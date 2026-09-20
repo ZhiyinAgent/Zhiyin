@@ -369,12 +369,10 @@ export class TurnLoop {
         let includeRoundTextInProtocol = true;
         const reached = ledger.reached(this.#deps.now());
         if (reached.length) {
-          const kinds = reached;
           const decision = await this.#waits.waitForWorkBudget(
             taskId,
             ledger.completedToolRounds(),
             controller.signal,
-            ledger.describe(this.#deps.now(), kinds),
           );
           if (decision === "cancelled") {
             await this.#interruptIfCurrent(taskId, controller);
@@ -487,6 +485,7 @@ export class TurnLoop {
           if (call.name === activatePluginTool.name) {
             const activation = await this.#pluginActivation.activate({
               taskId,
+              call,
               parsedArguments: parsed,
               pluginDirectory,
               activatedPlugins,

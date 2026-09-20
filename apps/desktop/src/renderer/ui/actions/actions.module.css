@@ -113,22 +113,23 @@
   line-height: 1.45;
 }
 
-/* What Zhiyin says the action is for. Deliberately quieter and separately
-   labelled: it is the agent's own account, not an established consequence. */
+/* Remote schema copy is useful context, but its source is named once for the
+   card instead of repeating the same heading above every argument. */
+.tool-call__description-source {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .tool-call__described {
   max-width: 58ch;
   margin: 0 0 4px;
   color: var(--zy-text-soft);
   font-size: 12px;
   line-height: 1.45;
-}
-
-.tool-call__described span {
-  display: block;
-  color: var(--zy-muted);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .approval__claim {

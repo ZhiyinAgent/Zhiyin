@@ -2,6 +2,7 @@ import type { PluginDirectoryEntry, ToolSpec } from "@zhiyin/contract";
 import type { ConversationTools, PluginContents } from "@zhiyin/capabilities";
 import type { AgentLoopDependencies } from "./dependencies.js";
 import type { TurnRecords } from "./turn-records.js";
+import type { AssembledToolCall } from "./turn-shared.js";
 
 export const activatePluginTool: ToolSpec = {
   name: "activate_plugin",
@@ -87,6 +88,7 @@ export class PluginActivation {
 
   async activate(options: {
     readonly taskId: string;
+    readonly call: AssembledToolCall;
     readonly parsedArguments: unknown;
     readonly pluginDirectory: readonly PluginDirectoryEntry[];
     readonly activatedPlugins: readonly string[];
@@ -114,6 +116,35 @@ export class PluginActivation {
         result: { ok: false, reason: "That plugin is not enabled." },
         ...unchanged,
       };
+    const entry = options.pluginDirectory.find(
+      (candidate) => candidate.id === resolved.id,
+    );
+    const pluginName = entry?.name ?? resolved.id;
+    const inspection = {
+      ok: true as const,
+      action: `Activate ${pluginName}`,
+      target: pluginName,
+      command: `activate_plugin(${JSON.stringify({ id: resolved.id })})`,
+      invocation: {
+        name: "Activate plugin",
+        arguments: [{ name: "Plugin", value: pluginName }],
+      },
+    };
+    const presentation = {
+      title: `Activate ${pluginName}`,
+      description:
+        "Make this plugin's components available in this conversation.",
+    };
+    const actionId = this.#records.nextActionId(options.taskId);
+    await this.#records.recordToolAction(
+      options.taskId,
+      actionId,
+      inspection,
+      presentation,
+      "running",
+      undefined,
+      options.call,
+    );
     const activatedPlugins = [...options.activatedPlugins, resolved.id];
     const task = this.#records.task(options.taskId);
     await this.#records.replaceTask({ ...task, activatedPlugins });
@@ -121,8 +152,27 @@ export class PluginActivation {
       skills: this.#deps.host.capabilitiesAvailable(),
       activatedPlugins,
     });
+    const result: ActivatePluginResult = {
+      ok: true,
+      id: resolved.id,
+      ...contents,
+    };
+    await this.#records.finishToolAction(
+      options.taskId,
+      options.call,
+      actionId,
+      inspection,
+      presentation,
+      "completed",
+      undefined,
+      {
+        ok: true,
+        value: result,
+        details: this.#deps.capabilities.describePluginContents(contents),
+      },
+    );
     return {
-      result: { ok: true, id: resolved.id, ...contents },
+      result,
       activatedPlugins,
       tools: refreshed.ok ? refreshed.value.tools : options.tools,
       skills: refreshed.ok ? refreshed.value.skills : options.skills,

@@ -89,8 +89,6 @@ const workBudget: PendingUserInputRequest = {
   id: "budget-1",
   kind: "workBudget",
   title: "Continue working?",
-  message:
-    "The task has completed 24 tool rounds. Continue or pause after a report.",
   completedRounds: 24,
 };
 
@@ -105,11 +103,11 @@ describe("UserInputPrompt", () => {
       />,
     );
 
-    expect(screen.getByText("24 rounds complete")).toBeVisible();
+    expect(
+      screen.getByText("This task has completed 24 tool rounds."),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Pause after a report" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],

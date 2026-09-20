@@ -1657,8 +1657,6 @@ describe("WorkspaceShell", () => {
               id: "budget-7",
               kind: "workBudget",
               title: "Continue working?",
-              message:
-                "The task completed 24 tool rounds and is ready for another action.",
               completedRounds: 24,
             },
           },
@@ -1680,9 +1678,7 @@ describe("WorkspaceShell", () => {
       answers: [{ questionId: "work-budget", answerIds: ["continue"] }],
     });
     expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
-    expect(
-      screen.getByText("Choose whether the task should continue or pause"),
-    ).toBeVisible();
+    expect(screen.getByText("Choose Continue or Pause above")).toBeVisible();
   });
 
   it("keeps a pending quiz in the conversation scroll surface and locks the composer", () => {

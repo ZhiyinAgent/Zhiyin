@@ -222,7 +222,6 @@ export type UserInputRequest =
 export type WorkBudgetRequest = {
   readonly kind: "workBudget";
   readonly title: string;
-  readonly message: string;
   readonly completedRounds: number;
 };
 
@@ -1124,6 +1123,12 @@ export type ToolCallInspection =
       readonly target: string;
       readonly command: string;
       readonly invocation?: ToolInvocation;
+      /**
+       * Exact interface copy supplied by an implementation the app owns.
+       * Remote tools cannot provide this; their purpose remains model-written
+       * and attributed as such.
+       */
+      readonly presentation?: Readonly<{ title: string; description: string }>;
       /**
        * One plain sentence naming the consequence the action string alone does
        * not carry — that a file is replaced rather than created, or how many

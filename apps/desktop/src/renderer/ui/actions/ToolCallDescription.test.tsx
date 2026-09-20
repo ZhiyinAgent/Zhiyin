@@ -18,7 +18,11 @@ const call: ToolInvocation = {
       value: "a9f",
       described: "Which project the issue is filed against.",
     },
-    { name: "body", value: "Steps to reproduce." },
+    {
+      name: "body",
+      value: "Steps to reproduce.",
+      described: "The issue description.",
+    },
   ],
 };
 
@@ -35,6 +39,10 @@ describe("ToolCallView with described inputs", () => {
   it("attributes the description to the connection rather than to Zhiyin", () => {
     render(<ToolCallView invocation={call} />);
 
+    expect(
+      screen.getByText("Input descriptions come from the connected tool."),
+    ).toBeVisible();
+    expect(screen.queryByText("What the tool says this is")).toBeNull();
     const description = screen.getByText(
       "Which project the issue is filed against.",
     );

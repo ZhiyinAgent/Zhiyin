@@ -59,36 +59,36 @@ export function ToolCallView({
       {invocation.arguments.length === 0 ? (
         <p className={styles["tool-call__none"]}>No inputs.</p>
       ) : (
-        <dl className={styles["tool-call__arguments"]}>
-          {invocation.arguments.map((argument) => (
-            <div key={argument.name}>
-              <dt>{argument.name}</dt>
-              <dd>
-                {argument.described && (
-                  /*
-                    The tool's own words about its own input. Labelled with
-                    where they came from for the same reason the model's claim
-                    about an action is: a description nobody here checked must
-                    not read as one this app stands behind.
-                  */
-                  <p
-                    className={styles["tool-call__described"]}
-                    data-claim="tool"
-                  >
-                    <span>What the tool says this is</span>
-                    {argument.described}
-                  </p>
-                )}
-                <ArgumentValue
-                  text={argument.value}
-                  {...(argument.omitted === undefined
-                    ? {}
-                    : { omitted: argument.omitted })}
-                />
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          {invocation.arguments.some((argument) => argument.described) && (
+            <p className={styles["tool-call__description-source"]}>
+              Input descriptions come from the connected tool.
+            </p>
+          )}
+          <dl className={styles["tool-call__arguments"]}>
+            {invocation.arguments.map((argument) => (
+              <div key={argument.name}>
+                <dt>{argument.name}</dt>
+                <dd>
+                  {argument.described && (
+                    <p
+                      className={styles["tool-call__described"]}
+                      data-claim="tool"
+                    >
+                      {argument.described}
+                    </p>
+                  )}
+                  <ArgumentValue
+                    text={argument.value}
+                    {...(argument.omitted === undefined
+                      ? {}
+                      : { omitted: argument.omitted })}
+                  />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </>
       )}
     </section>
   );

@@ -12,7 +12,33 @@ export type SidebarTask = {
 type TaskMenu = {
   id: string;
   mode: "menu" | "delete";
+  anchor: {
+    top: number;
+    bottom: number;
+    left: number;
+    width: number;
+  };
 };
+
+function taskMenuPosition(menu: TaskMenu) {
+  const gap = 4;
+  const viewportGap = 8;
+  const height = menu.mode === "menu" ? 76 : 112;
+  const width = Math.max(
+    160,
+    Math.min(menu.anchor.width - 14, window.innerWidth - viewportGap * 2),
+  );
+  const below = menu.anchor.bottom + gap;
+  const top =
+    below + height <= window.innerHeight - viewportGap
+      ? below
+      : Math.max(viewportGap, menu.anchor.top - height - gap);
+  const left = Math.min(
+    Math.max(viewportGap, menu.anchor.left + 7),
+    window.innerWidth - width - viewportGap,
+  );
+  return { position: "fixed" as const, top, left, width };
+}
 
 type AppSidebarProps = {
   onOpenLibrary?: () => void;
@@ -205,7 +231,17 @@ export function AppSidebar({
                 onClick={() => onSelect(task.id)}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  setTaskMenu({ id: task.id, mode: "menu" });
+                  const row = event.currentTarget.getBoundingClientRect();
+                  setTaskMenu({
+                    id: task.id,
+                    mode: "menu",
+                    anchor: {
+                      top: row.top,
+                      bottom: row.bottom,
+                      left: row.left,
+                      width: row.width,
+                    },
+                  });
                 }}
               >
                 <span>{task.title}</span>
@@ -214,7 +250,11 @@ export function AppSidebar({
             )}
 
             {taskMenu?.id === task.id && taskMenu.mode === "menu" && (
-              <div className={styles["task-context-menu"]} role="menu">
+              <div
+                className={styles["task-context-menu"]}
+                role="menu"
+                style={taskMenuPosition(taskMenu)}
+              >
                 <button
                   type="button"
                   role="menuitem"
@@ -226,7 +266,7 @@ export function AppSidebar({
                   className={styles["task-context-menu__danger"]}
                   type="button"
                   role="menuitem"
-                  onClick={() => setTaskMenu({ id: task.id, mode: "delete" })}
+                  onClick={() => setTaskMenu({ ...taskMenu, mode: "delete" })}
                 >
                   Delete
                 </button>
@@ -238,6 +278,7 @@ export function AppSidebar({
                 className={styles["task-delete-confirm"]}
                 role="group"
                 aria-label={`Delete ${task.title}`}
+                style={taskMenuPosition(taskMenu)}
               >
                 <strong>Delete this conversation?</strong>
                 <div>

@@ -86,8 +86,11 @@ and call, and routes every change to the member that owns it.
   Named tests: `reaches a connection in the conversation's own scope,
   withholding what its turn did not activate` and `withholds every connection
   from a conversation whose turn activated nothing`.
-- **Inspecting a plugin never activates it.** Named test: `lists one enabled
-  plugin's components by name and purpose without activating it`.
+- **Inspecting a plugin never activates it.** Its action names the plugin by
+  display name, and its result presents the plugin's skills, specialists, and
+  connectors as readable lists rather than only as protocol data. Named test:
+  `lists one enabled plugin's components by name and purpose without activating
+  it`.
 - **What a conversation was offered is forgotten with the conversation.** Named
   test: `forgets what a deleted conversation was offered`.
 - **Plugin readiness is truthful and derived.** A connector that needs a token

@@ -468,6 +468,27 @@ describe("inspecting a plugin", () => {
   it("lists one enabled plugin's components by name and purpose without activating it", async () => {
     const { capabilities } = membersRecording();
 
+    await expect(
+      capabilities.inspect("conversation-1", "plugin", "inspect_plugin", {
+        id: "software-engineering",
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      action: "Inspect Software Engineering",
+      target: "Software Engineering",
+      detail:
+        "Shows this plugin's skills, specialists, and connectors without activating it.",
+      presentation: {
+        title: "Inspect Software Engineering",
+        description:
+          "See what the Software Engineering plugin includes before using it.",
+      },
+      invocation: {
+        name: "Inspect plugin",
+        arguments: [{ name: "Plugin", value: "Software Engineering" }],
+      },
+    });
+
     const contents = await capabilities.execute(
       "conversation-1",
       "plugin",
@@ -505,6 +526,26 @@ describe("inspecting a plugin", () => {
           },
         ],
       },
+      details: [
+        {
+          kind: "list",
+          label: "Skills",
+          items: ["test-first — Write the failing test first."],
+        },
+        {
+          kind: "list",
+          label: "Specialists",
+          items: ["Code reviewer — Reviews a change."],
+        },
+        {
+          kind: "list",
+          label: "Connectors",
+          items: [
+            "GitHub — Repositories, issues, and pull requests.",
+            "Browser — Opens pages to test them.",
+          ],
+        },
+      ],
     });
     const gathered = await capabilities.toolsFor("conversation-1", {
       skills: true,

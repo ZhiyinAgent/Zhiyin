@@ -12,6 +12,7 @@
  */
 
 import type {
+  ActionDetail,
   AuthoredPluginContents,
   ComponentContent,
   ComponentContentDraft,
@@ -52,6 +53,7 @@ import {
   componentContentOf,
   declaredConnections,
   inspectPluginTool,
+  pluginContentsDetails,
   pluginContentsOf,
   pluginDirectoryFrom,
   pluginStatesFrom,
@@ -62,7 +64,11 @@ import {
 } from "./plugin-directory.js";
 
 export type { ToolOwner } from "@zhiyin/contract";
-export type { PluginContents, PluginContentItem } from "./plugin-directory.js";
+export {
+  pluginContentsDetails,
+  type PluginContents,
+  type PluginContentItem,
+} from "./plugin-directory.js";
 
 /** A skill as the model is told about it. */
 export type Skill = {
@@ -130,6 +136,8 @@ export interface Capabilities {
   builtInTool(name: string): ToolSpec | undefined;
   /** One enabled plugin's components by name and purpose, or nothing for an unknown or disabled id. */
   pluginContents(id: string): Promise<PluginContents | undefined>;
+  /** The same components arranged for a readable action result. */
+  describePluginContents(contents: PluginContents): readonly ActionDetail[];
   /** An app-made plugin's whole content, or nothing for any other plugin. */
   editablePluginContents(
     id: string,
@@ -348,6 +356,10 @@ export class ComposedCapabilities implements Capabilities {
     return view?.enabled ? pluginContentsOf(view) : undefined;
   }
 
+  describePluginContents(contents: PluginContents): readonly ActionDetail[] {
+    return pluginContentsDetails(contents);
+  }
+
   async editablePluginContents(
     id: string,
   ): Promise<AuthoredPluginContents | undefined> {
@@ -378,14 +390,26 @@ export class ComposedCapabilities implements Capabilities {
     }
     if (owner === "plugin") {
       const id = singleIdArg(args);
-      return id
-        ? {
-            ok: true,
-            action: "List plugin contents",
-            target: id,
-            command: `inspect_plugin(${JSON.stringify(args)})`,
-          }
-        : { ok: false, reason: "Choose one enabled plugin by id." };
+      const view = id ? await this.#view(id) : undefined;
+      if (!view?.enabled)
+        return { ok: false, reason: "Choose one enabled plugin by id." };
+      const pluginName = view.manifest.displayName;
+      return {
+        ok: true,
+        action: `Inspect ${pluginName}`,
+        target: pluginName,
+        command: `inspect_plugin(${JSON.stringify(args)})`,
+        detail:
+          "Shows this plugin's skills, specialists, and connectors without activating it.",
+        presentation: {
+          title: `Inspect ${pluginName}`,
+          description: `See what the ${pluginName} plugin includes before using it.`,
+        },
+        invocation: {
+          name: "Inspect plugin",
+          arguments: [{ name: "Plugin", value: pluginName }],
+        },
+      };
     }
     if (owner === "built-in") return this.#members.tools.inspect(name, args);
     return this.#members.mcp.inspect(
@@ -420,7 +444,11 @@ export class ComposedCapabilities implements Capabilities {
       if (!id) return { ok: false, reason: "Choose one enabled plugin by id." };
       const contents = await this.pluginContents(id);
       return contents
-        ? { ok: true, value: contents }
+        ? {
+            ok: true,
+            value: contents,
+            details: pluginContentsDetails(contents),
+          }
         : { ok: false, reason: `“${id}” is not an enabled plugin.` };
     }
     const id = singleIdArg(args);

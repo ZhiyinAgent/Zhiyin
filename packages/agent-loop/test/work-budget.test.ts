@@ -119,8 +119,8 @@ describe("AgentLoop renewable work budget", () => {
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
 
     expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).message).toContain("120 measured tokens");
-    expect(budgetPrompt(loop, taskId).message).toContain("$0.1200");
+    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
+    expect(budgetPrompt(loop, taskId)).not.toHaveProperty("message");
     await loop.resolveUserInput(taskId, "limit-1", {
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });
@@ -150,10 +150,7 @@ describe("AgentLoop renewable work budget", () => {
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
 
     expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).message).toContain("estimated tokens");
-    expect(budgetPrompt(loop, taskId).message).toContain(
-      "Provider cost was unavailable",
-    );
+    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
     await loop.resolveUserInput(taskId, "limit-1", {
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });
@@ -198,7 +195,7 @@ describe("AgentLoop renewable work budget", () => {
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
 
     expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).message).toContain("2 seconds elapsed");
+    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
     await loop.resolveUserInput(taskId, "limit-1", {
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });

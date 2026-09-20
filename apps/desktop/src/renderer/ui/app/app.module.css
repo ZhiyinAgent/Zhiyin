@@ -464,11 +464,8 @@
 
 .task-context-menu,
 .task-delete-confirm {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 7px;
+  position: fixed;
   z-index: 35;
-  width: calc(100% - 14px);
   padding: 5px;
   border: 1px solid var(--zy-line-strong);
   border-radius: 9px;

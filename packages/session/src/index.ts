@@ -577,7 +577,6 @@ function validPendingUserInputRequest(value: unknown): boolean {
     (isRecord(value) &&
       value.kind === "workBudget" &&
       typeof value.title === "string" &&
-      typeof value.message === "string" &&
       typeof value.completedRounds === "number" &&
       Number.isSafeInteger(value.completedRounds) &&
       value.completedRounds > 0)

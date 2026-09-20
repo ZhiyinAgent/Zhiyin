@@ -102,12 +102,12 @@ function WorkBudgetPrompt({
     >
       <header className={styles["user-input__header"]}>
         <div>
-          <p>Work checkpoint</p>
           <h3>{prompt.title}</h3>
         </div>
-        <span>{prompt.completedRounds} rounds complete</span>
       </header>
-      <p className={styles["work-budget__message"]}>{prompt.message}</p>
+      <p className={styles["work-budget__message"]}>
+        This task has completed {prompt.completedRounds} tool rounds.
+      </p>
       {error && (
         <p className={styles["user-input__error"]} role="alert">
           {error}
@@ -122,7 +122,7 @@ function WorkBudgetPrompt({
           disabled={pending !== null}
           onClick={() => void decide("pause")}
         >
-          {pending === "pause" ? "Pausing…" : "Pause after a report"}
+          {pending === "pause" ? "Pausing…" : "Pause"}
         </button>
         <button
           className="button button--accent"

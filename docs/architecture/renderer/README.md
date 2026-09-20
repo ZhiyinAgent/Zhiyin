@@ -317,6 +317,10 @@ rendered.
   model. A surrounding permission request or inspector may position the card
   but does not restyle its contents. Named regression: `keeps its heading,
   identity, and inputs inside one card`.
+- Descriptions supplied by a connected tool are attributed once per call, then
+  placed beside their inputs without repeating the same source heading on every
+  row. Named regression: `attributes the description to the connection rather
+  than to Zhiyin`.
 - A change to a file is reviewed as a difference, never as the call that would
   produce it. When the core carries before-and-after contents, the permission
   request offers them; when it carries none, no review is offered rather than
@@ -445,11 +449,14 @@ rendered.
   the app remains open. Legacy records without a timestamp use a neutral
   fallback instead of remaining `Now`. The named test `shows relative
   conversation age from timestamps instead of a frozen label` guards this.
-- A conversation's context menu is anchored to its sidebar row. Rename replaces
-  the row with an input; Delete changes the same nearby menu into a compact
-  confirmation rather than opening a centered dialog. The named tests `renames
-  a conversation in place from its context menu` and `confirms deletion beside
-  the conversation instead of opening a dialog` guard these interactions.
+- A conversation's context menu is anchored to its sidebar row but positioned
+  in the viewport, so opening it never enlarges or clips inside the scrolling
+  conversation list. Rename replaces the row with an input; Delete changes the
+  same nearby menu into a compact confirmation rather than opening a centered
+  dialog. The named tests `places a conversation menu above a low row without
+  enlarging the list`, `renames a conversation in place from its context menu`,
+  and `confirms deletion beside the conversation instead of opening a dialog`
+  guard these interactions.
 - Component switches cross the core boundary and are not retained as
   renderer-only state. The named test `sends component switches through the
   core instead of keeping them local` guards this. The named test `keeps a
@@ -540,6 +547,10 @@ rendered.
   The named tests `answers several clarifying questions once`, `keeps a failed
   answer editable`, and `returns the exact structured answer to the core` guard
   the form and bridge boundaries.
+- A renewable-work checkpoint shows only the completed tool-round count and the
+  Continue and Pause choices. Token, time, provider-cost, and ledger terminology
+  stay out of this decision surface. The named test `offers an explicit
+  continue or pause choice at a work checkpoint` guards this presentation.
 - A quiz supports single and multiple selection across several questions,
   exposes no correct answer before submission, and leaves one scored result in
   the conversation afterwards. The named tests `submits one and many answers

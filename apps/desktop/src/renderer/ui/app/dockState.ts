@@ -38,8 +38,8 @@ export function composerLock(
       };
     if (task.phase.prompt.kind === "workBudget")
       return {
-        disabledReason: "Choose whether the task should continue or pause",
-        disabledPlaceholder: "Waiting for your work-budget choice",
+        disabledReason: "Choose Continue or Pause above",
+        disabledPlaceholder: "Waiting for your choice",
       };
     return {
       disabledReason: "Answer the questions first",

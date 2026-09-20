@@ -235,14 +235,10 @@ export class TurnWaits {
     taskId: string,
     completedRounds: number,
     signal: AbortSignal,
-    message?: string,
   ): Promise<"continue" | "pause" | "cancelled"> {
     const request: WorkBudgetRequest = {
       kind: "workBudget",
       title: "Continue working?",
-      message:
-        message ??
-        `The task has completed ${completedRounds} tool rounds and is ready for another action. Continue with a fresh budget, or pause after a progress report.`,
       completedRounds,
     };
     const outcome = await this.waitForUserInput(

@@ -473,6 +473,42 @@ describe("ManagedMcpServers", () => {
     });
   });
 
+  it("accepts an embedded text resource returned for a repository file", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const result = {
+      content: [
+        { type: "text", text: "successfully downloaded text file" },
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://ZhiyinAgent/Zhiyin/contents/README.md",
+            mimeType: "text/markdown",
+            text: "# Zhiyin",
+          },
+        },
+      ],
+    } as const;
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "get_file_contents" }],
+        callTool: async () => result,
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "github",
+      name: "GitHub",
+      url: "https://api.githubcopilot.com/mcp/",
+      enabled: true,
+    });
+
+    await expect(
+      servers.execute("mcp__github__get_file_contents", {}),
+    ).resolves.toEqual({ ok: true, value: result });
+  });
+
   it("distinguishes cancellation before dispatch from a late resolved remote result", async () => {
     let release!: (value: unknown) => void;
     let dispatched = 0;
@@ -1137,6 +1173,41 @@ describe("ManagedMcpServers", () => {
         toolCount: 1,
       }),
     ]);
+  });
+
+  it("keeps a built-in connection available and reports its actual tool error", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const close = vi.fn(async () => {});
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "evaluate" }],
+            callTool: async () => {
+              throw new Error("The page closed before the code could run.");
+            },
+            close,
+          }),
+        },
+      ],
+    );
+
+    await servers.availableTools();
+    await expect(
+      servers.execute("mcp__browser__evaluate", {}),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "The page closed before the code could run.",
+    });
+    expect(close).not.toHaveBeenCalled();
+    await expect(servers.availableTools()).resolves.toHaveLength(1);
   });
 
   it("routes a conversation-scoped built-in only through that conversation's connection", async () => {

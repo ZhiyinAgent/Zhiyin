@@ -327,11 +327,13 @@ export class ToolCalls {
       return { result, ...(repairedArguments ? { repairedArguments } : {}) };
     }
 
-    const presentation = await this.#auxiliary.presentAction(
-      taskId,
-      inspection,
-      controller.signal,
-    );
+    const presentation =
+      inspection.presentation ??
+      (await this.#auxiliary.presentAction(
+        taskId,
+        inspection,
+        controller.signal,
+      ));
     controller.signal.throwIfAborted();
 
     const actionId = this.#records.nextActionId(taskId);

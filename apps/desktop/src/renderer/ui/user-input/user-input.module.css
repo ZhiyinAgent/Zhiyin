@@ -29,19 +29,6 @@
   min-height: 0;
 }
 
-.user-input--work-budget .user-input__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.user-input--work-budget .user-input__header > span {
-  flex: 0 0 auto;
-  color: var(--zy-muted);
-  font-size: 12px;
-}
-
 .work-budget__message {
   margin: 0;
   padding: 16px;

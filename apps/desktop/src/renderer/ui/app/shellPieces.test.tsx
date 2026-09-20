@@ -243,6 +243,40 @@ describe("AppSidebar", () => {
     expect(onRenameTask).toHaveBeenCalledOnce();
   });
 
+  it("places a conversation menu above a low row without enlarging the list", () => {
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: 760,
+    });
+    render(
+      <AppSidebar
+        selectedId="release"
+        onSelect={() => undefined}
+        tasks={[{ id: "release", title: "Prepare release notes", meta: "Now" }]}
+      />,
+    );
+
+    const row = screen.getByRole("button", { name: /prepare release notes/i });
+    vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
+      x: 11,
+      y: 710,
+      top: 710,
+      right: 211,
+      bottom: 749,
+      left: 11,
+      width: 200,
+      height: 39,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.contextMenu(row);
+
+    expect(screen.getByRole("menu")).toHaveStyle({
+      position: "fixed",
+      top: "630px",
+    });
+  });
+
   it("confirms deletion beside the conversation instead of opening a dialog", () => {
     const onDeleteTask = vi.fn();
     render(

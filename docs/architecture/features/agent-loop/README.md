@@ -101,9 +101,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   refreshes the tranche. Pause leaves that proposal unexecuted and allows one
   tool-free progress-report request before the turn stops (ADR 0029).
 - The same checkpoint stops before the next action when a turn reaches 30
-  minutes, 500,000 tokens, or USD 10 of provider-reported cost. It labels
-  provider values as measured, uses the context estimator when token usage is
-  absent, and says when provider cost is unavailable. Continue renews reached
+  minutes, 500,000 tokens, or USD 10 of provider-reported cost. Those details
+  stay in the internal ledger; the choice shown to a person says only how many
+  tool rounds completed and offers Continue or Pause. Continue renews reached
   limits; Pause still allows only the tool-free report (ADR 0038). Named tests:
   `pauses before an action when measured token or provider-cost limits are
   reached`, `labels token use as estimated when the provider reports no usage`,
@@ -488,7 +488,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `activate_plugin` persists the activation on the task, so it holds for the
   rest of the conversation, and its tool result names the plugin's now-callable
   skills, specialists, and connectors — the mechanism by which the model
-  learns what changed, rather than a rewritten system prompt mid-turn. Named
+  learns what changed, rather than a rewritten system prompt mid-turn. The
+  activation is also recorded as a completed, inspectable action with the
+  plugin's display name and component inventory. Named
   tests: `advertises a compact plugin directory instead of a plugin's full
   skills and specialists until it is activated` and `adds exactly an activated
   plugin's skills, specialists and connectors to context from that point on`.

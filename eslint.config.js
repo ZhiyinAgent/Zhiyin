@@ -239,8 +239,8 @@ const OVERSIZED_PACKAGE_FILES = {
   // Each entry is pinned at its effective line count when the feature-layer
   // ceiling was introduced. Splitting concerns may lower a pin; ordinary
   // feature work may not raise one.
-  "packages/mcp/src/index.ts": 1264,
-  "packages/session/src/index.ts": 1046,
+  "packages/mcp/src/index.ts": 1204,
+  "packages/session/src/index.ts": 1045,
   "packages/model-client/src/index.ts": 931,
   "packages/contract/src/index.ts": 1008,
   "packages/recovery/src/index.ts": 707,

@@ -168,5 +168,35 @@ describe("plugin activation", () => {
     expect(loop.snapshot().tasks[0]?.activatedPlugins).toEqual([
       "software-engineering",
     ]);
+    expect(loop.snapshot().tasks[0]?.actions).toEqual([
+      expect.objectContaining({
+        action: "Activate software-engineering",
+        description:
+          "Make this plugin's components available in this conversation.",
+        target: "software-engineering",
+        status: "completed",
+        invocation: {
+          name: "Activate plugin",
+          arguments: [{ name: "Plugin", value: "software-engineering" }],
+        },
+        details: [
+          {
+            kind: "list",
+            label: "Skills",
+            items: ["project-engineering — Coordinate engineering work."],
+          },
+          {
+            kind: "list",
+            label: "Specialists",
+            items: ["Code reviewer — Reviews a change."],
+          },
+          {
+            kind: "list",
+            label: "Connectors",
+            items: ["tavily — The tavily connector."],
+          },
+        ],
+      }),
+    ]);
   });
 });

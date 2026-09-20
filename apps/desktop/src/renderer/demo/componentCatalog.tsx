@@ -351,8 +351,6 @@ export const componentCatalog: ComponentCatalogEntry[] = [
           id: "catalog-work-budget",
           kind: "workBudget",
           title: "Continue working?",
-          message:
-            "The task has completed 24 tool rounds and is ready for another action. Continue with a fresh budget, or pause after a progress report.",
           completedRounds: 24,
         }}
         onSubmit={() => undefined}

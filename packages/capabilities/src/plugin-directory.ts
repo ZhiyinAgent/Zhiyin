@@ -7,6 +7,7 @@
  */
 
 import type {
+  ActionDetail,
   AuthoredPluginContents,
   ComponentContent,
   McpServerState,
@@ -166,6 +167,28 @@ export function pluginContentsOf(view: PluginView): PluginContents {
       ({ id, name, description }) => ({ id, name, description }),
     ),
   };
+}
+
+/** The component inventory as a person reads it in an action result. */
+export function pluginContentsDetails(
+  contents: PluginContents,
+): readonly ActionDetail[] {
+  return [
+    ["Skills", contents.skills],
+    ["Specialists", contents.specialists],
+    ["Connectors", contents.connectors],
+  ].flatMap(([label, items]) => {
+    const listed = items as readonly PluginContentItem[];
+    return listed.length
+      ? [
+          {
+            kind: "list" as const,
+            label: label as string,
+            items: listed.map((item) => `${item.name} — ${item.description}`),
+          },
+        ]
+      : [];
+  });
 }
 
 /** An app-made plugin's whole content, for its edit form. */

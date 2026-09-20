@@ -405,8 +405,6 @@ describe("FileSessions workspace persistence", () => {
             id: "budget-1",
             kind: "workBudget" as const,
             title: "Continue working?",
-            message:
-              "The task has completed 24 tool rounds and is ready for another action.",
             completedRounds: 24,
           },
         },

@@ -115,12 +115,14 @@ the project has not yet proved.
   are cut to fit and say where they were cut; a result whose bulk is not text
   is still refused rather than sent as something it is not. Named test:
   `shortens an oversized result instead of throwing the whole answer away`.
-- **Remote results cross a strict supported-shape boundary.** Text, image, and
-  JSON-object structured content are accepted. Unknown block kinds, non-JSON
-  metadata, arrays where objects are required, invalid error flags, and extra
-  result fields are refused as invalid output rather than becoming success.
-  Named tests: `rejects malformed and unsupported result content` and `accepts
-  text, image, and structured result content`.
+- **Remote results cross a strict supported-shape boundary.** Text, image,
+  embedded text resources, and JSON-object structured content are accepted.
+  Unknown block kinds, binary resources, non-JSON metadata, arrays where
+  objects are required, invalid error flags, and extra result fields are
+  refused as invalid output rather than becoming success. Named tests:
+  `rejects malformed and unsupported result content`, `accepts text, image,
+  and structured result content`, and `accepts an embedded text resource
+  returned for a repository file`.
 - Cancellation before dispatch is a stopped action. Once a remote call was
   dispatched, either a late result or a thrown transport failure remains
   uncertain: the server may already have acted. Named tests: `distinguishes
@@ -172,9 +174,12 @@ the project has not yet proved.
 - If initial tool discovery fails, the partially opened connection is closed.
   A failed server is not retried on every agent lookup; editing it or toggling
   it off and on is the explicit retry.
-- A thrown call error is treated as a lost connection: the connection closes
-  and its tools are withdrawn. The named test `withdraws tools after a
-  connection fails during a call` guards this.
+- A thrown remote call error is treated as a lost connection: the connection
+  closes and its tools are withdrawn. A built-in connection instead keeps the
+  tool available and returns its own error, because an app-owned tool failure
+  is not evidence that its in-memory connection was lost. Named tests:
+  `withdraws tools after a connection fails during a call` and `keeps a
+  built-in connection available and reports its actual tool error`.
 - MCP calls pass through the same permission engine as built-in tools. The
   agent-loop test `routes an externally registered tool to its owning MCP
   server` guards ownership routing.
