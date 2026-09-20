@@ -1,0 +1,11 @@
+/* Styles owned by the recovery module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* The two answers to a damaged history sit side by side, and wrap rather than
+   shrink so neither is ever the harder one to read. */
+.recovery-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}

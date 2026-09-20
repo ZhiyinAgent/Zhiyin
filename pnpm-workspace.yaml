@@ -1,0 +1,19 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Build scripts allowed to run: esbuild and unrs-resolver compile native
+# helpers, electron-winstaller is part of packaging.
+allowBuilds:
+  electron-winstaller: true
+  esbuild: true
+  # koffi ships prebuilt binaries for the platforms this app targets, so its
+  # build script has nothing to do. It has never run here; this only records
+  # that, now that a rebuilt lockfile makes pnpm ask.
+  koffi: false
+  unrs-resolver: true
+
+minimumReleaseAgeExclude:
+  - "@types/node@26.4.1"
+  - electron@44.1.1
+  - globals@17.12.0

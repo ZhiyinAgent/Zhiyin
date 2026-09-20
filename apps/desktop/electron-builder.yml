@@ -1,0 +1,29 @@
+appId: com.zhiyin.desktop
+productName: Zhiyin
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - third-party-licenses/**/*
+  - package.json
+  # The window sets its own icon, so the mark has to be readable at runtime and
+  # not only by the installer.
+  - build/icon.ico
+extraResources:
+  # The plugins shipped with the app are ordinary package folders, read by the
+  # same loader as a person's own.
+  - from: ../../packages/plugins/built-in
+    to: plugins
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../THIRD_PARTY_LICENSES.md
+    to: THIRD_PARTY_LICENSES.md
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

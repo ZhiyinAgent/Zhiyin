@@ -1,0 +1,103 @@
+.message {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action:hover,
+.action:focus-visible {
+  color: var(--zy-text);
+}
+
+.action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.effects {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.choice {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice legend {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.choice label {
+  display: flex;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.choice span {
+  display: grid;
+  gap: 2px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.choice strong {
+  color: var(--zy-text);
+  font-size: 13px;
+}
+
+.effects h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.effects ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.effects li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--zy-panel-soft);
+}
+
+.effects span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}

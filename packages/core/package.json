@@ -1,0 +1,36 @@
+{
+  "name": "@zhiyin/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The front desk between the app's window and everything behind it.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/agent-loop": "workspace:*",
+    "@zhiyin/artifacts": "workspace:*",
+    "@zhiyin/capabilities": "workspace:*",
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/interactive-browser": "workspace:*",
+    "@zhiyin/model-client": "workspace:*",
+    "@zhiyin/rewind": "workspace:*",
+    "@zhiyin/session": "workspace:*",
+    "@zhiyin/tools": "workspace:*",
+    "@zhiyin/usage": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/audit": "workspace:*",
+    "@zhiyin/conversation-rewind": "workspace:*",
+    "@zhiyin/mcp": "workspace:*",
+    "@zhiyin/permission-engine": "workspace:*",
+    "@zhiyin/plugins": "workspace:*",
+    "@zhiyin/toolchains": "workspace:*",
+    "@zhiyin/recovery": "workspace:*"
+  }
+}

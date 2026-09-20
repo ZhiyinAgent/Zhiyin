@@ -1,0 +1,225 @@
+/*
+ * Every colour in the app comes from here. A rule that writes a literal colour
+ * is a rule that cannot be re-themed, so there are none outside this block —
+ * including the translucent washes, which have to invert with the ground and
+ * are the thing a naive theme swap silently gets wrong.
+ *
+ * Two reds, on purpose. `--zy-accent` is the foreground red: text, icons,
+ * borders, anything read against the dark ground. `--zy-accent-fill` is the
+ * solid red a control is painted with, and it is darker so that
+ * `--zy-on-accent` white sitting on it stays legible at body size. Using the
+ * foreground red as a fill is the mistake this split exists to prevent.
+ */
+:root {
+  color-scheme: dark;
+  --zy-canvas: #1b1c1e;
+  --zy-sidebar: #101113;
+  --zy-panel: #0a0a0b;
+  --zy-panel-raised: #121315;
+  --zy-panel-soft: #17181a;
+  --zy-line: #2a2c2f;
+  --zy-line-strong: #3b3e43;
+  --zy-text: #f2f2f3;
+  --zy-text-soft: #cfd1d4;
+  --zy-muted: #9b9da2;
+  --zy-faint: #7b7d83;
+  --zy-accent: #ff5b4f;
+  --zy-accent-fill: #e01f13;
+  --zy-accent-fill-hover: #f4291b;
+  --zy-on-accent: #ffffff;
+  --zy-accent-soft: rgba(255, 91, 79, 0.14);
+  --zy-accent-soft-hover: rgba(255, 91, 79, 0.24);
+  --zy-accent-veil: rgba(255, 91, 79, 0.09);
+  --zy-accent-line: rgba(255, 91, 79, 0.45);
+  --zy-glow-accent: rgba(255, 91, 79, 0.16);
+  --zy-green: #5ed6a4;
+  --zy-green-line: rgba(94, 214, 164, 0.35);
+  --zy-green-fill: rgba(94, 214, 164, 0.12);
+  --zy-green-ring: rgba(94, 214, 164, 0.14);
+  --zy-amber: #e8b23a;
+  --zy-amber-line: rgba(232, 178, 58, 0.4);
+  --zy-amber-fill: rgba(232, 178, 58, 0.13);
+  --zy-blue: #6fb2ff;
+  --zy-orange: #f2903f;
+  --zy-danger: #ff6b6b;
+  --zy-code-punct: #6b6d73;
+  --zy-code-key: #86b4e3;
+  --zy-code-string: #cfd1d4;
+  --zy-code-number: #d0a06a;
+  --zy-code-literal: #a99bd6;
+  --zy-wash-faint: rgba(255, 255, 255, 0.03);
+  --zy-wash: rgba(255, 255, 255, 0.05);
+  --zy-wash-strong: rgba(255, 255, 255, 0.08);
+  /*
+   * The app's own top bar: the mark, the conversation header, and the window
+   * controls Windows draws at the end of it.
+   *
+   * A caption button is exactly as tall as the bar it is given, and that is
+   * why this is one number and not two. Given a taller bar than the controls,
+   * everything the app puts beside them centres on the bar while they centre
+   * on themselves, and the two sit visibly off each other's line. One height
+   * means one centre line for the mark, the title, the app's own buttons and
+   * the window's alike. The main process is given this same number.
+   */
+  --zy-title-bar-height: 44px;
+  /* What the window controls take from the right-hand end of that bar. Nothing
+     of the app's may be drawn there. Windows tells the page how much of the
+     bar is left; on anything that is not this app, the whole of it is. */
+  --zy-window-controls: calc(100vw - env(titlebar-area-width, 100vw));
+  /* The navigation column, said once so the shell and anything that has to
+     line up with it cannot drift apart. */
+  --zy-sidebar-width: 242px;
+  --zy-radius-sm: 11px;
+  --zy-radius-md: 18px;
+  --zy-radius-lg: 24px;
+  --zy-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  --zy-shadow-pop: 0 8px 22px rgba(0, 0, 0, 0.45);
+  --zy-shadow-raised:
+    0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --zy-shadow-menu: 0 16px 38px rgba(0, 0, 0, 0.62);
+  --zy-inset: rgba(0, 0, 0, 0.35);
+  --zy-scrim: rgba(0, 0, 0, 0.62);
+  --zy-font-display: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+  --zy-font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --zy-font-instrument: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --zy-font-data: "Cascadia Mono", Consolas, monospace;
+  font-family: var(--zy-font-body);
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.button:hover {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.button--accent {
+  border-color: var(--zy-accent-fill);
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.button--accent:hover {
+  border-color: var(--zy-accent-fill-hover);
+  background: var(--zy-accent-fill-hover);
+  color: var(--zy-on-accent);
+}
+
+.button--quiet {
+  border-color: transparent;
+}
+
+.button--small {
+  min-height: 30px;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 26px;
+  margin: 1px 0 0 -5px;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--zy-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: var(--zy-text-soft);
+}
+
+.text-button svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms ease;
+}
+
+.text-button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.instrument-label {
+  display: block;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

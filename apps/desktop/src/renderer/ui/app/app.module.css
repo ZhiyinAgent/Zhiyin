@@ -1,0 +1,1080 @@
+/* Styles owned by the app module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/*
+ * The window's top bar is the app's own: the mark, the conversation header,
+ * and - drawn by Windows at the right-hand end of it - minimize, maximize and
+ * close. There is no strip above it. One was tried, and two thin bands stacked
+ * read as narrower than the single bar they were meant to improve on.
+ *
+ * Two things follow from the controls living on the app's bar, and both are
+ * held here rather than in the modules that draw it: the bar is what a person
+ * drags the window by, and nothing of the app's may be drawn in the width the
+ * controls take at its right-hand end.
+ */
+.app-sidebar__brand,
+.session-header {
+  -webkit-app-region: drag;
+}
+
+.app-sidebar__brand button,
+.session-header button,
+.session-header a,
+.session-header [role="tablist"] {
+  -webkit-app-region: no-drag;
+}
+
+/* The window taking shape before the core has answered. */
+.workspace-skeleton {
+  display: grid;
+  grid-template-columns: 220px minmax(480px, 1fr) 274px;
+  background: var(--zy-canvas);
+}
+
+.workspace-skeleton__sidebar,
+.workspace-skeleton__main {
+  padding: 24px;
+}
+
+.workspace-skeleton__sidebar {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border-right: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+}
+
+.workspace-skeleton__main {
+  border-right: 1px solid var(--zy-line);
+}
+
+/* The context shelf's outline, drawn before there is a shelf to show. */
+.workspace-skeleton__shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 24px;
+  border-left: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+}
+
+.workspace-skeleton__brand {
+  width: 118px;
+  height: 26px;
+  margin-bottom: 10px;
+}
+
+.workspace-skeleton__button {
+  height: 37px;
+  margin-bottom: 8px;
+}
+
+.workspace-skeleton__nav {
+  width: 72%;
+  height: 22px;
+}
+
+.workspace-skeleton__header {
+  width: 48%;
+  height: 18px;
+}
+
+.workspace-skeleton__label {
+  width: 64px;
+  height: 9px;
+}
+
+.workspace-skeleton__heading {
+  width: 140px;
+  height: 18px;
+  margin: 10px 0 28px;
+}
+
+.workspace-skeleton__file {
+  width: 28px;
+  height: 28px;
+}
+
+.workspace-skeleton__context-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+/* The folder picker sits in the composer footer. It opens upward: the
+   composer is at the bottom of the window and a downward menu would be
+   clipped by it. */
+.workspace-picker {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.workspace-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  height: 25px;
+  padding: 0 7px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.workspace-picker__trigger:hover:not(:disabled),
+.workspace-picker__trigger[aria-expanded="true"] {
+  border-color: var(--zy-line);
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.workspace-picker__trigger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.workspace-picker__trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-picker__trigger svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+.workspace-picker__trigger svg:last-child {
+  color: var(--zy-faint);
+}
+
+.workspace-picker__trigger[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
+}
+
+/* Fixed, not absolute: the composer dock scrolls its own content, and an
+   absolutely positioned menu would be clipped by it. The component measures
+   the trigger and sets the offsets. */
+.workspace-picker__menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 1px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 24px));
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--zy-line);
+  border-radius: 12px;
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.workspace-picker__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-picker__item:hover,
+.workspace-picker__item:focus-visible {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.workspace-picker__item > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-picker__item svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--zy-faint);
+}
+
+.workspace-picker__item--current {
+  color: var(--zy-text);
+}
+
+.workspace-picker__item--current svg {
+  color: var(--zy-green);
+}
+
+/* Offset by the width of the check the current folder carries, so the names
+   line up in a column rather than stepping in and out. */
+.workspace-picker__item:not(.workspace-picker__item--current):not(
+    .workspace-picker__item--choose
+  ) {
+  padding-left: 30px;
+}
+
+.workspace-picker__item--choose {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--zy-line);
+  border-radius: 0 0 8px 8px;
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 18px 20px;
+  border-right: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+}
+
+/*
+ * The same height and the same rule under it as the conversation header beside
+ * it, so the two read as one bar across the window rather than as two columns
+ * that happen to start near each other. The negative margins undo the
+ * sidebar's own padding so the rule reaches the column's edges.
+ */
+.app-sidebar__brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--zy-title-bar-height);
+  margin: 0 -18px;
+  padding: 0 23px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.app-sidebar__brand > button,
+.app-nav button,
+.task-list__label button,
+.app-sidebar__profile > button,
+.header-more {
+  border: 0;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.app-sidebar__brand > button:hover,
+.header-more:hover {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.app-sidebar__brand > button svg {
+  width: 15px;
+  height: 15px;
+  transform: rotate(90deg);
+}
+
+/* Spans the sidebar it belongs to rather than a width picked by hand: the
+   longest item on it is "Evidence & recovery", which wrapped onto a second
+   line at 150px and left the icon floating beside two lines of text. */
+.brand-menu {
+  position: absolute;
+  right: 0;
+  left: 0;
+  bottom: 38px;
+  z-index: 30;
+  display: grid;
+  gap: 1px;
+  padding: 5px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 10px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-menu);
+}
+
+.brand-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.brand-menu button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand-menu button:hover {
+  background: var(--zy-accent-soft);
+  color: var(--zy-text);
+}
+
+.brand-menu svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-accent);
+}
+
+.new-task {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 37px;
+  margin: 20px 0 10px;
+  padding: 0 10px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 9px;
+  background: var(--zy-accent-soft);
+  color: var(--zy-text);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.new-task svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-accent);
+}
+
+.app-nav {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.app-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 33px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  text-align: left;
+}
+
+.app-nav button:hover {
+  background: var(--zy-wash-strong);
+}
+
+.app-nav svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+}
+
+/*
+ * The conversation list is the part of the sidebar that gives. Everything else
+ * in the column - the brand, New task, the app links, the preferences row - is
+ * a fixed row a person must always be able to reach; the list is the part that
+ * grows without limit, so it is the part that scrolls. Without this the column
+ * simply overflowed the window and the preferences row, which holds settings
+ * and usage, could not be reached at all once enough conversations existed.
+ */
+.task-list {
+  display: grid;
+  gap: 3px;
+  margin-top: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/*
+ * The label stays put while the conversations under it move, so a scrolled list
+ * still says what it is a list of.
+ */
+.task-list__label {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--zy-sidebar);
+}
+
+.task-entry {
+  position: relative;
+  min-width: 0;
+}
+
+.task-list__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 26px;
+  padding: 0 7px;
+  color: var(--zy-faint);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 39px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-muted);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.task-row--editing {
+  display: block;
+  outline: 0;
+  border-color: var(--zy-accent-line);
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  font: inherit;
+}
+
+.task-context-menu,
+.task-delete-confirm {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 7px;
+  z-index: 35;
+  width: calc(100% - 14px);
+  padding: 5px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 9px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-menu);
+}
+
+.task-context-menu button {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-context-menu button:hover {
+  background: var(--zy-wash-strong);
+}
+
+.task-context-menu .task-context-menu__danger {
+  color: var(--zy-danger);
+}
+
+.task-delete-confirm {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+}
+
+.task-delete-confirm strong {
+  color: var(--zy-text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.task-delete-confirm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.task-delete-confirm button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.task-delete-confirm .task-delete-confirm__delete {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-danger);
+}
+
+.task-row:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.task-row[aria-current="page"] {
+  border-color: var(--zy-line);
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.task-row span {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row small {
+  color: var(--zy-faint);
+  font-size: 10.5px;
+}
+
+.app-sidebar__profile {
+  position: relative;
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  /* Sits at the end of the column and never gives up its height to the list
+     above it: it is how a person reaches settings and usage. */
+  margin-top: auto;
+  flex: 0 0 auto;
+  padding: 11px 6px 1px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.profile-avatar {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--zy-accent);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-sidebar__profile strong,
+.app-sidebar__profile small {
+  display: block;
+}
+
+.app-sidebar__profile strong {
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.app-sidebar__profile small {
+  margin-top: 1px;
+  color: var(--zy-faint);
+  font-size: 10.5px;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-width: 0;
+  height: var(--zy-title-bar-height);
+  padding: 0 16px 0 22px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-canvas);
+}
+
+/*
+ * Where the header reaches the window's right-hand edge it ends before the
+ * window controls, which Windows draws over that corner. Where the context
+ * shelf is open the header stops short of the edge and the shelf is what
+ * clears the corner instead.
+ */
+.app-shell--no-context .session-header,
+.app-shell--browser .session-header {
+  padding-right: calc(16px + var(--zy-window-controls));
+}
+
+.session-header__title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.session-header__title span,
+.session-header__title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-header__title span {
+  flex: none;
+  color: var(--zy-muted);
+  font-size: 11.5px;
+}
+
+.session-header__title span::after {
+  margin: 0 8px;
+  color: var(--zy-faint);
+  content: "/";
+}
+
+.session-header__title strong {
+  color: var(--zy-text);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+.session-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.header-more {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.command-error {
+  position: fixed;
+  z-index: 100;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: min(550px, 90vw);
+  padding: 14px 18px;
+  border: 1px solid var(--zy-line);
+  border-radius: 14px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow);
+  transform: translateX(-50%);
+  font-size: 14px;
+}
+
+.command-error button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.command-error svg {
+  width: 18px;
+  height: 18px;
+}
+
+.connection-recovery {
+  display: grid;
+  place-content: center;
+  justify-items: start;
+  gap: 12px;
+  height: 100%;
+  padding: 32px;
+  background: var(--zy-canvas);
+}
+
+.connection-recovery h1 {
+  margin: 0;
+  font: 450 42px var(--zy-font-display);
+}
+
+.connection-recovery p {
+  color: var(--zy-muted);
+}
+
+.profile-avatar svg {
+  width: 17px;
+  height: 17px;
+}
+
+.mobile-navigation {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .mobile-navigation {
+    position: fixed;
+    display: grid;
+    place-items: center;
+    /*
+      Centred on the header it sits beside, rather than pinned to a number that
+      happened to look right. The pane's top padding puts the header at 20px and
+      the header is 54px tall, so its middle is at 47px and the button's own
+      height decides the rest. A fixed top offset drifted 10px out of line the
+      first time either of those changed.
+    */
+    top: calc(20px + (var(--zy-title-bar-height) - 38px) / 2);
+    left: 16px;
+    z-index: 60;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--zy-line);
+    border-radius: 50%;
+    background: var(--zy-panel);
+    color: var(--zy-text);
+    cursor: pointer;
+  }
+
+  .mobile-navigation svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Clear the floating navigation button, which no longer has a bar to sit
+     beside now that the folder picker lives in the composer. */
+  .session-header {
+    padding-left: 72px;
+  }
+
+  .session-pane {
+    padding-top: 20px;
+  }
+
+  .app-shell--navigation-open > .app-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 50;
+    display: flex !important;
+    width: min(300px, 90vw);
+    /* The same offset the conversation pane uses, so the drawer's own brand row
+       lines up with the floating button rather than starting below it. */
+    padding-top: 20px;
+    box-shadow: var(--zy-shadow);
+  }
+
+  /* The button that opened the drawer floats over it, so the name sits beside
+     the button instead of under it - the same clearance the conversation
+     header gives it. */
+  .app-shell--navigation-open > .app-sidebar > .app-sidebar__brand {
+    /* Keeps its own height rather than being squeezed by the scrolling list
+       below it, so its middle is the same as the floating button's. */
+    flex: 0 0 auto;
+    padding-left: 72px;
+  }
+
+  /*
+   * The floating button sits over whatever is behind it, so a surface has to
+   * leave room for it on both axes. Only the top was allowed for, which drew
+   * the button across the first word of the settings page's own heading.
+   */
+  /* Through the shell, so the clearance outweighs the page's own padding: the
+     page cannot know a button floats over it. */
+  .app-shell > .workspace-surface > * {
+    /* Clearing the button sideways is what a surface actually needs; the large
+       top offset was standing in for that and left a band of empty space above
+       every page. */
+    padding-top: 20px;
+    padding-left: 72px;
+  }
+}
+
+.workspace-surface {
+  grid-column: 2 / -1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The shelf's own column; the wrapper adds no box, so the shelf is laid out as
+   the shell's grid item and can be hidden where there is no room for it. */
+.app-shell__context {
+  display: contents;
+}
+
+/*
+ * The shelf starts below the top bar rather than beside it, so the bar runs
+ * unbroken across the window and its right-hand end - where the window
+ * controls are - is the bar's own ground rather than the shelf's darker one.
+ * The rule along its top is the header's rule, continued to the edge.
+ */
+.app-shell__context > * {
+  margin-top: var(--zy-title-bar-height);
+  border-top: 1px solid var(--zy-line);
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--zy-sidebar-width) minmax(480px, 1fr) 274px;
+  min-height: 0;
+  background: var(--zy-canvas);
+}
+
+.app-shell--no-context {
+  grid-template-columns: var(--zy-sidebar-width) minmax(0, 1fr);
+}
+
+.app-shell--browser {
+  grid-template-columns: var(--zy-sidebar-width) minmax(0, 1fr);
+}
+
+.workspace-tabs {
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+}
+
+.workspace-tabs [role="tablist"] {
+  display: flex;
+  gap: 2px;
+}
+
+.workspace-tabs [role="tab"] {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+/* The browser is doing something nobody is watching. A dot, not a count and
+   not a spinner: it says where to look and disappears once you have. */
+.workspace-tabs [data-live="true"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workspace-tabs [data-live="true"]::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--zy-accent);
+}
+
+.workspace-tabs [aria-selected="true"] {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.workspace-tabs button:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: 3px;
+}
+
+.session-header {
+  flex: none;
+}
+
+.session-header__actions {
+  flex: none;
+}
+
+.workspace-view {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-view[hidden],
+.workspace-composer[hidden],
+.composer-dock[hidden] {
+  display: none;
+}
+
+.session-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--zy-canvas);
+}
+
+.thread-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.thread-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px clamp(24px, 4vw, 50px) 28px;
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.thread-scroll > * {
+  flex: 0 0 auto;
+  width: min(780px, 100%);
+  margin-inline: auto;
+}
+
+.thread-scroll--new {
+  justify-content: center;
+}
+
+.composer-dock {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 65%;
+  overflow-y: auto;
+  padding: 12px clamp(24px, 4vw, 50px) 28px;
+  border-top: 0;
+  background: linear-gradient(to bottom, transparent, var(--zy-canvas) 24px);
+}
+
+/* A pending decision shrinks to the dock and scrolls inside itself, so the
+   dock never gains a scrollbar of its own however long the request is. */
+.composer-dock__decision {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 8px;
+}
+
+.composer-dock:has(> .composer-dock__decision) {
+  overflow: hidden;
+}
+
+.composer-dock > .workspace-composer {
+  flex: 0 0 auto;
+}
+
+.composer-dock__decision,
+.composer-dock > .workspace-composer {
+  width: min(780px, 100%);
+  margin-inline: auto;
+}
+
+.thread-view--approval .thread-scroll {
+  padding-bottom: 20px;
+}
+
+@media (max-width: 1020px) {
+  .app-shell,
+  .app-shell--no-context,
+  .app-shell--browser {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  .app-shell__context {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell,
+  .app-shell--no-context,
+  .app-shell--browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /*
+   * There is one column here, so a surface still asking for the second one has
+   * nowhere to go: the browser invents a track beyond the right-hand edge and
+   * draws the whole settings page into it, a few characters wide. The override
+   * has to live beside the rule that collapses the columns - it was set at a
+   * narrower breakpoint, which is why everything between 521 and 720 pixels was
+   * drawn outside the window.
+   */
+  .workspace-surface {
+    grid-column: 1 / -1;
+  }
+
+  .app-shell > .app-sidebar {
+    display: none;
+  }
+
+  .session-header__title span {
+    display: none;
+  }
+
+  .thread-scroll,
+  .composer-dock {
+    padding-inline: 16px;
+  }
+}
+
+/* Beside the browser the conversation has a narrow column, so it tightens. */
+.thread-scroll.thread-scroll--compact {
+  padding: 18px 16px;
+  gap: 20px;
+}
+
+.composer-dock.composer-dock--compact {
+  padding: 10px 16px 16px;
+}
+
+.workspace-completion {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.session-header__files {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: none;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.session-header__files:hover,
+.session-header__files[aria-expanded="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.session-header__count {
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--zy-wash-strong);
+  font-variant-numeric: tabular-nums;
+}

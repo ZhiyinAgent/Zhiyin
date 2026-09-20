@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "tavily": {
+      "type": "streamable-http",
+      "url": "https://mcp.tavily.com/mcp/",
+      "name": "Tavily",
+      "description": "Searches the web and extracts, maps, and crawls pages for research.",
+      "access": "Needs a Tavily API key.",
+      "dataDestination": "Searches and requested addresses are sent to mcp.tavily.com."
+    }
+  }
+}

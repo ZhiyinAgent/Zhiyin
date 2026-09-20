@@ -1,0 +1,35 @@
+{
+  "name": "zhiyin",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "A general-purpose desktop agent with inspectable actions and manageable capabilities.",
+  "author": "Bastien HOTTELET",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --filter desktop dev",
+    "build": "pnpm -r build",
+    "package": "pnpm --filter desktop package",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run --project packages --project desktop --project repository --project system-boundary",
+    "test:installed": "vitest run --project installed"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.4.1",
+    "eslint": "10.9.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-import-x": "4.17.1",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.12.0",
+    "postcss": "8.5.26",
+    "prettier": "3.9.6",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.69.0",
+    "vitest": "4.1.11"
+  }
+}

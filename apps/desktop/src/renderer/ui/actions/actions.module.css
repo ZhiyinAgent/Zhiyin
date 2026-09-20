@@ -1,0 +1,1060 @@
+/* Styles owned by the actions module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.approval {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  width: min(780px, 100%);
+  min-height: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.approval h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.approval__icon {
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.approval__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.approval__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.approval__summary {
+  flex: 0 0 auto;
+}
+
+.approval__summary {
+  display: grid;
+  gap: 3px;
+}
+
+/* The exact text that will run, shown whole. It wraps rather than clipping:
+   a command a person cannot finish reading is one they cannot consent to.
+   Long output scrolls inside the block instead of stretching the prompt. */
+.approval__target {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 9px;
+}
+
+.approval__target span {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-instrument);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.approval__target code {
+  max-height: 8.4em;
+  overflow-y: auto;
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+  padding: 8px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-text-soft);
+  font: 11.5px/1.5 var(--zy-font-data);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.approval__reason {
+  max-width: 58ch;
+  margin: 3px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* What the action will actually change, next to the reason it was requested. */
+.approval__detail {
+  max-width: 58ch;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--zy-accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* What Zhiyin says the action is for. Deliberately quieter and separately
+   labelled: it is the agent's own account, not an established consequence. */
+.tool-call__described {
+  max-width: 58ch;
+  margin: 0 0 4px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tool-call__described span {
+  display: block;
+  color: var(--zy-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.approval__claim {
+  max-width: 58ch;
+  margin: 6px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.approval__claim span {
+  display: block;
+  color: var(--zy-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.approval__details {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  margin: 9px 0 1px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: var(--zy-inset);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.approval__details code {
+  max-height: 9em;
+  overflow-y: auto;
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+  color: var(--zy-text-soft);
+  font: 10.5px/1.5 var(--zy-font-data);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.approval__actions {
+  display: flex;
+  gap: 3px;
+}
+
+.approval__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 8px;
+  background: var(--zy-panel-raised);
+}
+
+.approval__error {
+  margin: 8px 0 0;
+  color: var(--zy-danger);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.approval :global(.text-button):disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.approval--compact {
+  padding: 12px;
+  gap: 10px;
+}
+
+/* One scroll region per decision. A request scrolls inside itself when it is
+   taller than the room it is given, so the blocks within it that would bound
+   themselves elsewhere give that up here: a long command is read by scrolling
+   the request once rather than a scrollbar inside a scrollbar. */
+.approval .approval__target code,
+.approval .approval__details code,
+.approval .tool-call__value,
+.approval .json-block {
+  max-height: none;
+  overflow: visible;
+}
+
+/* One delegated specialist's own run: the same card language as an approval
+   request, with its own actions nested through the unmodified action-history
+   list below. */
+.specialist-run {
+  padding: 14px 16px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-soft);
+}
+
+.specialist-run__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.specialist-run__marker {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  color: var(--zy-muted);
+}
+
+.specialist-run__marker svg {
+  width: 14px;
+  height: 14px;
+}
+
+.specialist-run__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.specialist-run__content h3 {
+  margin: 2px 0 0;
+  color: var(--zy-text);
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.specialist-run__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.specialist-run__status svg {
+  width: 12px;
+  height: 12px;
+}
+
+.specialist-run__status--running {
+  color: var(--zy-accent);
+}
+
+.specialist-run__status--completed {
+  color: var(--zy-green);
+}
+
+.specialist-run__status--failed,
+.specialist-run__status--interrupted {
+  color: var(--zy-danger);
+}
+
+.specialist-run__handoff {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.specialist-run__handoff p {
+  margin: 0 0 4px;
+}
+
+.specialist-run__handoff ul {
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+
+.specialist-run__reason {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.specialist-run .action-history {
+  margin-top: 4px;
+}
+
+.action-history {
+  padding-top: 2px;
+}
+
+.action-history ul {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+}
+
+.action-history__item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.action-history__marker {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0 4px;
+  border: 1px solid var(--zy-line);
+  border-radius: 6px;
+  color: var(--zy-muted);
+}
+
+.action-history__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.action-history__item--completed .action-history__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+/* Ran and answered, but the answer was not success: read as neither. */
+.action-history__item--reported .action-history__marker {
+  border-color: var(--zy-amber-line);
+  background: var(--zy-amber-fill);
+  color: var(--zy-amber);
+}
+
+/*
+ * Grey, and deliberately not the accent. Work still going on shared its ring
+ * with failed, denied and blocked, so a command that was running looked like a
+ * command that had gone wrong.
+ */
+.action-history__item--running .action-history__marker {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+}
+
+.action-history__item--failed .action-history__marker,
+.action-history__item--denied .action-history__marker,
+.action-history__item--blocked .action-history__marker {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.action-history__content,
+.action-history__summary {
+  min-width: 0;
+}
+
+.action-history__content {
+  display: grid;
+  gap: 2px;
+}
+
+.action-history__summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.action-history__summary strong {
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  font-weight: 570;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-history__status {
+  flex: 0 0 auto;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.action-history__item--failed .action-history__status,
+.action-history__item--denied .action-history__status,
+.action-history__item--blocked .action-history__status {
+  color: var(--zy-danger);
+}
+
+.action-history__item--reported .action-history__status {
+  color: var(--zy-amber);
+}
+
+.action-history__target {
+  overflow: hidden;
+  color: var(--zy-muted);
+  font: 10.5px/1.45 var(--zy-font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-history__description {
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.action-history__reason {
+  margin-top: 2px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* What was called, and with what. Every context uses this whole card; only its
+   outer margin belongs to the permission prompt or action inspector. */
+.tool-call {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+  container-type: inline-size;
+}
+
+.tool-call__header {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+}
+
+.tool-call__label {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-instrument);
+  font-size: 10px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tool-call__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-call__identity code {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tool-call__via {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-faint);
+  font: 10px/1.4 var(--zy-font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call__none {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-faint);
+  font-size: 11px;
+}
+
+.tool-call__arguments {
+  display: grid;
+  margin: 0;
+  padding: 3px 0;
+}
+
+.tool-call__arguments > div {
+  display: grid;
+  grid-template-columns: minmax(92px, 124px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+  padding: 7px 12px;
+}
+
+.tool-call__arguments > div + div {
+  border-top: 1px solid var(--zy-line);
+}
+
+.tool-call__arguments dt {
+  color: var(--zy-muted);
+  font: 10px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+}
+
+.tool-call__arguments dd {
+  min-width: 0;
+  margin: 0;
+}
+
+/* Says what is missing, in the place it is missing from. */
+.tool-call__omitted {
+  color: var(--zy-amber);
+  font-style: normal;
+}
+
+/* A tool's answer, indented and coloured. Bounded and scrollable: an honest
+   answer can be very long, and the panel is not the place to read all of it. */
+.json-block,
+.inspector__json,
+.tool-call__value {
+  max-height: 340px;
+  margin: 0;
+  overflow: auto;
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+  color: var(--zy-code-punct);
+  font: 11px/1.55 var(--zy-font-data);
+}
+
+.tool-call__value {
+  max-height: 220px;
+  color: var(--zy-code-string);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 420px) {
+  .tool-call__arguments > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .tool-call__via {
+    flex-basis: 100%;
+  }
+}
+
+/* Punctuation recedes, keys lead, prose reads as prose. Only the values that
+   are not language — numbers, true, false, null — take a tint, because those
+   are the ones a reader scanning a structure is actually looking for. */
+.json-key {
+  color: var(--zy-code-key);
+}
+
+.json-string {
+  color: var(--zy-code-string);
+}
+
+.json-number {
+  color: var(--zy-code-number);
+}
+
+.json-literal {
+  color: var(--zy-code-literal);
+}
+
+.json-line {
+  /* Wrapped text lands under the line's own indent rather than the margin. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-indent: -1ch;
+  padding-left: 1ch;
+}
+
+/* Present to a screen reader, absent to everyone else. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.diff-modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--zy-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.diff-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow);
+}
+
+/*
+ * No ring. Focus is moved here only so Escape and scrolling have somewhere to
+ * land; it is not a control anyone chose, and outlining the whole dialog reads
+ * as a border on the panel rather than as focus.
+ */
+.diff-modal:focus {
+  outline: none;
+}
+
+.diff-modal__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__header h2 {
+  margin: 0;
+  font: 600 15px/1.3 var(--zy-font-display);
+}
+
+.diff-modal__files {
+  display: flex;
+  gap: 6px;
+  padding: 10px 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__files button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-sm);
+  background: none;
+  color: var(--zy-muted);
+  font: 12px/1.4 var(--zy-font-data);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.diff-modal__files button[aria-selected="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.diff-modal__body {
+  flex: 1;
+  padding: 0 0 12px;
+  overflow: auto;
+}
+
+.change-review__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.change-review__path {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+}
+
+.change-review__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.change-review__count--added {
+  color: var(--zy-green);
+}
+
+.change-review__count--removed {
+  color: var(--zy-danger);
+}
+
+.change-review__unavailable {
+  padding: 24px 20px;
+  color: var(--zy-text-soft);
+}
+
+.change-review__unavailable p {
+  margin: 0 0 8px;
+}
+
+.diff {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.6 var(--zy-font-data);
+}
+
+.diff__row td {
+  padding: 0;
+  vertical-align: top;
+}
+
+.diff__number {
+  width: 1%;
+  padding: 0 8px !important;
+  color: var(--zy-faint);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff__text {
+  width: 100%;
+  padding-right: 16px !important;
+}
+
+.diff__text code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff__marker {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--zy-faint);
+  text-align: center;
+  user-select: none;
+}
+
+.diff__row--added {
+  background: var(--zy-green-fill);
+}
+
+.diff__row--added .diff__marker {
+  color: var(--zy-green);
+}
+
+.diff__row--removed {
+  background: var(--zy-accent-veil);
+}
+
+.diff__row--removed .diff__marker {
+  color: var(--zy-danger);
+}
+
+.diff__skip td {
+  padding: 4px 20px;
+  border-top: 1px solid var(--zy-line);
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+  color: var(--zy-faint);
+  font-size: 11px;
+}
+
+.approval__review {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-modal__scrim {
+    backdrop-filter: none;
+  }
+}
+
+/* What an action did, opened from the record of it. */
+.inspector__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 12.5px;
+}
+
+.inspector__facts > div {
+  display: contents;
+}
+
+.inspector__facts dt {
+  color: var(--zy-muted);
+}
+
+.inspector__facts dd {
+  margin: 0;
+  color: var(--zy-text);
+  overflow-wrap: anywhere;
+}
+
+.inspector__block {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.inspector__block h3 {
+  margin: 0 0 8px;
+  color: var(--zy-muted);
+  font: 600 11px/1.4 var(--zy-font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 12px/1.7 var(--zy-font-data);
+  color: var(--zy-text-soft);
+}
+
+.inspector__matches {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.7 var(--zy-font-data);
+}
+
+.inspector__matches td {
+  padding: 2px 12px 2px 0;
+  vertical-align: top;
+}
+
+.inspector__where {
+  width: 1%;
+  color: var(--zy-muted);
+  white-space: nowrap;
+}
+
+.inspector__line {
+  color: var(--zy-faint);
+}
+
+.inspector__matches code {
+  overflow-wrap: anywhere;
+}
+
+.inspector__note {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+/* The inspector controls only the card's placement. Its internal spacing is
+   identical to the permission request and every catalog example. */
+.diff-modal__body > .tool-call {
+  margin: 12px 20px 0;
+}
+
+.approval__summary > .tool-call {
+  margin-top: 9px;
+}
+
+/* Small enough to sit inside a record of what happened, and openable at the
+   size it was taken. Checkered ground: a screenshot with transparency has to
+   read as transparent rather than as whatever the panel happens to be. */
+.result-image__frame {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin-top: 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.result-image :global(.text-button) {
+  margin-top: 6px;
+}
+
+.result-image__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--zy-scrim);
+  cursor: zoom-out;
+}
+
+.result-image__scrim img {
+  max-width: 100%;
+  max-height: 100%;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-panel-soft);
+  object-fit: contain;
+}
+
+.inspector__raw {
+  padding: 16px 20px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.inspector__raw summary {
+  padding-block: 5px;
+  cursor: pointer;
+}
+
+.inspector__raw p {
+  margin-block: 8px;
+}
+
+/* What was agreed to, kept with the record of it having happened. */
+.inspector__lead,
+.inspector__consequence,
+.inspector__claim {
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.inspector__lead {
+  color: var(--zy-text);
+}
+
+.inspector__consequence {
+  color: var(--zy-text-soft);
+}
+
+.inspector__claim {
+  color: var(--zy-text-soft);
+}
+
+.inspector__claim span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--zy-muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.approval__effect {
+  margin: 7px 0 0;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.approval__destination {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.approval__destination > span,
+.approval__destination p {
+  color: var(--zy-muted);
+  margin: 0;
+}
+
+.approval__destination pre,
+.inspector__raw pre,
+.inspector__block pre {
+  max-height: 200px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-panel-soft);
+  font: 12px/1.6 var(--zy-font-data);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.action-history__inspect {
+  align-self: flex-start;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.approval__recovery {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.approval__recovery p,
+.approval__recovery ul {
+  margin: 0;
+}
+
+.approval__recovery ul {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 0 18px;
+}
+
+.approval__recovery li span {
+  display: block;
+}

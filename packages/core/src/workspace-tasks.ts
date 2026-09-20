@@ -1,0 +1,46 @@
+import type {
+  TaskArtifact,
+  TaskView,
+  WorkspaceSnapshot,
+  WorkspaceTask,
+} from "@zhiyin/contract";
+
+export function requiredTask(
+  tasks: readonly WorkspaceTask[],
+  taskId: string,
+): WorkspaceTask {
+  const task = tasks.find((item) => item.id === taskId);
+  if (!task) throw new Error("The task does not exist.");
+  return task;
+}
+
+export function taskArtifact(
+  tasks: readonly WorkspaceTask[],
+  taskId: string,
+  path: string,
+): TaskArtifact | undefined {
+  return tasks
+    .find((item) => item.id === taskId)
+    ?.artifacts?.find((item) => item.path === path);
+}
+
+export function taskView(
+  tasks: readonly WorkspaceTask[],
+  taskId: string,
+  viewId: string,
+): TaskView | undefined {
+  return tasks
+    .find((item) => item.id === taskId)
+    ?.views?.find((item) => item.id === viewId);
+}
+
+export function stampTaskWorkspace(
+  tasks: readonly WorkspaceTask[],
+  selectedTaskId: string | null,
+  folder: WorkspaceSnapshot["workspace"],
+): WorkspaceTask[] {
+  if (!folder || !selectedTaskId) return [...tasks];
+  return tasks.map((task) =>
+    task.id === selectedTaskId ? { ...task, workspace: folder } : task,
+  );
+}

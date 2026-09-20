@@ -1,0 +1,218 @@
+import { useId, useState } from "react";
+import type {
+  ApprovalRequest,
+  FileChange,
+  ToolInvocation,
+} from "@zhiyin/contract";
+import { DiffModal } from "./DiffModal.js";
+import { ToolCallView } from "./ToolCallView.js";
+import { Icon } from "../shared/index.js";
+import styles from "./actions.module.css";
+
+export type ApprovalDecision = "allow-once" | "deny";
+
+type ApprovalPromptProps = {
+  effect?: string;
+  detail?: string;
+  claim?: string;
+  destination?: string;
+  title: string;
+  target: string;
+  description?: string;
+  command: string;
+  invocation?: ToolInvocation;
+  changes?: readonly FileChange[];
+  recovery?: ApprovalRequest["recovery"];
+  /** Tighter spacing, for a conversation sharing the window with the browser. */
+  compact?: boolean;
+  onDecision: (decision: ApprovalDecision) => void | Promise<void>;
+};
+
+/**
+ * The one screen where a person is asked to take responsibility for something
+ * they may not be able to read. Its order is the order the decision is
+ * actually made in, and nothing may be inserted above that order:
+ *
+ *   1. what the action is, in a few words;
+ *   2. what it can do to their machine — authoritative, true of every such
+ *      action, and never written by the model;
+ *   3. what Zhiyin says this particular one is for — clearly attributed,
+ *      because it is a claim and not evidence;
+ *   4. the exact thing that will run, verbatim and in full — or, when the
+ *      action is a file change whose effects the tool knows exactly, the
+ *      difference itself, on request.
+ *
+ * The command is shown whole rather than clipped to one line. A command a
+ * person cannot finish reading is a command they cannot consent to, and the
+ * decision is the entire point of this component.
+ */
+export function ApprovalPrompt({
+  effect,
+  detail,
+  claim,
+  destination,
+  title,
+  target,
+  description,
+  command,
+  invocation,
+  changes,
+  recovery,
+  compact = false,
+  onDecision,
+}: ApprovalPromptProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [pendingDecision, setPendingDecision] =
+    useState<ApprovalDecision | null>(null);
+  const [decisionError, setDecisionError] = useState<string>();
+  const detailId = useId();
+  const actionAlreadyNamed = invocation?.name === title && !invocation.via;
+
+  async function decide(decision: ApprovalDecision) {
+    if (pendingDecision) return;
+    setPendingDecision(decision);
+    setDecisionError(undefined);
+    try {
+      await onDecision(decision);
+      setPendingDecision(null);
+    } catch {
+      setPendingDecision(null);
+      setDecisionError("The decision could not be sent. Try again.");
+    }
+  }
+
+  return (
+    <section
+      className={`${styles.approval}${compact ? ` ${styles["approval--compact"]}` : ""}`}
+      aria-label="Permission request"
+    >
+      <div className={styles.approval__icon}>
+        <Icon name="lock" />
+      </div>
+      <div className={styles.approval__content}>
+        <div className={styles.approval__summary}>
+          <h3>{title}</h3>
+          {effect && effect !== title && (
+            <p className={styles.approval__effect}>{effect}</p>
+          )}
+          {detail && <p className={styles.approval__detail}>{detail}</p>}
+          {claim && (
+            <p className={styles.approval__claim}>
+              <span>Zhiyin says this is for</span>
+              {claim}
+            </p>
+          )}
+          {description && description !== claim && (
+            <p className={styles.approval__reason}>{description}</p>
+          )}
+          {destination && (
+            <div className={styles.approval__destination}>
+              <span>Connection</span>
+              <strong>{destination}</strong>
+              <p>This request sends these inputs to this connection.</p>
+            </div>
+          )}
+          {invocation && !changes?.length ? (
+            (!actionAlreadyNamed || invocation.arguments.length > 0) && (
+              <ToolCallView
+                invocation={invocation}
+                label="What will run"
+                hideName={actionAlreadyNamed}
+              />
+            )
+          ) : (
+            <div className={styles.approval__target}>
+              <span>
+                {changes?.length ? "What will change" : "What will run"}
+              </span>
+              <code>{target}</code>
+            </div>
+          )}
+          {/*
+            A file change is reviewed as a difference, never as the call that
+            would make it. Nobody consents to replacing a file by reading
+            `write_file({"path":…,"text":…})`; the question they are
+            answering is which lines go and which arrive.
+          */}
+          {!!changes?.length && (
+            <button
+              className={`text-button ${styles.approval__review}`}
+              type="button"
+              disabled={pendingDecision !== null}
+              onClick={() => setReviewing(true)}
+            >
+              <Icon name="file" />
+              {changes.length === 1
+                ? "Review this change"
+                : `Review ${changes.length} changed files`}
+            </button>
+          )}
+          {recovery?.files.some((file) => file.status === "unprotected") && (
+            <div
+              className={styles.approval__recovery}
+              aria-label="File recovery"
+            >
+              <p>Some file changes cannot be restored after this action.</p>
+              <ul>
+                {recovery.files
+                  .filter((file) => file.status === "unprotected")
+                  .map((file) => (
+                    <li key={file.path}>
+                      <strong>{file.path}</strong>
+                      {file.reason && <span>{file.reason}</span>}
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+        </div>
+        {detailsOpen && (
+          <div className={styles.approval__details} id={detailId}>
+            <span>Exactly as sent</span>
+            <code>{command}</code>
+          </div>
+        )}
+        {decisionError && (
+          <p className={styles.approval__error} role="alert">
+            {decisionError}
+          </p>
+        )}
+        <div className={styles.approval__footer}>
+          <button
+            className="text-button"
+            type="button"
+            aria-expanded={detailsOpen}
+            aria-controls={detailId}
+            disabled={pendingDecision !== null}
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            {detailsOpen ? "Hide details" : "Show details"}
+            <Icon name="chevron" />
+          </button>
+          <div className={styles.approval__actions}>
+            <button
+              className="button button--quiet"
+              type="button"
+              disabled={pendingDecision !== null}
+              onClick={() => void decide("deny")}
+            >
+              {pendingDecision === "deny" ? "Denying…" : "Deny"}
+            </button>
+            <button
+              className="button button--accent"
+              type="button"
+              disabled={pendingDecision !== null}
+              onClick={() => void decide("allow-once")}
+            >
+              {pendingDecision === "allow-once" ? "Allowing…" : "Allow once"}
+            </button>
+          </div>
+        </div>
+      </div>
+      {reviewing && !!changes?.length && (
+        <DiffModal changes={changes} onClose={() => setReviewing(false)} />
+      )}
+    </section>
+  );
+}

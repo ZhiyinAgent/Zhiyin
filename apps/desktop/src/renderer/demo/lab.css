@@ -1,0 +1,285 @@
+html {
+  min-width: 320px;
+  background: var(--zy-canvas);
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background: var(--zy-canvas);
+  color: var(--zy-text);
+}
+
+.lab {
+  width: min(1100px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 62px 0 100px;
+}
+
+.lab__header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 0 4px 34px;
+}
+
+.lab__header h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 46px);
+  font-weight: 520;
+  letter-spacing: -0.045em;
+}
+
+.lab__header p:last-child {
+  margin: 9px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.lab__header a {
+  flex: none;
+  padding: 10px 0;
+  color: var(--zy-accent);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.lab-section {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 34px;
+  padding: 34px 4px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.lab-section__intro {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-content: start;
+}
+
+.lab-section__intro > span {
+  color: var(--zy-accent);
+  font:
+    10px/1.4 "Cascadia Code",
+    Consolas,
+    monospace;
+}
+
+.lab-section__intro h2 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lab-section__intro p {
+  margin: 7px 0 0;
+  color: var(--zy-muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.lab-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 150px;
+  padding: 26px 30px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-lg);
+  background: var(--zy-panel);
+}
+
+.lab-brand__sizes {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding-left: 28px;
+  border-left: 1px solid var(--zy-line);
+}
+
+.lab-mark--large {
+  width: 48px;
+  height: 48px;
+}
+
+.lab-mark--medium {
+  width: 30px;
+  height: 30px;
+}
+
+.lab-mark--small {
+  width: 18px;
+  height: 18px;
+}
+
+.lab-narrow {
+  max-width: 430px;
+}
+
+.lab-response {
+  max-width: 760px;
+  padding: 24px 26px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-soft);
+}
+
+.lab-shelves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.lab-shelves > * {
+  min-height: 470px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+}
+
+.lab-stack {
+  display: grid;
+  gap: 14px;
+  max-width: 650px;
+}
+
+/* The room a decision has in the app: bounded, so a long one scrolls inside
+   itself and keeps its answer in reach. */
+.lab-dock {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+}
+
+.lab-frame-parts {
+  display: grid;
+  grid-template-columns: 218px minmax(0, 1fr);
+  min-height: 470px;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-canvas);
+}
+
+.lab-sidebar {
+  min-height: 470px;
+}
+
+.lab-sidebar > * {
+  height: 100%;
+}
+
+.lab-frame-parts__main {
+  min-width: 0;
+}
+
+.lab-frame-parts__main > div:last-child {
+  max-width: 520px;
+  padding: 46px 32px;
+}
+
+.lab-feature-surface {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-canvas);
+}
+
+/* A page-sized panel is shown at a page's height. */
+.lab-feature-surface--page > * {
+  min-height: 620px;
+}
+
+.lab-loading-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.8fr);
+  gap: 16px;
+}
+
+.lab-loading-grid > * {
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-canvas);
+}
+
+.lab-loading-grid > :last-child {
+  grid-column: 2;
+}
+
+@media (max-width: 760px) {
+  .lab {
+    width: min(100% - 28px, 620px);
+    padding-top: 34px;
+  }
+
+  .lab__header,
+  .lab-section {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .lab-section {
+    gap: 22px;
+  }
+
+  .lab-brand {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 26px;
+  }
+
+  .lab-brand__sizes {
+    width: 100%;
+    padding: 20px 0 0;
+    border-top: 1px solid var(--zy-line);
+    border-left: 0;
+  }
+
+  .lab-shelves {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-frame-parts {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-loading-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lab-loading-grid > :last-child {
+    grid-column: 1;
+  }
+
+  .lab-sidebar {
+    display: none;
+  }
+}
+
+/* Gives the produced-files panel the positioned parent it has in the app. */
+.lab-drawer-stage {
+  position: relative;
+  height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-canvas);
+}
+
+/* The browser panel lives in the right rail, so the lab shows it at that
+   width rather than stretched across the page. */
+.lab-feature-surface--rail {
+  display: flex;
+  gap: 16px;
+  align-items: start;
+}
+
+.lab-feature-surface--rail > * {
+  width: 360px;
+}

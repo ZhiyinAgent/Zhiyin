@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the same gate as everything else. Enable with:
+#   git config core.hooksPath .githooks
+# Skip once with: git commit --no-verify
+exec powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1

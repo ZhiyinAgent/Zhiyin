@@ -1,0 +1,379 @@
+/* Styles owned by the browser module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.browser-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  align-self: start;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  margin: 12px 12px 12px 0;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-soft);
+}
+
+/* Chrome and page read as one window: the toolbar sits on its own ground,
+   the page is flush beneath it with nothing floating in between. */
+.browser-panel__chrome {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px 10px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+}
+
+.browser-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.browser-panel__title h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-panel__progress {
+  flex: none;
+  color: var(--zy-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+/* A hairline that travels while the page loads, in place of a sentence. */
+.browser-panel__chrome[data-loading="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 32%;
+  height: 1px;
+  background: var(--zy-accent-line);
+  animation: browser-panel-progress 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-panel__chrome[data-loading="true"]::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+}
+
+.browser-panel__close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-faint);
+  cursor: pointer;
+}
+
+.browser-panel__close:hover {
+  border-color: var(--zy-line);
+  color: var(--zy-text-soft);
+}
+
+.browser-panel__close svg {
+  width: 12px;
+}
+
+.browser-panel__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.browser-panel__bar button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.browser-panel__bar button:hover:not(:disabled) {
+  border-color: var(--zy-line);
+  color: var(--zy-text-soft);
+}
+
+.browser-panel__bar button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.browser-panel__bar svg {
+  width: 14px;
+}
+
+/* One chevron asset, turned: back and forward are the same arrow. */
+.browser-panel__bar button svg {
+  transform: rotate(90deg);
+}
+
+.browser-panel__bar .browser-panel__forward svg {
+  transform: rotate(-90deg);
+}
+
+.browser-panel__bar form {
+  flex: 1;
+  min-width: 0;
+  margin-left: 6px;
+}
+
+.browser-panel__bar input {
+  width: 100%;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+  font: 10px/1 var(--zy-font-data);
+  text-overflow: ellipsis;
+}
+
+.browser-panel__bar input:hover:not(:disabled) {
+  border-color: var(--zy-line);
+}
+
+.browser-panel__bar input:focus-visible {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-wash);
+  outline: none;
+}
+
+.browser-panel__viewport {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--zy-panel-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--zy-line-strong) transparent;
+}
+
+.browser-panel__view {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: var(--zy-panel-soft);
+  cursor: default;
+}
+
+.browser-panel__view:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: -2px;
+}
+
+.browser-panel__view--waiting {
+  aspect-ratio: 4 / 3;
+}
+
+.browser-panel__notice {
+  display: flex;
+  gap: 9px;
+  margin: 12px;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 9px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-muted);
+}
+
+.browser-panel__notice svg {
+  flex: none;
+  width: 15px;
+  color: var(--zy-danger);
+}
+
+.browser-panel__notice p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.browser-workspace {
+  overflow: hidden;
+  padding: 16px clamp(12px, 2vw, 24px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--zy-line-strong) transparent;
+}
+
+.browser-workspace > .browser-panel {
+  flex: 1;
+  align-self: stretch;
+  max-height: none;
+  overflow: hidden;
+  margin: 0;
+}
+
+.browser-workspace .browser-panel__viewport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.browser-workspace img.browser-panel__view {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.browser-workspace .browser-panel__view--waiting {
+  height: 100%;
+  aspect-ratio: auto;
+}
+
+/* Written where what happens is written down, and gone once it is acted on. */
+.browser-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-wash-faint);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+}
+
+.browser-notice svg {
+  flex: none;
+  width: 14px;
+  color: var(--zy-muted);
+}
+
+.browser-notice p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.browser-work-area {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.browser-lane {
+  display: flex;
+  flex: 0 0 0%;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    flex-basis 200ms ease,
+    opacity 160ms ease;
+}
+
+.browser-work-area[data-split="true"] > .browser-lane {
+  flex-basis: min(var(--browser-share), calc(100% - 328px));
+  opacity: 1;
+}
+
+.browser-lane > .browser-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+
+.conversation-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace-divider {
+  flex: 0 0 0px;
+  min-width: 0;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  transition: flex-basis 200ms ease;
+}
+
+.browser-work-area[data-split="true"] > .workspace-divider {
+  flex-basis: 8px;
+}
+
+.workspace-divider::after {
+  content: "";
+  position: absolute;
+  inset: 12px 3px;
+  border-radius: 2px;
+  background: var(--zy-line);
+}
+
+.workspace-divider:hover::after,
+.workspace-divider:focus-visible::after {
+  background: var(--zy-accent-line);
+}
+
+.workspace-divider:focus-visible {
+  outline: none;
+}
+
+.browser-work-area[data-dragging="true"] > .browser-lane,
+.browser-work-area[data-dragging="true"] > .workspace-divider {
+  transition: none;
+}
+
+.browser-work-area[data-dragging="true"] {
+  user-select: none;
+}
+
+.browser-workspace__return {
+  flex: none;
+  align-self: center;
+  margin: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-lane,
+  .workspace-divider {
+    transition: none;
+  }
+}
+
+@keyframes browser-panel-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}

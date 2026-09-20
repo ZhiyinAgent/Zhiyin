@@ -1,0 +1,14 @@
+node_modules
+dist
+out
+pnpm-lock.yaml
+.claude/settings.local.json
+.playwright-mcp/
+
+# Prose is hand-wrapped and reviewed by people. Prettier reflows it and
+# rewrites emphasis markers, which makes doc diffs unreadable.
+*.md
+
+# Evaluation fixtures are inputs, not source. One contains a deliberate defect
+# that must survive formatting exactly as written.
+evaluation/

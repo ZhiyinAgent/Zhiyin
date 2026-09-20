@@ -1,0 +1,15 @@
+node_modules
+dist
+out
+*.tsbuildinfo
+
+# Secrets
+.env
+.env.local
+.claude/settings.local.json
+.playwright-mcp/
+
+# OS
+.DS_Store
+Thumbs.db
+release

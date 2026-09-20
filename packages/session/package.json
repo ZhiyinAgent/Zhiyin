@@ -1,0 +1,18 @@
+{
+  "name": "@zhiyin/session",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Persistence of conversations and the per-turn change record that makes undo possible.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "@zhiyin/artifacts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The files a task produced, and how they are reviewed and taken out of the workspace.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*"
+  }
+}

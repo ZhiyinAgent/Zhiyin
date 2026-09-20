@@ -1,0 +1,260 @@
+import type { ModelProviderList, ModelProviderOption } from "@zhiyin/contract";
+import { LoadingSkeleton } from "../shared/index.js";
+import { perMillion, tokenCount, responseTime } from "./format.js";
+import styles from "./model.module.css";
+
+export type ProviderOrder =
+  "price" | "response" | "speed" | "reliability" | "context";
+
+const orders: readonly {
+  readonly value: ProviderOrder;
+  readonly label: string;
+}[] = [
+  { value: "price", label: "Lowest price" },
+  { value: "response", label: "Fastest response" },
+  { value: "speed", label: "Highest speed" },
+  { value: "reliability", label: "Most reliable" },
+  { value: "context", label: "Largest context window" },
+];
+
+/** Absent measurements sort last rather than best. */
+function sorted(
+  providers: readonly ModelProviderOption[],
+  order: ProviderOrder,
+): readonly ModelProviderOption[] {
+  const rows = [...providers];
+  const low = (value: number | null) => value ?? Number.POSITIVE_INFINITY;
+  const high = (value: number | null) => value ?? Number.NEGATIVE_INFINITY;
+  switch (order) {
+    case "price":
+      return rows.sort((a, b) => a.inputUsdPerMillion - b.inputUsdPerMillion);
+    case "response":
+      return rows.sort((a, b) => low(a.responseMs) - low(b.responseMs));
+    case "speed":
+      return rows.sort(
+        (a, b) => high(b.tokensPerSecond) - high(a.tokensPerSecond),
+      );
+    case "reliability":
+      return rows.sort((a, b) => high(b.uptimePercent) - high(a.uptimePercent));
+    case "context":
+      return rows.sort((a, b) => b.contextWindow - a.contextWindow);
+  }
+}
+
+export function ProviderTable({
+  list,
+  loading,
+  selected,
+  order,
+  onOrderChange,
+  onToggle,
+  onAutomatic,
+  onAddKey,
+  keyMissing,
+}: {
+  list: ModelProviderList | null;
+  loading: boolean;
+  selected: readonly string[];
+  order: ProviderOrder;
+  onOrderChange: (order: ProviderOrder) => void;
+  onToggle: (slug: string) => void;
+  onAutomatic: () => void;
+  onAddKey: () => void;
+  keyMissing: boolean;
+}) {
+  const automatic = selected.length === 0;
+
+  return (
+    <section className={styles["model-column"]} aria-label="Providers">
+      <div className={styles["model-column__top"]}>
+        <div className={styles["model-controls"]}>
+          <div
+            className={`${styles["model-control"]} ${styles["model-control--grow"]}`}
+          >
+            <span className={styles["model-control__label"]}>
+              Providers for
+            </span>
+            <h3>
+              {list?.status === "ready" ? list.model : "No model selected"}
+            </h3>
+          </div>
+          <div className={styles["model-control"]}>
+            <label
+              className={styles["model-control__label"]}
+              htmlFor="provider-order"
+            >
+              Order by
+            </label>
+            <select
+              className={styles["model-select"]}
+              id="provider-order"
+              value={order}
+              disabled={keyMissing || list?.status !== "ready"}
+              onChange={(event) =>
+                onOrderChange(event.target.value as ProviderOrder)
+              }
+            >
+              {orders.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {keyMissing ? (
+        <div className={styles["model-empty"]}>
+          <strong>Add a key to compare providers</strong>
+          <p>The saved model keeps working while there is no key.</p>
+          <button
+            className="button button--accent"
+            type="button"
+            onClick={onAddKey}
+          >
+            Add a key
+          </button>
+        </div>
+      ) : loading ? (
+        <LoadingSkeleton label="Loading providers" />
+      ) : !list ? (
+        <div className={styles["model-empty"]}>
+          <strong>Choose a model first</strong>
+          <p>
+            Its providers, their prices and how they have been running appear
+            here.
+          </p>
+        </div>
+      ) : list.status === "unavailable" ? (
+        <div className={styles["model-empty"]} role="status">
+          <strong>Providers are unavailable</strong>
+          <p>{list.reason}</p>
+        </div>
+      ) : (
+        <div>
+          <button
+            className={styles["model-auto-row"]}
+            type="button"
+            role="checkbox"
+            aria-checked={automatic}
+            onClick={onAutomatic}
+          >
+            <span className={styles["model-box"]} aria-hidden="true">
+              ✓
+            </span>
+            <span>
+              <strong>
+                Any provider
+                <span
+                  className={`${styles["model-badge"]} ${styles["model-badge--good"]}`}
+                >
+                  Recommended
+                </span>
+              </strong>
+              <p>
+                Zhiyin uses whichever provider can answer, and moves to another
+                when one is busy.
+              </p>
+            </span>
+          </button>
+
+          <div className={styles["model-provider-head"]} aria-hidden="true">
+            <span />
+            <span>Provider</span>
+            <span>
+              Input<small>$ per million</small>
+            </span>
+            <span className={styles["model-col--output"]}>
+              Output<small>$ per million</small>
+            </span>
+            <span className={styles["model-col--context"]}>
+              Context window<small>tokens</small>
+            </span>
+            <span>
+              Response time<small>typical</small>
+            </span>
+            <span className={styles["model-col--speed"]}>
+              Speed<small>tokens/second</small>
+            </span>
+            <span>
+              Reliability<small>last 30 minutes</small>
+            </span>
+          </div>
+
+          {sorted(list.providers, order).map((provider) => {
+            const picked = selected.includes(provider.slug);
+            return (
+              <button
+                key={provider.slug}
+                className={styles["model-provider-row"]}
+                type="button"
+                role="checkbox"
+                aria-checked={picked}
+                disabled={!provider.acceptsTools}
+                aria-label={provider.name}
+                title={
+                  provider.acceptsTools
+                    ? undefined
+                    : "This provider cannot run tools"
+                }
+                onClick={() => onToggle(provider.slug)}
+              >
+                <span className={styles["model-box"]} aria-hidden="true">
+                  ✓
+                </span>
+                <span className={styles["model-provider-row__name"]}>
+                  <strong>
+                    {provider.name}
+                    {provider.acceptsTools ? null : (
+                      <span
+                        className={`${styles["model-badge"]} ${styles["model-badge--warn"]}`}
+                      >
+                        No tool use
+                      </span>
+                    )}
+                  </strong>
+                  <span>
+                    {provider.quantization
+                      ? `${provider.quantization} precision`
+                      : "Precision not stated"}
+                  </span>
+                </span>
+                <span className={styles["model-cell"]}>
+                  {perMillion(provider.inputUsdPerMillion)}
+                </span>
+                <span
+                  className={`${styles["model-cell"]} ${styles["model-col--output"]}`}
+                >
+                  {perMillion(provider.outputUsdPerMillion)}
+                </span>
+                <span
+                  className={`${styles["model-cell"]} ${styles["model-col--context"]}`}
+                >
+                  {tokenCount(provider.contextWindow)}
+                </span>
+                <span
+                  className={`${styles["model-cell"]}${provider.responseMs === null ? ` ${styles["model-cell--absent"]}` : ""}`}
+                >
+                  {responseTime(provider.responseMs)}
+                </span>
+                <span
+                  className={`${styles["model-cell"]} ${styles["model-col--speed"]}${provider.tokensPerSecond === null ? ` ${styles["model-cell--absent"]}` : ""}`}
+                >
+                  {provider.tokensPerSecond ?? "—"}
+                </span>
+                <span
+                  className={`${styles["model-cell"]}${provider.uptimePercent === null ? ` ${styles["model-cell--absent"]}` : ""}`}
+                >
+                  {provider.uptimePercent === null
+                    ? "—"
+                    : `${provider.uptimePercent}%`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}

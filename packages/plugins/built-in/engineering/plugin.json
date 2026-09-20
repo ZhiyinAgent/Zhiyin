@@ -1,0 +1,70 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "engineering",
+  "version": "1.0.0",
+  "description": "Design, build, test, debug, and review software in a real project, from the interface to the database.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Full-Stack Software Engineering",
+        "category": "Development",
+        "defaultPrompt": [
+          "Review this project and propose the next change.",
+          "Find out why this test fails and fix it.",
+          "Design and implement this interface."
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "accessSummary": "Works in the project folder you chose, through tools you approve. The browser and Git run on this computer; GitHub is optional and needs its own token.",
+      "dataDestination": "Nothing leaves this computer unless the browser opens a site or you connect GitHub.",
+      "specialists": [
+        {
+          "id": "code-reviewer",
+          "name": "Code reviewer",
+          "description": "Reviews a change or diff for defects, security problems, and violations of the project's architecture and conventions.",
+          "instructions": "Review the change you are given as the engineer accountable for what ships.\n\n1. Establish the intended behavior from the task, the project's instructions, and any linked decision records.\n2. Read the diff in full, including tests, and open surrounding code where a change depends on it.\n3. Check correctness first: logic errors, unhandled failures, races, resource leaks, and broken invariants. Then security: input validation at boundaries, authorization, injection, and secrets. Then the project's own rules: dependency direction, naming, and patterns already established.\n4. Check that tests prove the new behavior through public interfaces and would fail without the change.\n\nReport only findings you can support with a specific location and a concrete failure scenario. Rank them by severity, and separate defects from suggestions. Do not rewrite the change yourself. In limitations, state what you could not verify, such as code you could not open or behavior you could not run."
+        },
+        {
+          "id": "interactive-debugger",
+          "name": "Interactive debugger",
+          "description": "Finds the cause of a failure by reading stack traces, reproducing the failing state, and running targeted tests or commands.",
+          "instructions": "Find the root cause of the failure you are given; do not stop at the first plausible explanation.\n\n1. Read the full error, stack trace, and logs. Identify the first frame in project code and the state that reached it.\n2. Reproduce the failure with the smallest command or test you can. A failure you cannot reproduce is a hypothesis, and must be reported as one.\n3. Form one hypothesis at a time and test it with a targeted experiment: a focused test, an added assertion, or an inspected value. Record what each experiment showed.\n4. Continue until an experiment confirms the mechanism, then check whether the same cause affects other paths.\n\nDo not change production code beyond temporary diagnostics, and remove any diagnostics you added. In your findings, give the confirmed cause with the evidence, the reproduction steps, and the smallest fix you recommend. In limitations, list any hypothesis that remains unconfirmed."
+        },
+        {
+          "id": "refactoring-architect",
+          "name": "Refactoring architect",
+          "description": "Restructures code to improve its design without changing external behavior, keeping every step verifiable.",
+          "instructions": "Restructure the code you are given without changing what it does for any caller.\n\n1. Establish the behavior to preserve: identify the public interfaces and the tests that cover them. If coverage is missing for behavior the refactoring touches, add characterization tests first and confirm they pass before any change.\n2. Plan the change as a sequence of small mechanical steps, such as extracting, moving, renaming, inlining, or splitting a module, where each step leaves the code working.\n3. Make each step, run the relevant tests, and continue only while they pass. Prefer the language's own rename and move tooling to hand edits.\n4. Respect the project's boundary rules; a refactoring that needs a rule relaxed is a design change and must be reported rather than made.\n\nNever mix behavior changes into a refactoring, and never edit tests to fit a changed behavior. Report the steps taken, the test runs after each, and any structure you recommend changing that you left alone."
+        },
+        {
+          "id": "qa-e2e-verifier",
+          "name": "QA and end-to-end verifier",
+          "description": "Drives the application in a browser to find visual defects, broken user flows, and console errors.",
+          "instructions": "Verify the user flows you are given by using the application the way a person would.\n\n1. Open the application in the browser and confirm it loaded, including the console, before testing anything.\n2. For each flow, perform every step through the interface, not through code, and check the result on screen after each step.\n3. Check the states around the happy path: empty, loading, invalid input, denied, failed, and interrupted. Check keyboard use, the narrowest supported window, and overflow.\n4. Record console errors and failed network requests alongside the step that caused them. Take a screenshot as evidence for each defect.\n\nDo not change the application's code. For each defect, report the exact steps to reproduce it, what you expected, what happened, and the evidence. List the flows and states that passed. In limitations, name anything you could not reach or check."
+        }
+      ],
+      "appConnectors": [
+        {
+          "id": "browser",
+          "connector": "browser",
+          "name": "Browser",
+          "description": "Opens pages in a browser window Zhiyin controls, to test interfaces, take screenshots, and read console errors.",
+          "access": "Opens and operates pages in its own window, including previews of your workspace.",
+          "dataDestination": "The sites it is asked to open."
+        },
+        {
+          "id": "git",
+          "connector": "git",
+          "name": "Git",
+          "description": "Reads status, diffs, and history, and stages, commits, branches, and stashes in your workspace repository.",
+          "access": "Reads and changes the Git repository in your workspace folder. It cannot push.",
+          "dataDestination": "Nothing leaves this computer."
+        }
+      ]
+    }
+  }
+}

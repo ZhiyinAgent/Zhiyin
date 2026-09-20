@@ -1,0 +1,391 @@
+/* Styles owned by the shared module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* Sized by one number, the mark's width; the name and its spacing keep their
+   proportion to it. The component sets the size when it is not the default. */
+.zy-logo {
+  --logo-size: 31px;
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--logo-size) * 10 / 31);
+  min-width: 0;
+}
+
+.zy-logo--compact {
+  --logo-size: 22px;
+}
+
+.zy-logo img {
+  display: block;
+  width: var(--logo-size);
+  height: var(--logo-size);
+  /* The mark is a single-colour PNG, so it is recoloured rather than reissued.
+     White, not accent red: red is reserved for the one thing on a screen that
+     is live or asking, and a permanent logo would spend it. */
+  filter: brightness(0) invert(1);
+}
+
+.zy-logo__word {
+  color: var(--zy-text);
+  font-family: var(--zy-font-instrument);
+  font-size: calc(var(--logo-size) * 16 / 31);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+}
+
+.surface-panel {
+  height: 100%;
+  min-height: 100%;
+  /* The same frame as the model settings page, so a title, its divider, and
+     the content below sit in one place whichever page is open. */
+  padding: 34px clamp(24px, 4vw, 64px) 48px;
+  overflow-y: auto;
+  background: var(--zy-canvas);
+  color: var(--zy-text);
+  scrollbar-color: var(--zy-line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+.surface-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 28px;
+  padding-bottom: 24px;
+  border-bottom: 0;
+}
+
+/* A page that holds its own scrolling: the frame stays put, and the parts
+   inside it decide what moves. */
+.surface-panel--contained {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.surface-panel--contained > .surface-panel__header {
+  flex: 0 0 auto;
+}
+
+/* More room under the heading, for a page that is one large choice. */
+.surface-panel__header--loose {
+  padding-bottom: clamp(34px, 6vh, 72px);
+}
+
+.surface-panel__header h1 {
+  margin: 4px 0 0;
+  font-family: var(--zy-font-display);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.surface-panel__description {
+  max-width: 54ch;
+  margin: 9px 0 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.surface-panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.panel-close:hover {
+  border-color: var(--zy-text-soft);
+  color: var(--zy-text);
+}
+
+.panel-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+.skeleton-block {
+  display: block;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--zy-panel-soft);
+}
+
+.skeleton-block::after {
+  display: block;
+  width: 45%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--zy-wash), transparent);
+  content: "";
+  animation: skeleton-drift 1.8s ease-in-out infinite;
+}
+
+.skeleton-block--avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+}
+
+.skeleton-block--title {
+  width: 110px;
+  height: 11px;
+}
+
+.skeleton-block--line {
+  display: block;
+  width: 72%;
+  height: 8px;
+  margin-top: 8px;
+}
+
+.skeleton-block--wide {
+  width: 92%;
+}
+
+.skeleton-block--control {
+  width: 52px;
+  height: 28px;
+}
+
+.skeleton-list__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 78px;
+  padding: 15px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+@media (max-width: 620px) {
+  .surface-panel {
+    padding: 22px 18px 30px;
+  }
+
+  .surface-panel__header {
+    flex-wrap: wrap;
+  }
+
+  .surface-panel__header > div:first-child {
+    flex: 1 1 280px;
+  }
+
+  .surface-panel__controls {
+    margin-left: auto;
+    justify-content: space-between;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block::after {
+    animation: none;
+  }
+}
+
+/*
+ * The glow starts below the top bar, not at the page's own top edge. The
+ * window controls are drawn over that corner on a flat colour the main process
+ * was given once, and a gradient behind them shows as a rectangle cut out of
+ * it. Above the bar the page is the plain ground, which is exactly what the
+ * controls are painted with.
+ */
+.standalone-page {
+  height: 100%;
+  min-height: 100%;
+  width: 100%;
+  overflow: auto;
+  padding: 0 clamp(22px, 5vw, 72px) 32px;
+  background:
+    radial-gradient(ellipse at 85% 0%, var(--zy-glow-accent) 0, transparent 55%)
+      0 var(--zy-title-bar-height) / 100%
+      calc(100% - var(--zy-title-bar-height)) no-repeat,
+    var(--zy-canvas);
+}
+
+/*
+ * The page's own top bar, and the window's: the same height as the workspace's,
+ * dragged by the same gesture, and ending before the window controls rather
+ * than running under them. The negative margins undo the page's side padding so
+ * the bar reaches both edges.
+ */
+.standalone-page__brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  height: var(--zy-title-bar-height);
+  margin: 0 calc(-1 * clamp(22px, 5vw, 72px));
+  padding: 0 clamp(22px, 5vw, 72px);
+  padding-right: max(clamp(22px, 5vw, 72px), var(--zy-window-controls));
+  -webkit-app-region: drag;
+}
+
+.standalone-page__brand > span {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.standalone-page__body {
+  width: min(940px, 100%);
+  margin: clamp(32px, 6vh, 90px) auto 32px;
+}
+
+.standalone-page__label {
+  color: var(--zy-accent);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.17em;
+}
+
+.standalone-page__intro h1 {
+  margin: 20px 0;
+  font: 450 clamp(38px, 5.4vw, 64px)/1.08 var(--zy-font-display);
+  letter-spacing: -0.045em;
+}
+
+.standalone-page__intro p {
+  max-width: 540px;
+  color: var(--zy-muted);
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.standalone-page__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.standalone-page__footer p {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.standalone-page__footer button {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  min-height: 48px;
+  border-radius: 28px;
+  padding-inline: 24px;
+}
+
+.standalone-page__footer button svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(90deg);
+}
+
+@media (max-width: 520px) {
+  .standalone-page__footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .standalone-page__footer button {
+    justify-content: space-between;
+  }
+
+  .standalone-page__brand > span {
+    display: none;
+  }
+}
+
+.notice {
+  width: min(540px, 100%);
+  padding: 15px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel);
+}
+
+.notice strong {
+  color: var(--zy-text);
+  font-size: 14px;
+}
+
+.notice p {
+  margin: 5px 0 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dialog-shell__scrim {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--zy-scrim);
+}
+
+.dialog-shell {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 18px;
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.dialog-shell:focus {
+  outline: none;
+}
+
+.dialog-shell__header,
+.dialog-shell__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.dialog-shell__header {
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.dialog-shell__header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.dialog-shell__body {
+  overflow: auto;
+  padding: 20px;
+}
+
+.dialog-shell__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--zy-line);
+}
+
+@keyframes skeleton-drift {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}

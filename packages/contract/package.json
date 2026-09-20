@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types crossing between the core and the renderer. No behaviour.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
