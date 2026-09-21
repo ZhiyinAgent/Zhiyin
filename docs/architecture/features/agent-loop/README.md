@@ -230,11 +230,14 @@ browser is not among them: it is reached, and let go of, through capabilities.
   made, in the order it was made` and `keeps the record of a drawing that never
   arrived`.
 
-- The first message receives a locally validated LLM title. Every later
-  compaction regenerates an automatic title from the compacted summary, while a
-  manually entered title is never replaced and does not cause a wasted title
-  request. The named tests `uses an LLM title based on the first message`,
-  `keeps a useful fallback when the first generated title is unusable`,
+- The first message receives a locally validated LLM title. The planning
+  request supplies it when possible; if that answer omits or malforms the
+  title, a focused title request retries once before the app keeps its local
+  fallback. Every later compaction regenerates an automatic title from the
+  compacted summary, while a manually entered title is never replaced and does
+  not cause a wasted title request. The named tests `uses an LLM title based on
+  the first message`, `retries the first title separately when the planning
+  answer omits it`, `keeps a useful fallback when the first generated title is unusable`,
   `preserves a legacy title as manual when its provenance is unknowable`,
   `increments an existing compaction and regenerates its automatic title`, and
   `compacts a manually named conversation without requesting a new title` guard
@@ -326,6 +329,11 @@ browser is not among them: it is reached, and let go of, through capabilities.
   only that it ran. A criterion resting on a tool's output can therefore be
   met by that output. The named test `shows the final assessment what each
   action actually returned` guards it.
+- A negative assessment at the end of one conversational turn is not a failed
+  plan item: the person may still be supplying details or the task may continue
+  in another turn. Positive evidence marks an item verified; otherwise its
+  prior open state and evidence remain intact. The named test `keeps unmet plan
+  work open when a turn asks for more information` guards this distinction.
 - A conversation compacted by the loop is renamed by the same request that
   compacted it, never a second one, and a manual title is neither asked for nor
   replaced. The named tests `names a compacted conversation from the compaction
@@ -483,17 +491,17 @@ browser is not among them: it is reached, and let go of, through capabilities.
   id by some other means.
 - **A plugin's components enter context only from the point a turn activates
   it.** The turn's first request carries only a compact `pluginDirectory`
-  (name and one-line purpose) for every enabled plugin, plus `inspect_plugin`
-  and, while an inactive plugin remains, `activate_plugin`. Calling
+  (name, one-line purpose, component names and brief connector purposes) for every enabled plugin, plus
+  `inspect_plugin` and, while an inactive plugin remains, `activate_plugin`. Calling
   `activate_plugin` persists the activation on the task, so it holds for the
   rest of the conversation, and its tool result names the plugin's now-callable
   skills, specialists, and connectors — the mechanism by which the model
   learns what changed, rather than a rewritten system prompt mid-turn. The
   activation is also recorded as a completed, inspectable action with the
-  plugin's display name and component inventory. Named
-  tests: `advertises a compact plugin directory instead of a plugin's full
-  skills and specialists until it is activated` and `adds exactly an activated
-  plugin's skills, specialists and connectors to context from that point on`.
+  plugin's display name and component inventory. Named tests: `advertises a
+  compact inventory without exposing full plugin instructions until
+  activation` and `adds exactly an activated plugin's skills, specialists and
+  connectors to context from that point on`.
 - **A specialist handoff is durable and attributable.** Running child work is
   stored on the owning task with its definition provenance; a restart settles
   it as interrupted, and completion returns a structured handoff to the parent.

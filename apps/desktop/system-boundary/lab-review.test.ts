@@ -262,6 +262,58 @@ describe.runIf(availability.available)(
       }
     }, 300_000);
 
+    it("keeps a selected clarification choice inside its option card in a real browser", async () => {
+      const target = await launcher.launch(minimum);
+      try {
+        const page = (target.automation() as BrowserContext).pages()[0];
+        if (!page) throw new Error("No browser page");
+        await page.setViewportSize(minimum);
+        await target.goto(`${served.url}#clarifying-questions`);
+
+        const option = page
+          .locator("#clarifying-questions label")
+          .filter({ hasText: "Internal team" });
+        const appearance = () =>
+          option.evaluate((element) => {
+            const style = getComputedStyle(element);
+            const box = element.getBoundingClientRect();
+            return {
+              display: style.display,
+              columns: style.gridTemplateColumns,
+              padding: style.padding,
+              radius: style.borderRadius,
+              width: Math.round(box.width),
+              height: Math.round(box.height),
+              border: style.borderColor,
+              background: style.backgroundColor,
+            };
+          });
+
+        const before = await appearance();
+        await option.click();
+        await page.waitForTimeout(200);
+        const after = await appearance();
+
+        expect(before.display).toBe("grid");
+        expect(before.width).toBeGreaterThan(0);
+        expect(await option.locator("input").isChecked()).toBe(true);
+        expect(after).toMatchObject({
+          display: before.display,
+          columns: before.columns,
+          padding: before.padding,
+          radius: before.radius,
+          width: before.width,
+          height: before.height,
+        });
+        expect([after.border, after.background]).not.toEqual([
+          before.border,
+          before.background,
+        ]);
+      } finally {
+        await target.close();
+      }
+    }, 300_000);
+
     /**
      * A diagram is the same size within and across motion settings. Ambient
      * application animation once changed the label measurements Mermaid used;

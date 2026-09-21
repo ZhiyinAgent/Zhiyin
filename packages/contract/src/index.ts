@@ -1518,16 +1518,7 @@ export class VisibleError extends Error {
  */
 export type ToolOwner = "built-in" | "mcp" | "skill" | "plugin";
 
-/**
- * One enabled plugin's compact identity, advertised in place of its full
- * skills, specialists, and connectors until it is activated.
- */
-export type PluginDirectoryEntry = {
-  readonly id: string;
-  readonly name: string;
-  readonly purpose: string;
-  readonly activated: boolean;
-};
+export type { PluginDirectoryEntry } from "./plugin-directory.js";
 
 /** A tool as named to the agent and shown to the user. */
 export interface ToolSpec {

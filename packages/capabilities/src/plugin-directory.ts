@@ -90,6 +90,26 @@ export function pluginDirectoryFrom(
       id: view.manifest.name,
       name: view.manifest.displayName,
       purpose: view.manifest.description,
+      includes: {
+        skills: view.skills
+          .filter((skill) => skill.enabled)
+          .map((skill) => skill.name),
+        specialists: view.specialists
+          .filter((specialist) => specialist.enabled)
+          .map((specialist) => specialist.name),
+        connectors: [...view.mcpServers, ...view.appConnectors]
+          .filter((connector) => connector.enabled)
+          .map((connector) => {
+            const description = connector.description
+              .trim()
+              .replace(/\s+/g, " ");
+            const purpose =
+              description.length > 120
+                ? `${description.slice(0, 117).trimEnd()}…`
+                : description;
+            return purpose ? `${connector.name} — ${purpose}` : connector.name;
+          }),
+      },
       activated: activated.has(view.manifest.name),
     }));
 }

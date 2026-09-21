@@ -59,6 +59,18 @@ export function recordPlanTool(withConversationTitle: boolean): ModelTool {
   };
 }
 
+/** Consumed by `conversationTitleFrom` when the planning answer omitted it. */
+export const recordConversationTitleTool: ModelTool = {
+  name: "record_conversation_title",
+  description: "Record the concise title for a new conversation.",
+  inputSchema: {
+    type: "object",
+    properties: { title: conversationTitleProperty },
+    required: ["title"],
+    additionalProperties: false,
+  },
+};
+
 /**
  * Consumed by `compactionFrom`, and by `conversationTitleFrom` when asked for.
  *

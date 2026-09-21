@@ -544,9 +544,12 @@ rendered.
   feedback and duplicate-click suppression.
 - Clarifying questions use native mutually exclusive choices and bounded text,
   remain visually distinct from permission, and submit one complete response.
-  The named tests `answers several clarifying questions once`, `keeps a failed
-  answer editable`, and `returns the exact structured answer to the core` guard
-  the form and bridge boundaries.
+  Selecting a choice adds its state without replacing the option-card layout.
+  The named tests `answers several clarifying questions once`, `keeps a
+  selected clarification choice inside its option card`, `keeps a selected
+  clarification choice inside its option card in a real browser`, `keeps a
+  failed answer editable`, and `returns the exact structured answer to the
+  core` guard the form, layout, and bridge boundaries.
 - A renewable-work checkpoint shows only the completed tool-round count and the
   Continue and Pause choices. Token, time, provider-cost, and ledger terminology
   stay out of this decision surface. The named test `offers an explicit

@@ -242,7 +242,7 @@ const OVERSIZED_PACKAGE_FILES = {
   "packages/mcp/src/index.ts": 1204,
   "packages/session/src/index.ts": 1045,
   "packages/model-client/src/index.ts": 931,
-  "packages/contract/src/index.ts": 1008,
+  "packages/contract/src/index.ts": 1003,
   "packages/recovery/src/index.ts": 707,
 };
 

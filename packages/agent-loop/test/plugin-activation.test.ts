@@ -58,7 +58,7 @@ function dependenciesWithPlugin(
 }
 
 describe("plugin activation", () => {
-  it("advertises a compact plugin directory instead of a plugin's full skills and specialists until it is activated", async () => {
+  it("advertises a compact inventory without exposing full plugin instructions until activation", async () => {
     const requests: ModelRequest[] = [];
     const loop = loopFrom(
       dependenciesWithPlugin(async function* (request) {
@@ -84,8 +84,11 @@ describe("plugin activation", () => {
     const serialized = JSON.stringify(request?.messages);
     expect(serialized).toContain("software-engineering");
     expect(serialized).toContain("The software-engineering plugin.");
-    expect(serialized).not.toContain("project-engineering");
-    expect(serialized).not.toContain("code-reviewer");
+    expect(serialized).toContain("project-engineering");
+    expect(serialized).toContain("Code reviewer");
+    expect(serialized).toContain("tavily — The tavily connector.");
+    expect(serialized).not.toContain("Do the engineering.");
+    expect(serialized).not.toContain("Search the web with Tavily.");
   });
 
   it("adds exactly an activated plugin's skills, specialists and connectors to context from that point on", async () => {

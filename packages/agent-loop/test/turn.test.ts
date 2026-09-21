@@ -838,7 +838,7 @@ describe("AgentLoop", () => {
           yield {
             kind: "textDelta",
             text: prompt.includes("Create an ordered plan")
-              ? '{"items":[{"title":"Identify the project","criterion":"The project name and package manager are supported by workspace evidence."}]}'
+              ? '{"conversationTitle":"Identify current project","items":[{"title":"Identify the project","criterion":"The project name and package manager are supported by workspace evidence."}]}'
               : '{"title":"Read project manifest","description":"I need package.json to identify the project and its package manager.","planItemId":"plan-1"}',
           };
           yield { kind: "done" };

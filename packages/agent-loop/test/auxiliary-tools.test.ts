@@ -108,6 +108,46 @@ describe("auxiliary model calls", () => {
     });
   });
 
+  it("retries the first title separately when the planning answer omits it", async () => {
+    const requests: ModelRequest[] = [];
+    const deps = stubDependencies(() => {}, [{ kind: "done" }]);
+    const loop = loopFrom({
+      ...deps,
+      guidanceModel: guidance(requests, (request) => {
+        const tool = request.tools?.[0]?.name;
+        if (tool === "record_plan")
+          return toolCall("record_plan", {
+            items: [
+              {
+                title: "Inspect the checklist",
+                criterion: "The launch checklist has been reviewed.",
+              },
+            ],
+          });
+        if (tool === "record_conversation_title")
+          return toolCall("record_conversation_title", {
+            title: "Assess launch readiness",
+          });
+        return [];
+      }),
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(
+      taskId,
+      "Please inspect the launch checklist before tomorrow's review",
+    );
+
+    expect(requests.map((request) => request.tools?.[0]?.name)).toEqual([
+      "record_plan",
+      "record_conversation_title",
+    ]);
+    expect(loop.snapshot().tasks[0]).toMatchObject({
+      title: "Assess launch readiness",
+      plan: [{ title: "Inspect the checklist" }],
+    });
+  });
+
   /**
    * Without `tool_choice`, a model may answer in prose instead of calling the
    * tool. That was already the outcome when JSON mode returned well-formed

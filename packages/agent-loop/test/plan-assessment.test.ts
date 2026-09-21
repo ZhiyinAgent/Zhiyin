@@ -191,6 +191,47 @@ describe("plan assessment", () => {
       "FOUND-IN-THE-EVIDENCE",
     );
   });
+
+  it("keeps unmet plan work open when a turn asks for more information", async () => {
+    const deps = stubDependencies(() => {}, [
+      {
+        kind: "textDelta",
+        text: "Could you paste the repository URL so I can continue?",
+      },
+      { kind: "done" },
+    ]);
+    const loop = loopFrom({
+      ...deps,
+      ...auxiliaryFor({
+        [PLAN]: {
+          items: [
+            {
+              title: "Open the repository",
+              criterion: "The repository can be read.",
+            },
+            {
+              title: "Explain the architecture",
+              criterion: "The main components are explained.",
+            },
+          ],
+        },
+        [FINAL_ASSESSMENT]: {
+          satisfied: false,
+          summary: "The repository URL is still needed.",
+        },
+      }),
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Explain how my repository works.");
+
+    const plan = loop.snapshot().tasks[0]?.plan ?? [];
+    expect(plan.map((item) => item.status)).toEqual(["active", "pending"]);
+    expect(plan.map((item) => item.verification)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
 });
 
 /**

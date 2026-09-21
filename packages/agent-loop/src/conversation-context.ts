@@ -35,7 +35,7 @@ export function fixedModelMessages(
       ? [
           {
             role: "system" as const,
-            content: `Enabled plugins, by name and purpose (list a plugin's skills, specialists and connectors with inspect_plugin without activating it; activate_plugin adds them to context): ${JSON.stringify(pluginDirectory)}`,
+            content: `Enabled plugins, with a concise inventory of what each contains (inspect_plugin shows component purposes without activating it; activate_plugin adds them to context): ${JSON.stringify(pluginDirectory)}`,
           },
         ]
       : []),

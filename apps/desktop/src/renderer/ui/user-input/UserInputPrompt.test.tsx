@@ -197,6 +197,26 @@ describe("UserInputPrompt", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("keeps a selected clarification choice inside its option card", () => {
+    render(
+      <UserInputPrompt
+        prompt={singleClarification}
+        onSubmit={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const input = screen.getByLabelText("Internal team");
+    const option = input.closest("label");
+    expect(option).not.toBeNull();
+    const cardClass = option?.className ?? "";
+
+    fireEvent.click(input);
+
+    expect(option).toHaveClass(cardClass);
+    expect(option?.className.trim().split(/\s+/)).toHaveLength(2);
+  });
+
   it("sends a single clarifying question without a review step", () => {
     const onSubmit = vi.fn(async () => {});
     render(

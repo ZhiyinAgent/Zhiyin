@@ -344,7 +344,7 @@ function ClarificationPrompt({
           <div className={styles["input-flow__options"]}>
             {options.map((option) => (
               <label
-                className={`${styles["input-flow__option"]}${
+                className={`${styles["input-flow__option"]} ${
                   selectedIds.includes(option.id)
                     ? styles["input-flow__option--selected"]
                     : ""
@@ -678,17 +678,17 @@ function QuizPrompt({
               const stateClass = questionReviewed
                 ? answerCorrect
                   ? outcome === "incomplete" && !answerSelected
-                    ? " input-flow__option--incomplete"
-                    : " input-flow__option--correct"
+                    ? styles["input-flow__option--incomplete"]
+                    : styles["input-flow__option--correct"]
                   : answerSelected
-                    ? " input-flow__option--wrong"
-                    : ""
+                    ? styles["input-flow__option--wrong"]
+                    : undefined
                 : answerSelected
-                  ? " input-flow__option--selected"
-                  : "";
+                  ? styles["input-flow__option--selected"]
+                  : undefined;
               return (
                 <label
-                  className={`${styles["input-flow__option"]}${stateClass}`}
+                  className={`${styles["input-flow__option"]} ${stateClass ?? ""}`}
                   key={answer.id}
                 >
                   <input

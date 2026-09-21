@@ -285,12 +285,25 @@ describe("tools offered to a conversation", () => {
         id: "software-engineering",
         name: "Software Engineering",
         purpose: "Build and review software.",
+        includes: {
+          skills: ["test-first"],
+          specialists: ["Code reviewer"],
+          connectors: [
+            "GitHub — Repositories, issues, and pull requests.",
+            "Browser — Opens pages to test them.",
+          ],
+        },
         activated: false,
       },
       {
         id: "deep-research",
         name: "Deep Research",
         purpose: "Find and verify sources.",
+        includes: {
+          skills: ["triangulate"],
+          specialists: [],
+          connectors: ["Tavily — Searches the web."],
+        },
         activated: false,
       },
     ]);

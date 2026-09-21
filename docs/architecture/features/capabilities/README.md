@@ -63,10 +63,15 @@ and call, and routes every change to the member that owns it.
   reach an implementation nobody approved, so the gathering is refused instead.
   Named test: `refuses a connection tool that reuses a built-in tool's name`.
 - **A plugin's components enter context only once its conversation activates
-  it.** Before that a turn sees only the directory. Named tests: `offers the
-  directory, not a plugin's components, before any plugin is activated` and
-  `adds exactly an activated plugin's skills, specialists and connectors, and
-  names who answers for each`.
+  it.** Before that a turn sees a compact directory: the plugin's purpose and
+  the names of its enabled skills and specialists and brief connector purposes,
+  but no component instructions or tool schemas. This is enough to discover,
+  for example, that engineering includes GitHub repository access without
+  paying the full context cost. Named
+  tests: `offers the directory, not a plugin's components, before any plugin is
+  activated`, `advertises a compact inventory without exposing full plugin
+  instructions until activation`, and `adds exactly an activated plugin's
+  skills, specialists and connectors, and names who answers for each`.
 - **A component a person switched off is offered to no one**, and a plugin that
   is off withdraws everything it declares even in a conversation that activated
   it. Named tests: `offers nothing of a component a person switched off, even in

@@ -20,6 +20,7 @@ import {
 import {
   recordActionPresentationTool,
   recordCompactionTool,
+  recordConversationTitleTool,
   recordCriterionEvaluationTool,
   recordPlanTool,
 } from "./auxiliary-tools.js";
@@ -128,10 +129,35 @@ export class AuxiliaryWork {
       signal,
     );
     const plan = response ? planFrom(response) : undefined;
-    const generatedTitle =
+    let generatedTitle =
       generateConversationTitle && response
         ? conversationTitleFrom(response)
         : undefined;
+    if (generateConversationTitle && !generatedTitle && !signal.aborted) {
+      const titleResponse = await this.askGuidance(
+        {
+          messages: [
+            { role: "system", content: auxiliarySystemMessage },
+            {
+              role: "user",
+              content: [
+                "Name this conversation from the person's first message.",
+                "Use two to six specific words and no punctuation at the end.",
+                'Return {"title":"..."}.',
+                `First message: ${userIntent}`,
+              ].join("\n"),
+            },
+          ],
+          maximumOutputTokens: 180,
+          tools: [recordConversationTitleTool],
+          signal,
+        },
+        signal,
+      );
+      generatedTitle = titleResponse
+        ? conversationTitleFrom(titleResponse)
+        : undefined;
+    }
     if ((!plan && !generatedTitle) || signal.aborted) return;
     const task = this.#records.task(taskId);
     await this.#records.replaceTask({
@@ -467,12 +493,18 @@ export class AuxiliaryWork {
       const evaluation = response
         ? criterionEvaluationFrom(response)
         : undefined;
-      await this.#updatePlanItem(taskId, item.id, (current) => ({
-        ...current,
-        status: evaluation?.satisfied ? "verified" : "needs-attention",
-        verification:
-          evaluation?.summary ?? "Not verified from the available evidence.",
-      }));
+      await this.#updatePlanItem(taskId, item.id, (current) =>
+        evaluation?.satisfied
+          ? {
+              ...current,
+              status: "verified",
+              verification: evaluation.summary,
+            }
+          : {
+              ...current,
+              status: item.status,
+            },
+      );
     }
   }
 
