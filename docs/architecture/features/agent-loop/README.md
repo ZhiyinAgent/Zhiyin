@@ -205,6 +205,21 @@ browser is not among them: it is reached, and let go of, through capabilities.
   reasoning trace as interrupted`, and `retains reasoning across a failed request
   without presenting it as an answer`.
 
+- **A brief provider failure does not fail the turn, and nothing shown is
+  silently rewritten.** The model client decides when a request is sent again;
+  the round asks for restarts because it can take back what it received. An
+  answer is shown a fixed delay behind the model, so a restart before any text
+  was released is unseen; after that the shown text is withdrawn, the working
+  note says the answer is starting again, and exactly one answer remains. A
+  round that ends releases what was held at once. Each retry is recorded on the
+  round's model response with how much shown text it withdrew. ADR 0049. Named
+  tests: `is sent again, and the turn completes with one answer and the retries
+  recorded`, `is started again unseen, and the partial text is never shown or
+  saved`, `withdraws the shown text and starts the answer again openly`, `gives
+  up after three restarts, keeping what the last attempt showed`, `is not
+  started again for a content-policy stop`, `is released at once when the round
+  ends`, and `stops waiting the moment the person stops the turn`.
+
 - **An answer that ran out of room is not called finished.** A turn whose
   response stopped at the output ceiling ends interrupted, saying so, rather
   than completed with a document that stops mid-sentence. Named test: `is not

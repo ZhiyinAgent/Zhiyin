@@ -64,6 +64,9 @@ describe("reasoning in a conversation", () => {
     });
     const loop = loopFrom({
       ...deps,
+      // About what is shown while the round runs, not how far behind it: shown
+      // as it arrives (ADR 0049).
+      revealDelayMs: 0,
       model: {
         ...deps.model,
         send: async function* (request) {
@@ -123,6 +126,9 @@ describe("reasoning in a conversation", () => {
     });
     const loop = loopFrom({
       ...deps,
+      // About reasoning that was shown before the stop; shown as it arrives
+      // (ADR 0049), since text still held back at a stop is not kept.
+      revealDelayMs: 0,
       model: {
         ...deps.model,
         send: async function* () {

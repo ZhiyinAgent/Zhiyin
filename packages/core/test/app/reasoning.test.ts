@@ -50,6 +50,9 @@ describe("reasoning in a conversation", () => {
     let saved: ReturnType<AgentLoop["snapshot"]> | undefined;
     const loop = loopFrom({
       ...deps,
+      // About live and saved reasoning state, not how far the display trails
+      // the model: shown as it arrives (ADR 0049).
+      revealDelayMs: 0,
       model,
       sessions: {
         ...deps.sessions,

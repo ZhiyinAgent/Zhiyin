@@ -14,6 +14,12 @@ import {
  */
 
 const apiKey = "test-secret-that-must-not-escape";
+/**
+ * A retryable failure is sent again (ADR 0049). These tests are about what one
+ * failure is reported as, so the retries happen without waiting and the same
+ * failure comes out at the end.
+ */
+const noWaiting = { wait: async () => {} };
 
 type Refusal = {
   readonly status: number;
@@ -70,6 +76,7 @@ function streamingThen(error: Record<string, unknown>): ModelFetch {
 
 async function failureOf(fetcher: ModelFetch): Promise<unknown> {
   const client = new OpenRouterModelClient({
+    retry: noWaiting,
     apiKey: async () => apiKey,
     fetcher,
     model: "z-ai/glm-5.3-flash",

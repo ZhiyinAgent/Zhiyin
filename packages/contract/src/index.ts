@@ -26,6 +26,11 @@ export type WorkStep = {
 };
 
 export { REASONING_EFFORTS, type ReasoningEffort } from "./reasoning.js";
+export type {
+  ModelResponseRecord,
+  ModelRetryRecord,
+} from "./model-response.js";
+import type { ModelResponseRecord } from "./model-response.js";
 import type { ReasoningEffort } from "./reasoning.js";
 
 export type ReasoningSelection =
@@ -45,18 +50,6 @@ export type ReasoningCapabilities =
 export type ReasoningTrace = {
   readonly text: string;
   readonly status: "streaming" | "complete" | "interrupted";
-};
-
-/** Provider-neutral evidence about how one model request ended. */
-export type ModelResponseRecord = {
-  readonly requestId?: string;
-  readonly model?: string;
-  readonly provider?: string;
-  readonly finishReason: string | null;
-  /** The strongest terminal signal observed on the stream. */
-  readonly termination: "sentinel" | "finishReason" | "usage";
-  /** Whether the request produced a usable answer or tool call before ending. */
-  readonly complete: boolean;
 };
 
 export type TaskMessage = {

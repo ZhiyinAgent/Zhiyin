@@ -70,11 +70,13 @@ sequencing.
   without losing the saved file`.
 - Persisted effort validation uses the contract's closed effort universe.
 - Per-request model evidence survives restart, including the request id,
-  resolved model, serving provider, finish reason, terminal signal, and whether
-  usable output arrived. Malformed evidence rejects the saved workspace rather
-  than reaching the renderer. Named tests: `restores the provider evidence for
-  each model response` and `rejects malformed provider evidence without losing
-  the saved file`.
+  resolved model, serving provider, finish reason, terminal signal, whether
+  usable output arrived, and the failed attempts before it. Malformed evidence
+  rejects the saved workspace rather than reaching the renderer. Named tests:
+  `restores the provider evidence for each model response`, `restores the
+  failed attempts recorded before a model response`, `rejects malformed
+  provider evidence without losing the saved file`, and `rejects malformed
+  retry evidence without losing the saved file`.
 
 - Every status the writer can produce, the reader accepts. One damaged task
   fails the whole file, so a status the core writes and this rejects is not one

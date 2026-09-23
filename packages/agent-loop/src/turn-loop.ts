@@ -6,12 +6,7 @@
  * before this begins (a fresh user message and a plan, or nothing).
  */
 
-import type {
-  ModelResponseRecord,
-  ReasoningTrace,
-  ToolSpec,
-  WorkspaceDescription,
-} from "@zhiyin/contract";
+import type { ToolSpec, WorkspaceDescription } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
 import type { ConversationTools } from "@zhiyin/capabilities";
 import type { ModelMessage } from "@zhiyin/model-client";
@@ -20,9 +15,9 @@ import { fitPictures, picturesNotSent, sendPictures } from "./turn-pictures.js";
 import {
   fixedModelMessages,
   modelFacingConversation,
-  estimatedRequestTokens,
 } from "./conversation-context.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
+import { ModelRound } from "./model-round.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
   delegateSpecialistTool,
@@ -36,7 +31,6 @@ import { TurnRecords } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
 import { TurnOwnership } from "./turn-ownership.js";
 import {
-  type AssembledToolCall,
   describedWorkspace,
   maximumQuietRetries,
   modelFailure,
@@ -57,6 +51,7 @@ export class TurnLoop {
   readonly #pluginActivation: PluginActivation;
   readonly #ownership: TurnOwnership;
   readonly #pendingHandoffs: PendingHandoffs;
+  readonly #round: ModelRound;
 
   constructor(
     deps: AgentLoopDependencies,
@@ -80,6 +75,7 @@ export class TurnLoop {
     this.#pluginActivation = parts.pluginActivation;
     this.#ownership = parts.ownership;
     this.#pendingHandoffs = parts.pendingHandoffs;
+    this.#round = new ModelRound(deps, parts.records);
   }
 
   async run(
@@ -161,117 +157,30 @@ export class TurnLoop {
             content: handoffMessage(settled),
           });
         }
-        const assembled = new Map<number, AssembledToolCall>();
-        let finishReason: string | undefined;
-        let modelResponse: ModelResponseRecord | undefined;
-        let roundText = "";
-        let roundReasoning = "";
-        let reasoningStatus: ReasoningTrace["status"] = "streaming";
-        let assistantSequence: number | undefined;
-        const assistantId = this.#deps.newMessageId();
-        let reportedUsage = false;
-        /**
-         * When this round last said it was composing a call. Zero so the first
-         * fragment always says so at once: the whole complaint is that nothing
-         * happens for a while, and a delay before admitting to a delay is the
-         * same silence with extra steps. After that it is paced, because the
-         * note only has to stay true, not keep up with the tokens.
-         */
-        let composingSaidAt = 0;
-        const composingIntervalMs = 250;
         const request = {
           messages: requestMessages,
           tools: reportOnly ? [] : currentAdvertisedTools(),
           ...(this.#records.task(taskId).reasoning
             ? { reasoning: this.#records.task(taskId).reasoning }
             : {}),
-          signal: controller.signal,
         };
-
-        for await (const event of this.#deps.model.send(request)) {
-          if (!this.#ownsTurn(taskId, controller)) break;
-          if (event.kind === "reasoningDelta") {
-            roundReasoning += event.text;
-            reasoningStatus = "streaming";
-            assistantSequence ??= this.#records.nextTimelineSequence(
-              this.#records.task(taskId),
-            );
-            await this.#records.showAssistantProgress(
-              taskId,
-              assistantId,
-              roundText,
-              assistantSequence,
-              { text: roundReasoning, status: reasoningStatus },
-            );
-          } else if (event.kind === "textDelta") {
-            roundText += event.text;
-            if (event.text) reasoningStatus = "complete";
-            assistantSequence ??= this.#records.nextTimelineSequence(
-              this.#records.task(taskId),
-            );
-            await this.#records.showAssistantProgress(
-              taskId,
-              assistantId,
-              roundText,
-              assistantSequence,
-              ...(roundReasoning
-                ? [{ text: roundReasoning, status: reasoningStatus }]
-                : []),
-            );
-          } else if (event.kind === "toolCallDelta") {
-            const current = assembled.get(event.index) ?? {
-              index: event.index,
-              callId: "",
-              name: "",
-              arguments: "",
-            };
-            if (event.callId) current.callId = event.callId;
-            if (event.name) current.name += event.name;
-            if (event.argumentsDelta) current.arguments += event.argumentsDelta;
-            assembled.set(event.index, current);
-            const saidAgo = Date.now() - composingSaidAt;
-            if (saidAgo >= composingIntervalMs) {
-              composingSaidAt = Date.now();
-              await this.#records.showWorking(
-                taskId,
-                current.name
-                  ? `Composing a request: ${this.#records.humanizeIdentifier(current.name)}`
-                  : "Composing a request",
-                this.#records.visibleSteps(taskId),
-              );
-            }
-          } else if (event.kind === "usage") {
-            reportedUsage = true;
-            ledger.record(event.usage);
-            await this.#deps.host.recordUsage(event.usage);
-          } else if (event.kind === "done") {
-            finishReason = event.finishReason;
-            modelResponse = event.response;
-          }
-        }
-
-        if (!reportedUsage)
-          ledger.estimate(
-            estimatedRequestTokens(
-              [
-                ...request.messages,
-                {
-                  role: "assistant",
-                  content: `${roundReasoning}\n${roundText}`,
-                },
-              ],
-              request.tools,
-            ),
-          );
+        const {
+          calls,
+          text: roundText,
+          reasoning: roundReasoning,
+          finishReason,
+          response: modelResponse,
+          assistantId,
+          assistantSequence,
+        } = await this.#round.run(taskId, controller, ledger, request, () =>
+          this.#ownsTurn(taskId, controller),
+        );
 
         if (controller.signal.aborted) {
           await this.#interruptIfCurrent(taskId, controller);
           return;
         }
 
-        const calls = [...assembled.values()].sort(
-          (left, right) => left.index - right.index,
-        );
         const stoppedWithoutOutput =
           calls.length === 0 && !roundText.trim() && Boolean(roundReasoning);
         const incomplete =

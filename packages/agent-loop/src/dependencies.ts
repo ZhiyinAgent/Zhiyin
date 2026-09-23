@@ -41,6 +41,11 @@ export interface AgentLoopDependencies {
   readonly contextBudget?: ContextBudget;
   readonly workLimits?: WorkLimits;
   readonly pictures?: PictureFitting;
+  /**
+   * How far the shown answer trails the model, in milliseconds. Defaults to
+   * the loop's own value; ADR 0049.
+   */
+  readonly revealDelayMs?: number;
   readonly newMessageId: () => string;
   readonly newActionId: () => string;
   readonly newSpecialistRunId: () => string;

@@ -25,7 +25,9 @@ one trust boundary.
   written here and nowhere else; a composition that wants a different starting
   point passes one rather than repeating a name.
 - `send(request) → AsyncIterable<ModelEvent>` emits text deltas, fragmented
-  tool-call data, provider-reported usage, and an explicit completion event.
+  tool-call data, provider-reported usage, and an explicit completion event,
+  plus `retrying` before a failed attempt is sent again and, for a request
+  marked `restartable`, `restarting` when what was received so far is void.
   Provider-neutral assistant tool calls and paired tool-result messages are
   translated to OpenRouter's wire format inside this boundary.
 - A request may bound output tokens, request JSON mode, supply a reasoning
@@ -192,6 +194,22 @@ one trust boundary.
   model id as the model, not as an oversized request`, `still reports a
   genuinely oversized request as too large`, and the live check `refuses a
   withdrawn model id in one of the two ways the app now reads`.
+- **A retryable failure is sent again while nothing was passed on, and only a
+  restartable request is repeated after.** Silent retries follow the provider's
+  Retry-After (up to a minute) or a jittered doubling wait, stop after 5
+  attempts or 120 s of waiting, and never outlast Stop. Once events went out, a
+  repeat would hand the caller a second copy, so it happens only for a request
+  marked `restartable`, at most 3 times, each announced by a `restarting`
+  event. Failed attempts are recorded on the response that arrives. ADR 0049.
+  Named tests: `is sent again, and the answer arrives once with its retries
+  recorded`, `waits as long as the provider asks, up to a minute`, `spreads its
+  own waits at random below a doubling ceiling of 30 seconds`, `gives up after
+  five attempts and reports the last failure`, `gives up rather than wait past
+  two minutes in total`, `never retries a failure that would fail the same way
+  again`, `stops waiting at once when the request is cancelled`, `is not sent
+  again, because the caller already has part of it`, `is started again when the
+  caller can take back what it received`, and `is started again at most three
+  times`.
 - **A failure is classified from the provider's typed error first.**
   OpenRouter tags failures with an `error_type`; the status alone cannot tell
   a context overflow from a bad tool schema (both 400) or a moderation block
@@ -233,9 +251,8 @@ real streaming parser and public error surface. A live provider check is kept
 outside the suite because it requires both a credential and network access; it
 is for verifying the external wire contract, not for making local tests pass.
 
-The client reports a provider rate limit and any retry delay but does not retry
-silently. Retry policy belongs in a separate product decision because a repeated
-request can have cost and duplicate-side-effect consequences once tools exist.
+Retry policy is ADR 0049. Its tests replace only how the client waits, never the
+policy, so no test sleeps for a real backoff.
 
 ## Open questions
 

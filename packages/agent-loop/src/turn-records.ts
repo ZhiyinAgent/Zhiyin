@@ -128,6 +128,23 @@ export class TurnRecords {
     );
   }
 
+  /**
+   * Takes an answer back out of the conversation, when the round that was
+   * writing it failed and is starting again. What was withdrawn is recorded
+   * against the round, not kept on screen.
+   */
+  async withdrawAssistantMessage(
+    taskId: string,
+    assistantId: string,
+  ): Promise<void> {
+    const task = this.task(taskId);
+    if (!task.messages.some((message) => message.id === assistantId)) return;
+    await this.replaceTask({
+      ...task,
+      messages: task.messages.filter((message) => message.id !== assistantId),
+    });
+  }
+
   async showWorking(
     taskId: string,
     note: string | undefined,

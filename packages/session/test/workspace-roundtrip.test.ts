@@ -54,6 +54,61 @@ describe("saved reasoning", () => {
     );
   });
 
+  it("restores the failed attempts recorded before a model response", async () => {
+    const root = await temporaryRoot();
+    const task = {
+      ...snapshot.tasks[0]!,
+      modelResponses: [
+        {
+          finishReason: "stop",
+          termination: "finishReason" as const,
+          complete: true,
+          retries: [
+            { failure: "rateLimited", delayMs: 1_000, kind: "silent" as const },
+            {
+              failure: "networkFailure",
+              delayMs: 2_000,
+              kind: "restart" as const,
+              discardedCharacters: 120,
+            },
+          ],
+        },
+      ],
+    };
+    await new FileSessions(root).saveWorkspace({ ...snapshot, tasks: [task] });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ modelResponses: task.modelResponses }] },
+    );
+  });
+
+  it("rejects malformed retry evidence without losing the saved file", async () => {
+    const root = await temporaryRoot();
+    await writeFile(
+      join(root, "workspace.json"),
+      JSON.stringify({
+        ...snapshot,
+        tasks: [
+          {
+            ...snapshot.tasks[0],
+            modelResponses: [
+              {
+                finishReason: "stop",
+                termination: "finishReason",
+                complete: true,
+                retries: [{ failure: "rateLimited", delayMs: "soon" }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    await expect(new FileSessions(root).loadWorkspace()).rejects.toMatchObject({
+      code: "corrupted",
+    });
+  });
+
   it("rejects malformed provider evidence without losing the saved file", async () => {
     const root = await temporaryRoot();
     await writeFile(

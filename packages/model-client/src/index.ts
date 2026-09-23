@@ -26,7 +26,20 @@ import {
   refusalBody,
   type ProviderError,
 } from "./failures.js";
+import { ProviderCredentials } from "./credentials.js";
 import { acceptsImages, reasoningCapabilities } from "./reasoning.js";
+export {
+  ProviderCredentials,
+  type CredentialEntry,
+  type ProviderCredentialsOptions,
+} from "./credentials.js";
+import {
+  withRetries,
+  type RestartingEvent,
+  type RetryingEvent,
+  type RetryOptions,
+} from "./retry.js";
+export type { RestartingEvent, RetryingEvent, RetryOptions } from "./retry.js";
 export {
   ModelClientError,
   type ModelClientErrorCode,
@@ -103,6 +116,12 @@ export type ModelRequest = {
     readonly schema: Readonly<Record<string, unknown>>;
   };
   readonly signal?: AbortSignal;
+  /**
+   * The caller can take back what it received from a failed attempt, so the
+   * request may be started again after output was passed on. A `restarting`
+   * event says when; without this, such a failure is reported. ADR 0049.
+   */
+  readonly restartable?: boolean;
 };
 
 export type ModelUsage = {
@@ -125,6 +144,9 @@ export type ModelEvent =
       readonly argumentsDelta?: string;
     }
   | { readonly kind: "usage"; readonly usage: ModelUsage }
+  /** A failed attempt is about to be made again, after `delayMs`. ADR 0049. */
+  | RetryingEvent
+  | RestartingEvent
   | {
       readonly kind: "done";
       /**
@@ -153,99 +175,6 @@ export interface ModelClient {
   modelProviders(model: string): Promise<ModelProviderList>;
   /** Choose the model and the upstreams routing may use, as one change. */
   selectModel(model: string, providers: readonly string[]): Promise<void>;
-}
-
-export type CredentialEntry = {
-  getPassword(): Promise<string | undefined>;
-  setPassword(password: string): Promise<void>;
-  deletePassword(): Promise<boolean>;
-};
-
-export type ProviderCredentialsOptions = {
-  readonly environment: () => string | undefined;
-  readonly entry?: CredentialEntry;
-};
-
-export class ProviderCredentials {
-  readonly #environment: ProviderCredentialsOptions["environment"];
-  readonly #providedEntry: CredentialEntry | undefined;
-  #loadedEntry: Promise<CredentialEntry> | undefined;
-
-  constructor(options: ProviderCredentialsOptions) {
-    this.#environment = options.environment;
-    this.#providedEntry = options.entry;
-  }
-
-  async get(): Promise<string | undefined> {
-    const environment = this.#environment()?.trim();
-    if (environment) return environment;
-    try {
-      return await (await this.#entry()).getPassword();
-    } catch (error) {
-      throw new ModelClientError(
-        "credentialUnavailable",
-        "Secure key storage is unavailable.",
-        { cause: error },
-      );
-    }
-  }
-
-  async status(): Promise<ProviderSettings["credential"]> {
-    if (this.#environment()?.trim()) {
-      return { status: "configured", source: "environment" };
-    }
-    try {
-      const password = await (await this.#entry()).getPassword();
-      return password
-        ? { status: "configured", source: "credentialStore" }
-        : { status: "missing", source: "none" };
-    } catch {
-      return {
-        status: "unavailable",
-        source: "credentialStore",
-        reason: "Secure key storage is unavailable.",
-      };
-    }
-  }
-
-  async set(apiKey: string): Promise<void> {
-    const value = apiKey.trim();
-    if (!value) {
-      throw new ModelClientError(
-        "missingCredential",
-        "Enter an OpenRouter API key before saving.",
-      );
-    }
-    try {
-      await (await this.#entry()).setPassword(value);
-    } catch (error) {
-      throw new ModelClientError(
-        "credentialUnavailable",
-        "Secure key storage is unavailable.",
-        { cause: error },
-      );
-    }
-  }
-
-  async clear(): Promise<void> {
-    try {
-      await (await this.#entry()).deletePassword();
-    } catch (error) {
-      throw new ModelClientError(
-        "credentialUnavailable",
-        "Secure key storage is unavailable.",
-        { cause: error },
-      );
-    }
-  }
-
-  async #entry(): Promise<CredentialEntry> {
-    if (this.#providedEntry) return this.#providedEntry;
-    this.#loadedEntry ??= import("@napi-rs/keyring").then(
-      ({ AsyncEntry }) => new AsyncEntry("Zhiyin", "openrouter"),
-    );
-    return this.#loadedEntry;
-  }
 }
 
 export type ModelFetchResponse = {
@@ -298,6 +227,8 @@ export type OpenRouterModelClientOptions = {
    * and cutting off real work is worse than waiting.
    */
   readonly stallTimeoutMs?: number;
+  /** How retries wait. Replaced in tests; the policy itself is fixed. */
+  readonly retry?: RetryOptions;
 };
 
 type ProviderChunk = {
@@ -527,6 +458,7 @@ export class OpenRouterModelClient implements ModelClient {
   readonly #fetcher: ModelFetch;
   readonly #stallTimeoutMs: number;
   readonly #catalogFetch: CatalogFetch | undefined;
+  readonly #retry: RetryOptions | undefined;
 
   constructor(options: OpenRouterModelClientOptions) {
     this.#modelInfo = options.modelInfo;
@@ -552,9 +484,14 @@ export class OpenRouterModelClient implements ModelClient {
     this.#fetcher = options.fetcher ?? defaultFetch;
     this.#stallTimeoutMs = options.stallTimeoutMs ?? defaultStallTimeoutMs;
     this.#catalogFetch = options.catalogFetch;
+    this.#retry = options.retry;
   }
 
-  async *send(request: ModelRequest): AsyncIterable<ModelEvent> {
+  send(request: ModelRequest): AsyncIterable<ModelEvent> {
+    return withRetries(() => this.#attempt(request), request, this.#retry);
+  }
+
+  async *#attempt(request: ModelRequest): AsyncIterable<ModelEvent> {
     await this.#current();
     if (request.reasoning) {
       const capabilities = await this.#loadReasoning();

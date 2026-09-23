@@ -9,6 +9,12 @@ import {
 } from "../src/index.js";
 
 const apiKey = "test-secret-that-must-not-escape";
+/**
+ * A retryable failure is sent again (ADR 0049). These tests are about what one
+ * failure is reported as, so the retries happen without waiting and the same
+ * failure comes out at the end.
+ */
+const noWaiting = { wait: async () => {} };
 const DONE_EVENT = "data: [DONE]\n\n";
 
 function streamResponse(chunks: string[]): Awaited<ReturnType<ModelFetch>> {
@@ -37,6 +43,7 @@ describe("OpenRouterModelClient", () => {
       return streamResponse([DONE_EVENT]);
     };
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "z-ai/glm-5.3-flash",
@@ -74,6 +81,7 @@ describe("OpenRouterModelClient", () => {
 
   it("says whether this model can be shown a picture at all", async () => {
     const seeing = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => streamResponse([]),
       model: "z-ai/glm-5.3-flash",
@@ -82,6 +90,7 @@ describe("OpenRouterModelClient", () => {
       }),
     });
     const reading = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => streamResponse([]),
       model: "z-ai/glm-5.3",
@@ -105,6 +114,7 @@ describe("OpenRouterModelClient", () => {
       ]);
     };
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "z-ai/glm-5.3-flash",
@@ -150,6 +160,7 @@ describe("OpenRouterModelClient", () => {
   it("sends a bounded schema request for auxiliary model work", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async (...args) => {
         requests.push(args);
@@ -210,6 +221,7 @@ describe("OpenRouterModelClient", () => {
   it("restricts routing to the allowlist and ranks it", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       providers: ["z-ai", "deepinfra"],
       fetcher: async (...args) => {
@@ -236,6 +248,7 @@ describe("OpenRouterModelClient", () => {
   it("does not forbid recovery inside the allowlist", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       providers: ["z-ai", "deepinfra"],
       fetcher: async (...args) => {
@@ -259,6 +272,7 @@ describe("OpenRouterModelClient", () => {
   it("keeps the allowlist on a request that also constrains routing", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       providers: ["z-ai"],
       fetcher: async (...args) => {
@@ -286,6 +300,7 @@ describe("OpenRouterModelClient", () => {
   it("lets OpenRouter choose when the allowlist is empty", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       providers: [],
       fetcher: async (...args) => {
@@ -310,6 +325,7 @@ describe("OpenRouterModelClient", () => {
    */
   it("reports a rate limit as exhausted provider capacity", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => ({
         ok: false,
@@ -335,6 +351,7 @@ describe("OpenRouterModelClient", () => {
    */
   it("reports an empty routing result as no available provider", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => ({
         ok: false,
@@ -361,6 +378,7 @@ describe("OpenRouterModelClient", () => {
    */
   it("names the stored model when routing can no longer serve it", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       model: "z-ai/glm-5.3-flash",
       fetcher: async () => ({
@@ -381,6 +399,7 @@ describe("OpenRouterModelClient", () => {
 
   it("points a withdrawn model at the place the choice is made", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       model: "z-ai/glm-5.3-flash",
       fetcher: async () => ({
@@ -423,6 +442,7 @@ describe("OpenRouterModelClient", () => {
 
   it("reports an unrecognised model id as the model, not as an oversized request", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       model: "z-ai/glm-4.9-retired",
       fetcher: refusedWith(400, "z-ai/glm-4.9-retired is not a valid model ID"),
@@ -438,6 +458,7 @@ describe("OpenRouterModelClient", () => {
 
   it("still reports a genuinely oversized request as too large", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       model: "z-ai/glm-5.3-flash",
       fetcher: refusedWith(
@@ -465,6 +486,7 @@ describe("OpenRouterModelClient", () => {
   it("leaves routing unrestricted when no upstreams were chosen", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       model: "inception/mercury-2.5",
       fetcher: async (...args) => {
@@ -481,6 +503,7 @@ describe("OpenRouterModelClient", () => {
   it("requests JSON without claiming schema enforcement", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async (...args) => {
         requests.push(args);
@@ -510,6 +533,7 @@ describe("OpenRouterModelClient", () => {
   it("preserves assistant tool calls and pairs tool results on continuation", async () => {
     const requests: Parameters<ModelFetch>[] = [];
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async (...args) => {
         requests.push(args);
@@ -569,6 +593,7 @@ describe("OpenRouterModelClient", () => {
 
   it("treats a stream without its completion marker as malformed", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () =>
         streamResponse([
@@ -590,6 +615,7 @@ describe("OpenRouterModelClient", () => {
    */
   it("gives up on a stream that stops arriving and never closes", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       stallTimeoutMs: 50,
       fetcher: async () => ({
@@ -614,6 +640,7 @@ describe("OpenRouterModelClient", () => {
 
   it("does not give up on a slow stream that is still arriving", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       stallTimeoutMs: 120,
       fetcher: async () => ({
@@ -654,6 +681,7 @@ describe("OpenRouterModelClient", () => {
 
   it("returns actionable authentication failures without leaking the key", async () => {
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => ({
         ok: false,
@@ -683,6 +711,7 @@ describe("OpenRouterModelClient", () => {
   it("reports a missing key before making a network request", async () => {
     let requested = false;
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => undefined,
       fetcher: async () => {
         requested = true;
@@ -777,6 +806,7 @@ describe("ProviderCredentials", () => {
         'data: {"id":"gen-1","model":"m","choices":[{"delta":{"content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}\n\n',
       ]);
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "m",
@@ -808,6 +838,7 @@ describe("ProviderCredentials", () => {
         "data: [DONE]\n\n",
       ]);
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "m",
@@ -838,6 +869,7 @@ describe("ProviderCredentials", () => {
         'data: {"id":"gen-incomplete","model":"z-ai/glm-5.3-flash-20260826","provider":"Z.AI","choices":[],"usage":{"prompt_tokens":41724,"completion_tokens":1478,"total_tokens":43202}}\n\n',
       ]);
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "z-ai/glm-5.3-flash",
@@ -866,6 +898,7 @@ describe("ProviderCredentials", () => {
         'data: {"id":"gen-1","model":"m","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"write_file","arguments":"{\\"path\\":\\"a\\"}"}}]},"finish_reason":"tool_calls"}]}\n\n',
       ]);
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "m",
@@ -901,6 +934,7 @@ describe("ProviderCredentials", () => {
         'data: {"id":"gen-1","model":"m","choices":[{"delta":{"content":"half"},"finish_reason":null}]}\n\n',
       ]);
     const client = new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher,
       model: "m",
@@ -933,6 +967,7 @@ describe("an error delivered inside a 200 stream", () => {
 
   function clientOver(chunks: string[]) {
     return new OpenRouterModelClient({
+      retry: noWaiting,
       apiKey: async () => apiKey,
       fetcher: async () => streamResponse(chunks),
       model: "z-ai/glm-5.3-flash",
