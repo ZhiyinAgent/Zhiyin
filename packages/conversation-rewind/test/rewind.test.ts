@@ -97,6 +97,29 @@ describe("ConversationRewind", () => {
     expect(planned.task.phase).toEqual({ kind: "draft" });
   });
 
+  it("keeps what the model was sent before the selected message, and nothing after", () => {
+    const rewind = new ConversationRewind(() => "rewind-1");
+    const sent: NonNullable<WorkspaceTask["modelHistory"]> = [
+      { id: "h1", kind: "message", messageId: "u1" },
+      { id: "h2", kind: "calls", text: "", calls: [] },
+      { id: "h3", kind: "result", callId: "c1", name: "read", content: "r" },
+      { id: "h4", kind: "message", messageId: "a1" },
+      { id: "h5", kind: "message", messageId: "u2" },
+      { id: "h6", kind: "notice", content: "n" },
+      { id: "h7", kind: "message", messageId: "a2" },
+    ];
+
+    const planned = rewind.plan({ ...task(), modelHistory: sent }, "u2");
+
+    if (!planned.ok) throw new Error(planned.reason);
+    expect(planned.task.modelHistory?.map((entry) => entry.id)).toEqual([
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+    ]);
+  });
+
   it("refuses assistant messages and generated structured answers", () => {
     const rewind = new ConversationRewind(() => "rewind-1");
     const source = task();

@@ -31,7 +31,9 @@ one trust boundary.
   Provider-neutral assistant tool calls and paired tool-result messages are
   translated to OpenRouter's wire format inside this boundary.
 - A request may bound output tokens, request JSON mode, supply a reasoning
-  effort, supply tools, or supply a strict JSON schema. These remain
+  effort, supply tools, or supply a strict JSON schema. It may name its
+  conversation (`session`) and the messages a later request will repeat up to
+  (`cacheAfter`); see the caching invariant. These remain
   provider-neutral request options. Callers must use only options supported by
   their selected model. Routing is bounded by a configured allowlist of
   upstreams; an empty allowlist lets the provider choose freely. ADR 0022.
@@ -56,6 +58,22 @@ one trust boundary.
   said.
 
 ## Invariants
+
+- **Each request asks for its cached start the way its provider needs.** Most
+  providers behind OpenRouter reuse a cached request start on their own;
+  Anthropic and the Qwen models Alibaba serves reuse only what the request
+  marks (OpenRouter's prompt caching guide, checked 2026-09-23). The
+  conversation is sent as `session_id`, so OpenRouter keeps it with the
+  provider holding its cache. For the two that need marks, the last part of
+  each message in `cacheAfter` is marked; every other model is sent the
+  messages unmarked. Usage reports what the provider read from and wrote to
+  its cache. Named tests: `names the conversation, so its requests stay with
+  the provider holding its cache`, `marks where the next request will repeat
+  this one for %s, which caches only what is marked`, `marks the last part of a
+  message that carries a picture`, `sends no marks to %s, which caches on its
+  own`, and `reports how much of the request was read from and written to the
+  cache`. The live check `reads the repeated start from the cache on a Claude
+  model, after 12 parallel calls too` confirms it against the provider.
 
 - New source modules stay below the repository line ceiling, and the existing
   oversized module may shrink but may not grow. The repository lint gate is the

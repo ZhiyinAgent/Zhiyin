@@ -30,6 +30,9 @@ carry prompts or responses.
 - Stored and aggregated data contains request accounting but no request or
   response text. The named test `aggregates request, token, cost, model, and
   daily activity without text` guards both the shape and the aggregates.
+- What the provider read from and wrote to its cache is kept with each
+  request, when it said. Named test: `keeps how much of each request the
+  provider read from and wrote to its cache`.
 - A repeated provider request id replaces its earlier record instead of being
   double-counted. The same aggregation test guards deduplication.
 - Cost is provider-reported, never reconstructed from a stale local price

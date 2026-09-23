@@ -28,7 +28,10 @@ result.
   Named regression: `refuses assistant messages and generated structured answers`.
 - The boundary is immediately before the selected message; every later entry
   leaves the active task. Named regression: `returns the selected user message
-  to a draft and removes later context`.
+  to a draft and removes later context`. What the model was sent is cut at
+  the same message, so no call or result from a removed exchange is sent
+  again. Named regression: `keeps what the model was sent before the selected
+  message, and nothing after`.
 - A changed task invalidates its review. Named regression: `refuses a stale plan
   when the conversation changed`.
 

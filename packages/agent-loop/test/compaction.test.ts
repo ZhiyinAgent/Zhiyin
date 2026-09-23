@@ -457,3 +457,74 @@ describe("conversation context", () => {
     );
   });
 });
+
+describe("the size a picture counts for", () => {
+  it("does not condense a conversation because it carries a large picture", async () => {
+    const summaryRequests: ModelRequest[] = [];
+    const sent: ModelRequest[] = [];
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      acceptsImages: true,
+      // Far below the picture's encoded size, far above the text's.
+      contextBudget: {
+        compactAboveEstimatedTokens: 50_000,
+        retainRecentEstimatedTokens: 1_000,
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request) {
+          sent.push(request);
+          yield { kind: "textDelta" as const, text: "Seen." };
+          yield { kind: "done" as const };
+        },
+      },
+      ...guidanceFor(
+        {
+          compaction: JSON.stringify({
+            summary: "Condensed.",
+            retainedActionIds: [],
+          }),
+        },
+        summaryRequests,
+      ),
+      sessions: {
+        ...deps.sessions,
+        // About a megabyte encoded; a provider bills a few thousand tokens.
+        readPicture: async () => ({
+          status: "ready" as const,
+          mediaType: "image/png",
+          data: "A".repeat(1_000_000),
+        }),
+      },
+    });
+    loop.restore([
+      settledTask({
+        messages: [
+          { id: "m1", role: "user", text: "Look at the page", sequence: 0 },
+          {
+            id: "m2",
+            role: "assistant",
+            text: "It shows the release checklist. ".repeat(100),
+            sequence: 1,
+          },
+        ],
+        modelHistory: [
+          { id: "h1", kind: "message", messageId: "m1" },
+          {
+            id: "h2",
+            kind: "pictures",
+            text: "The picture:",
+            pictures: [{ mediaType: "image/png", source: "picture-1" }],
+          },
+          { id: "h3", kind: "message", messageId: "m2" },
+        ],
+      }),
+    ]);
+
+    await loop.start("task-1", "What did it show?");
+
+    expect(JSON.stringify(sent)).toContain("A".repeat(1_000));
+    expect(loop.snapshot().tasks[0]?.compaction).toBeUndefined();
+  });
+});

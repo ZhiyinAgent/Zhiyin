@@ -115,6 +115,9 @@ export class ConversationRewind implements RewindPlanner {
         : undefined;
     const proposed: WorkspaceTask = {
       ...taskWithoutCompaction,
+      ...(task.modelHistory
+        ? { modelHistory: sentBefore(task.modelHistory, retainedMessageIds) }
+        : {}),
       messages,
       actions,
       plan: [],
@@ -151,4 +154,21 @@ export class ConversationRewind implements RewindPlanner {
       };
     return { ok: true, task: plan.task };
   }
+}
+
+/**
+ * What the model was sent before the first message the rewind removes. The
+ * model's calls and results after it belong to the removed exchanges.
+ */
+function sentBefore(
+  sent: NonNullable<WorkspaceTask["modelHistory"]>,
+  retainedMessageIds: ReadonlySet<string>,
+): NonNullable<WorkspaceTask["modelHistory"]> {
+  const cut = sent.findIndex(
+    (entry) =>
+      (entry.kind === "message" || entry.kind === "calls") &&
+      entry.messageId !== undefined &&
+      !retainedMessageIds.has(entry.messageId),
+  );
+  return cut < 0 ? sent : sent.slice(0, cut);
 }

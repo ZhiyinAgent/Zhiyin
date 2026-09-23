@@ -178,6 +178,10 @@ directly.
   at all were set aside by the history store, and the person is told where.
   Named tests: `lists the conversation changed last first` and `says where
   conversations that could not be read at all were kept`.
+- **The window is never sent what the model was sent.** A conversation's
+  stored model history is often its largest part and nothing in the window
+  reads it, so every event leaves it out. Named test: `saves what the model
+  was sent, and never sends it to the window`.
 - **A launch reads the list of conversations, not the conversations.** A
   conversation is read from disk when something first needs it — the person
   selects it, or a rewind left unfinished by a crash names it — and is settled

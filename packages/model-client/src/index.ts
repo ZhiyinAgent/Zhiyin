@@ -27,6 +27,7 @@ import {
   type ProviderError,
 } from "./failures.js";
 import { ProviderCredentials } from "./credentials.js";
+import { providerMessages, usageFrom } from "./wire.js";
 import { acceptsImages, reasoningCapabilities } from "./reasoning.js";
 export {
   ProviderCredentials,
@@ -122,6 +123,16 @@ export type ModelRequest = {
    * event says when; without this, such a failure is reported. ADR 0049.
    */
   readonly restartable?: boolean;
+  /**
+   * The conversation the request belongs to, sent as OpenRouter's
+   * `session_id` so its requests stay with the provider holding its cache.
+   */
+  readonly session?: string;
+  /**
+   * Messages the next request is expected to repeat up to, in order. Marked
+   * as places the cache may end, for the providers that need the mark.
+   */
+  readonly cacheAfter?: readonly number[];
 };
 
 export type ModelUsage = {
@@ -131,6 +142,10 @@ export type ModelUsage = {
   readonly outputTokens: number;
   readonly totalTokens: number;
   readonly costUsd?: number;
+  /** Of the input, what the provider read from its cache, when it said. */
+  readonly cacheReadTokens?: number;
+  /** Of the input, what the provider wrote to its cache, when it said. */
+  readonly cacheWriteTokens?: number;
 };
 
 export type ModelEvent =
@@ -381,67 +396,6 @@ async function* serverSentEvents(body: AsyncIterable<Uint8Array>) {
   if (data) yield data;
 }
 
-function finiteNumber(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-function usageFrom(chunk: ProviderChunk): ModelUsage | undefined {
-  if (!chunk.usage) return undefined;
-  return {
-    requestId: typeof chunk.id === "string" ? chunk.id : "unknown",
-    model: typeof chunk.model === "string" ? chunk.model : "unknown",
-    inputTokens: finiteNumber(chunk.usage.prompt_tokens),
-    outputTokens: finiteNumber(chunk.usage.completion_tokens),
-    totalTokens: finiteNumber(chunk.usage.total_tokens),
-    ...(typeof chunk.usage.cost === "number" &&
-    Number.isFinite(chunk.usage.cost)
-      ? { costUsd: chunk.usage.cost }
-      : {}),
-  };
-}
-
-function providerMessage(message: ModelMessage) {
-  if (message.role === "assistant") {
-    return {
-      role: message.role,
-      content: message.content,
-      ...(message.toolCalls?.length
-        ? {
-            tool_calls: message.toolCalls.map((call) => ({
-              id: call.id,
-              type: "function",
-              function: { name: call.name, arguments: call.arguments },
-            })),
-          }
-        : {}),
-    };
-  }
-  if (message.role === "tool") {
-    return {
-      role: message.role,
-      content: message.content,
-      tool_call_id: message.toolCallId,
-      name: message.name,
-    };
-  }
-  if (message.role === "user" && typeof message.content !== "string") {
-    return {
-      role: message.role,
-      content: message.content.map((part) =>
-        part.kind === "text"
-          ? { type: "text", text: part.text }
-          : {
-              type: "image_url",
-              image_url: {
-                url: `data:${part.mediaType};base64,${part.data}`,
-              },
-            },
-      ),
-    };
-  }
-  return message;
-}
-
 export class OpenRouterModelClient implements ModelClient {
   readonly #modelInfo: OpenRouterModelClientOptions["modelInfo"];
   /** The catalogue's entry for the chosen model, looked up once for every answer. */
@@ -544,7 +498,12 @@ export class OpenRouterModelClient implements ModelClient {
     const body = {
       model: chosen.model,
       stream: true,
-      messages: request.messages.map(providerMessage),
+      messages: providerMessages(
+        request.messages,
+        chosen.model,
+        request.cacheAfter,
+      ),
+      ...(request.session ? { session_id: request.session } : {}),
       ...(Object.keys(routing).length ? { provider: routing } : {}),
       ...(request.maximumOutputTokens !== undefined
         ? { max_tokens: request.maximumOutputTokens }

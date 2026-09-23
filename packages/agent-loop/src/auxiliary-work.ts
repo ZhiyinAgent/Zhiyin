@@ -169,7 +169,7 @@ export class AuxiliaryWork {
     });
   }
 
-  contextEvidence(task: WorkspaceTask): readonly TaskAction[] {
+  #contextEvidence(task: WorkspaceTask): readonly TaskAction[] {
     const retained = new Set(task.compaction?.retainedActionIds ?? []);
     const recent = (task.actions ?? [])
       .filter((action) => action.evidence)
@@ -183,28 +183,29 @@ export class AuxiliaryWork {
     ];
   }
 
+  /** Condenses the older conversation when the request has grown too large; says whether it did. */
   async compactIfNeeded(
     taskId: string,
-    fixedMessages: readonly ModelMessage[],
+    requestMessages: readonly ModelMessage[],
     tools: readonly ModelTool[],
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const task = this.#records.task(taskId);
     const prefix = compactionPrefix(
       task,
-      fixedMessages,
+      requestMessages,
       tools,
       this.#deps.contextBudget ?? defaultContextBudget,
     );
     const through = prefix.at(-1);
-    if (!through || signal.aborted) return;
+    if (!through || signal.aborted) return false;
 
     const throughIndex = task.messages.findIndex(
       (message) => message.id === through.id,
     );
     const nextSequence = task.messages[throughIndex + 1]?.sequence;
     const throughSequence = through.sequence;
-    const evidence = this.contextEvidence(task).filter(
+    const evidence = this.#contextEvidence(task).filter(
       (action) =>
         action.evidence &&
         (nextSequence !== undefined
@@ -266,7 +267,7 @@ export class AuxiliaryWork {
     const compacted = response
       ? compactionFrom(response, allowedActionIds)
       : undefined;
-    if (!compacted || signal.aborted) return;
+    if (!compacted || signal.aborted) return false;
 
     const generatedTitle = nameIt
       ? conversationTitleFrom(response ?? "")
@@ -287,6 +288,7 @@ export class AuxiliaryWork {
         ? { title: generatedTitle, titleSource: "generated" as const }
         : {}),
     });
+    return true;
   }
 
   async presentAction(

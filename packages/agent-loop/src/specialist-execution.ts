@@ -7,7 +7,7 @@ import type {
 } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { estimatedRequestTokens } from "./conversation-context.js";
-import { QuietFailures } from "./quiet-failures.js";
+import { QuietFailures, withdrawCalls } from "./quiet-failures.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
 import type { ToolCalls } from "./tool-calls.js";
 import type { TurnOwnership } from "./turn-ownership.js";
@@ -368,7 +368,13 @@ export class SpecialistExecution {
             ),
           });
           if (outcome.quiet) quiet.remember(call.name, call.callId);
-          else if (outcome.result.ok) quiet.forget(call.name, messages);
+          else if (outcome.result.ok)
+            withdrawCalls(
+              messages,
+              quiet.take(call.name),
+              (message) => message,
+              (_, message) => message,
+            );
         }
         if (nameless) throw new Error(namelessCallFailure);
         options.ledger.completeToolRound();

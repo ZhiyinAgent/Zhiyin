@@ -27,31 +27,44 @@ export class QuietFailures {
     this.#failures.push({ toolName, callId });
   }
 
-  /** Takes this tool's dead ends back out of what the model is being sent. */
-  forget(toolName: string, messages: ModelMessage[]): void {
+  /** This tool's dead ends, to be taken back out of what the model is sent. */
+  take(toolName: string): ReadonlySet<string> {
     const doomed = new Set(
       this.#failures
         .filter((failure) => failure.toolName === toolName)
         .map((failure) => failure.callId),
     );
-    if (!doomed.size) return;
     this.#failures = this.#failures.filter(
       (failure) => failure.toolName !== toolName,
     );
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const message = messages[index];
-      if (!message) continue;
-      if (message.role === "tool") {
-        if (doomed.has(message.toolCallId)) messages.splice(index, 1);
-        continue;
-      }
-      if (message.role !== "assistant" || !message.toolCalls?.length) continue;
-      const kept = message.toolCalls.filter((item) => !doomed.has(item.id));
-      if (kept.length === message.toolCalls.length) continue;
-      // An assistant turn that held nothing but withdrawn calls has nothing
-      // left to say; one that also spoke keeps its words.
-      if (!kept.length && !message.content.trim()) messages.splice(index, 1);
-      else messages[index] = { ...message, toolCalls: kept };
+    return doomed;
+  }
+}
+
+/**
+ * Takes the withdrawn calls, and the answers to them, out of a request. Words
+ * said alongside withdrawn calls are kept; a message that was nothing but
+ * withdrawn calls has nothing left to say.
+ */
+export function withdrawCalls<Item>(
+  items: Item[],
+  callIds: ReadonlySet<string>,
+  messageOf: (item: Item) => ModelMessage,
+  replaced: (item: Item, message: ModelMessage) => Item,
+): void {
+  if (!callIds.size) return;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item === undefined) continue;
+    const message = messageOf(item);
+    if (message.role === "tool") {
+      if (callIds.has(message.toolCallId)) items.splice(index, 1);
+      continue;
     }
+    if (message.role !== "assistant" || !message.toolCalls?.length) continue;
+    const kept = message.toolCalls.filter((call) => !callIds.has(call.id));
+    if (kept.length === message.toolCalls.length) continue;
+    if (!kept.length && !message.content.trim()) items.splice(index, 1);
+    else items[index] = replaced(item, { ...message, toolCalls: kept });
   }
 }

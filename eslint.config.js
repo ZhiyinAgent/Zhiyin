@@ -240,8 +240,8 @@ const OVERSIZED_PACKAGE_FILES = {
   // ceiling was introduced. Splitting concerns may lower a pin; ordinary
   // feature work may not raise one.
   "packages/mcp/src/index.ts": 1204,
-  "packages/model-client/src/index.ts": 733,
-  "packages/contract/src/index.ts": 998,
+  "packages/model-client/src/index.ts": 685,
+  "packages/contract/src/index.ts": 988,
   "packages/recovery/src/index.ts": 640,
 };
 

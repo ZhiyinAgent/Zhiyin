@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,6 +39,26 @@ describe("FileUsageTelemetry", () => {
     );
     expect(state.ranges["7"].requests).toBe(12);
   });
+  it("keeps how much of each request the provider read from and wrote to its cache", async () => {
+    const root = await temporaryRoot();
+    await new FileUsageTelemetry(root).record({
+      requestId: "cached",
+      model: "anthropic/claude-sonnet-5",
+      inputTokens: 1_000,
+      outputTokens: 3,
+      totalTokens: 1_003,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 100,
+      recordedAt: "2026-09-05T08:00:00.000Z",
+    });
+
+    expect(
+      JSON.parse(await readFile(join(root, "usage.json"), "utf8")),
+    ).toMatchObject([
+      { requestId: "cached", cacheReadTokens: 900, cacheWriteTokens: 100 },
+    ]);
+  });
+
   it("aggregates request, token, cost, model, and daily activity without text", async () => {
     const usage = new FileUsageTelemetry(await temporaryRoot());
     await usage.record({

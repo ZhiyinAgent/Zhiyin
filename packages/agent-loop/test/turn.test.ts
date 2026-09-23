@@ -64,7 +64,7 @@ describe("AgentLoop", () => {
     );
     expect(loop.snapshot().tasks[0]?.actions?.[0]?.status).toBe("completed");
   });
-  it("advertises enabled skills and retains earlier tool evidence for a follow-up", async () => {
+  it("advertises enabled skills and sends earlier tool results with a follow-up", async () => {
     const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const previous: WorkspaceSnapshot = {
@@ -76,6 +76,22 @@ describe("AgentLoop", () => {
           title: "Read my notes",
           updatedLabel: "Earlier",
           messages: [{ id: "m1", role: "user", text: "Read my notes" }],
+          modelHistory: [
+            { id: "h1", kind: "message", messageId: "m1" },
+            {
+              id: "h2",
+              kind: "calls",
+              text: "",
+              calls: [{ id: "call-1", name: "read_file", arguments: "{}" }],
+            },
+            {
+              id: "h3",
+              kind: "result",
+              callId: "call-1",
+              name: "read_file",
+              content: fenced("read_file", "The launch date is December 12."),
+            },
+          ],
           actions: [
             {
               id: "a1",

@@ -132,5 +132,12 @@ describe("waking a task after a background specialist settles", () => {
       role: "user",
       content: expect.stringMatching(/^<zhiyin-notice kind="handoff">/),
     });
+    // Just before it, where each specialist now stands, since that changed.
+    expect(woken.at(-2)).toMatchObject({
+      role: "user",
+      content: expect.stringMatching(
+        /^<zhiyin-notice kind="specialists">.*"status":"completed"/,
+      ),
+    });
   });
 });

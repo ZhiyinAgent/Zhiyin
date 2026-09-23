@@ -67,6 +67,29 @@ describe("the core and a turn together", () => {
     );
   });
 
+  it("saves what the model was sent, and never sends it to the window", async () => {
+    const saved: WorkspaceSnapshot[] = [];
+    const seen: AppEvent[] = [];
+    const loop = loopFrom({
+      ...stubDependencies(
+        (event) => seen.push(event),
+        [{ kind: "textDelta", text: "Hello." }, { kind: "done" }],
+      ),
+      sessions: {
+        ...stubDependencies(() => {}).sessions,
+        saveWorkspace: async (snapshot) => saved.push(snapshot),
+      },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Hi");
+    await loop.renameTask(taskId, "Greeting");
+
+    expect(saved.at(-1)?.tasks[0]?.modelHistory?.length).toBeGreaterThan(0);
+    expect(seen.some((event) => event.kind === "taskChanged")).toBe(true);
+    expect(JSON.stringify(seen)).not.toContain("modelHistory");
+  });
+
   it("deletes a task and selects its nearest remaining conversation", async () => {
     let nextId = 0;
     const saved: WorkspaceSnapshot[] = [];

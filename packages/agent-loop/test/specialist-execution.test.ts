@@ -97,10 +97,9 @@ describe("specialist child execution", () => {
             yield { kind: "done" as const };
             return;
           }
-          // "delegated to so far" is the durable record threaded into every
-          // round's fixed messages (see fixedModelMessages); it, not the
-          // ephemeral tool-call protocol, is what a round after a wake still
-          // carries, so it is what marks "already delegated" here too.
+          // "delegated to so far" is the specialists notice sent whenever a
+          // specialist's standing changes, and it stays in the conversation,
+          // so it is what marks "already delegated" here too.
           if (!text.includes("Review the proposed change.")) {
             expect(request.tools?.map((tool) => tool.name)).toContain(
               "delegate_specialist",

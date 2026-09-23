@@ -6,17 +6,26 @@
  * before this begins (a fresh user message and a plan, or nothing).
  */
 
-import type { ToolSpec, WorkspaceDescription } from "@zhiyin/contract";
+import type {
+  ProducedImage,
+  ToolSpec,
+  WorkspaceDescription,
+} from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
-import type { ConversationTools } from "@zhiyin/capabilities";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "./quiet-failures.js";
-import { fitPictures, picturesNotSent, sendPictures } from "./turn-pictures.js";
+import {
+  fitPictures,
+  pictureCaption,
+  picturesNotSent,
+  type FittedPictures,
+} from "./turn-pictures.js";
 import {
   fixedModelMessages,
-  modelFacingConversation,
+  specialistRunsText,
 } from "./conversation-context.js";
 import { harnessNotice, toolOutput } from "./notices.js";
+import { ModelHistory, type SentPicture } from "./model-history.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
 import { ToolCalls } from "./tool-calls.js";
@@ -39,7 +48,6 @@ import {
   namelessCallFailure,
   pauseReportInstruction,
   protocolCall,
-  rewriteCallArguments,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
@@ -55,6 +63,8 @@ export class TurnLoop {
   readonly #ownership: TurnOwnership;
   readonly #pendingHandoffs: PendingHandoffs;
   readonly #round: ModelRound;
+  /** How long each conversation's last request was, to mark where the next repeats it. */
+  readonly #lastRequestLength = new Map<string, number>();
 
   constructor(
     deps: AgentLoopDependencies,
@@ -126,27 +136,23 @@ export class TurnLoop {
           ? [activatePluginTool]
           : []),
       ];
-      const fixedMessages = this.#fixedModelMessages(
-        this.#records.task(taskId),
+      const fixedMessages = fixedModelMessages(
         workspace,
         skills,
         pluginDirectory,
+        this.#deps.now(),
       );
-      await this.#auxiliary.compactIfNeeded(
+      let history = await this.#condensedIfNeeded(
         taskId,
+        await this.#openHistory(taskId),
         fixedMessages,
         currentAdvertisedTools(),
         controller.signal,
       );
       controller.signal.throwIfAborted();
-      const requestMessages: ModelMessage[] = [
-        ...this.#fixedModelMessages(
-          this.#records.task(taskId),
-          workspace,
-          skills,
-          pluginDirectory,
-        ),
-        ...modelFacingConversation(this.#records.task(taskId)),
+      const requestMessages = (): ModelMessage[] => [
+        ...fixedMessages,
+        ...history.messages(),
       ];
 
       const quiet = new QuietFailures();
@@ -154,18 +160,30 @@ export class TurnLoop {
       let reportOnly = false;
       let delegatedChildren = options?.initialDelegatedChildren ?? 0;
       while (true) {
-        for (const settled of this.#pendingHandoffs.drain(taskId)) {
-          requestMessages.push({
-            role: "user",
-            content: harnessNotice("handoff", handoffMessage(settled)),
-          });
-        }
+        const runs = specialistRunsText(
+          this.#records.task(taskId).specialistRuns ?? [],
+        );
+        if (
+          runs &&
+          history.latestNotice("specialists") !==
+            harnessNotice("specialists", runs)
+        )
+          await history.notice("specialists", runs);
+        for (const settled of this.#pendingHandoffs.drain(taskId))
+          await history.notice("handoff", handoffMessage(settled));
+        const messages = requestMessages();
         const request = {
-          messages: requestMessages,
+          messages,
           tools: reportOnly ? [] : currentAdvertisedTools(),
           ...(this.#records.task(taskId).reasoning
             ? { reasoning: this.#records.task(taskId).reasoning }
             : {}),
+          session: taskId,
+          cacheAfter: this.#cacheAfter(
+            taskId,
+            fixedMessages.length,
+            messages.length,
+          ),
         };
         const {
           calls,
@@ -278,7 +296,7 @@ export class TurnLoop {
           });
           return;
         }
-        let includeRoundTextInProtocol = true;
+        let renewed = false;
         const reached = ledger.reached(this.#deps.now());
         if (reached.length) {
           const decision = await this.#waits.waitForWorkBudget(
@@ -297,67 +315,42 @@ export class TurnLoop {
           );
           if (decision === "pause") {
             assistantParts.length = 0;
-            requestMessages.push({
-              role: "user",
-              content: harnessNotice("pause", pauseReportInstruction),
-            });
+            await history.notice("pause", pauseReportInstruction);
             reportOnly = true;
             continue;
           }
 
           ledger.renew(this.#deps.now());
-
-          const refreshedFixedMessages = this.#fixedModelMessages(
-            this.#records.task(taskId),
-            workspace,
-            skills,
-            pluginDirectory,
-          );
-          await this.#auxiliary.compactIfNeeded(
+          history = await this.#condensedIfNeeded(
             taskId,
-            refreshedFixedMessages,
+            history,
+            fixedMessages,
             currentAdvertisedTools(),
             controller.signal,
           );
           controller.signal.throwIfAborted();
-          requestMessages.splice(
-            0,
-            requestMessages.length,
-            ...this.#fixedModelMessages(
-              this.#records.task(taskId),
-              workspace,
-              skills,
-              pluginDirectory,
-            ),
-            ...modelFacingConversation(this.#records.task(taskId)),
-            {
-              role: "user",
-              content: harnessNotice(
-                "renewal",
-                [
-                  "The person chose Continue at the renewable work-budget boundary.",
-                  `A fresh budget of ${ledger.maximumToolRounds()} tool rounds is available for the same task.`,
-                  "Continue from the durable conversation and action evidence. Re-read a source when the retained evidence is insufficient.",
-                ].join("\n"),
-              ),
-            },
-          );
-          includeRoundTextInProtocol = false;
+          renewed = true;
         }
 
         const { answerable, nameless } = answerableCalls(
           calls,
           () => `call-${this.#deps.newMessageId()}`,
         );
-        requestMessages.push({
-          role: "assistant",
-          content: includeRoundTextInProtocol ? roundText : "",
-          toolCalls: answerable.map(protocolCall),
-        });
+        history.round(
+          roundText,
+          answerable.map(protocolCall),
+          this.#records
+            .task(taskId)
+            .messages.some((message) => message.id === assistantId)
+            ? assistantId
+            : undefined,
+        );
         const round = {
           text: roundText,
           reasoning: roundReasoning,
-          messages: requestMessages,
+          get messages() {
+            return requestMessages();
+          },
           tools: currentAdvertisedTools(),
         };
 
@@ -371,14 +364,13 @@ export class TurnLoop {
             quietRetriesLeft,
             controller.signal,
           );
-          rewriteCallArguments(requestMessages, call);
+          await history.rewriteCall(call.callId, call.arguments);
           if (!input.ok) {
-            requestMessages.push({
-              role: "tool",
-              toolCallId: call.callId,
-              name: call.name,
-              content: toolOutput(call.name, JSON.stringify(input.result)),
-            });
+            await history.result(
+              call,
+              toolOutput(call.name, JSON.stringify(input.result)),
+              Boolean(input.quiet),
+            );
             if (input.quiet) quiet.remember(call.name, call.callId);
             continue;
           }
@@ -393,25 +385,19 @@ export class TurnLoop {
               delegatedChildren,
               tools: availableTools,
               ownerOf: toolOwner,
-              fixedMessages: this.#fixedModelMessages(
-                this.#records.task(taskId),
-                workspace,
-                skills,
-                pluginDirectory,
-              ),
+              fixedMessages,
               workspace,
               ledger,
             });
             delegatedChildren = delegation.delegatedChildren;
-            requestMessages.push({
-              role: "tool",
-              toolCallId: call.callId,
-              name: call.name,
-              content: toolOutput(
+            await history.result(
+              call,
+              toolOutput(
                 call.name,
                 JSON.stringify({ ...delegation.result, ...note }),
               ),
-            });
+              false,
+            );
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
               return;
@@ -436,15 +422,14 @@ export class TurnLoop {
             specialists = activation.specialists;
             pluginDirectory = activation.pluginDirectory;
             toolOwner = activation.ownerOf;
-            requestMessages.push({
-              role: "tool",
-              toolCallId: call.callId,
-              name: call.name,
-              content: toolOutput(
+            await history.result(
+              call,
+              toolOutput(
                 call.name,
                 JSON.stringify({ ...activation.result, ...note }),
               ),
-            });
+              false,
+            );
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
               return;
@@ -478,11 +463,9 @@ export class TurnLoop {
             fitted,
             this.#deps.host.acceptsImages(),
           );
-          requestMessages.push({
-            role: "tool",
-            toolCallId: call.callId,
-            name: call.name,
-            content: toolOutput(
+          await history.result(
+            call,
+            toolOutput(
               call.name,
               JSON.stringify({
                 ...outcome.result,
@@ -491,13 +474,32 @@ export class TurnLoop {
                 ...note,
               }),
             ),
-          });
+            Boolean(outcome.quiet),
+          );
           if (fitted.pictures.length && this.#deps.host.acceptsImages())
-            sendPictures(requestMessages, call.name, fitted);
-          rewriteCallArguments(requestMessages, call);
+            await history.pictures(
+              pictureCaption(call.name, fitted),
+              await this.#storedPictures(
+                taskId,
+                outcome.actionId,
+                produced,
+                fitted,
+              ),
+            );
+          await history.rewriteCall(call.callId, call.arguments);
           if (outcome.quiet) quiet.remember(call.name, call.callId);
-          else if (outcome.result.ok) quiet.forget(call.name, requestMessages);
+          else if (outcome.result.ok) history.forget(quiet.take(call.name));
         }
+        await history.endRound();
+        if (renewed)
+          await history.notice(
+            "renewal",
+            [
+              "The person chose Continue at the renewable work-budget boundary.",
+              `A fresh budget of ${ledger.maximumToolRounds()} tool rounds is available for the same task.`,
+              "Continue from where the conversation stands.",
+            ].join("\n"),
+          );
         if (nameless) throw new VisibleError(namelessCallFailure);
         ledger.completeToolRound();
       }
@@ -539,19 +541,77 @@ export class TurnLoop {
     }
   }
 
-  #fixedModelMessages(
-    task: ReturnType<TurnRecords["task"]>,
-    workspace: WorkspaceDescription,
-    skills: ConversationTools["skills"],
-    pluginDirectory: ConversationTools["pluginDirectory"],
-  ): readonly ModelMessage[] {
-    return fixedModelMessages(
-      workspace,
-      skills,
-      pluginDirectory,
-      task.specialistRuns ?? [],
-      this.#auxiliary.contextEvidence(task),
-      this.#deps.now(),
+  async #openHistory(taskId: string): Promise<ModelHistory> {
+    return ModelHistory.open(this.#records.task(taskId), {
+      newId: () => this.#deps.newMessageId(),
+      readPicture: (source) => this.#deps.sessions.readPicture(source),
+      save: async (modelHistory) => {
+        await this.#records.replaceTask({
+          ...this.#records.task(taskId),
+          modelHistory,
+        });
+      },
+    });
+  }
+
+  /** The history, reopened from its summary when it had to be condensed. */
+  async #condensedIfNeeded(
+    taskId: string,
+    history: ModelHistory,
+    fixedMessages: readonly ModelMessage[],
+    tools: readonly ToolSpec[],
+    signal: AbortSignal,
+  ): Promise<ModelHistory> {
+    const condensed = await this.#auxiliary.compactIfNeeded(
+      taskId,
+      [...fixedMessages, ...history.messages()],
+      tools,
+      signal,
+    );
+    return condensed ? this.#openHistory(taskId) : history;
+  }
+
+  /**
+   * Where a later request is expected to repeat this one: after the fixed
+   * start, after the previous request, and after the newest message.
+   */
+  #cacheAfter(taskId: string, fixed: number, length: number): number[] {
+    const previous = this.#lastRequestLength.get(taskId);
+    this.#lastRequestLength.set(taskId, length);
+    return [
+      ...new Set([
+        fixed - 1,
+        ...(previous === undefined ? [] : [previous - 1]),
+        length - 1,
+      ]),
+    ]
+      .filter((index) => index >= 0 && index < length)
+      .sort((left, right) => left - right);
+  }
+
+  /**
+   * The pictures as sent, each with where it is stored. One the action already
+   * stored unchanged is named by that; one made to fit is stored as sent.
+   */
+  async #storedPictures(
+    taskId: string,
+    actionId: string | undefined,
+    produced: readonly ProducedImage[],
+    fitted: FittedPictures,
+  ): Promise<SentPicture[]> {
+    const kept = (
+      this.#records.task(taskId).actions?.find((item) => item.id === actionId)
+        ?.details ?? []
+    ).flatMap((detail) => (detail.kind === "image" ? [detail.source] : []));
+    return Promise.all(
+      fitted.pictures.map(async (picture, index) => {
+        const from = fitted.from[index] ?? -1;
+        const source =
+          kept.length === produced.length && picture === produced[from]
+            ? kept[from]
+            : await this.#deps.sessions.savePicture(picture).catch(() => "");
+        return { ...picture, source: source ?? "" };
+      }),
     );
   }
 }

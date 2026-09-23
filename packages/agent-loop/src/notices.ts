@@ -30,6 +30,8 @@ export const noticeKinds = [
   "renewal",
   /** The caption of a picture a tool produced, or the note left in its place. */
   "picture",
+  /** The specialists delegated to so far, sent again when any of them changes. */
+  "specialists",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];
@@ -56,13 +58,4 @@ export function harnessNotice(kind: NoticeKind, text: string): string {
 /** What a tool returned, as data to weigh and never as instructions. */
 export function toolOutput(tool: string, content: string): string {
   return `<tool-output tool="${attribute(tool)}" trust="untrusted">${inert(content)}</tool-output>`;
-}
-
-/**
- * Text that is neither mark but carries tool material into a system message
- * at the start — the evidence retained from earlier turns — kept from forging
- * either mark.
- */
-export function withoutMarks(text: string): string {
-  return inert(text);
 }

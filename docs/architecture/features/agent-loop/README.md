@@ -23,8 +23,8 @@ serve them from different models. ADR 0046.
 
 The model-facing conversation may be compacted independently of the durable
 human transcript. The loop chooses the cutoff, asks for a bounded summary,
-retains named evidence, and assembles later requests from that summary plus the
-recent tail. ADR 0020.
+retains named evidence, and sends later requests that summary followed by what
+the model was sent after the cutoff. ADR 0020.
 
 This is the feature most at risk of becoming a god class. It owns the order of
 steps and nothing about how a step is performed. Concrete storage, network,
@@ -96,9 +96,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   normalized result returns to the requesting model. Any later consequential
   action receives its own permission decision (ADR 0021).
 - Twenty-four completed tool rounds form a renewable tranche, not a failed
-  turn. If the next response still proposes an action, Continue rebuilds the
-  request from durable conversation and evidence, runs normal compaction, and
-  refreshes the tranche. Pause leaves that proposal unexecuted and allows one
+  turn. If the next response still proposes an action, Continue runs normal
+  compaction, refreshes the tranche, and carries on from the conversation as
+  already sent, with a `renewal` notice after the round's results. Pause leaves that proposal unexecuted and allows one
   tool-free progress-report request before the turn stops (ADR 0029).
 - The same checkpoint stops before the next action when a turn reaches 30
   minutes, 500,000 tokens, or USD 10 of provider-reported cost. Those details
@@ -162,7 +162,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
 
 - **Three voices, each marked.** Whatever Zhiyin itself tells the model during
   a conversation arrives as a `zhiyin-notice` of a named kind (`summary`,
-  `handoff`, `pause`, `renewal`, `picture`), each owned by one part of the
+  `handoff`, `pause`, `renewal`, `picture`, `specialists`), each owned by one part of the
   loop; a kind nothing owns is refused. Every tool result is fenced as
   `tool-output` marked untrusted. Inside both, anything that would open or
   close either mark is escaped, so fetched text cannot end its fence and pose
@@ -176,13 +176,45 @@ browser is not among them: it is reached, and let go of, through capabilities.
   renewal notice`, `captions a tool's picture with a picture notice, not in
   the person's voice`, `puts a condensed conversation's summary in a summary
   notice, where the older messages were`, and `marks the turn completed with
-  the specialist still running, then wakes with its handoff`.
+  the specialist still running, then wakes with its handoff` (which also
+  checks the `specialists` notice).
 - **No system message after the person's first message.** Notices are `user`
   messages at the end of the conversation, because upstreams merge, move or
   reject a system message placed mid-conversation. Only what rarely changes —
-  the system prompt, skills, plugins, and, for now, the retained evidence
-  and specialist runs, escaped the same way — comes before it. Held for every
+  the system prompt, skills and plugins — comes before it. Held for every
   request of every agent-loop test by the shared model stand-in.
+- **Every request starts with the whole of the one before it.** A provider
+  reuses its cached copy of a request's start only while the start is the same,
+  byte for byte, so the conversation is sent as it was first sent: the
+  person's messages, the model's words and tool calls with the arguments that
+  ran, each result as the model received it, and Zhiyin's notices, in the
+  order they happened. It is stored with the conversation, so the next turn
+  and a restarted app send the same bytes, and anything new goes at the end.
+  Earlier tool results are not re-sent in a block of their own. The start
+  changes only on purpose, each case named by a test: a quiet correction taken
+  back, the date in the system prompt changing, a condensing, a plugin
+  activated, and pictures let go of. Named tests: `sends turn 1's tool calls
+  and results in turn 3, in order, and no evidence block`, `starts every
+  request of three turns with the whole of the request before it`, `sends the
+  same tool calls and results after the app restarts`, `carries on from the
+  history already sent after Continue`, `takes a quietly corrected proposal
+  back out once the tool succeeds`, `changes the system prompt's date when
+  the day changes, and nothing else`, `puts the summary in place of what a
+  condensing covered, with the results it kept`, and `changes the fixed start
+  once when a plugin is activated`.
+- **A quiet correction is never stored; a failure the person saw is.** A
+  proposal a tool refused quietly is sent back to the model until the tool
+  succeeds and then taken out; it was never part of the conversation, so it
+  is never saved. A refusal shown to the person is part of it, and is saved and
+  sent again like any result. Named test: `keeps no quiet correction, and keeps
+  a failure the person was shown`.
+- **Each request names its conversation and marks where the next will repeat
+  it.** It carries the conversation id as the session, so OpenRouter keeps the
+  conversation with the provider holding its cache, and marks the end of the
+  fixed start, the end of the previous request and the newest message; the
+  model client decides which providers need the marks. Named test: `names the
+  conversation on every request and marks where the next one will repeat this
+  one`.
 
 - **What the model is told before it starts includes the date.** A model has no
   clock and a training horizon; unsaid, it dates what it writes from a guess and
@@ -208,11 +240,21 @@ browser is not among them: it is reached, and let go of, through capabilities.
   in it would be legible`.
 - **A picture is kept where a reopened conversation can find it, and one
   request carries a bounded number of them.** The record names a stored
-  picture rather than carrying it, and pictures a turn has moved past are
-  replaced by a line saying they are no longer attached — a provider counts
-  images per request, and every one is re-sent with every later request in the
-  turn. Named tests: `is kept where a conversation reopened tomorrow can still
-  find it`, `keeps the most recent ones and says the older ones are gone`.
+  picture rather than carrying it, and the conversation as sent names it too,
+  so a restarted app sends it again; one the store has since removed is sent
+  as a line saying so. A provider counts images per request and each is
+  re-sent with every later request, so past 8 messages carrying pictures the
+  older ones are replaced, down to the newest 4, by a line saying they are no
+  longer attached. Replacing several at once changes the start of the request
+  once for the next four pictures rather than once for each. Named tests: `is
+  kept where a conversation reopened tomorrow can still find it`, `keeps the
+  most recent ones and says the older ones are gone`, `changes the start of
+  the request once when pictures 9 to 12 arrive, at picture 9`, and `sends a
+  saved picture again after the app restarts, and says so when it is gone`.
+- **A picture counts toward a request's size as what a provider bills for it,**
+  a few thousand tokens, not its encoded bytes, so a screenshot kept in the
+  conversation does not set off a condensing. Named test: `does not condense a
+  conversation because it carries a large picture`.
 - **A picture a tool produced reaches the model as a picture, or is declared
   missing.** It never travels inside the tool result's text, where it would be
   paid for and unreadable; when the model cannot be shown one, the result says a
@@ -296,13 +338,15 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - Compaction changes model context, not the durable transcript. It records an
   exact cutoff, carries only validated references to retained action evidence,
   labels the summary as untrusted and non-authorizing in a `summary` notice
-  standing where the condensed messages were, and resumes from the
-  same shape after restart. An unusable summary does not discard context. The
-  named tests `compacts only model context, retains evidence, and renames from
-  the summary`, `resumes from a durable summary without removing the human
-  transcript`, `keeps full context when an attempted compaction is unusable`,
-  and `cancels compaction with its owning turn and publishes no late checkpoint`
-  guard this boundary.
+  standing where the condensed messages were, with the retained actions'
+  results inside it, and resumes from the same shape after restart. An
+  unusable summary does not discard context. The named tests `compacts only
+  model context, retains evidence, and renames from the summary`, `resumes
+  from a durable summary without removing the human transcript`, `keeps full
+  context when an attempted compaction is unusable`, `puts the summary in place
+  of what a condensing covered, with the results it kept`, and `cancels
+  compaction with its owning turn and publishes no late checkpoint` guard this
+  boundary.
 
 - A validated inert view executes and persists without a permission decision;
   an unvalidated one produces no view. The named tests `checks, runs, and
@@ -515,12 +559,13 @@ browser is not among them: it is reached, and let go of, through capabilities.
   user message — delivers the queued handoffs and lets the model continue or
   give a final answer. Named test: `marks the turn completed with the
   specialist still running, then wakes with its handoff`.
-- **A specialist's own delegation record is durable context, not only
-  ephemeral protocol.** What it was asked, its status, and its handoff or
-  reason are threaded into every round's fixed messages from
-  `task.specialistRuns`, because the ephemeral tool-call protocol that would
-  otherwise carry this is discarded at both a work-budget renewal and a wake
-  — the durable record is what still says a delegation happened after either.
+- **A specialist's own delegation record reaches the model whenever it
+  changes.** What it was asked, its status, and its handoff or reason are sent
+  from `task.specialistRuns` as a `specialists` notice each time any of them
+  changes, just before any handoff, and stay in the conversation as sent — so a
+  turn woken by a specialist finishing still knows a delegation happened. Named
+  test: `marks the turn completed with the specialist still running, then wakes
+  with its handoff`.
 - **A specialist honors the shared budget it cannot itself ask about.** Only
   the parent's own round loop can pause and ask a person to continue; a
   specialist has no one to ask, so it checks the same shared ledger after
@@ -654,8 +699,9 @@ lives with the core.
 
 `keeps cancellation terminal during final assessment` covers cancellation after
 generation. `rejects overlapping starts instead of replacing an active turn`
-covers ownership of a task. `advertises enabled skills and retains earlier tool
-evidence for a follow-up` covers runtime discovery and restored evidence.
+covers ownership of a task. `advertises enabled skills and sends earlier tool
+results with a follow-up` covers runtime discovery and a restored
+conversation's tool results.
 `loads an enabled skill through permission handling and returns instructions to
 the model` covers the complete explicit loading path.
 Evidence is bounded and common credential fields are redacted; the named tests

@@ -50,6 +50,7 @@ describe("a notice from Zhiyin", () => {
       "pause",
       "renewal",
       "picture",
+      "specialists",
     ]);
   });
 });

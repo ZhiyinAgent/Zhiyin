@@ -50,6 +50,7 @@ import * as startup from "./startup.js";
 import { requiredTask, stampTaskWorkspace } from "./workspace-tasks.js";
 import { WorkspacePersistence } from "./workspace-persistence.js";
 import { recordUsage } from "./workspace-usage.js";
+import { forTheWindow } from "./window-events.js";
 import {
   clearEvidence as clearStoredEvidence,
   readEvidence,
@@ -190,7 +191,7 @@ export class Workspace {
   }
 
   emit(event: AppEvent): void {
-    this.#deps.emit(event);
+    this.#deps.emit(forTheWindow(event));
   }
 
   async initialize(): Promise<void> {
@@ -541,7 +542,6 @@ export class Workspace {
       this.#deps.now(),
       (event) => this.emit(event),
     );
-    this.emit({ kind: "usageChanged", data: this.#usage });
   }
 
   previewArtifact = (taskId: string, path: string): Promise<ArtifactPreview> =>
