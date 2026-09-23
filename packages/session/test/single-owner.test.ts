@@ -8,6 +8,7 @@
  * what makes the assumption true rather than hoped for.
  */
 
+import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,4 +129,36 @@ describe("FileSessions single ownership", () => {
 
     await expect(readFile(join(root, "owner.lock"), "utf8")).rejects.toThrow();
   });
+
+  it.runIf(process.platform === "win32")(
+    "takes over a lock naming a process that is running but is not the app",
+    async () => {
+      const root = await temporaryRoot();
+      // A live process, so a lock that trusts process ids would think the
+      // folder is still owned: the id of a killed app, reused by something else.
+      const unrelated = spawn(
+        process.execPath,
+        ["-e", "setInterval(() => {}, 1000)"],
+        { stdio: "ignore", windowsHide: true },
+      );
+      try {
+        await writeFile(
+          join(root, "owner.lock"),
+          JSON.stringify({
+            pid: unrelated.pid,
+            since: "2026-09-01T00:00:00.000Z",
+          }),
+          "utf8",
+        );
+
+        const next = new FileSessions(root);
+
+        await expect(next.claim()).resolves.toBeUndefined();
+        await expect(next.saveWorkspace(snapshot)).resolves.toBeUndefined();
+        await next.release();
+      } finally {
+        unrelated.kill();
+      }
+    },
+  );
 });

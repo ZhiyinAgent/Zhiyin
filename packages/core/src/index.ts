@@ -245,10 +245,15 @@ export class Core {
     this.#deps.viewChecks.abandon();
   }
 
-  /** Gives up the saved data only once the workspace has stopped writing to it. */
-  shutdown(): Promise<void> {
+  /**
+   * Gives up the saved data once the workspace has stopped writing to it, or
+   * has stopped being waited for. Answers what had not finished closing.
+   */
+  async shutdown(): Promise<readonly string[]> {
     const { workspace, ownership } = this.#deps;
-    return workspace.shutdown().then(() => ownership.release());
+    const unfinished = await workspace.shutdown();
+    await ownership.release();
+    return unfinished;
   }
 
   /**

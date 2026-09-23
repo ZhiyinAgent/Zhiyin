@@ -80,6 +80,8 @@ export type Surroundings = {
   readonly chooseSaveLocation: CoreDependencies["chooseSaveLocation"];
   readonly openExternal: CoreDependencies["openExternal"];
   readonly credentialEntry?: CredentialEntry;
+  /** Tests only: closing browsers and connections never finishes. */
+  readonly connectionsNeverClose?: boolean;
 };
 
 export function buildCore({
@@ -92,6 +94,7 @@ export function buildCore({
   chooseSaveLocation,
   openExternal,
   credentialEntry,
+  connectionsNeverClose,
 }: Surroundings): Core {
   const emit = (event: AppEvent): void => send(CHANNEL.appEvent, event);
   const views = new PendingViewChecks({
@@ -222,6 +225,9 @@ export function buildCore({
     // what a conversation holds through this one group.
     browsers,
   });
+  // A test's stand-in for a browser or connection that never finishes closing.
+  if (connectionsNeverClose)
+    capabilities.shutdown = () => new Promise<void>(() => {});
   // Both are pointed at the same folder here rather than at each other.
   const artifacts = new WorkspaceArtifacts(() => workspace.workspaceRoot());
   const rewind = new ComposedRewind({

@@ -8,7 +8,14 @@ import {
 } from "./ui/app/index.js";
 import { validateView } from "./ui/views/index.js";
 
-export function App({ core }: { core: CoreApi }) {
+export function App({
+  core,
+  restarted = false,
+}: {
+  core: CoreApi;
+  /** The window was reloaded after its page crashed. */
+  restarted?: boolean;
+}) {
   const [connectionError, setConnectionError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [state, dispatch] = useReducer(
@@ -70,5 +77,12 @@ export function App({ core }: { core: CoreApi }) {
       />
     );
 
-  return <WorkspaceShell state={state} dispatch={dispatch} commands={core} />;
+  return (
+    <WorkspaceShell
+      state={state}
+      dispatch={dispatch}
+      commands={core}
+      restarted={restarted}
+    />
+  );
 }

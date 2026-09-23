@@ -24,6 +24,7 @@ import { timelinePieces } from "./timelinePieces.js";
 import { WorkspaceSurfaces } from "./WorkspaceSurfaces.js";
 import { approvalPromptDetails, composerLock } from "./dockState.js";
 import { BrowserNotice, BrowserWorkspace } from "../browser/index.js";
+import { RestartNotice } from "./RestartNotice.js";
 import { SessionHeader } from "./SessionHeader.js";
 import { WorkspaceViewTabs } from "./WorkspaceViewTabs.js";
 import { UserInputPrompt } from "../user-input/index.js";
@@ -36,6 +37,8 @@ import styles from "./app.module.css";
 
 type WorkspaceShellProps = {
   state: WorkspaceState;
+  /** The window was reloaded after its page crashed. */
+  restarted?: boolean;
   dispatch: (action: WorkspaceAction) => void;
   commands: Pick<
     CoreApi,
@@ -107,6 +110,7 @@ export function WorkspaceShell({
   state,
   dispatch,
   commands,
+  restarted = false,
 }: WorkspaceShellProps) {
   // Held with the rest of the window's state rather than beside it, so the
   // message survives the pages of the app changing under it.
@@ -385,6 +389,7 @@ export function WorkspaceShell({
                   : ""
               }`}
             >
+              {restarted && <RestartNotice />}
               <BrowserWorkspace
                 browser={state.browser}
                 split={browserView}

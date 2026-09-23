@@ -324,6 +324,29 @@ describe("App", () => {
       await screen.findByRole("heading", { name: "What should we work on?" }),
     ).toBeVisible();
   });
+  it("says the window restarted after a problem, and that the work is intact, until dismissed", async () => {
+    render(<App core={fakeCore("0.1.0")} restarted />);
+
+    const title = await screen.findByText(
+      "The window restarted after a problem.",
+    );
+    const notice = title.closest('[role="status"]');
+    // Said politely: nothing went wrong that the person has to act on.
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveTextContent("Your work is intact.");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(
+      screen.queryByText("The window restarted after a problem."),
+    ).toBeNull();
+  });
+
+  it("says nothing about a restart on an ordinary start", async () => {
+    render(<App core={fakeCore("0.1.0")} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+
+    expect(screen.queryByText(/The window restarted/)).toBeNull();
+  });
+
   it("replaces the loading shell with the production workspace after the handshake", async () => {
     render(<App core={fakeCore("0.1.0")} />);
     expect(

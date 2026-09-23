@@ -27,20 +27,12 @@ import {
   isSavedWorkspace,
   isWorkspaceTask,
 } from "./saved-workspace.js";
-const mib = 1024 * 1024;
+import { SessionStoreError } from "./errors.js";
+import { FolderOwnership, type OwnershipOptions } from "./owner-lock.js";
 
-/**
- * Signal 0 delivers nothing and only reports whether the process is there.
- * `EPERM` means it exists and belongs to someone else, which still counts.
- */
-function processIsRunning(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-}
+export { SessionStoreError } from "./errors.js";
+
+const mib = 1024 * 1024;
 
 /**
  * How much disk the pictures a conversation refers to may occupy.
@@ -145,23 +137,6 @@ export type DamageReport =
       readonly damaged: number;
     };
 
-export class SessionStoreError extends Error {
-  readonly code: "corrupted" | "unavailable" | "in-use";
-
-  constructor(
-    code: SessionStoreError["code"],
-    message: string,
-    options: { cause?: unknown } = {},
-  ) {
-    super(
-      message,
-      options.cause === undefined ? undefined : { cause: options.cause },
-    );
-    this.name = "SessionStoreError";
-    this.code = code;
-  }
-}
-
 /** Only the fields a history file holds, whatever else the value carries. */
 function durable(workspace: SavedWorkspace): SavedWorkspace {
   return {
@@ -178,35 +153,29 @@ function durable(workspace: SavedWorkspace): SavedWorkspace {
 export class FileSessions implements Sessions {
   readonly #directory: string;
   readonly #workspaceFile: string;
-  readonly #lockFile: string;
+  readonly #ownership: FolderOwnership;
   readonly #pictureLimits: PictureLimits;
   readonly #now: () => Date;
-  readonly #processIsRunning: (pid: number) => boolean;
   readonly #workspaceFiles: WorkspaceFileOperations;
-  readonly #pid: number;
   #writes: Promise<void> = Promise.resolve();
-  #owned = false;
 
   constructor(
     directory: string,
     options: {
       readonly pictures?: Partial<PictureLimits>;
       readonly now?: () => Date;
-      /** Replaced in tests, where a dead process id has to be a known quantity. */
-      readonly processIsRunning?: (pid: number) => boolean;
-      /** Which process this instance speaks for. Injected so two owners can be tested. */
-      readonly pid?: number;
       /** Replaced by boundary tests that make a workspace write fail. */
       readonly workspaceFiles?: WorkspaceFileOperations;
-    } = {},
+    } & OwnershipOptions = {},
   ) {
     this.#directory = directory;
     this.#workspaceFile = join(directory, "workspace.json");
-    this.#lockFile = join(directory, "owner.lock");
+    this.#ownership = new FolderOwnership(
+      join(directory, "owner.lock"),
+      options,
+    );
     this.#pictureLimits = { ...defaultPictureLimits, ...options.pictures };
     this.#now = options.now ?? (() => new Date());
-    this.#processIsRunning = options.processIsRunning ?? processIsRunning;
-    this.#pid = options.pid ?? process.pid;
     this.#workspaceFiles = options.workspaceFiles ?? {
       write: (path, source) => writeFile(path, source, "utf8"),
       replace: rename,
@@ -214,88 +183,15 @@ export class FileSessions implements Sessions {
     };
   }
 
-  /**
-   * Takes ownership of the data directory for this process, or refuses.
-   *
-   * The write queue orders this process's saves and knows nothing about any
-   * other process. Two instances each replacing the whole workspace file would
-   * lose whichever set of changes finished first, with nothing to say it had
-   * happened, so a second instance is prohibited rather than coordinated.
-   *
-   * A lock whose process is no longer running is taken over: the previous
-   * launch was killed, and refusing forever would need the person to delete a
-   * file they have no reason to know about. This trusts process ids not to be
-   * reused between an unclean exit and the next launch, which is the same
-   * assumption every lock file of this shape makes.
-   */
+  /** Takes ownership of the data directory for this process, or refuses. */
   async claim(): Promise<void> {
     await mkdir(this.#directory, { recursive: true });
-    const holder = await this.#currentOwner();
-    if (holder !== undefined && holder !== this.#pid)
-      throw new SessionStoreError(
-        "in-use",
-        "Another copy of the app is already using this data. Close it and try again.",
-      );
-    try {
-      await writeFile(
-        this.#lockFile,
-        JSON.stringify({
-          pid: this.#pid,
-          since: this.#now().toISOString(),
-        }),
-        "utf8",
-      );
-    } catch (error) {
-      throw new SessionStoreError(
-        "unavailable",
-        "This data folder could not be claimed.",
-        { cause: error },
-      );
-    }
-    this.#owned = true;
+    await this.#ownership.claim();
   }
 
   /** Gives the folder up so the next launch does not have to wait out a lock. */
-  async release(): Promise<void> {
-    this.#owned = false;
-    await rm(this.#lockFile, { force: true }).catch(() => {});
-  }
-
-  /**
-   * The process holding the folder, or nothing if it is free. A lock that
-   * cannot be read or parsed is treated as free: an unreadable lock would
-   * otherwise be an app that never starts again.
-   */
-  async #currentOwner(): Promise<number | undefined> {
-    let source: string;
-    try {
-      source = await readFile(this.#lockFile, "utf8");
-    } catch {
-      return undefined;
-    }
-    try {
-      const value: unknown = JSON.parse(source);
-      if (!isRecord(value) || typeof value.pid !== "number") return undefined;
-      return this.#processIsRunning(value.pid) ? value.pid : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Every durable write goes through here first. An instance that was refused
-   * ownership must not be able to write anyway — a refusal that only stops the
-   * launch, and not the writes, is not a lock.
-   */
-  async #requireOwnership(): Promise<void> {
-    if (this.#owned) return;
-    const holder = await this.#currentOwner();
-    if (holder !== undefined && holder !== this.#pid)
-      throw new SessionStoreError(
-        "in-use",
-        "Another copy of the app is using this data, so nothing was saved.",
-      );
-    this.#owned = true;
+  release(): Promise<void> {
+    return this.#ownership.release();
   }
 
   /**
@@ -590,7 +486,7 @@ export class FileSessions implements Sessions {
     // for the same reason: awaiting it out here would let a later save overtake
     // an earlier one while the check was in flight.
     const write = this.#writes.then(async () => {
-      await this.#requireOwnership();
+      await this.#ownership.require();
       await this.#write(source, options.commit);
     });
     this.#writes = write.catch(() => undefined);

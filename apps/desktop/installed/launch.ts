@@ -50,6 +50,8 @@ export async function launch(
   options: {
     readonly dataDirectory?: string;
     readonly credentialsUnavailable?: boolean;
+    /** Closing browsers and connections never finishes, as a hung one would. */
+    readonly connectionsNeverClose?: boolean;
     /**
      * A provider credential, for the rare test that needs a real stream rather
      * than a fixture. Left out by default and blanked below, so no ordinary run
@@ -70,6 +72,9 @@ export async function launch(
       ZHIYIN_WORKSPACE: "",
       ...(options.credentialsUnavailable
         ? { ZHIYIN_TEST_CREDENTIALS_UNAVAILABLE: "1" }
+        : {}),
+      ...(options.connectionsNeverClose
+        ? { ZHIYIN_TEST_CONNECTIONS_NEVER_CLOSE: "1" }
         : {}),
     },
   });

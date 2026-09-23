@@ -89,6 +89,18 @@ feature that leaked them.
   tests: `reads valid UTF-8 as UTF-8` and `is read in the console's code page`
   (runs only where the console code page is a Western OEM one).
 
+- **A held file is let go of with its holder.** `holdExclusively` opens a file
+  sharing nothing but deletion and marked to be deleted on close: a second
+  holder is refused as `held-elsewhere`, and when the holder dies, however it
+  went, the file is freed and removed. Any other failure is `unavailable`,
+  never "held". Named tests: `refuses a second holder until the first lets go`,
+  `is let go of when its holder is killed outright`, `leaves nothing behind
+  once released`, `says the folder could not be used, not that someone holds
+  it, when it cannot be created`, and `lets the folder that holds it be
+  removed`. Because deletion is shared, a lock file someone deletes by hand
+  while it is held could be created again beside the running holder; nothing
+  in Zhiyin deletes it.
+
 ## Testing notes
 
 Every test here runs against real processes. A fake cannot establish this

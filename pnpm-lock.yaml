@@ -451,6 +451,9 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+      '@zhiyin/process-ownership':
+        specifier: workspace:*
+        version: link:../process-ownership
 
   packages/toolchains:
     dependencies:

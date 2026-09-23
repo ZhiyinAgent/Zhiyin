@@ -120,15 +120,20 @@ sequencing.
 - **One instance owns a data folder at a time.** The write queue orders this
   process's saves and can see no other process, so a second instance is refused
   rather than coordinated: it cannot claim the folder and cannot write to it
-  either. A lock whose process is no longer running is taken over, so a launch
-  that was killed does not leave the app unable to start. Reading is never
+  either. On Windows the lock is a file the owning process holds open, which the
+  operating system lets go of when that process is gone however it went, so a
+  launch that was killed never leaves the app unable to start, and no process
+  id is trusted: a lock file naming a live but unrelated process is taken over.
+  Stores opened by one process share its ownership. Elsewhere a lock whose
+  process is no longer running is taken over. Reading is never
   blocked, so an instance that was refused can still show what is saved. Named
   tests: `refuses a second owner of the same folder rather than letting it
   overwrite the first`, `does not save from an instance that was refused
   ownership`, `takes over a folder whose previous owner died without releasing
   it`, `lets the next launch take over from an instance that is gone`, `reads
   without claiming, so a refused instance can still show what is saved`, and
-  `leaves no lock behind after the owner releases it`, and the installed test
+  `leaves no lock behind after the owner releases it`, `takes over a lock
+  naming a process that is running but is not the app`, and the installed test
   `releases the data lock on an ordinary quit`.
 - **The cost of keeping history is bounded at a stated size.** The target is 200
   conversations of 40 messages and 20 actions each; save, load, and one further

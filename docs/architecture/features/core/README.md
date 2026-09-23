@@ -38,7 +38,8 @@ Electron main process, which is meant to carry messages and nothing else (ADR
   with no channel, and a method the window is offered that travels nowhere each
   stop the build rather than reaching someone as a button that does nothing.
 - `start()` claims the saved data and starts the workspace; `shutdown()` stops
-  the workspace and its turns, and then gives the data up.
+  the workspace and its turns, and then gives the data up. It answers the names
+  of whatever had not finished closing by its deadline.
 - `windowClosed()` abandons view checks the window can no longer answer.
 
 ### The workspace
@@ -238,6 +239,15 @@ directly.
   task with a non-empty trimmed title and persists it` and `deletes a task and
   selects its nearest remaining conversation` guard these mutations.
 
+- **Quitting always finishes.** Turns, then browsers and connections, are each
+  given until one deadline five seconds after quitting starts; whatever has not
+  closed by then is named and no longer waited for, and the saved data is given
+  up either way, so the next launch is never told another copy is running.
+  Named tests: `gives the data folder up after five seconds, and names what
+  never closed`, `does not wait at all when everything closes`, and the
+  installed test `quits within six seconds when a connection never finishes
+  closing, and the next launch starts`.
+
 ## Testing notes
 
 The workspace's invariants are exercised through the workspace and the real
@@ -253,3 +263,18 @@ and sender check are exercised by the installed-app tests.
 The installed startup tests also hold the damaged-history screen to the minimum
 window size and activate recovery from keyboard focus, and verify that an
 unavailable OS credential store is reported without preventing startup.
+
+### The main process around the core
+
+The main process keeps a diagnostic log: one JSON line per event in a file per
+day under the data folder's `logs`, kept for two weeks, written synchronously,
+never sent anywhere and stored as written. An exception or rejection nobody
+handled is recorded and the process keeps running; a helper process that ends
+abnormally is recorded; and a window whose page crashes is loaded again with a
+notice that the work is intact, unless it crashed three times in a minute.
+Named tests: `writes one line per entry into the day's file`, `removes days
+older than two weeks, and nothing else`, `never throws, even where it cannot
+write`, `is recorded, and the process is left running`, `is loaded again,
+saying it restarted, and the crash is recorded`, `stops being reloaded when it
+crashes again and again`, and the installed test `brings its window back after
+the page's process is killed, with the work intact`.

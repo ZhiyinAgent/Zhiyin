@@ -63,6 +63,7 @@ import { WorkspaceRewinds } from "./workspace-rewinds.js";
 import { WorkspacePlugins } from "./workspace-plugins.js";
 import { WorkspaceConnections } from "./workspace-connections.js";
 import { WorkspaceShell } from "./workspace-shell.js";
+import { closeInTurn } from "./closing.js";
 
 /** What the workspace asks of whoever runs turns. */
 export type WorkspaceTurns = Pick<
@@ -370,11 +371,16 @@ export class Workspace {
   /**
    * Stops every turn first, then closes what the conversations held open: the
    * browsers and the connections, and the feeds watching them.
+   *
+   * Each is given until one deadline, not waited for without end: something
+   * that never finishes closing would otherwise keep the app alive, holding
+   * the data folder. Answers what had not finished by then.
    */
-  async shutdown(): Promise<void> {
-    await this.turns.shutdown();
-    await this.#deps.capabilities.shutdown();
-    this.#browser.stopWatching();
+  shutdown(): Promise<readonly string[]> {
+    return closeInTurn([
+      ["conversation turns", () => this.turns.shutdown()],
+      ["browsers and connections", () => this.#deps.capabilities.shutdown()],
+    ]).finally(() => this.#browser.stopWatching());
   }
 
   setPluginEnabled(id: string, enabled: boolean): Promise<void> {

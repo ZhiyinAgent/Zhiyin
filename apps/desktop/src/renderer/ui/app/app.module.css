@@ -693,6 +693,111 @@
   height: 18px;
 }
 
+/* A calm status, not an error: centred over the conversation, a little below
+   its header, until the person dismisses it. */
+.restart-notice {
+  position: absolute;
+  z-index: 100;
+  top: 32px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
+  height: auto;
+  padding: 12px 10px 12px 14px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow);
+  transform: translateX(-50%);
+  animation: restart-notice-in 220ms ease-out;
+}
+
+.restart-notice__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--zy-green-line);
+  border-radius: 50%;
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.restart-notice__badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.restart-notice__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.restart-notice__title,
+.restart-notice__detail {
+  margin: 0;
+  line-height: 1.35;
+}
+
+.restart-notice__title {
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 550;
+}
+
+.restart-notice__detail {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.restart-notice__dismiss {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.restart-notice__dismiss svg {
+  width: 16px;
+  height: 16px;
+}
+
+.restart-notice__dismiss:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.restart-notice__dismiss:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .restart-notice {
+    animation: none;
+  }
+}
+
+@keyframes restart-notice-in {
+  from {
+    transform: translate(-50%, -8px);
+    opacity: 0;
+  }
+}
+
 .connection-recovery {
   display: grid;
   place-content: center;

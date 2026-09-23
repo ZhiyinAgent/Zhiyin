@@ -11,6 +11,10 @@ if (!root) throw new Error("missing #root element");
 
 createRoot(root).render(
   <StrictMode>
-    <App core={core} />
+    <App
+      core={core}
+      // Set by the main process when it reloads a window whose page crashed.
+      restarted={new URLSearchParams(location.search).has("restarted")}
+    />
   </StrictMode>,
 );

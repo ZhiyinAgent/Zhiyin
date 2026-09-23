@@ -18,11 +18,22 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { COMMAND_CHANNELS } from "@zhiyin/contract";
 import { buildCore } from "./composition.js";
+import { DiagnosticLog, recordCrashes } from "./diagnostic-log.js";
 import { fromOwnWindow } from "./ipc-policy.js";
 import { iconCandidates } from "./icon.js";
 import { TITLE_BAR } from "./title-bar.js";
+import { reloadAfterCrash } from "./window-recovery.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Local only, beside the saved history. Started before anything else so that
+ * whatever fails from here on leaves a line behind, and the main process keeps
+ * running rather than dying on an error nobody caught.
+ */
+const log = new DiagnosticLog(join(app.getPath("userData"), "logs"));
+log.prune();
+recordCrashes(process, log);
 
 /**
  * No application menu at all. Every page the menu used to name is reached from
@@ -88,11 +99,20 @@ function createWindow(): BrowserWindow {
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
-  if (process.env["ELECTRON_RENDERER_URL"]) {
-    void window.loadURL(process.env["ELECTRON_RENDERER_URL"]);
-  } else {
-    void window.loadFile(join(here, "../renderer/index.html"));
-  }
+  const load = (restarted: boolean) => {
+    const query = restarted ? { restarted: "1" } : undefined;
+    if (process.env["ELECTRON_RENDERER_URL"]) {
+      const url = new URL(process.env["ELECTRON_RENDERER_URL"]);
+      if (query) url.search = new URLSearchParams(query).toString();
+      void window.loadURL(url.toString());
+    } else {
+      void window.loadFile(join(here, "../renderer/index.html"), {
+        ...(query ? { query } : {}),
+      });
+    }
+  };
+  reloadAfterCrash(window, load, log);
+  load(false);
 
   return window;
 }
@@ -147,6 +167,8 @@ void app.whenReady().then(() => {
       return result.canceled ? undefined : result.filePath;
     },
     openExternal: (url) => shell.openExternal(url),
+    connectionsNeverClose:
+      process.env["ZHIYIN_TEST_CONNECTIONS_NEVER_CLOSE"] === "1",
     ...(process.env["ZHIYIN_TEST_CREDENTIALS_UNAVAILABLE"] === "1"
       ? {
           credentialEntry: {
@@ -182,6 +204,15 @@ void app.whenReady().then(() => {
   });
 });
 
+app.on("child-process-gone", (_event, details) => {
+  if (details.reason === "clean-exit") return;
+  log.record({
+    level: "warn",
+    source: details.name ?? details.type,
+    message: `A helper process ended: ${details.reason}, exit code ${details.exitCode}.`,
+  });
+});
+
 app.on("window-all-closed", () => {
   app.quit();
 });
@@ -191,5 +222,26 @@ app.on("before-quit", (event) => {
   event.preventDefault();
   const core = activeCore;
   activeCore = undefined;
-  void core.shutdown().finally(() => app.quit());
+  // Bounded by the core: what has not closed in time is named here and left
+  // behind, and the Job Objects end any process it still owned.
+  void core
+    .shutdown()
+    .then(
+      (unfinished) => {
+        if (unfinished.length)
+          log.record({
+            level: "warn",
+            source: "shutdown",
+            message: `Quit without waiting any longer for: ${unfinished.join(", ")}.`,
+          });
+      },
+      (error: unknown) =>
+        log.record({
+          level: "error",
+          source: "shutdown",
+          message: "Shutting down failed.",
+          error,
+        }),
+    )
+    .finally(() => app.quit());
 });
