@@ -5,6 +5,7 @@ import {
   pluginOffering,
   pluginsOffering,
   stubDependencies,
+  unfenced,
 } from "./support.js";
 
 const softwareEngineering = pluginOffering({
@@ -123,7 +124,7 @@ describe("plugin activation", () => {
         "toolCallId" in message &&
         message.toolCallId === "activate-1",
     );
-    const activationResult = JSON.parse(
+    const activationResult = unfenced(
       (activationResultMessage as { content: string }).content,
     );
     expect(activationResult).toEqual({

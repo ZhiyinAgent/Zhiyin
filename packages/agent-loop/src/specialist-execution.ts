@@ -22,6 +22,7 @@ import {
   rewriteCallArguments,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
+import { toolOutput } from "./notices.js";
 
 /**
  * How many specialists one turn can delegate to. A shared renewable ledger
@@ -358,10 +359,13 @@ export class SpecialistExecution {
             role: "tool",
             toolCallId: call.callId,
             name: call.name,
-            content: JSON.stringify({
-              ...outcome.result,
-              ...(input.ok && input.note ? { note: input.note } : {}),
-            }),
+            content: toolOutput(
+              call.name,
+              JSON.stringify({
+                ...outcome.result,
+                ...(input.ok && input.note ? { note: input.note } : {}),
+              }),
+            ),
           });
           if (outcome.quiet) quiet.remember(call.name, call.callId);
           else if (outcome.result.ok) quiet.forget(call.name, messages);

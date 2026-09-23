@@ -6,7 +6,7 @@ import type {
   ModelRequest,
 } from "@zhiyin/model-client";
 import type { AuditEntry } from "@zhiyin/audit";
-import { loopFrom, stubDependencies } from "./support.js";
+import { loopFrom, stubDependencies, unfenced } from "./support.js";
 
 /**
  * A tool request whose input is not valid JSON is one of the most common model
@@ -234,7 +234,7 @@ describe("a tool request whose input is not valid JSON", () => {
     expect(JSON.stringify(afterwards)).not.toContain(
       JSON.stringify(unescapedQuote.args).slice(1, -1),
     );
-    const result = JSON.parse(toolResults(afterwards)[0]?.content ?? "{}");
+    const result = unfenced(toolResults(afterwards)[0]?.content ?? "");
     expect(result.note).toMatch(
       /^Zhiyin corrected this call's input \(invalid JSON: .+\)\.$/,
     );
@@ -283,9 +283,7 @@ describe("a tool request whose input is not valid JSON", () => {
         cause: "content-changed",
       }),
     );
-    const refusal = JSON.parse(
-      toolResults(main.requests[1])[0]?.content ?? "{}",
-    );
+    const refusal = unfenced(toolResults(main.requests[1])[0]?.content ?? "");
     expect(refusal).toMatchObject({
       ok: false,
       refusedBy: "input-check",
@@ -312,9 +310,7 @@ describe("a tool request whose input is not valid JSON", () => {
     await loop.start(taskId, "Write the note");
 
     expect(repair.requests).toEqual([]);
-    const refusal = JSON.parse(
-      toolResults(main.requests[1])[0]?.content ?? "{}",
-    );
+    const refusal = unfenced(toolResults(main.requests[1])[0]?.content ?? "");
     expect(refusal.reason).toMatch(/cut off/);
     expect(refusal.next).toMatch(/shorter|split/);
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
@@ -354,9 +350,7 @@ describe("a tool request whose input is not valid JSON", () => {
         args: { path: "note.md", text: "Line one\nLine two" },
       },
     ]);
-    const result = JSON.parse(
-      toolResults(main.requests[1])[0]?.content ?? "{}",
-    );
+    const result = unfenced(toolResults(main.requests[1])[0]?.content ?? "");
     expect(result.note).toMatch(/^Zhiyin corrected this call's input/);
     expect(audit.entries).toContainEqual(
       expect.objectContaining({
@@ -410,8 +404,8 @@ describe("a refusal the model receives", () => {
 
     await loop.start(taskId, "Write the note");
 
-    const [inputCheck, tool] = toolResults(main.requests[1]).map(
-      (message) => JSON.parse(message.content) as Record<string, unknown>,
+    const [inputCheck, tool] = toolResults(main.requests[1]).map((message) =>
+      unfenced(message.content),
     );
     expect(inputCheck?.["refusedBy"]).toBe("input-check");
     expect(tool?.["refusedBy"]).toBe("tool");

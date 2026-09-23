@@ -160,6 +160,30 @@ browser is not among them: it is reached, and let go of, through capabilities.
 
 ## Invariants
 
+- **Three voices, each marked.** Whatever Zhiyin itself tells the model during
+  a conversation arrives as a `zhiyin-notice` of a named kind (`summary`,
+  `handoff`, `pause`, `renewal`, `picture`), each owned by one part of the
+  loop; a kind nothing owns is refused. Every tool result is fenced as
+  `tool-output` marked untrusted. Inside both, anything that would open or
+  close either mark is escaped, so fetched text cannot end its fence and pose
+  as Zhiyin. The system prompt says what both marks are and that neither
+  grants permission. Named tests: `is marked with its kind, and nothing in its
+  text can close the mark`, `is refused for a kind no part of Zhiyin owns`,
+  `reaches the model fenced as untrusted, with anything that would close the
+  fence escaped`, `says what both marks are, and that neither grants
+  permission`, and one test per kind: `asks for a report after Pause with a
+  pause notice at the end`, `grants a fresh budget after Continue with a
+  renewal notice`, `captions a tool's picture with a picture notice, not in
+  the person's voice`, `puts a condensed conversation's summary in a summary
+  notice, where the older messages were`, and `marks the turn completed with
+  the specialist still running, then wakes with its handoff`.
+- **No system message after the person's first message.** Notices are `user`
+  messages at the end of the conversation, because upstreams merge, move or
+  reject a system message placed mid-conversation. Only what rarely changes —
+  the system prompt, skills, plugins, and, for now, the retained evidence
+  and specialist runs, escaped the same way — comes before it. Held for every
+  request of every agent-loop test by the shared model stand-in.
+
 - **What the model is told before it starts includes the date.** A model has no
   clock and a training horizon; unsaid, it dates what it writes from a guess and
   treats stale knowledge as current. The system message carries today's date and
@@ -271,7 +295,8 @@ browser is not among them: it is reached, and let go of, through capabilities.
   compaction title is pending` guards the concurrent rename boundary.
 - Compaction changes model context, not the durable transcript. It records an
   exact cutoff, carries only validated references to retained action evidence,
-  labels the summary as untrusted and non-authorizing, and resumes from the
+  labels the summary as untrusted and non-authorizing in a `summary` notice
+  standing where the condensed messages were, and resumes from the
   same shape after restart. An unusable summary does not discard context. The
   named tests `compacts only model context, retains evidence, and renames from
   the summary`, `resumes from a durable summary without removing the human
@@ -475,7 +500,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
   starts the child running and returns immediately with a "started"
   acknowledgment, never the handoff — the parent's own round continues, and
   more than one specialist can be running at once. A finished handoff or
-  failure is delivered later, as a system message, to whichever turn is live
+  failure is delivered later, as a `handoff` notice, to whichever turn is live
   when it settles: the same turn's next round if it is still going, or a
   fresh turn automatically woken for the task if it already ended. Delivery
   is queued per task and drained exactly once, so several specialists

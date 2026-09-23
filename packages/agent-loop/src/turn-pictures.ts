@@ -11,6 +11,7 @@
 import type { PictureFitting, ProducedImage } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { readableToolName } from "./invocation.js";
+import { harnessNotice } from "./notices.js";
 
 /**
  * How many pictures one request may still be carrying.
@@ -49,7 +50,10 @@ export function letGoOfOlderPictures(messages: ModelMessage[]): void {
       content: [
         {
           kind: "text",
-          text: `${gone === 1 ? "A picture" : `${gone} pictures`} shown earlier in this turn ${gone === 1 ? "is" : "are"} no longer attached. Take another if you need to look again.`,
+          text: harnessNotice(
+            "picture",
+            `${gone === 1 ? "A picture" : `${gone} pictures`} shown earlier in this turn ${gone === 1 ? "is" : "are"} no longer attached. Take another if you need to look again.`,
+          ),
         },
       ],
     };
@@ -115,10 +119,13 @@ export function sendPictures(
     content: [
       {
         kind: "text",
-        text: [
-          `${fitted.pictures.length === 1 ? "The picture" : "The pictures"} from ${readableToolName(toolName)}:`,
-          ...fitted.notes,
-        ].join(" "),
+        text: harnessNotice(
+          "picture",
+          [
+            `${fitted.pictures.length === 1 ? "The picture" : "The pictures"} from ${readableToolName(toolName)}:`,
+            ...fitted.notes,
+          ].join(" "),
+        ),
       },
       ...fitted.pictures.map((picture) => ({
         kind: "image" as const,

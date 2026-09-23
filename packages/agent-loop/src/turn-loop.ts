@@ -16,6 +16,7 @@ import {
   fixedModelMessages,
   modelFacingConversation,
 } from "./conversation-context.js";
+import { harnessNotice, toolOutput } from "./notices.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
 import { ToolCalls } from "./tool-calls.js";
@@ -155,8 +156,8 @@ export class TurnLoop {
       while (true) {
         for (const settled of this.#pendingHandoffs.drain(taskId)) {
           requestMessages.push({
-            role: "system",
-            content: handoffMessage(settled),
+            role: "user",
+            content: harnessNotice("handoff", handoffMessage(settled)),
           });
         }
         const request = {
@@ -297,8 +298,8 @@ export class TurnLoop {
           if (decision === "pause") {
             assistantParts.length = 0;
             requestMessages.push({
-              role: "system",
-              content: pauseReportInstruction,
+              role: "user",
+              content: harnessNotice("pause", pauseReportInstruction),
             });
             reportOnly = true;
             continue;
@@ -330,12 +331,15 @@ export class TurnLoop {
             ),
             ...modelFacingConversation(this.#records.task(taskId)),
             {
-              role: "system",
-              content: [
-                "The person chose Continue at the renewable work-budget boundary.",
-                `A fresh budget of ${ledger.maximumToolRounds()} tool rounds is available for the same task.`,
-                "Continue from the durable conversation and action evidence. Re-read a source when the retained evidence is insufficient.",
-              ].join("\n"),
+              role: "user",
+              content: harnessNotice(
+                "renewal",
+                [
+                  "The person chose Continue at the renewable work-budget boundary.",
+                  `A fresh budget of ${ledger.maximumToolRounds()} tool rounds is available for the same task.`,
+                  "Continue from the durable conversation and action evidence. Re-read a source when the retained evidence is insufficient.",
+                ].join("\n"),
+              ),
             },
           );
           includeRoundTextInProtocol = false;
@@ -373,7 +377,7 @@ export class TurnLoop {
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: JSON.stringify(input.result),
+              content: toolOutput(call.name, JSON.stringify(input.result)),
             });
             if (input.quiet) quiet.remember(call.name, call.callId);
             continue;
@@ -403,7 +407,10 @@ export class TurnLoop {
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: JSON.stringify({ ...delegation.result, ...note }),
+              content: toolOutput(
+                call.name,
+                JSON.stringify({ ...delegation.result, ...note }),
+              ),
             });
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
@@ -433,7 +440,10 @@ export class TurnLoop {
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: JSON.stringify({ ...activation.result, ...note }),
+              content: toolOutput(
+                call.name,
+                JSON.stringify({ ...activation.result, ...note }),
+              ),
             });
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
@@ -472,12 +482,15 @@ export class TurnLoop {
             role: "tool",
             toolCallId: call.callId,
             name: call.name,
-            content: JSON.stringify({
-              ...outcome.result,
-              images: undefined,
-              ...(shown ? { picturesNotSent: shown } : {}),
-              ...note,
-            }),
+            content: toolOutput(
+              call.name,
+              JSON.stringify({
+                ...outcome.result,
+                images: undefined,
+                ...(shown ? { picturesNotSent: shown } : {}),
+                ...note,
+              }),
+            ),
           });
           if (fitted.pictures.length && this.#deps.host.acceptsImages())
             sendPictures(requestMessages, call.name, fitted);

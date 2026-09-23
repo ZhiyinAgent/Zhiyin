@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import type { ModelRequest } from "@zhiyin/model-client";
 import {
   loopFrom,
   pluginOffering,
@@ -21,6 +22,7 @@ describe("waking a task after a background specialist settles", () => {
     const specialistGate = new Promise<void>((resolve) => {
       releaseSpecialist = resolve;
     });
+    const requests: ModelRequest[] = [];
     const loop = loopFrom({
       ...base,
       plugins: pluginsOffering([
@@ -39,6 +41,7 @@ describe("waking a task after a background specialist settles", () => {
       model: {
         ...base.model,
         send: async function* (request) {
+          requests.push(request);
           const text = JSON.stringify(request.messages);
           if (text.includes("You are the Reviewer specialist")) {
             await specialistGate;
@@ -123,5 +126,11 @@ describe("waking a task after a background specialist settles", () => {
       ).backgroundSpecialistIds,
     ).toBeUndefined();
     expect(loop.running(taskId)).toBe(false);
+    // The handoff reached the woken turn as Zhiyin's notice, at the end.
+    const woken = requests.at(-1)?.messages ?? [];
+    expect(woken.at(-1)).toMatchObject({
+      role: "user",
+      content: expect.stringMatching(/^<zhiyin-notice kind="handoff">/),
+    });
   });
 });

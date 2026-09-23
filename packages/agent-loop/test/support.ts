@@ -22,7 +22,7 @@ import type { PluginView, Plugins } from "@zhiyin/plugins";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery } from "@zhiyin/recovery";
 import { ComposedRewind } from "@zhiyin/rewind";
-import type { ModelEvent } from "@zhiyin/model-client";
+import type { ModelClient, ModelEvent } from "@zhiyin/model-client";
 import {
   AgentLoop,
   type AgentLoopDependencies,
@@ -246,6 +246,54 @@ export type TurnTestApp = AgentLoop &
 /** The name the tests that moved here already used for it. */
 export type TestApp = TurnTestApp;
 
+/**
+ * What the model is told a tool returned: the result, inside the fence Zhiyin
+ * puts round everything a tool answers.
+ */
+export function fenced(tool: string, result: string): string {
+  return `<tool-output tool="${tool}" trust="untrusted">${result}</tool-output>`;
+}
+
+/** The result inside a fenced tool answer, read back as JSON. */
+export function unfenced(content: string): Record<string, unknown> {
+  const inside =
+    /^<tool-output tool="[^"]*" trust="untrusted">([\s\S]*)<\/tool-output>$/.exec(
+      content,
+    )?.[1];
+  if (inside === undefined)
+    throw new Error(`Not a fenced tool answer: ${content.slice(0, 80)}`);
+  return JSON.parse(inside) as Record<string, unknown>;
+}
+
+/**
+ * Held for every request any test makes: after the person's first message,
+ * nothing arrives as a system message. Zhiyin speaks through marked notices
+ * instead, because upstreams merge, move or reject a system message placed
+ * mid-conversation.
+ */
+function withOneChannel(model: ModelClient): ModelClient {
+  return {
+    ...model,
+    send(request) {
+      const firstUser = request.messages.findIndex(
+        (message) => message.role === "user",
+      );
+      const late =
+        firstUser < 0
+          ? -1
+          : request.messages.findIndex(
+              (message, index) =>
+                index > firstUser && message.role === "system",
+            );
+      if (late >= 0)
+        throw new Error(
+          `A system message was sent after the person's first message: ${JSON.stringify(request.messages[late]).slice(0, 200)}`,
+        );
+      return model.send(request);
+    },
+  };
+}
+
 export function loopFrom(dependencies: LoopTestDependencies): TurnTestApp {
   const { host } = loopAndHost(dependencies);
   return host.app;
@@ -272,6 +320,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   host.images = acceptsImages === true;
   const loop = new AgentLoop({
     ...rest,
+    model: withOneChannel(rest.model),
     capabilities: new ComposedCapabilities({
       tools,
       mcp,

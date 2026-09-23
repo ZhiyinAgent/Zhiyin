@@ -11,6 +11,7 @@ import {
   stubDependencies,
   until,
   loopFrom,
+  fenced,
 } from "./support.js";
 
 describe("AgentLoop", () => {
@@ -530,7 +531,10 @@ describe("AgentLoop", () => {
       role: "tool",
       toolCallId: "call-readme",
       name: "read_file",
-      content: '{"ok":true,"value":{"text":"Project notes"}}',
+      content: fenced(
+        "read_file",
+        '{"ok":true,"value":{"text":"Project notes"}}',
+      ),
     });
     expect(seen).toContainEqual({
       kind: "toolActivity",
@@ -646,7 +650,10 @@ describe("AgentLoop", () => {
       role: "tool",
       toolCallId: "call-write",
       name: "write_sentinel",
-      content: '{"ok":false,"reason":"This write was blocked by policy."}',
+      content: fenced(
+        "write_sentinel",
+        '{"ok":false,"reason":"This write was blocked by policy."}',
+      ),
     });
     expect(loop.snapshot().tasks[0]?.actions).toEqual([
       expect.objectContaining({
@@ -720,7 +727,7 @@ describe("AgentLoop", () => {
       role: "tool",
       toolCallId: "call-mcp",
       name: "external_lookup",
-      content: '{"ok":true,"value":{"answer":42}}',
+      content: fenced("external_lookup", '{"ok":true,"value":{"answer":42}}'),
     });
   });
 
@@ -1040,8 +1047,10 @@ describe("AgentLoop", () => {
       role: "tool",
       toolCallId: "call-missing",
       name: "missing_tool",
-      content:
+      content: fenced(
+        "missing_tool",
         '{"ok":false,"refusedBy":"input-check","reason":"The tool “missing_tool” is not available.","next":"Use one of the tools on offer."}',
+      ),
     });
     expect(loop.snapshot().tasks[0]?.actions).toEqual([
       expect.objectContaining({
@@ -1106,8 +1115,10 @@ describe("AgentLoop", () => {
       role: "tool",
       toolCallId: "call-fail",
       name: "failing_tool",
-      content:
+      content: fenced(
+        "failing_tool",
         '{"ok":false,"reason":"The requested action failed while it was running."}',
+      ),
     });
     expect(loop.snapshot().tasks[0]).toMatchObject({
       actions: [
