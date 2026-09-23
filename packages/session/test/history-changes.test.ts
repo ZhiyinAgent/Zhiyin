@@ -58,6 +58,96 @@ describe("a change between two saves", () => {
     expect(rebuilt(before, after)).toBe(JSON.stringify(after));
   });
 
+  describe("in a list whose entries have ids", () => {
+    const entries = Array.from({ length: 50 }, (_, index) => ({
+      id: `entry-${index}`,
+      text: "x".repeat(1_000),
+    }));
+    const size = (before: unknown, after: unknown) =>
+      JSON.stringify(changesBetween(before, after)).length;
+
+    it("records an entry added at the top as that entry, not the list", () => {
+      const added = { id: "new", text: "y".repeat(1_000) };
+      const before = { items: entries };
+      const after = { items: [added, ...entries] };
+
+      expect(size(before, after)).toBeLessThan(1_200);
+      expect(rebuilt(before, after)).toBe(JSON.stringify(after));
+    });
+
+    it("records an entry removed from the middle as its removal", () => {
+      const before = { items: entries };
+      const after = { items: entries.filter((_, index) => index !== 20) };
+
+      expect(size(before, after)).toBeLessThan(100);
+      expect(rebuilt(before, after)).toBe(JSON.stringify(after));
+    });
+
+    it("records an entry moved to the top as the move", () => {
+      const before = { items: entries };
+      const after = {
+        items: [entries[30]!, ...entries.filter((_, index) => index !== 30)],
+      };
+
+      expect(size(before, after)).toBeLessThan(100);
+      expect(rebuilt(before, after)).toBe(JSON.stringify(after));
+    });
+
+    it("names the entry a change is in by its id, not its place", () => {
+      const before = { items: entries };
+      const after = {
+        items: entries.map((entry, index) =>
+          index === 12 ? { ...entry, text: `${entry.text}z` } : entry,
+        ),
+      };
+
+      expect(JSON.stringify(changesBetween(before, after))).toContain(
+        '"entry-12"',
+      );
+      expect(rebuilt(before, after)).toBe(JSON.stringify(after));
+    });
+
+    it("rebuilds any sequence of additions, removals, moves and edits exactly", () => {
+      let seed = 11;
+      const random = () => {
+        seed = (seed * 48_271) % 2_147_483_647;
+        return seed / 2_147_483_647;
+      };
+      const at = (length: number) => Math.floor(random() * length);
+      let next = 0;
+      type Entry = { id: string; text: string; notes: readonly Entry[] };
+      const fresh = (): Entry => ({ id: `e${next++}`, text: "a", notes: [] });
+      let state: { readonly items: readonly Entry[] } = {
+        items: Array.from({ length: 5 }, fresh),
+      };
+
+      for (let step = 0; step < 2_000; step += 1) {
+        const items = [...state.items];
+        const edits = 1 + at(3);
+        for (let count = 0; count < edits; count += 1) {
+          const choice = random();
+          if (choice < 0.25 || !items.length)
+            items.splice(at(items.length + 1), 0, fresh());
+          else if (choice < 0.45) items.splice(at(items.length), 1);
+          else if (choice < 0.65) {
+            const [moved] = items.splice(at(items.length), 1);
+            items.splice(at(items.length + 1), 0, moved!);
+          } else {
+            const index = at(items.length);
+            const entry = items[index]!;
+            items[index] =
+              random() < 0.5
+                ? { ...entry, text: `${entry.text}b` }
+                : { ...entry, notes: [...entry.notes, fresh()] };
+          }
+        }
+        const after = { items };
+        expect(rebuilt(state, after)).toBe(JSON.stringify(after));
+        state = after;
+      }
+    });
+  });
+
   it("rebuilds added, removed and shortened entries exactly", () => {
     const before = {
       id: "a",

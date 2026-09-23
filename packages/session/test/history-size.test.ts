@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot, WorkspaceTask } from "@zhiyin/contract";
-import { FileSessions } from "../src/index.js";
+import { FileSessions, historyFiles } from "../src/index.js";
 import { savedBytes } from "./planted-history.js";
 
 const CONVERSATIONS = 200;
@@ -151,5 +151,58 @@ describe("FileSessions at the documented history size", () => {
 
     expect(index?.conversations).toHaveLength(CONVERSATIONS);
     expect(launchMs).toBeLessThanOrEqual(COMMIT_BUDGET_MS);
+  });
+
+  /**
+   * The list changes by one conversation at a time: one is started, one is
+   * deleted, one moves to the top when it is worked on. Each should cost that
+   * conversation's entry, not the list; matched by position, every entry after
+   * the change would be written again.
+   */
+  it("writes a started, a deleted and a moved conversation as that one entry, whatever the length of the list", async () => {
+    const root = await temporaryRoot();
+    let written = 0;
+    const sessions = new FileSessions(root, {
+      historyFiles: {
+        ...historyFiles,
+        append: (path, text) => {
+          written += Buffer.byteLength(text, "utf8");
+          return historyFiles.append(path, text);
+        },
+      },
+    });
+    let tasks = full.tasks;
+    await sessions.saveWorkspace(full);
+    const cost = async (next: readonly WorkspaceTask[]) => {
+      tasks = next;
+      await sessions.saveWorkspace({ ...full, tasks });
+      const bytes = written;
+      written = 0;
+      return bytes;
+    };
+    const started = conversation(CONVERSATIONS);
+    const deleted = full.tasks[100]!.id;
+    const moved = full.tasks[150]!;
+
+    // The started conversation is created as its own file, which is not an
+    // append; what is counted is what the list, and the moved one, grew by.
+    const costs = {
+      started: await cost([started, ...tasks]),
+      deleted: await cost(tasks.filter((task) => task.id !== deleted)),
+      moved: await cost([
+        { ...moved, updatedAt: "2026-09-11T12:00:00.000Z" },
+        ...tasks.filter((task) => task.id !== moved.id),
+      ]),
+    };
+
+    expect(
+      Object.values(costs).every((bytes) => bytes < 1_024),
+      JSON.stringify(costs),
+    ).toBe(true);
+    expect(
+      (await new FileSessions(root).loadIndex())?.conversations.map(
+        (item) => item.id,
+      ),
+    ).toEqual(tasks.map((task) => task.id));
   });
 });

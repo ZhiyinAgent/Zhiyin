@@ -55,6 +55,17 @@ sequencing.
   only the words that were added`, `records one changed entry of a long list,
   not the list`, and, through the core, `writes under 200 KB to stream a
   2,000-token reply in a history of 100 conversations`.
+- **An entry of a list with ids is named by its id, not its place.** Where
+  every entry of a list has a distinct id — conversations, messages, actions —
+  an entry is added, removed or moved by id, and a change inside it names it,
+  so starting, deleting or reordering one conversation costs that one entry
+  however long the list, and a saved line says which entry it is about. Named
+  tests: `records an entry added at the top as that entry, not the list`,
+  `records an entry removed from the middle as its removal`, `records an entry
+  moved to the top as the move`, `names the entry a change is in by its id, not
+  its place`, `rebuilds any sequence of additions, removals, moves and edits
+  exactly`, and `writes a started, a deleted and a moved conversation as that
+  one entry, whatever the length of the list`.
 - **What is read back is exactly what was saved,** field order included: a
   pending rewind recognises a conversation by its saved text. Named tests:
   `keeps the order of fields exactly, even when a field moves`, `treats a
