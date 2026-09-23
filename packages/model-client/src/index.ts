@@ -20,7 +20,19 @@ import {
   type CatalogOptions,
 } from "./catalog.js";
 import type { ModelChoice, ModelChoiceValue } from "./choice.js";
+import {
+  classifyFailure,
+  ModelClientError,
+  refusalBody,
+  type ProviderError,
+} from "./failures.js";
 import { acceptsImages, reasoningCapabilities } from "./reasoning.js";
+export {
+  ModelClientError,
+  type ModelClientErrorCode,
+  type ProviderFailureDetail,
+  type TokenLimitDetail,
+} from "./failures.js";
 export { fetchOpenRouterModelInfo } from "./reasoning.js";
 export {
   fetchOpenRouterCatalog,
@@ -124,37 +136,6 @@ export type ModelEvent =
       /** Durable, provider-neutral evidence for diagnosing this response. */
       readonly response?: ModelResponseRecord;
     };
-
-export type ModelClientErrorCode =
-  | "unsupportedReasoning"
-  | "missingCredential"
-  | "unauthorized"
-  | "rateLimited"
-  | "modelUnavailable"
-  | "contextExceeded"
-  | "credentialUnavailable"
-  | "networkFailure"
-  | "malformedResponse";
-
-export class ModelClientError extends Error {
-  readonly code: ModelClientErrorCode;
-  readonly retryAfterMs?: number;
-
-  constructor(
-    code: ModelClientErrorCode,
-    message: string,
-    options: { retryAfterMs?: number; cause?: unknown } = {},
-  ) {
-    super(
-      message,
-      options.cause === undefined ? undefined : { cause: options.cause },
-    );
-    this.name = "ModelClientError";
-    this.code = code;
-    if (options.retryAfterMs !== undefined)
-      this.retryAfterMs = options.retryAfterMs;
-  }
-}
 
 /**
  * Every failure is thrown as an error named `ModelClientError` carrying a
@@ -328,11 +309,7 @@ type ProviderChunk = {
    * line went out with the headers before anything went wrong. Carries the same
    * numeric codes an HTTP failure would.
    */
-  readonly error?: {
-    readonly code?: unknown;
-    readonly message?: unknown;
-    readonly metadata?: { readonly error_type?: unknown };
-  };
+  readonly error?: ProviderError;
   readonly choices?: readonly {
     readonly delta?: {
       readonly reasoning?: unknown;
@@ -396,175 +373,6 @@ const defaultStallTimeoutMs = 300_000;
 
 function defaultFetch(url: string, init: Parameters<ModelFetch>[1]) {
   return fetch(url, init) as Promise<ModelFetchResponse>;
-}
-
-function retryAfterMs(headers: ModelFetchResponse["headers"]) {
-  const value = headers.get("retry-after");
-  if (!value) return undefined;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
-  const at = Date.parse(value);
-  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
-}
-
-/** How much of a refusal is worth reading. Providers answer these in a sentence. */
-const refusalBodyLimit = 4_096;
-
-/**
- * The provider's own explanation of a refusal, where it gave one.
- *
- * A failure in the status line carries its reason in the body, and until now
- * that body was thrown away unread - which is why one refusal could not be told
- * from another that happens to share a status code.
- */
-async function refusalMessage(
-  body: AsyncIterable<Uint8Array> | null,
-): Promise<string | undefined> {
-  if (!body) return undefined;
-  const decoder = new TextDecoder();
-  let text = "";
-  try {
-    for await (const chunk of body) {
-      text += decoder.decode(chunk, { stream: true });
-      if (text.length >= refusalBodyLimit) break;
-    }
-  } catch {
-    return undefined;
-  }
-  try {
-    const parsed = JSON.parse(text) as { error?: { message?: unknown } };
-    const message = parsed.error?.message;
-    return typeof message === "string" && message.trim() ? message : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Whether a refusal is about the model id rather than the request.
- *
- * Verified against the live provider on 2026-09-13: an id OpenRouter does not
- * recognise is refused with 400 "<id> is not a valid model ID", while a model
- * that existed and has since been retired answers 404 "No endpoints found for
- * <id>". The second was already read as a model failure; the first was being
- * read as the request being too large, which sends somebody to shorten a
- * message that was never the problem.
- */
-function refusesTheModel(message: string | undefined): boolean {
-  return (
-    message !== undefined &&
-    /not a valid model|no endpoints found/i.test(message)
-  );
-}
-
-function responseError(
-  response: ModelFetchResponse,
-  model?: string,
-  providerMessage?: string,
-): ModelClientError {
-  return failureFor(
-    response.status,
-    undefined,
-    response.headers,
-    model,
-    providerMessage,
-  );
-}
-
-/**
- * One failure, whether it arrived in the status line or inside the stream.
- *
- * A rate limit is a rate limit even when the provider had already sent its
- * headers, so the same code produces the same typed outcome and the caller does
- * not have to know where it was reported. `detail` is the provider's own
- * sentence where there is one; it replaces our wording rather than joining it,
- * because two explanations of one failure read as two failures.
- */
-function failureFor(
-  status: number,
-  detail?: string,
-  headers?: ModelFetchResponse["headers"],
-  model?: string,
-  providerMessage?: string,
-): ModelClientError {
-  const response = {
-    status,
-    headers: headers ?? { get: () => null },
-  } as ModelFetchResponse;
-  const error = statusError(response, model, providerMessage);
-  return detail
-    ? new ModelClientError(
-        error.code,
-        detail,
-        error.retryAfterMs === undefined
-          ? {}
-          : { retryAfterMs: error.retryAfterMs },
-      )
-    : error;
-}
-
-function statusError(
-  response: ModelFetchResponse,
-  model?: string,
-  providerMessage?: string,
-): ModelClientError {
-  if (response.status === 401 || response.status === 403) {
-    return new ModelClientError(
-      "unauthorized",
-      "OpenRouter rejected the API key.",
-    );
-  }
-  if (response.status === 429) {
-    const retry = retryAfterMs(response.headers);
-    return new ModelClientError(
-      "rateLimited",
-      "Every allowed provider is out of capacity for this model. Try again shortly.",
-      retry === undefined ? {} : { retryAfterMs: retry },
-    );
-  }
-  if (response.status === 404) {
-    /*
-     * Routing matched nobody: an allowlist naming no provider that serves this
-     * model, or a request parameter none of the allowed providers support.
-     * Reporting it as the model being down sends a person to wait for a
-     * recovery that is not coming.
-     *
-     * A model the provider has withdrawn arrives here too, and is the case a
-     * person can actually do something about - so the stored id is named, and
-     * so is the page where it is changed. Without that, an app that stops
-     * answering gives no indication that a choice made months ago is the cause.
-     */
-    return new ModelClientError(
-      "modelUnavailable",
-      model
-        ? `No allowed provider can serve “${model}”. If that model has been withdrawn, choose another in Settings.`
-        : "No allowed provider can serve the selected model.",
-    );
-  }
-  if (response.status === 503) {
-    return new ModelClientError(
-      "modelUnavailable",
-      "The selected model is not available right now.",
-    );
-  }
-  if (response.status === 400 && refusesTheModel(providerMessage)) {
-    return new ModelClientError(
-      "modelUnavailable",
-      model
-        ? `OpenRouter does not recognise “${model}”. It may have been withdrawn; choose another model in Settings.`
-        : "OpenRouter does not recognise the selected model. Choose another in Settings.",
-    );
-  }
-  if (response.status === 400 || response.status === 413) {
-    return new ModelClientError(
-      "contextExceeded",
-      "The request is too large for the selected model.",
-    );
-  }
-  return new ModelClientError(
-    "networkFailure",
-    `OpenRouter could not complete the request (HTTP ${response.status}).`,
-  );
 }
 
 /**
@@ -858,11 +666,14 @@ export class OpenRouterModelClient implements ModelClient {
     }
 
     if (!response.ok)
-      throw responseError(
-        response,
-        chosen.model,
-        await refusalMessage(response.body),
-      );
+      throw classifyFailure({
+        status: response.status,
+        headers: response.headers,
+        model: chosen.model,
+        ...(await refusalBody(response.body).then((error) =>
+          error ? { error } : {},
+        )),
+      });
     if (!response.body) {
       throw new ModelClientError(
         "malformedResponse",
@@ -906,16 +717,12 @@ export class OpenRouterModelClient implements ModelClient {
       // arrived before it, and is recorded as a completed answer - with the
       // provider's own explanation of what went wrong read and discarded.
       if (chunk.error) {
-        const message =
-          typeof chunk.error.message === "string" && chunk.error.message.trim()
-            ? chunk.error.message
-            : undefined;
-        throw failureFor(
-          typeof chunk.error.code === "number" ? chunk.error.code : 0,
-          message,
-          undefined,
-          chosen.model,
-        );
+        throw classifyFailure({
+          status: typeof chunk.error.code === "number" ? chunk.error.code : 0,
+          error: chunk.error,
+          model: chosen.model,
+          inStream: true,
+        });
       }
 
       const choice = chunk.choices?.[0];
@@ -1150,7 +957,21 @@ export class OpenRouterModelClient implements ModelClient {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       if (response.ok) return { accepted: true };
-      return { accepted: false, error: failureFor(response.status) };
+      /*
+       * The account endpoint refuses nothing but the key, so any refusal here
+       * is about the key - including a 403 that on a model request would be a
+       * moderation block.
+       */
+      return {
+        accepted: false,
+        error:
+          response.status === 401 || response.status === 403
+            ? new ModelClientError(
+                "unauthorized",
+                "OpenRouter rejected the API key.",
+              )
+            : classifyFailure({ status: response.status }),
+      };
     } catch (error) {
       return {
         accepted: true,

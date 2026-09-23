@@ -45,7 +45,13 @@ one trust boundary.
 - `setApiKey(value)` and `clearApiKey()` write to the credential store.
 - `ModelClientError` distinguishes missing or rejected credentials, rate
   limits, unavailable models, excessive context, unavailable credential
-  storage, network failures, and malformed responses.
+  storage, network failures, malformed responses, refusals by a content
+  filter or the model, exhausted credits or spending caps, rejected
+  attachments, and requests refused for something other than their size. Each
+  says whether sending the same request again could succeed (`retryable`),
+  keeps who declined it and why without the person's flagged words, and, for
+  an oversized request, how large it was and the limit where the provider
+  said.
 
 ## Invariants
 
@@ -186,6 +192,22 @@ one trust boundary.
   model id as the model, not as an oversized request`, `still reports a
   genuinely oversized request as too large`, and the live check `refuses a
   withdrawn model id in one of the two ways the app now reads`.
+- **A failure is classified from the provider's typed error first.**
+  OpenRouter tags failures with an `error_type`; the status alone cannot tell
+  a context overflow from a bad tool schema (both 400) or a moderation block
+  from a rejected key (both 403). The status and the provider's sentence
+  decide only when the type is absent, unmapped or unknown, and an untyped 400
+  is too large only when its sentence says so. A spending cap and an output
+  limit are not a full conversation. The same classification applies to a
+  refused request and to an error inside a stream. Named tests: `tells a bad
+  tool schema, a bad parameter, a bad picture and an oversized request apart`,
+  `never reports an unexplained 400 as too large`, `does not mistake a
+  spending cap or an output limit for a full conversation`, `reports a
+  moderation block as a refusal with its reasons, not as a rejected key`,
+  `keeps who declined and why, but not the person's flagged words`, `marks a
+  busy model retryable and a withdrawn one permanent`, `falls back to the
+  status for a type it does not know`, and `reads a typed rate limit from a
+  mid-stream chunk as retryable`.
 - A stream without the provider's completion marker is a malformed response,
   not an empty success. The named test `treats a stream without its completion
   marker as malformed` guards this.

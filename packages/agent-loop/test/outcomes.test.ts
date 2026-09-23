@@ -3,7 +3,11 @@ import type {
   ToolCallInspection,
   ToolInvocationResult,
 } from "@zhiyin/contract";
-import { ModelClientError, type ModelRequest } from "@zhiyin/model-client";
+import {
+  ModelClientError,
+  OpenRouterModelClient,
+  type ModelRequest,
+} from "@zhiyin/model-client";
 import { stubDependencies, loopFrom } from "./support.js";
 
 function toolReturning(result: ToolInvocationResult) {
@@ -229,6 +233,49 @@ describe("AgentLoop when the provider fails mid-answer", () => {
       kind: "failed",
       reason: "Rate limit exceeded for Z.AI",
     });
+  });
+
+  /**
+   * A 400 that is not about size used to end the turn with "too large",
+   * sending somebody to start a new conversation over a bad tool schema. The
+   * provider's own sentence is the useful part.
+   */
+  it("shows the provider's reason for a refused request that is not about size", async () => {
+    const deps = stubDependencies(() => {});
+    const client = new OpenRouterModelClient({
+      apiKey: async () => "key",
+      model: "z-ai/glm-5.3-flash",
+      fetcher: async () => ({
+        ok: false,
+        status: 400,
+        headers: { get: () => null },
+        body: (async function* () {
+          yield new TextEncoder().encode(
+            JSON.stringify({
+              error: {
+                code: 400,
+                message: "Invalid schema for function 'write_file'",
+                metadata: { error_type: "invalid_request" },
+              },
+            }),
+          );
+        })(),
+      }),
+    });
+    const loop = loopFrom({
+      ...deps,
+      model: { ...deps.model, send: (request) => client.send(request) },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Write the summary.");
+
+    const phase = loop.snapshot().tasks[0]?.phase;
+    expect(phase).toMatchObject({
+      kind: "failed",
+      reason: expect.stringContaining("Invalid schema for function"),
+    });
+    expect(JSON.stringify(phase)).not.toMatch(/too large/i);
   });
 
   it("keeps the part of the answer that did arrive", async () => {
