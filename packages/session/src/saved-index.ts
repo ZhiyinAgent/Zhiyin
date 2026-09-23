@@ -1,13 +1,17 @@
 /**
- * What the saved list of conversations must look like to be loaded. Like a
- * conversation, anything else is treated as damaged rather than trusted.
+ * What the saved settings and a conversation's summary must look like to be
+ * loaded. Like a conversation, anything else is treated as damaged rather than
+ * trusted.
  */
 
-import type { SavedIndex } from "./history-store.js";
+import type { ConversationSummary } from "@zhiyin/contract";
+import type { SavedSettings } from "./history-store.js";
 import { isFolder, isRecord, optionalText } from "./saved-workspace.js";
 
 /** A conversation as the list shows it, without opening it. */
-function isConversationSummary(value: unknown): boolean {
+export function isConversationSummary(
+  value: unknown,
+): value is ConversationSummary {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
@@ -20,12 +24,12 @@ function isConversationSummary(value: unknown): boolean {
   );
 }
 
-/** The list of conversations and the choices a person made. */
-export function isSavedIndex(
+/** The choices a person made. */
+export function isSavedSettings(
   value: unknown,
-): value is SavedIndex & { readonly version: 2 } {
+): value is SavedSettings & { readonly version: 3 } {
   if (!isRecord(value)) return false;
-  if (value.version !== 2) return false;
+  if (value.version !== 3) return false;
   if (
     value.preferences !== undefined &&
     (!isRecord(value.preferences) ||
@@ -43,14 +47,7 @@ export function isSavedIndex(
       !value.recentWorkspaces.every(isFolder))
   )
     return false;
-  if (!Array.isArray(value.conversations)) return false;
-  if (value.selectedTaskId !== null && typeof value.selectedTaskId !== "string")
-    return false;
-  if (
-    new Set(
-      value.conversations.map((item) => (isRecord(item) ? item.id : undefined)),
-    ).size !== value.conversations.length
-  )
-    return false;
-  return value.conversations.every(isConversationSummary);
+  return (
+    value.selectedTaskId === null || typeof value.selectedTaskId === "string"
+  );
 }

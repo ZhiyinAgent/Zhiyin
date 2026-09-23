@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   closeEverything,
   hides,
-  historyIndexFolder,
+  historySettingsFile,
   launch,
   plantHistory,
   shows,
@@ -22,10 +22,9 @@ import {
 
 afterEach(closeEverything);
 
-/** The saved list of conversations, as the bytes on disk. */
-async function listText(folder: string): Promise<string> {
-  const [name] = await readdir(folder);
-  return readFile(join(folder, name!), "utf8");
+/** The saved settings, as the bytes on disk. */
+function settingsText(file: string): Promise<string> {
+  return readFile(file, "utf8");
 }
 
 function conversation(id: string) {
@@ -45,18 +44,21 @@ function conversation(id: string) {
 
 /**
  * Somebody who has been using the app: they have answered the first-run
- * questions, and their history has since been damaged. Without the preferences
- * a damaged file is indistinguishable from a fresh install, and recovery would
- * correctly drop them into onboarding instead of their conversations.
+ * questions, and their history has since been damaged — one setting and one
+ * conversation. Without the preferences a damaged file is indistinguishable
+ * from a fresh install, and recovery would correctly drop them into
+ * onboarding instead of their conversations.
  */
 const damagedButPartlyReadable = JSON.stringify({
   version: 1,
   preferences: { onboarded: true, interests: ["writing"] },
+  // A folder that is not one: the settings are damaged.
+  workspace: { path: 42 },
   runtime: { tasks: "available", capabilities: "available" },
   selectedTaskId: "keep-1",
   tasks: [
     conversation("keep-1"),
-    { id: "broken", phase: { kind: "invented" } },
+    { ...conversation("broken"), phase: { kind: "invented" } },
     conversation("keep-2"),
   ],
   skills: [],
@@ -133,7 +135,7 @@ describe("the installed app on damaged history", () => {
   it("still holds the damaged bytes on disk while the question is open", async () => {
     const dataDirectory = await temporaryDataDirectory();
     await plantHistory(dataDirectory, damagedButPartlyReadable);
-    const planted = await listText(historyIndexFolder(dataDirectory));
+    const planted = await settingsText(historySettingsFile(dataDirectory));
 
     const { window } = await launch({ dataDirectory });
     await shows(
@@ -144,10 +146,14 @@ describe("the installed app on damaged history", () => {
     const kept = await readdir(join(dataDirectory, "damaged-history"));
     expect(kept).toHaveLength(1);
     expect(
-      await listText(join(dataDirectory, "damaged-history", kept[0]!, "index")),
+      await settingsText(
+        join(dataDirectory, "damaged-history", kept[0]!, "settings.json"),
+      ),
     ).toBe(planted);
-    // And the list it came from has not been written over.
-    expect(await listText(historyIndexFolder(dataDirectory))).toBe(planted);
+    // And the settings it came from have not been written over.
+    expect(await settingsText(historySettingsFile(dataDirectory))).toBe(
+      planted,
+    );
   });
 
   it("opens the conversations that survived when that is chosen", async () => {
@@ -226,7 +232,9 @@ describe("the installed app on damaged history", () => {
     const kept = await readdir(join(dataDirectory, "damaged-history"));
     expect(kept).toHaveLength(1);
     expect(
-      await listText(join(dataDirectory, "damaged-history", kept[0]!, "index")),
+      await settingsText(
+        join(dataDirectory, "damaged-history", kept[0]!, "settings.json"),
+      ),
     ).toBe("this is not a workspace at all");
   });
 });

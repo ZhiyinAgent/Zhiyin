@@ -96,7 +96,10 @@ export type SavedWorkspace = Pick<
 >;
 
 export interface Sessions {
-  /** The list of conversations and the choices, without opening any conversation. */
+  /**
+   * The conversations, newest first, and the choices, without opening any
+   * conversation.
+   */
   loadIndex(): Promise<SavedIndex | undefined>;
   /** One conversation, read when it is first opened. */
   openConversation(id: string): Promise<OpenedConversation>;
@@ -128,11 +131,11 @@ export interface Sessions {
   list(): Promise<readonly SessionSummary[]>;
   /** Idempotent: undoing twice does nothing the second time. */
   undo(turnId: string): Promise<void>;
-  /** What is left of a history whose list will not open. Changes nothing. */
+  /** What is left of a history whose settings will not open. Changes nothing. */
   inspectDamage(): Promise<DamageReport>;
   /** Copies what is damaged somewhere safe and answers where. Changes nothing else. */
   preserveDamaged(): Promise<string>;
-  /** Keeps what is damaged, then starts the list afresh from what could be read. */
+  /** Keeps what is damaged, then starts the settings afresh beside what could be read. */
   recoverReadable(): Promise<{
     readonly recovered: number;
     readonly discarded: number;
@@ -140,7 +143,7 @@ export interface Sessions {
   }>;
 }
 
-/** What is left of a history whose list will not open. */
+/** What is left of a history whose settings will not open. */
 export type DamageReport =
   | { readonly kind: "unreadable" }
   | {

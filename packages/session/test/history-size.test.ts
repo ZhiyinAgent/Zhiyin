@@ -24,8 +24,9 @@ const ACTIONS_EACH = 20;
 
 /*
  * Measured 2026-09-23 on a Windows 11 laptop at the target size: the whole
- * history written at once 280-520 ms, every conversation read 30 ms, the list
- * read at launch 5 ms, one further commit 2 ms, 7.5 MiB on disk.
+ * history written at once 315-325 ms, every conversation read 30 ms, the list
+ * read at launch from each conversation's summary 7-9 ms, one further commit
+ * 1-4 ms, 7.5 MiB on disk.
  *
  * Writing a whole history at once is what only recovery does, and it flushes
  * each of the two hundred files to the disk before counting it saved; that
@@ -156,53 +157,64 @@ describe("FileSessions at the documented history size", () => {
   /**
    * The list changes by one conversation at a time: one is started, one is
    * deleted, one moves to the top when it is worked on. Each should cost that
-   * conversation's entry, not the list; matched by position, every entry after
-   * the change would be written again.
+   * one conversation's folder and nothing about the others, however many
+   * there are.
    */
-  it("writes a started, a deleted and a moved conversation as that one entry, whatever the length of the list", async () => {
+  it("writes nothing about the other conversations when one is started, deleted or moved to the top", async () => {
     const root = await temporaryRoot();
-    let written = 0;
+    const written = new Map<string, number>();
+    const count = (path: string, text: string) => {
+      written.set(path, (written.get(path) ?? 0) + Buffer.byteLength(text));
+    };
     const sessions = new FileSessions(root, {
       historyFiles: {
         ...historyFiles,
         append: (path, text) => {
-          written += Buffer.byteLength(text, "utf8");
+          count(path, text);
           return historyFiles.append(path, text);
+        },
+        create: (path, text) => {
+          count(path, text);
+          return historyFiles.create(path, text);
+        },
+        write: (path, text) => {
+          count(path, text);
+          return historyFiles.write(path, text);
         },
       },
     });
     let tasks = full.tasks;
     await sessions.saveWorkspace(full);
-    const cost = async (next: readonly WorkspaceTask[]) => {
+    /** Bytes written outside the folder of the conversation that changed. */
+    const cost = async (id: string, next: readonly WorkspaceTask[]) => {
+      written.clear();
       tasks = next;
       await sessions.saveWorkspace({ ...full, tasks });
-      const bytes = written;
-      written = 0;
-      return bytes;
+      return [...written]
+        .filter(([path]) => !path.includes(`c-${id}`))
+        .reduce((sum, [, bytes]) => sum + bytes, 0);
     };
     const started = conversation(CONVERSATIONS);
     const deleted = full.tasks[100]!.id;
     const moved = full.tasks[150]!;
 
-    // The started conversation is created as its own file, which is not an
-    // append; what is counted is what the list, and the moved one, grew by.
     const costs = {
-      started: await cost([started, ...tasks]),
-      deleted: await cost(tasks.filter((task) => task.id !== deleted)),
-      moved: await cost([
+      started: await cost(started.id, [started, ...tasks]),
+      deleted: await cost(
+        deleted,
+        tasks.filter((task) => task.id !== deleted),
+      ),
+      moved: await cost(moved.id, [
         { ...moved, updatedAt: "2026-09-11T12:00:00.000Z" },
         ...tasks.filter((task) => task.id !== moved.id),
       ]),
     };
 
-    expect(
-      Object.values(costs).every((bytes) => bytes < 1_024),
-      JSON.stringify(costs),
-    ).toBe(true);
-    expect(
-      (await new FileSessions(root).loadIndex())?.conversations.map(
-        (item) => item.id,
-      ),
-    ).toEqual(tasks.map((task) => task.id));
+    expect(costs).toEqual({ started: 0, deleted: 0, moved: 0 });
+    const listed = (await new FileSessions(root).loadIndex())?.conversations;
+    expect(listed?.[0]?.id).toBe(moved.id);
+    expect(listed?.map((item) => item.id).sort()).toEqual(
+      tasks.map((task) => task.id).sort(),
+    );
   });
 });

@@ -23,8 +23,9 @@ sequencing.
 
 ## Public interface
 
-- `loadIndex()` returns the list of conversations and the person's choices
-  without opening any conversation, or nothing on a clean first launch.
+- `loadIndex()` returns the conversations, newest first, and the person's
+  choices without opening any conversation, or nothing on a clean first launch.
+  Conversations that could not be read at all are reported as set aside.
 - `openConversation(id)` reads one conversation, and says whether the last save
   before the app closed was cut off and dropped.
 - `loadWorkspace()` opens every conversation at once; one that will not open
@@ -46,9 +47,30 @@ sequencing.
 
 ## Invariants
 
-- **Each conversation is its own log, and a save appends only what changed.**
-  The list of conversations and the person's choices are one more log. A save
-  compares what it is given with what it last wrote and appends the
+- **The list of conversations is the folders, not a file.** Each conversation
+  is a folder holding `conversation.jsonl` and a small `meta.json` summary —
+  id, title, when it last changed — and the person's choices are one
+  `settings.json` beside them. A launch reads every summary and lists the
+  conversation changed last first, so starting, renaming or deleting one
+  touches its own folder and nothing about the others. Named tests: `keeps each
+  conversation in its own folder, as a summary and the conversation, with the
+  settings beside them`, `lists conversations by when each last changed, newest
+  first`, `removes a conversation's folder once it is no longer listed`, `keeps
+  the conversations when the settings were never written`, and `writes nothing
+  about the other conversations when one is started, deleted or moved to the
+  top`.
+- **A summary is only a copy of its conversation.** It records how long the
+  conversation's file was when it was written; one that is missing, broken or
+  from before the last save is not trusted, and the conversation is read
+  instead and the summary rewritten. A folder with neither a readable summary
+  nor a readable conversation is moved into `damaged-history` and reported
+  once. Named tests: `lists a conversation whose summary is missing or broken
+  from the conversation itself`, `lists a conversation whose summary is older
+  than the conversation as the conversation is now`, and `sets aside a
+  conversation whose summary and file are both damaged, and says where it was
+  kept`.
+- **Each conversation is its own log, and a save appends only what changed.** A
+  save compares what it is given with what it last wrote and appends the
   difference as one line — a reply that grew is written as the words added —
   so its cost follows the change, not everything kept. Nothing depends on a
   caller reporting what it changed. Named tests: `records a reply that grew as
@@ -56,16 +78,14 @@ sequencing.
   not the list`, and, through the core, `writes under 200 KB to stream a
   2,000-token reply in a history of 100 conversations`.
 - **An entry of a list with ids is named by its id, not its place.** Where
-  every entry of a list has a distinct id — conversations, messages, actions —
-  an entry is added, removed or moved by id, and a change inside it names it,
-  so starting, deleting or reordering one conversation costs that one entry
-  however long the list, and a saved line says which entry it is about. Named
-  tests: `records an entry added at the top as that entry, not the list`,
-  `records an entry removed from the middle as its removal`, `records an entry
-  moved to the top as the move`, `names the entry a change is in by its id, not
-  its place`, `rebuilds any sequence of additions, removals, moves and edits
-  exactly`, and `writes a started, a deleted and a moved conversation as that
-  one entry, whatever the length of the list`.
+  every entry of a list in a conversation has a distinct id — messages,
+  actions — an entry is added, removed or moved by id, and a change inside it
+  names it, so one entry costs that entry however long the list, and a saved
+  line says which entry it is about. Named tests: `records an entry added at
+  the top as that entry, not the list`, `records an entry removed from the
+  middle as its removal`, `records an entry moved to the top as the move`,
+  `names the entry a change is in by its id, not its place`, and `rebuilds any
+  sequence of additions, removals, moves and edits exactly`.
 - **What is read back is exactly what was saved,** field order included: a
   pending rewind recognises a conversation by its saved text. Named tests:
   `keeps the order of fields exactly, even when a field moves`, `treats a
@@ -83,15 +103,13 @@ sequencing.
   save a crash cut off, and says one was lost`.
 - **A log that outgrows its state starts afresh.** Past four times the size of
   the state it describes, a fresh file holding only the state is written in
-  full under another name and renamed into place, so there is always one
+  full under another name and renamed over it, so there is always one
   complete file to read. Named tests: `starts a fresh file holding the whole
   state once the edits outgrow it` and `keeps the previous file when starting a
   fresh one did not finish`.
-- **Conversations are written before the list that names them,** and removed
-  after it stops naming them, so the list never names a conversation that is
-  not on disk; conversations with no list are damage, not an empty history.
-  Named test: `reports conversations with no list as damage, not as an empty
-  history`.
+- **A deleted conversation's folder is renamed before it is removed,** so a
+  deletion cut short by a crash is finished at the next launch rather than
+  listed as a damaged conversation.
 
 - New source modules stay below the repository line ceiling, and the existing
   oversized module may shrink but may not grow. The repository lint gate is the
@@ -157,23 +175,23 @@ sequencing.
 - **A damaged conversation fails alone.** The list opens, and so does every
   other conversation. Named test: `fails alone: the list opens, and so does
   every other conversation`.
-- **A damaged list is examined and kept, never repaired in place, and never
+- **Damaged settings are examined and kept, never repaired in place, and never
   written over.** `inspectDamage` counts the conversations that open on their
-  own and changes nothing; `preserveDamaged` copies the list and every
+  own and changes nothing; `preserveDamaged` copies the settings and every
   conversation that will not open somewhere they will not be written over, and
   leaves the originals where they are, keeping every copy rather than the last;
-  `recoverReadable` keeps the damage first, then starts the list afresh from
-  the conversations that open, carrying across each setting that is sound on
-  its own and never leaving a selected conversation that did not survive. A
-  history with nothing readable is refused rather than turned into an empty
-  one, and a save over a list that will not open is refused. Named tests:
+  `recoverReadable` keeps the damage first, then starts the settings afresh
+  beside the conversations that open, carrying across each setting that is
+  sound on its own and never leaving a selected conversation that did not
+  survive. A history with nothing readable is refused rather than turned into
+  an empty one, and a save over settings that will not open is refused. Named tests:
   `reports how much of a damaged history can still be read`, `says when
   nothing can be read rather than guessing`, `keeps the damaged bytes before
   anything is decided about them`, `keeps each damaged copy rather than
   overwriting the last one`, `recovers the conversations that could be read
   and leaves out the one that could not`, `keeps the damaged file when it
   recovers what it can`, `keeps each setting that survived, whatever else in
-  the list was damaged`, `chooses a selected conversation that survived the
+  the settings was damaged`, `chooses a selected conversation that survived the
   recovery`, `refuses to recover a file that holds nothing readable, rather
   than starting empty behind the person's back`, and `refuses to save over a
   history that will not open`.

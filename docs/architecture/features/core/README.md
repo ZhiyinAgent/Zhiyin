@@ -172,6 +172,12 @@ directly.
   conversations without waiting for the model catalogue`, `brings the provider
   settings in when the catalogue answers`, and `keeps settings read after a
   change rather than a slower read begun at startup` guard that.
+- **The list shows the conversation changed last first,** and a conversation
+  moves to the top when it changes; the conversation that takes a deleted
+  one's place is the next in that order. Conversations that could not be read
+  at all were set aside by the history store, and the person is told where.
+  Named tests: `lists the conversation changed last first` and `says where
+  conversations that could not be read at all were kept`.
 - **A launch reads the list of conversations, not the conversations.** A
   conversation is read from disk when something first needs it — the person
   selects it, or a rewind left unfinished by a crash names it — and is settled

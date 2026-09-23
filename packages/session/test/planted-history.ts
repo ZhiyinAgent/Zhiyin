@@ -14,7 +14,6 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { FileSessions, type SavedWorkspace } from "../src/index.js";
-import { HistoryLog } from "../src/history-log.js";
 
 /** Replaces whatever history the folder held with this one. */
 export async function plantHistory(
@@ -27,34 +26,35 @@ export async function plantHistory(
   await sessions.release();
 }
 
-export function indexFolder(root: string): string {
-  return join(root, "history", "index");
+export function historyFolder(root: string): string {
+  return join(root, "history");
+}
+
+/** The choices a person made, kept beside the conversations. */
+export function settingsFile(root: string): string {
+  return join(root, "history", "settings.json");
 }
 
 export function conversationFolder(root: string, id: string): string {
   return join(root, "history", "conversations", `c-${id}`);
 }
 
-/** Replaces every log in a folder with text that is not a history. */
-export async function damage(folder: string, text = "not json"): Promise<void> {
-  await mkdir(folder, { recursive: true });
-  const logs = (await readdir(folder)).filter((name) =>
-    name.endsWith(".jsonl"),
-  );
-  for (const name of logs.length ? logs : ["log-000001.jsonl"])
-    await writeFile(join(folder, name), text, "utf8");
+/** Replaces a file with text that is not what it should hold. */
+export async function damage(path: string, text = "not json"): Promise<void> {
+  await mkdir(join(path, ".."), { recursive: true });
+  await writeFile(path, text, "utf8");
 }
 
-/** A history whose list is not a history at all. */
+/** A history whose settings are not settings at all, and no conversation. */
 export async function plantUnreadableHistory(root: string): Promise<void> {
-  await damage(indexFolder(root));
+  await damage(settingsFile(root));
 }
 
-/** The list of conversations and the choices, as last saved. */
-export async function savedIndex(
+/** The choices a person made, as last saved. */
+export async function savedSettings(
   root: string,
 ): Promise<Record<string, unknown>> {
-  return (await HistoryLog.open(indexFolder(root))).state as Record<
+  return JSON.parse(await readFile(settingsFile(root), "utf8")) as Record<
     string,
     unknown
   >;

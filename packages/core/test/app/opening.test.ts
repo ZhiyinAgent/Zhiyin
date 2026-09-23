@@ -33,7 +33,8 @@ function conversation(index: number): WorkspaceTask {
     id: `task-${index}`,
     title: `Conversation ${index}`,
     titleSource: "manual",
-    updatedAt: "2026-09-20T10:00:00.000Z",
+    // Before the test clock, so anything the app changes is newer.
+    updatedAt: "2026-09-01T10:00:00.000Z",
     updatedLabel: "Earlier",
     messages: Array.from({ length: 10 }, (_, turn) => ({
       id: `task-${index}-message-${turn}`,
@@ -131,15 +132,17 @@ describe("opening conversations", () => {
       (await new FileSessions(root).loadIndex())?.conversations.map(
         (item) => item.title,
       ),
-    ).toEqual(["Conversation 0", "Renamed from the list"]);
+    ).toEqual(["Renamed from the list", "Conversation 0"]);
   });
 
   it("reports a damaged conversation, keeps a copy, and opens every other", async () => {
     const root = await temporaryRoot();
     await plant(root, 3);
-    const folder = join(root, "history", "conversations", "c-task-2");
-    for (const name of await readdir(folder))
-      await writeFile(join(folder, name), "not json", "utf8");
+    await writeFile(
+      join(root, "history", "conversations", "c-task-2", "conversation.jsonl"),
+      "not json",
+      "utf8",
+    );
     const app = appOver(new FileSessions(root));
     await app.initialize();
 
@@ -153,12 +156,48 @@ describe("opening conversations", () => {
     expect(app.snapshot().selectedTaskId).toBe("task-1");
   });
 
+  it("lists the conversation changed last first", async () => {
+    const root = await temporaryRoot();
+    await plant(root, 3);
+    const app = appOver(new FileSessions(root));
+    await app.initialize();
+
+    await app.renameTask("task-1", "Worked on just now");
+
+    expect(app.snapshot().conversations?.map((item) => item.id)).toEqual([
+      "task-1",
+      "task-0",
+      "task-2",
+    ]);
+  });
+
+  it("says where conversations that could not be read at all were kept", async () => {
+    const root = await temporaryRoot();
+    await plant(root, 3);
+    const folder = join(root, "history", "conversations", "c-task-2");
+    for (const name of await readdir(folder))
+      await writeFile(join(folder, name), "not json", "utf8");
+    const app = appOver(new FileSessions(root));
+
+    await app.initialize();
+
+    expect(app.snapshot().conversations?.map((item) => item.id)).toEqual([
+      "task-0",
+      "task-1",
+    ]);
+    expect(app.snapshot().issues?.join(" ")).toMatch(
+      /One saved conversation was damaged beyond reading.*kept at .*damaged-history/,
+    );
+  });
+
   it("says when the last moment before the app closed was not saved", async () => {
     const root = await temporaryRoot();
     await plant(root, 1);
-    const folder = join(root, "history", "conversations", "c-task-0");
-    const [name] = await readdir(folder);
-    await appendFile(join(folder, name!), '{"changes":[{"p":', "utf8");
+    await appendFile(
+      join(root, "history", "conversations", "c-task-0", "conversation.jsonl"),
+      '{"changes":[{"p":',
+      "utf8",
+    );
     const app = appOver(new FileSessions(root));
 
     await app.initialize();
@@ -192,6 +231,10 @@ describe("what a streamed reply costs on disk", () => {
         create: (path, text) => {
           count(text);
           return historyFiles.create(path, text);
+        },
+        write: (path, text) => {
+          count(text);
+          return historyFiles.write(path, text);
         },
       },
     });

@@ -387,7 +387,7 @@ export class Workspace {
     this.#browser.forget(taskId);
     await this.#deps.capabilities.forgetConversation(taskId);
     this.#tasks = this.#tasks.filter((task) => task.id !== taskId);
-    const next = this.#conversations.remove(taskId);
+    const next = this.#conversations.remove(taskId, this.#tasks);
     if (this.#selectedTaskId === taskId)
       this.#selectedTaskId =
         next && (await this.#ensureOpen(next)) ? next : null;

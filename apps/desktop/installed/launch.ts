@@ -42,7 +42,7 @@ export async function temporaryDataDirectory(): Promise<string> {
  * Puts a saved history into a data folder, damaged or otherwise. A workspace
  * given as JSON is stored the way the app stores one, whatever it holds — a
  * conversation the reader will refuse included. Anything else becomes the
- * list of conversations, unreadable.
+ * settings kept beside the conversations, unreadable.
  */
 export async function plantHistory(
   dataDirectory: string,
@@ -53,9 +53,9 @@ export async function plantHistory(
   try {
     workspace = JSON.parse(contents);
   } catch {
-    const index = historyIndexFolder(dataDirectory);
-    await mkdir(index, { recursive: true });
-    await writeFile(join(index, "log-000001.jsonl"), contents, "utf8");
+    const settings = historySettingsFile(dataDirectory);
+    await mkdir(join(settings, ".."), { recursive: true });
+    await writeFile(settings, contents, "utf8");
     return;
   }
   // Saving claims the folder; it is let go so the app can own it.
@@ -64,9 +64,9 @@ export async function plantHistory(
   await sessions.release();
 }
 
-/** Where the list of conversations is kept in a data folder. */
-export function historyIndexFolder(dataDirectory: string): string {
-  return join(dataDirectory, "history", "index");
+/** Where the choices a person made are kept in a data folder. */
+export function historySettingsFile(dataDirectory: string): string {
+  return join(dataDirectory, "history", "settings.json");
 }
 
 export async function launch(

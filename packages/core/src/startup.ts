@@ -175,6 +175,10 @@ export async function loadStartup(
     })),
   ]);
 
+  if (restored?.setAside)
+    issues.push(
+      `${restored.setAside.count === 1 ? "One saved conversation was" : `${restored.setAside.count} saved conversations were`} damaged beyond reading and left out of the list. A copy was kept at ${restored.setAside.keptAt}.`,
+    );
   let needsSave = false;
   const tasks = restored ? [] : [...current.tasks];
   const conversations = restored

@@ -124,6 +124,44 @@ describe("the conversation list", () => {
     ]);
   });
 
+  it("moves a conversation to the top when it changes", () => {
+    const dated = workspaceReducer(createWorkspaceState(), {
+      type: "workspaceHydrated",
+      snapshot: {
+        ...snapshot,
+        tasks: [{ ...opened, updatedAt: "2026-09-01T10:00:00.000Z" }],
+        conversations: [
+          {
+            id: "closed",
+            title: "Never opened",
+            updatedAt: "2026-09-02T10:00:00.000Z",
+            updatedLabel: "Earlier",
+          },
+          {
+            id: "open",
+            title: "Opened",
+            updatedAt: "2026-09-01T10:00:00.000Z",
+            updatedLabel: "Earlier",
+          },
+        ],
+      },
+    });
+
+    const changed = workspaceReducer(dated, {
+      type: "taskReplaced",
+      task: { ...opened, updatedAt: "2026-09-03T10:00:00.000Z" },
+    });
+
+    expect(listedConversations(dated).map((item) => item.id)).toEqual([
+      "closed",
+      "open",
+    ]);
+    expect(listedConversations(changed).map((item) => item.id)).toEqual([
+      "open",
+      "closed",
+    ]);
+  });
+
   it("drops a deleted conversation, opened or not", () => {
     const state = workspaceReducer(hydrated(), {
       type: "taskRemoved",

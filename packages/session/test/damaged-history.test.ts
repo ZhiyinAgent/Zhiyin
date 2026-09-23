@@ -7,8 +7,8 @@
  * silently starting empty or refusing to start until a file the person has
  * never heard of is repaired by hand.
  *
- * Each conversation is its own file, so damage is either one conversation,
- * which fails alone, or the list of conversations, which is what asks the
+ * Each conversation is its own folder, so damage is either one conversation,
+ * which fails alone, or the settings kept beside them, which is what asks the
  * person to choose.
  */
 
@@ -21,9 +21,9 @@ import { FileSessions } from "../src/index.js";
 import {
   conversationFolder,
   damage,
-  indexFolder,
   plantHistory,
   plantUnreadableHistory,
+  settingsFile,
 } from "./planted-history.js";
 
 const roots: string[] = [];
@@ -73,15 +73,18 @@ const oneBadTask = {
   ],
 };
 
-/** A history whose list is damaged, holding one damaged conversation too. */
+/** A history whose settings are damaged. */
 async function write(root: string, value: unknown) {
   await plantHistory(root, value);
-  await damage(indexFolder(root));
+  await damage(settingsFile(root));
 }
 
-async function onlyLog(folder: string): Promise<string> {
-  const [name] = await readdir(folder);
-  return readFile(join(folder, name!), "utf8");
+function text(path: string): Promise<string> {
+  return readFile(path, "utf8");
+}
+
+function conversationFile(folder: string): string {
+  return join(folder, "conversation.jsonl");
 }
 
 describe("FileSessions damaged history", () => {
@@ -106,15 +109,19 @@ describe("FileSessions damaged history", () => {
   it("keeps the damaged bytes before anything is decided about them", async () => {
     const root = await temporaryRoot();
     await write(root, oneBadTask);
-    const original = await onlyLog(indexFolder(root));
-    const broken = await onlyLog(conversationFolder(root, "broken"));
+    const original = await text(settingsFile(root));
+    const broken = await text(
+      conversationFile(conversationFolder(root, "broken")),
+    );
 
     const kept = await new FileSessions(root).preserveDamaged();
 
-    expect(await onlyLog(join(kept, "index"))).toBe(original);
-    expect(await onlyLog(join(kept, "conversations", "c-broken"))).toBe(broken);
+    expect(await text(join(kept, "settings.json"))).toBe(original);
+    expect(
+      await text(conversationFile(join(kept, "conversations", "c-broken"))),
+    ).toBe(broken);
     // And what it was taken from is still there, untouched.
-    expect(await onlyLog(indexFolder(root))).toBe(original);
+    expect(await text(settingsFile(root))).toBe(original);
   });
 
   it("keeps each damaged copy rather than overwriting the last one", async () => {
@@ -149,25 +156,25 @@ describe("FileSessions damaged history", () => {
   it("keeps the damaged file when it recovers what it can", async () => {
     const root = await temporaryRoot();
     await write(root, oneBadTask);
-    const original = await onlyLog(indexFolder(root));
+    const original = await text(settingsFile(root));
 
     await new FileSessions(root).recoverReadable();
 
     const kept = await readdir(join(root, "damaged-history"));
     expect(kept).toHaveLength(1);
     expect(
-      await onlyLog(join(root, "damaged-history", kept[0]!, "index")),
+      await text(join(root, "damaged-history", kept[0]!, "settings.json")),
     ).toBe(original);
   });
 
-  it("keeps each setting that survived, whatever else in the list was damaged", async () => {
+  it("keeps each setting that survived, whatever else in the settings was damaged", async () => {
     const root = await temporaryRoot();
     const preferences = { onboarded: true, interests: ["writing"] };
     await plantHistory(root, {
       ...base,
       preferences,
-      // A conversation whose entry in the list is not one: the list is damaged.
-      tasks: [...base.tasks, { id: "untitled", phase: { kind: "invented" } }],
+      // A folder that is not one: the settings are damaged.
+      workspace: { path: 42 },
     });
 
     await new FileSessions(root).recoverReadable();
@@ -200,18 +207,18 @@ describe("FileSessions damaged history", () => {
       new FileSessions(root).recoverReadable(),
     ).rejects.toMatchObject({ code: "corrupted" });
     // The damaged file is still there to be preserved or discarded by choice.
-    expect(await onlyLog(indexFolder(root))).toBe("not json");
+    expect(await text(settingsFile(root))).toBe("not json");
   });
 
   it("refuses to save over a history that will not open", async () => {
     const root = await temporaryRoot();
     await write(root, base);
-    const damaged = await onlyLog(indexFolder(root));
+    const damaged = await text(settingsFile(root));
 
     await expect(
       new FileSessions(root).saveWorkspace(base as never),
     ).rejects.toMatchObject({ code: "corrupted" });
-    expect(await onlyLog(indexFolder(root))).toBe(damaged);
+    expect(await text(settingsFile(root))).toBe(damaged);
   });
 });
 
@@ -223,9 +230,10 @@ describe("one damaged conversation", () => {
 
     const index = await sessions.loadIndex();
 
+    // All three last changed at the same moment, so they are listed by id.
     expect(index?.conversations.map((item) => item.id)).toEqual([
-      "keep-1",
       "broken",
+      "keep-1",
       "keep-2",
     ]);
     await expect(sessions.openConversation("broken")).rejects.toMatchObject({
@@ -240,10 +248,8 @@ describe("one damaged conversation", () => {
   it("opens without the save a crash cut off, and says one was lost", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, base);
-    const folder = conversationFolder(root, "keep-1");
-    const [name] = await readdir(folder);
     await appendFile(
-      join(folder, name!),
+      conversationFile(conversationFolder(root, "keep-1")),
       '{"changes":[{"p":["title"],',
       "utf8",
     );
@@ -254,18 +260,5 @@ describe("one damaged conversation", () => {
       task: { title: "Conversation keep-1" },
       lost: true,
     });
-  });
-
-  it("reports conversations with no list as damage, not as an empty history", async () => {
-    const root = await temporaryRoot();
-    await plantHistory(root, base);
-    await rm(indexFolder(root), { recursive: true });
-
-    await expect(new FileSessions(root).loadIndex()).rejects.toMatchObject({
-      code: "corrupted",
-    });
-    await expect(new FileSessions(root).inspectDamage()).resolves.toMatchObject(
-      { kind: "partial", readable: 2, damaged: 0 },
-    );
   });
 });

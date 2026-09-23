@@ -171,7 +171,8 @@ export type WorkspaceAction =
 /**
  * The list the sidebar shows: every conversation the core listed, an opened
  * one as it is now, and one opened since the last list — a new conversation —
- * first.
+ * first; then the one changed last first. Undated conversations and ties keep
+ * the order the core gave.
  */
 export function listedConversations(
   state: Pick<WorkspaceState, "tasks" | "conversations">,
@@ -186,12 +187,24 @@ export function listedConversations(
   return [
     ...state.tasks.filter((task) => !listed.has(task.id)),
     ...state.conversations.map((item) => opened.get(item.id) ?? item),
-  ].map((item) => ({
-    id: item.id,
-    title: item.title,
-    ...(item.updatedAt ? { updatedAt: item.updatedAt } : {}),
-    updatedLabel: item.updatedLabel,
-  }));
+  ]
+    .sort((a, b) =>
+      a.updatedAt === b.updatedAt
+        ? 0
+        : a.updatedAt === undefined
+          ? 1
+          : b.updatedAt === undefined
+            ? -1
+            : a.updatedAt < b.updatedAt
+              ? 1
+              : -1,
+    )
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      ...(item.updatedAt ? { updatedAt: item.updatedAt } : {}),
+      updatedLabel: item.updatedLabel,
+    }));
 }
 
 export function createWorkspaceState(

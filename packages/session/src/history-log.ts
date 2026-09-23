@@ -10,7 +10,8 @@
  *
  * When the edits outgrow the state they describe, a fresh file holding only
  * the state replaces the old one. The fresh file is written in full under
- * another name and then renamed, so there is always one complete file to read.
+ * another name and then renamed over it, so there is always one complete file
+ * to read.
  */
 
 import {
@@ -20,7 +21,9 @@ import {
   readdir,
   rename,
   rm,
+  stat,
   truncate,
+  writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
 import { applyChanges, type HistoryChange } from "./history-changes.js";
@@ -36,6 +39,14 @@ export type HistoryFiles = {
   /** Writes a whole file under another name, then renames it into place. */
   readonly create: (path: string, text: string) => Promise<void>;
   readonly remove: (path: string) => Promise<void>;
+  /**
+   * Writes a whole file in place, without waiting for the disk: for a file
+   * that is only a copy of what another holds, and is rebuilt from it when a
+   * crash leaves it broken or behind.
+   */
+  readonly write: (path: string, text: string) => Promise<void>;
+  /** The file's size in bytes, or nothing if there is no such file. */
+  readonly size: (path: string) => Promise<number | undefined>;
 };
 
 async function durably(
@@ -83,28 +94,19 @@ export const historyFiles: HistoryFiles = {
     }
   },
   remove: (path) => rm(path, { force: true }),
+  write: (path, text) => writeFile(path, text, "utf8"),
+  size: async (path) => {
+    try {
+      return (await stat(path)).size;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+  },
 };
 
 /** Below this, a log is never worth starting afresh. */
 const smallestRestart = 64 * 1024;
-
-const segmentName = /^log-(\d{6})\.jsonl$/;
-
-function nameOf(segment: number): string {
-  return `log-${String(segment).padStart(6, "0")}.jsonl`;
-}
-
-/** The log files in a folder, newest first. */
-async function segmentsIn(
-  folder: string,
-  files: HistoryFiles,
-): Promise<number[]> {
-  return (await files.names(folder))
-    .map((name) => segmentName.exec(name)?.[1])
-    .filter((number): number is string => number !== undefined)
-    .map(Number)
-    .sort((a, b) => b - a);
-}
 
 function stateLine(state: unknown): string {
   return `${JSON.stringify({ state })}\n`;
@@ -174,9 +176,8 @@ function replay(bytes: Buffer): {
 }
 
 export class HistoryLog {
-  readonly #folder: string;
+  readonly #path: string;
   readonly #files: HistoryFiles;
-  #segment: number;
   /** Where the last whole save ends. Anything after it is not a save. */
   #bytes: number;
   /** Whether the file may hold something past `#bytes` to cut off first. */
@@ -187,69 +188,46 @@ export class HistoryLog {
   #stateBytes: number;
 
   private constructor(
-    folder: string,
+    path: string,
     files: HistoryFiles,
-    segment: number,
     bytes: number,
     tail: boolean,
     stateBytes: number,
   ) {
-    this.#folder = folder;
+    this.#path = path;
     this.#files = files;
-    this.#segment = segment;
     this.#bytes = bytes;
     this.#tail = tail;
     this.#stateBytes = stateBytes;
   }
 
-  /** Whether the folder holds a log at all. */
-  static async exists(
-    folder: string,
-    files: HistoryFiles = historyFiles,
-  ): Promise<boolean> {
-    return (await segmentsIn(folder, files)).length > 0;
-  }
-
-  /**
-   * A log holding only this state. Whatever the folder held before is
-   * replaced: the new file is numbered above it, so it is the one read.
-   */
+  /** A log holding only this state, replacing whatever the file held. */
   static async create(
-    folder: string,
+    path: string,
     state: unknown,
     files: HistoryFiles = historyFiles,
   ): Promise<HistoryLog> {
-    const earlier = await segmentsIn(folder, files);
-    const segment = (earlier[0] ?? 0) + 1;
     const line = stateLine(state);
-    await files.create(join(folder, nameOf(segment)), line);
-    await Promise.all(
-      earlier.map((number) =>
-        files.remove(join(folder, nameOf(number))).catch(() => undefined),
-      ),
-    );
+    await files.create(path, line);
     const bytes = Buffer.byteLength(line, "utf8");
-    return new HistoryLog(folder, files, segment, bytes, false, bytes);
+    return new HistoryLog(path, files, bytes, false, bytes);
   }
 
-  /** The newest complete file in the folder, replayed. */
+  /** The file, replayed. */
   static async open(
-    folder: string,
+    path: string,
     files: HistoryFiles = historyFiles,
   ): Promise<ReadHistoryLog> {
-    const newest = (await segmentsIn(folder, files))[0];
-    if (newest === undefined) throw new Error("The folder holds no log.");
-    const bytes = await files.read(join(folder, nameOf(newest)));
-    if (!bytes) throw new Error("The log could not be read.");
+    const bytes = await files.read(path);
+    if (!bytes) throw new Error("There is no log to read.");
     const { state, lost, goodBytes } = replay(bytes);
     const firstLine = bytes.indexOf(0x0a) + 1;
     return {
       state,
       lost,
       log: new HistoryLog(
-        folder,
+        path,
         files,
-        newest,
         goodBytes,
         goodBytes < bytes.length,
         firstLine,
@@ -257,8 +235,9 @@ export class HistoryLog {
     };
   }
 
-  get #path(): string {
-    return join(this.#folder, nameOf(this.#segment));
+  /** How long the file is once every whole save is in it. */
+  get size(): number {
+    return this.#bytes;
   }
 
   /**
@@ -291,19 +270,13 @@ export class HistoryLog {
       await this.#restart(state);
   }
 
-  /** A fresh file holding only this state, and the old one gone. */
+  /** A fresh file holding only this state, in place of the old one. */
   async #restart(state: unknown): Promise<void> {
     const line = stateLine(state);
-    const previous = this.#path;
-    await this.#files.create(
-      join(this.#folder, nameOf(this.#segment + 1)),
-      line,
-    );
-    this.#segment += 1;
+    await this.#files.create(this.#path, line);
     this.#bytes = Buffer.byteLength(line, "utf8");
     this.#stateBytes = this.#bytes;
     this.#tail = false;
     this.#uncertain = false;
-    await this.#files.remove(previous).catch(() => undefined);
   }
 }

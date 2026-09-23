@@ -7,7 +7,7 @@ import { FileSessions, SessionStoreError } from "../src/index.js";
 import {
   plantHistory,
   plantUnreadableHistory,
-  savedIndex,
+  savedSettings,
   savedText,
 } from "./planted-history.js";
 
@@ -751,7 +751,7 @@ describe("FileSessions workspace persistence", () => {
 
     await new FileSessions(root).saveWorkspace(snapshot);
 
-    const saved = await savedIndex(root);
+    const saved = await savedSettings(root);
     expect(Object.keys(saved).sort()).toEqual(
       ["version", "conversations", "selectedTaskId", "preferences", "workspace"]
         .filter((key) => key in saved)

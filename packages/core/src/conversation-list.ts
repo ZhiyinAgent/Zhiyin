@@ -21,6 +21,19 @@ export function summaryOf(item: ConversationSummary): ConversationSummary {
   };
 }
 
+/**
+ * The order the list shows: the conversation changed last first, then those
+ * never dated; any tie by id, as the history store orders them at launch.
+ */
+function newestFirst(a: ConversationSummary, b: ConversationSummary): number {
+  if (a.updatedAt !== b.updatedAt) {
+    if (a.updatedAt === undefined) return 1;
+    if (b.updatedAt === undefined) return -1;
+    return a.updatedAt < b.updatedAt ? 1 : -1;
+  }
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
 /** What opening a conversation found. */
 export type Opening = {
   /** Absent when the conversation could not be read. */
@@ -53,9 +66,9 @@ export class ConversationList {
   /** The list in order, with what is open shown as it is now. */
   list(opened: readonly WorkspaceTask[]): ConversationSummary[] {
     const current = new Map(opened.map((task) => [task.id, task]));
-    return this.#summaries.map((item) =>
-      summaryOf(current.get(item.id) ?? item),
-    );
+    return this.#summaries
+      .map((item) => summaryOf(current.get(item.id) ?? item))
+      .sort(newestFirst);
   }
 
   has(id: string): boolean {
@@ -66,14 +79,17 @@ export class ConversationList {
     this.#summaries = [summaryOf(task), ...this.#summaries];
   }
 
-  /** Takes a conversation out, and answers the one that takes its place. */
-  remove(id: string): string | null {
-    const index = this.#summaries.findIndex((item) => item.id === id);
+  /**
+   * Takes a conversation out, and answers the one that takes its place in the
+   * list as it is shown.
+   */
+  remove(id: string, opened: readonly WorkspaceTask[]): string | null {
+    const shown = this.list(opened);
+    const index = shown.findIndex((item) => item.id === id);
     if (index < 0) return null;
     this.#summaries = this.#summaries.filter((item) => item.id !== id);
-    return (
-      this.#summaries[Math.min(index, this.#summaries.length - 1)]?.id ?? null
-    );
+    const rest = shown.filter((item) => item.id !== id);
+    return rest[Math.min(index, rest.length - 1)]?.id ?? null;
   }
 
   open(id: string): Promise<Opening> {
