@@ -1041,7 +1041,7 @@ describe("AgentLoop", () => {
       toolCallId: "call-missing",
       name: "missing_tool",
       content:
-        '{"ok":false,"reason":"The tool “missing_tool” is not available."}',
+        '{"ok":false,"refusedBy":"input-check","reason":"The tool “missing_tool” is not available.","next":"Use one of the tools on offer."}',
     });
     expect(loop.snapshot().tasks[0]?.actions).toEqual([
       expect.objectContaining({
@@ -1052,40 +1052,6 @@ describe("AgentLoop", () => {
       }),
     ]);
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
-  });
-
-  it("ends malformed tool arguments in an understandable failed state", async () => {
-    const loop = loopFrom({
-      ...stubDependencies(() => {}),
-      model: {
-        ...stubDependencies(() => {}).model,
-        send: async function* () {
-          yield {
-            kind: "toolCallDelta",
-            index: 0,
-            callId: "call-bad-json",
-            name: "read_file",
-            argumentsDelta: '{"path":',
-          };
-          yield { kind: "done" };
-        },
-      },
-    });
-    const taskId = await loop.createTask();
-
-    await loop.start(taskId, "Read a file");
-
-    expect(loop.snapshot().tasks[0]?.phase).toEqual({
-      kind: "failed",
-      reason: "The model returned invalid input for a requested action.",
-    });
-    expect(loop.snapshot().tasks[0]?.actions).toEqual([
-      expect.objectContaining({
-        action: "Read file",
-        description: "The requested action used invalid input.",
-        status: "failed",
-      }),
-    ]);
   });
 
   it("returns tool execution failures to the model instead of hanging", async () => {

@@ -525,6 +525,44 @@ export class AuxiliaryWork {
   }
 
   /**
+   * A repair of one tool call, on the guidance model. A repair is mechanical,
+   * so thinking is turned off where the model allows it; where it does not,
+   * the least thinking is asked for and `reasoningAllowance` tokens are added
+   * so it cannot eat the answer. An answer cut off by the cap is reported as
+   * such, not mistaken for an unusable one.
+   */
+  async askRepair(
+    request: ModelRequest,
+    reasoningAllowance: number,
+    signal: AbortSignal,
+  ): Promise<{ readonly answer?: string; readonly outOfRoom: boolean }> {
+    const model = this.#deps.guidanceModel;
+    let answer = await this.#collectAuxiliary(
+      model,
+      { ...request, reasoning: { enabled: false } },
+      signal,
+    );
+    const roomier = {
+      ...request,
+      maximumOutputTokens:
+        (request.maximumOutputTokens ?? 0) + reasoningAllowance,
+    };
+    if (answer.refusedReasoning)
+      answer = await this.#collectAuxiliary(
+        model,
+        { ...roomier, reasoning: auxiliaryReasoning },
+        signal,
+      );
+    if (answer.refusedReasoning)
+      answer = await this.#collectAuxiliary(model, roomier, signal);
+    const text = answer.toolArguments.trim() || answer.text.trim();
+    return {
+      ...(text ? { answer: text } : {}),
+      outOfRoom: answer.finishReason === "length",
+    };
+  }
+
+  /**
    * The one place an auxiliary request is sent, and therefore the one place its
    * thinking and its room to answer are decided. Set here rather than at each
    * call site: a new auxiliary request added later inherits both instead of
@@ -570,9 +608,11 @@ export class AuxiliaryWork {
     readonly text: string;
     readonly toolArguments: string;
     readonly refusedReasoning?: boolean;
+    readonly finishReason?: string;
   }> {
     let text = "";
     let toolArguments = "";
+    let finishReason: string | undefined;
     try {
       for await (const event of model.send(request)) {
         if (signal.aborted) return { text: "", toolArguments: "" };
@@ -581,6 +621,7 @@ export class AuxiliaryWork {
           toolArguments += event.argumentsDelta ?? "";
         else if (event.kind === "usage")
           await this.#deps.host.recordUsage(event.usage);
+        else if (event.kind === "done") finishReason = event.finishReason;
       }
     } catch (error) {
       const refusedReasoning =
@@ -592,7 +633,7 @@ export class AuxiliaryWork {
         ...(refusedReasoning ? { refusedReasoning } : {}),
       };
     }
-    return { text, toolArguments };
+    return { text, toolArguments, ...(finishReason ? { finishReason } : {}) };
   }
 
   #boundedEvidence(value: unknown): string {

@@ -1,16 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  keepsRawText,
   preservesContent,
-  repairContextLines,
+  recentCalls,
   repairDecisionFrom,
   repairLimits,
+  repairPrompt,
 } from "../src/repair-guidance.js";
 
 function base() {
   return {
+    kind: "refused" as const,
     userIntent: "Change the owner on the brief to Kim.",
     toolName: "multi_edit",
     toolDescription: "Replace exact text in workspace files.",
+    schema: {
+      type: "object",
+      properties: { edits: { type: "array" }, replace: { type: "string" } },
+    },
     failedArguments: JSON.stringify({
       edits: [
         {
@@ -21,32 +28,57 @@ function base() {
     }),
     reason: "“Owner: Dana” was not found in brief.md.",
     preserve: ["replace"],
+    roundText: "I will update the owner line.",
+    roundReasoning: "",
     recent: [
       {
-        action: "Read a workspace file",
-        target: "brief.md",
-        status: "completed",
-        evidence: '{"text":"Owner: Rowan\\nStatus: draft"}',
+        name: "read_file",
+        arguments: '{"path":"brief.md"}',
+        result: '{"text":"Owner: Rowan\\nStatus: draft"}',
       },
     ],
   };
 }
 
-describe("repairContextLines", () => {
-  it("shows the refused call, the reason, and what was just observed", () => {
-    const text = (repairContextLines(base()) ?? []).join("\n");
+function promptText(input: Parameters<typeof repairPrompt>[0]) {
+  const prompt = repairPrompt(input);
+  return prompt ? `${prompt.system}\n${prompt.user}` : "";
+}
+
+describe("repairPrompt", () => {
+  it("shows the refused call, the reason, the schema, and what was just observed", () => {
+    const text = promptText(base());
 
     expect(text).toContain("Owner: Dana");
     expect(text).toContain("was not found in brief.md");
+    expect(text).toContain('"properties"');
     // The evidence that makes the fix possible: what the file actually holds,
-    // from an action that already ran.
+    // from a call that already ran, and what the model meant to do.
     expect(text).toContain("Owner: Rowan");
-    expect(text).toContain("must not change these fields");
-    expect(text).toContain("replace");
+    expect(text).toContain("I will update the owner line.");
   });
 
-  it("tells the small model that handing back is a real answer", () => {
-    const text = (repairContextLines(base()) ?? []).join("\n");
+  it("says which fields may change and which must not", () => {
+    const system = repairPrompt(base())?.system ?? "";
+
+    expect(system).toContain("You may change these fields: edits.");
+    expect(system).toContain(
+      "You must not change these fields, wherever they appear: replace.",
+    );
+    expect(system).toContain("cannot read, run or ask anything");
+  });
+
+  it("allows only syntax changes to input that could not be read", () => {
+    const system =
+      repairPrompt({ ...base(), kind: "unreadable", failedArguments: '{"a":' })
+        ?.system ?? "";
+
+    expect(system).toContain("only the JSON syntax");
+    expect(system).not.toContain("You may change these fields");
+  });
+
+  it("tells the repairer that handing back is a real answer", () => {
+    const text = promptText(base());
 
     expect(text).toContain("handover");
     expect(text).toContain(
@@ -54,31 +86,76 @@ describe("repairContextLines", () => {
     );
   });
 
-  it("keeps only the most recent observations and stays within budget", () => {
-    const lines =
-      repairContextLines({
-        ...base(),
-        recent: Array.from({ length: 30 }, (_, index) => ({
-          action: "Read a workspace file",
-          target: `file-${index}.md`,
-          status: "completed",
-          evidence: `contents of file ${index}. `.repeat(60),
-        })),
-      }) ?? [];
+  it("keeps only the most recent calls and stays within budget", () => {
+    const prompt = repairPrompt({
+      ...base(),
+      recent: Array.from({ length: 3 }, (_, index) => ({
+        name: "read_file",
+        arguments: JSON.stringify({ path: `file-${index}.md` }),
+        result: `contents of file ${index}. `.repeat(60),
+      })),
+      failedArguments: "x".repeat(repairLimits.arguments),
+      toolDescription: "d".repeat(5_000),
+    });
 
-    const text = lines.join("\n");
+    const text = `${prompt?.system}\n${prompt?.user}`;
     expect(text.length).toBeLessThanOrEqual(repairLimits.total);
-    expect(text).toContain("file-29.md");
+    expect(text).toContain("file-2.md");
     expect(text).not.toContain("file-0.md");
   });
 
   it("refuses to describe a call too large to show in full", () => {
     expect(
-      repairContextLines({
+      repairPrompt({
         ...base(),
         failedArguments: "x".repeat(repairLimits.arguments + 1),
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("recentCalls", () => {
+  it("pairs each call with its result, newest last, at most three", () => {
+    const calls = recentCalls([
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [1, 2, 3, 4].map((n) => ({
+          id: `c${n}`,
+          name: "read_file",
+          arguments: `{"n":${n}}`,
+        })),
+      },
+      ...[1, 2, 3].map((n) => ({
+        role: "tool" as const,
+        toolCallId: `c${n}`,
+        name: "read_file",
+        content: `result ${n}`,
+      })),
+    ]);
+
+    expect(calls.map((call) => call.result)).toEqual([
+      "result 1",
+      "result 2",
+      "result 3",
+    ]);
+    expect(calls[0]?.arguments).toBe('{"n":1}');
+  });
+});
+
+describe("keepsRawText", () => {
+  const raw = '{"path":"a.md","text":"She said "hi"\\nthen left"}';
+
+  it("accepts text found in the raw input as written or as JSON escapes it", () => {
+    expect(
+      keepsRawText(raw, { path: "a.md", text: 'She said "hi"\nthen left' }),
+    ).toBe(true);
+  });
+
+  it("refuses a repair that changes one character of text", () => {
+    expect(
+      keepsRawText(raw, { path: "a.md", text: 'She said "hi"\nthen lefT' }),
+    ).toBe(false);
   });
 });
 

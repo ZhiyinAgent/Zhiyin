@@ -12,10 +12,14 @@ import type { AgentLoopDependencies } from "./dependencies.js";
 import type { ToolCalls } from "./tool-calls.js";
 import type { TurnOwnership } from "./turn-ownership.js";
 import type { TurnRecords } from "./turn-records.js";
+import { readToolInput } from "./tool-input.js";
 import {
   type AssembledToolCall,
-  parsedArguments,
+  answerableCalls,
+  maximumQuietRetries,
+  namelessCallFailure,
   protocolCall,
+  rewriteCallArguments,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
 
@@ -289,7 +293,8 @@ export class SpecialistExecution {
             throw new Error(
               "The specialist tried to finish and request another action together.",
             );
-          const result = handoff(parsedArguments(finish));
+          const input = readToolInput(finish.arguments);
+          const result = input.ok ? handoff(input.arguments) : undefined;
           if (!result)
             throw new Error(
               "The specialist returned an invalid structured handoff.",
@@ -315,31 +320,53 @@ export class SpecialistExecution {
             "The specialist stopped without returning a structured handoff.",
           );
 
+        const { answerable, nameless } = answerableCalls(
+          calls,
+          () => `call-${this.#deps.newMessageId()}`,
+        );
         messages.push({
           role: "assistant",
           content: text,
-          toolCalls: calls.map(protocolCall),
+          toolCalls: answerable.map(protocolCall),
         });
-        for (const call of calls) {
-          const args = parsedArguments(call);
-          const outcome = await this.#toolCalls.runToolCall(
+        const round = { text, reasoning: "", messages, tools };
+        for (const call of answerable) {
+          const quietRetriesLeft =
+            maximumQuietRetries - quiet.attempts(call.name);
+          const input = await this.#toolCalls.readInput(
             options.taskId,
             call,
-            args,
-            options.ownerOf(call.name),
-            controller,
-            3 - quiet.attempts(call.name),
+            round,
+            quietRetriesLeft,
+            controller.signal,
           );
+          rewriteCallArguments(messages, call);
+          const outcome = input.ok
+            ? await this.#toolCalls.runToolCall(
+                options.taskId,
+                call,
+                input.arguments,
+                options.ownerOf(call.name),
+                controller,
+                quietRetriesLeft,
+                round,
+              )
+            : { result: input.result, quiet: input.quiet };
           controller.signal.throwIfAborted();
+          rewriteCallArguments(messages, call);
           messages.push({
             role: "tool",
             toolCallId: call.callId,
             name: call.name,
-            content: JSON.stringify(outcome.result),
+            content: JSON.stringify({
+              ...outcome.result,
+              ...(input.ok && input.note ? { note: input.note } : {}),
+            }),
           });
           if (outcome.quiet) quiet.remember(call.name, call.callId);
           else if (outcome.result.ok) quiet.forget(call.name, messages);
         }
+        if (nameless) throw new Error(namelessCallFailure);
         options.ledger.completeToolRound();
         // A specialist has no one to ask when the shared budget runs out —
         // only the parent's own loop can prompt a person. Running in the

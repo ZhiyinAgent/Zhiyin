@@ -40,6 +40,7 @@ const causeLabels: Record<string, string> = {
   "still-refused": "The repaired call was refused too",
   "unusable-answer": "The repair came back unusable",
   "too-large": "The call was too large to repair",
+  "out-of-room": "The repair ran out of room to answer",
 };
 
 function when(value: string): string {

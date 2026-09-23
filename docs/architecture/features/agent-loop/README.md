@@ -108,9 +108,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `pauses before an action when measured token or provider-cost limits are
   reached`, `labels token use as estimated when the provider reports no usage`,
   and `pauses before another action when elapsed work reaches its limit`.
-- Before a correctable refusal reaches the main model, a small model is offered
-  the chance to re-aim the call, from the refusal and the last few observations
-  rather than the transcript. It may re-aim, never rewrite: the tool names the
+- Before a correctable refusal reaches the main model, a separate model call is
+  offered the chance to re-aim it, from the refusal, the tool's schema, what the
+  model said just before the call, and the last few calls with their results,
+  rather than the transcript. It runs under its own instructions, which say what
+  it may and must not change and that it has nothing but the prompt. It may
+  re-aim, never rewrite: the tool names the
   fields carrying content and a repair that alters them is discarded. It
   proposes and never authorises — a repaired call re-enters at inspection and is
   approved like any other. It gets two attempts, may not repeat arguments
@@ -118,6 +121,14 @@ browser is not among them: it is reached, and let go of, through capabilities.
   cannot tell is a correct answer and falls through to the main model. ADR 0016.
 - A repaired call's arguments replace the original in the model's own record of
   the turn, so it is not left reasoning from a draft that never ran.
+- A call whose input is not valid JSON is a correctable refusal like any other,
+  and the rest of its batch runs. Slips with exactly one reading - empty input,
+  a code fence, an object sent as a string, a raw line break inside text, a
+  trailing comma - are fixed without a model. Otherwise one repair attempt may
+  fix the syntax only, and every text value it proposes must already be in the
+  raw input. Input that stops before its object closes is not repaired: the
+  model is told it was cut off. A call streamed without an id is given one; a
+  call without a name fails the turn once the rest of the batch has run.
 - Every quiet correction is written to the audit feature: the refusal, a repair
   that was applied with what it changed, and a repair that was thrown away with
   the reason. Invisible to the person is not the same as invisible to everyone.
@@ -285,8 +296,8 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `shows an action that ran and answered as reported, not failed`, `still shows
   an action that could not run at all as failed`, and `shows an action that
   succeeded as completed` guard the three outcomes.
-- Every auxiliary request - the plan, an action's name, a criterion check, a
-  repair - asks for the least thinking the model will do and carries enough room
+- Every auxiliary request - the plan, an action's name, a criterion check -
+  asks for the least thinking the model will do and carries enough room
   that the answer survives whatever thinking happens anyway. Both are set where
   the request is sent rather than at each call site, so one added later inherits
   them. A model that will not be told how much to think is asked again without
@@ -412,11 +423,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   to the model as an invitation to try another action. The named test `stops the
   turn immediately when the user denies an asked permission` guards this.
 - Unknown tools and execution failures are structured results the model can
-  handle; malformed arguments are a visible failed state. The named tests
-  `returns an unknown tool as a structured failure the model can recover from`,
-  `returns tool execution failures to the model instead of hanging`, and `ends
-  malformed tool arguments in an understandable failed state` guard these
-  boundaries.
+  handle. The named tests `returns an unknown tool as a structured failure the
+  model can recover from` and `returns tool execution failures to the model
+  instead of hanging` guard these boundaries.
 - Cancellation reaches the active request and the tool signal, asks the
   capabilities group to close what this conversation holds — its browser and its
   connections — records a running action as stopped, and cannot later publish
@@ -546,9 +555,43 @@ browser is not among them: it is reached, and let go of, through capabilities.
   and `rewrites the model's own record of the call to what actually ran` guard
   both halves.
 - The repair request is bounded and never describes a call it could not show in
-  full. The named tests `keeps only the most recent observations and stays
-  within budget` and `refuses to describe a call too large to show in full`
-  guard the limits.
+  full. The named tests `keeps only the most recent calls and stays within
+  budget` and `refuses to describe a call too large to show in full` guard the
+  limits.
+- A repair is told who it is and what it may touch. The named tests `says which
+  fields may change and which must not`, `allows only syntax changes to input
+  that could not be read`, and `shows the refused call, the reason, the schema,
+  and what was just observed` guard the prompt.
+- A repair has room to answer, and running out of it is its own finding. It asks
+  for no thinking where the model allows that, and otherwise for the least,
+  with room added for it; the answer's room grows with the call it writes back.
+  The named tests `tells the repair what it may change, the tool's schema, and
+  what the model said it was doing` and `records a repair that ran out of room
+  as out of room` guard this.
+- One garbled tool request does not end the turn. The named tests `does not stop
+  the other calls in its batch, and the turn goes on`, `is repaired by a
+  separate call, and only the repaired call stays in the conversation`, `rejects
+  a repair that changes one character of the text, and hands the refusal to the
+  model`, `is not sent to repair when it was cut off, and the model is told so`,
+  `is fixed without a model when the fix cannot change a value, and the model is
+  told`, `leaves neither the malformed call nor its refusal in the request once
+  the tool succeeds`, and `shows the person the failure once the model has used
+  its quiet corrections` guard the path; `answers a specialist's unreadable tool
+  input instead of failing the specialist` guards it inside a specialist.
+- Which slips are fixed without a model is decided by whether they have one
+  reading. The named tests `removes a trailing comma, and leaves a comma inside
+  text alone`, `escapes a raw newline or tab inside a text value, keeping the
+  text`, `does not guess where an unescaped quote ends its text`, and
+  `recognises input that ends before its object closes` guard the boundary; the
+  content check on a syntax repair is guarded by `refuses a repair that changes
+  one character of text`.
+- A call's id and name are what its result pairs with. The named tests `is
+  given an id, so its result still pairs with it` and `ends the turn when the
+  name is missing, but only after the valid calls ran` guard both.
+- Every refusal the model receives here says who refused, what happened, and
+  what to do next, in the same words the person reads. The named test `says who
+  refused and what to do next, differently for the input check and the tool`
+  guards the format.
 - Self-correction stays out of the person's view and out of the model's context
   once it has worked. The named tests `lets the model correct a rejected edit
   without showing it to the person` and `removes the corrected attempts from what

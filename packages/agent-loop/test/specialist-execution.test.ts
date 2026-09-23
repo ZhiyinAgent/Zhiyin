@@ -516,4 +516,102 @@ describe("specialist child execution", () => {
       },
     ]);
   });
+
+  it("answers a specialist's unreadable tool input instead of failing the specialist", async () => {
+    const execute = vi.fn(async () => ({ ok: true as const, value: "text" }));
+    const base = stubDependencies(() => {});
+    const specialistRequests: string[] = [];
+    const loop = loopFrom({
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Reviews behavior and regressions.",
+              instructions: "Inspect the evidence and report concrete risks.",
+            },
+          ],
+        }),
+      ]),
+      tools: {
+        list: () => [
+          {
+            name: "read_file",
+            description: "Read one project file.",
+            inputSchema: {
+              type: "object",
+              properties: { path: { type: "string" } },
+            },
+          },
+        ],
+        inspect: async (): Promise<ToolCallInspection> => ({
+          ok: true,
+          action: "Read file",
+          target: "src/change.ts",
+          command: "read_file(src/change.ts)",
+        }),
+        execute,
+      },
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Reviewer specialist")) {
+            specialistRequests.push(text);
+            yield specialistRequests.length === 1
+              ? {
+                  kind: "toolCallDelta" as const,
+                  index: 0,
+                  callId: "read-1",
+                  name: "read_file",
+                  argumentsDelta: '{"path":"src/cha',
+                }
+              : {
+                  kind: "toolCallDelta" as const,
+                  index: 0,
+                  callId: "finish-1",
+                  name: "finish_specialist",
+                  argumentsDelta: JSON.stringify({
+                    summary: "Nothing was read.",
+                    findings: [],
+                    recommendations: [],
+                    limitations: ["The file was not read."],
+                  }),
+                };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (!text.includes("Review the proposed change.")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Review the proposed change.",
+              }),
+            };
+          } else {
+            yield { kind: "textDelta" as const, text: "Waiting." };
+          }
+          yield { kind: "done" as const };
+        },
+      },
+      newSpecialistRunId: () => "specialist-1",
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Review this change");
+    await until(
+      () =>
+        loop.snapshot().tasks[0]?.specialistRuns?.[0]?.status === "completed",
+    );
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(specialistRequests[1]).toContain("cut off");
+  });
 });

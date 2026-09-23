@@ -36,7 +36,8 @@ export type RepairRejection =
   | "no-progress"
   | "still-refused"
   | "unusable-answer"
-  | "too-large";
+  | "too-large"
+  | "out-of-room";
 
 export type AuditEntry = {
   /** ISO timestamp, supplied by the caller so tests are not time-dependent. */

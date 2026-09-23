@@ -31,12 +31,14 @@ import { TurnRecords } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
 import { TurnOwnership } from "./turn-ownership.js";
 import {
+  answerableCalls,
   describedWorkspace,
   maximumQuietRetries,
   modelFailure,
-  parsedArguments,
+  namelessCallFailure,
   pauseReportInstruction,
   protocolCall,
+  rewriteCallArguments,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
@@ -339,27 +341,45 @@ export class TurnLoop {
           includeRoundTextInProtocol = false;
         }
 
-        const protocolCalls = calls.map((call) => protocolCall(call));
+        const { answerable, nameless } = answerableCalls(
+          calls,
+          () => `call-${this.#deps.newMessageId()}`,
+        );
         requestMessages.push({
           role: "assistant",
           content: includeRoundTextInProtocol ? roundText : "",
-          toolCalls: protocolCalls,
+          toolCalls: answerable.map(protocolCall),
         });
+        const round = {
+          text: roundText,
+          reasoning: roundReasoning,
+          messages: requestMessages,
+          tools: currentAdvertisedTools(),
+        };
 
-        for (const call of calls) {
-          let parsed: unknown;
-          try {
-            parsed = parsedArguments(call);
-          } catch (error) {
-            await this.#toolCalls.recordFailedProposal(
-              taskId,
-              call,
-              "The requested action used invalid input.",
-              "The model returned invalid input for a requested action.",
-              controller.signal,
-            );
-            throw error;
+        for (const call of answerable) {
+          const quietRetriesLeft =
+            maximumQuietRetries - quiet.attempts(call.name);
+          const input = await this.#toolCalls.readInput(
+            taskId,
+            call,
+            round,
+            quietRetriesLeft,
+            controller.signal,
+          );
+          rewriteCallArguments(requestMessages, call);
+          if (!input.ok) {
+            requestMessages.push({
+              role: "tool",
+              toolCallId: call.callId,
+              name: call.name,
+              content: JSON.stringify(input.result),
+            });
+            if (input.quiet) quiet.remember(call.name, call.callId);
+            continue;
           }
+          const parsed = input.arguments;
+          const note = input.note ? { note: input.note } : {};
           if (call.name === delegateSpecialistToolName) {
             const delegation = await this.#specialists.delegate({
               taskId,
@@ -383,7 +403,7 @@ export class TurnLoop {
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: JSON.stringify(delegation.result),
+              content: JSON.stringify({ ...delegation.result, ...note }),
             });
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
@@ -413,7 +433,7 @@ export class TurnLoop {
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: JSON.stringify(activation.result),
+              content: JSON.stringify({ ...activation.result, ...note }),
             });
             if (controller.signal.aborted) {
               await this.#interruptIfCurrent(taskId, controller);
@@ -428,7 +448,8 @@ export class TurnLoop {
             parsed,
             owner,
             controller,
-            maximumQuietRetries - quiet.attempts(call.name),
+            quietRetriesLeft,
+            round,
           );
           if (controller.signal.aborted) {
             await this.#interruptIfCurrent(taskId, controller);
@@ -455,31 +476,16 @@ export class TurnLoop {
               ...outcome.result,
               images: undefined,
               ...(shown ? { picturesNotSent: shown } : {}),
+              ...note,
             }),
           });
           if (fitted.pictures.length && this.#deps.host.acceptsImages())
             sendPictures(requestMessages, call.name, fitted);
-          if (outcome.repairedArguments) {
-            for (const [index, message] of requestMessages.entries()) {
-              if (message.role !== "assistant" || !message.toolCalls) continue;
-              if (!message.toolCalls.some((item) => item.id === call.callId))
-                continue;
-              requestMessages[index] = {
-                ...message,
-                toolCalls: message.toolCalls.map((item) =>
-                  item.id === call.callId
-                    ? {
-                        ...item,
-                        arguments: outcome.repairedArguments as string,
-                      }
-                    : item,
-                ),
-              };
-            }
-          }
+          rewriteCallArguments(requestMessages, call);
           if (outcome.quiet) quiet.remember(call.name, call.callId);
           else if (outcome.result.ok) quiet.forget(call.name, requestMessages);
         }
+        if (nameless) throw new VisibleError(namelessCallFailure);
         ledger.completeToolRound();
       }
     } catch (error) {

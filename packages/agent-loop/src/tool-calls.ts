@@ -7,7 +7,13 @@ import { VisibleError } from "@zhiyin/contract";
 import type { RepairRejection } from "@zhiyin/audit";
 import type { FileBackup } from "@zhiyin/rewind";
 import { evidenceText } from "./evidence.js";
-import { ToolCallRepair, maximumRepairAttempts } from "./tool-repair.js";
+import {
+  type RoundEvidence,
+  ToolCallRepair,
+  maximumRepairAttempts,
+} from "./tool-repair.js";
+import { type CallInput, CallInputs } from "./call-input.js";
+import { correctableByModel, refusal } from "./refusals.js";
 import type { AgentLoopDependencies } from "./index.js";
 import type { TurnRecords } from "./turn-records.js";
 import type { AuxiliaryWork } from "./auxiliary-work.js";
@@ -28,12 +34,6 @@ type ToolCallOutcome = {
    * scaled to fit the model — can be added to the same record.
    */
   readonly actionId?: string;
-  /**
-   * Set when a small model re-aimed the call before it ran. The transcript is
-   * rewritten to match, so the model is left holding what actually happened
-   * rather than the draft it first wrote.
-   */
-  readonly repairedArguments?: string;
 };
 
 /** Bounded so a refused edit's arguments cannot fill the audit record. */
@@ -67,6 +67,8 @@ export class ToolCalls {
   readonly #waits: TurnWaits;
   /** Re-aiming a refused call, which is its own piece of work. */
   readonly #repair: ToolCallRepair;
+  /** Reading what the model streamed as a call's input. */
+  readonly #inputs: CallInputs;
   readonly #turn: {
     interruptIfCurrent(
       taskId: string,
@@ -96,7 +98,6 @@ export class ToolCalls {
     this.#waits = parts.waits;
     this.#turn = turn;
     this.#repair = new ToolCallRepair({
-      deps,
       records: parts.records,
       auxiliary: parts.auxiliary,
       inspect: (taskId, owner, name, args) =>
@@ -104,6 +105,33 @@ export class ToolCalls {
       audit: (taskId, toolName, kind, reason, extra) =>
         this.#audit(taskId, toolName, kind, reason, extra),
     });
+    this.#inputs = new CallInputs({
+      repair: this.#repair,
+      audit: (taskId, toolName, kind, reason, extra) =>
+        this.#audit(taskId, toolName, kind, reason, extra),
+      fail: (taskId, call, reason, signal) =>
+        this.recordFailedProposal(
+          taskId,
+          call,
+          "The requested action used invalid input.",
+          reason,
+          signal,
+        ),
+    });
+  }
+
+  /**
+   * The call's input as a tool would be handed it, or the refusal to answer
+   * the model with. May correct `call.arguments` in place; see `CallInputs`.
+   */
+  readInput(
+    taskId: string,
+    call: AssembledToolCall,
+    round: RoundEvidence,
+    quietRetriesLeft: number,
+    signal: AbortSignal,
+  ): Promise<CallInput> {
+    return this.#inputs.read(taskId, call, round, quietRetriesLeft, signal);
   }
 
   async runToolCall(
@@ -113,12 +141,14 @@ export class ToolCalls {
     owner: ToolOwner | undefined,
     controller: AbortController,
     quietRetriesLeft: number,
+    round: RoundEvidence,
   ): Promise<ToolCallOutcome> {
     if (!owner) {
-      const result = {
-        ok: false as const,
-        reason: `The tool “${call.name}” is not available.`,
-      };
+      const result = refusal(
+        "input-check",
+        `The tool “${call.name}” is not available.`,
+        "Use one of the tools on offer.",
+      );
       await this.recordFailedProposal(
         taskId,
         call,
@@ -130,7 +160,6 @@ export class ToolCalls {
     }
 
     let args = proposedArguments;
-    let repairedArguments: string | undefined;
     let inspection = await this.#inspectTool(taskId, owner, call.name, args);
     controller.signal.throwIfAborted();
 
@@ -143,29 +172,34 @@ export class ToolCalls {
         args,
         owner,
         inspection,
+        round,
         controller.signal,
       );
       controller.signal.throwIfAborted();
       if (repair) {
         args = repair.arguments;
-        repairedArguments = JSON.stringify(repair.arguments);
+        // The call is rewritten to what will run, so the model is left
+        // holding what actually happened rather than the draft it first wrote.
+        call.arguments = JSON.stringify(repair.arguments);
         inspection = repair.inspection;
       }
     }
 
     if (!inspection.ok) {
-      const result = { ok: false as const, reason: inspection.reason };
+      const result = inspection.correctable
+        ? correctableByModel(inspection.reason)
+        : refusal(
+            "tool",
+            inspection.reason,
+            "Do not send this call again. Choose another way, or tell the person why it cannot be done.",
+          );
       // The tool says the model can fix this itself, and the model has tries
       // left: answer it and leave the person out of it entirely.
       if (inspection.correctable && quietRetriesLeft > 0) {
         await this.#audit(taskId, call.name, "quiet-retry", inspection.reason, {
           before: args,
         });
-        return {
-          result,
-          quiet: true,
-          ...(repairedArguments ? { repairedArguments } : {}),
-        };
+        return { result, quiet: true };
       }
       await this.recordFailedProposal(
         taskId,
@@ -174,7 +208,7 @@ export class ToolCalls {
         result.reason,
         controller.signal,
       );
-      return { result, ...(repairedArguments ? { repairedArguments } : {}) };
+      return { result };
     }
 
     if (
@@ -200,7 +234,6 @@ export class ToolCalls {
       if (outcome.kind === "cancelled")
         return {
           result: { ok: false, reason: "The task was cancelled." },
-          ...(repairedArguments ? { repairedArguments } : {}),
         };
       await this.#records.recordUserInteraction(
         taskId,
@@ -210,10 +243,7 @@ export class ToolCalls {
         outcome.result,
       );
       this.#records.emitToolActivity(taskId, call, "completed", outcome.result);
-      return {
-        result: outcome.result,
-        ...(repairedArguments ? { repairedArguments } : {}),
-      };
+      return { result: outcome.result };
     }
 
     if (
@@ -237,6 +267,7 @@ export class ToolCalls {
           args,
           owner,
           { ok: false, reason: checked.reason, correctable: true },
+          round,
           controller.signal,
         );
         if (
@@ -247,7 +278,7 @@ export class ToolCalls {
           break;
         const repairedView = repair.inspection.view;
         args = repair.arguments;
-        repairedArguments = JSON.stringify(repair.arguments);
+        call.arguments = JSON.stringify(repair.arguments);
         inspection = repair.inspection;
         checked = await this.#deps.views.validate(
           repairedView.kind,
@@ -264,7 +295,6 @@ export class ToolCalls {
             reason: `The view was not shown because it could not be validated: ${checked.reason}`,
           },
           quiet: quietRetriesLeft > 0,
-          ...(repairedArguments ? { repairedArguments } : {}),
         };
       }
 
@@ -324,7 +354,7 @@ export class ToolCalls {
         outcomeStatus(result),
         result,
       );
-      return { result, ...(repairedArguments ? { repairedArguments } : {}) };
+      return { result };
     }
 
     const presentation =
@@ -383,7 +413,6 @@ export class ToolCalls {
       if (backup) await this.#deps.rewind.discardBackup(actionId);
       return {
         result: { ok: false, reason: "The task was cancelled." },
-        ...(repairedArguments ? { repairedArguments } : {}),
       };
     }
     if (decision === "deny") {
@@ -408,14 +437,14 @@ export class ToolCalls {
       if (userDenied) {
         controller.abort();
         await this.#turn.interruptIfCurrent(taskId, controller, reason);
-        return { result, ...(repairedArguments ? { repairedArguments } : {}) };
+        return { result };
       }
       await this.#records.showWorking(
         taskId,
         undefined,
         this.#records.visibleSteps(taskId),
       );
-      return { result, ...(repairedArguments ? { repairedArguments } : {}) };
+      return { result };
     }
 
     const currentInspection = await this.#inspectTool(
@@ -506,11 +535,7 @@ export class ToolCalls {
         result,
       );
     }
-    return {
-      result,
-      actionId,
-      ...(repairedArguments ? { repairedArguments } : {}),
-    };
+    return { result, actionId };
   }
 
   /**

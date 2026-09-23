@@ -1,8 +1,11 @@
 /** What more than one part of a turn shares: limits, small types and helpers. */
 
 import type { WorkspaceContext, WorkspaceDescription } from "@zhiyin/contract";
-import { VisibleError } from "@zhiyin/contract";
-import type { ModelClientErrorCode, ModelToolCall } from "@zhiyin/model-client";
+import type {
+  ModelClientErrorCode,
+  ModelMessage,
+  ModelToolCall,
+} from "@zhiyin/model-client";
 
 /**
  * How many times in a row the model may ask for tools before the person
@@ -73,26 +76,50 @@ export async function describedWorkspace(
 
 /** One assembled call as the provider's protocol carries it. */
 export function protocolCall(call: AssembledToolCall): ModelToolCall {
-  if (!call.callId || !call.name) {
-    throw new VisibleError(
-      "The model returned an incomplete tool request. Try the task again.",
-    );
-  }
   return { id: call.callId, name: call.name, arguments: call.arguments };
 }
 
-/** A call's arguments, or a failure the person can read. */
-export function parsedArguments(call: AssembledToolCall): unknown {
-  try {
-    const parsed: unknown = JSON.parse(call.arguments);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("Tool arguments must be an object.");
-    }
-    return parsed;
-  } catch {
-    throw new VisibleError(
-      "The model returned invalid input for a requested action.",
-    );
+/**
+ * The calls of one round that can be answered. One streamed without an id is
+ * given one, so its result still pairs with it; one without a name cannot be
+ * answered at all, and is only counted.
+ */
+export function answerableCalls(
+  calls: readonly AssembledToolCall[],
+  newId: () => string,
+): { readonly answerable: AssembledToolCall[]; readonly nameless: number } {
+  const answerable = calls.filter((call) => call.name);
+  for (const call of answerable) if (!call.callId) call.callId = newId();
+  return { answerable, nameless: calls.length - answerable.length };
+}
+
+/** Ends a round that held a call nobody could answer, once the rest ran. */
+export const namelessCallFailure =
+  "The model returned an incomplete tool request. Try the task again.";
+
+/**
+ * Brings the request's record of `call` in line with the arguments it ended
+ * up with, so the model is left holding what actually ran rather than the
+ * draft it first wrote.
+ */
+export function rewriteCallArguments(
+  messages: ModelMessage[],
+  call: AssembledToolCall,
+): void {
+  for (const [index, message] of messages.entries()) {
+    if (message.role !== "assistant" || !message.toolCalls) continue;
+    if (
+      !message.toolCalls.some(
+        (item) => item.id === call.callId && item.arguments !== call.arguments,
+      )
+    )
+      continue;
+    messages[index] = {
+      ...message,
+      toolCalls: message.toolCalls.map((item) =>
+        item.id === call.callId ? { ...item, arguments: call.arguments } : item,
+      ),
+    };
   }
 }
 

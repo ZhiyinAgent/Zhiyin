@@ -41,7 +41,10 @@ attempted, for someone asking afterwards what the agent actually did.
 - Why a repair was thrown away is recorded, not just that it was. The named test
   `records exactly why a repair was thrown away` guards the distinction, and
   `content-changed` — something tried to alter what an approved action would
-  write — is the one that matters most.
+  write — is the one that matters most. A repair that ran out of room to answer is
+  `out-of-room`, not an unusable answer: the cap failed, not the repairer. The
+  loop's named test `records a repair that ran out of room as out of room`
+  guards it.
 - A damaged line costs that line and nothing else. The named test `skips a
   damaged line rather than losing the whole record` guards this; an audit record
   that discards itself on one bad write is worse than none.
