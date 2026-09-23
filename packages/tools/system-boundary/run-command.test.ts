@@ -3,6 +3,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { openProcessContainer } from "@zhiyin/process-ownership";
 import { WorkspaceTools, resolveShell } from "../src/index.js";
 
 const shell = resolveShell();
@@ -196,6 +197,27 @@ withShell("bash", () => {
     // Stopped before it could answer: there is nothing here that it reported.
     expect(result).not.toHaveProperty("reported", true);
   });
+
+  it("stops a command that prints without end, and says why", async () => {
+    const tools = new WorkspaceTools(await workspace(), {
+      ...(process.platform === "win32"
+        ? { containment: { open: openProcessContainer } }
+        : {}),
+    });
+
+    const result = await tools.execute("bash", {
+      command: "yes",
+      explanation: "Prints without end, for the purpose of this test.",
+      timeoutMs: 60_000,
+    });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result).toHaveProperty(
+      "reason",
+      expect.stringContaining("printed more than"),
+    );
+    expect(result).not.toHaveProperty("reported", true);
+  }, 90_000);
 
   /**
    * The reason a shell tool can exist at all: a command that starts a

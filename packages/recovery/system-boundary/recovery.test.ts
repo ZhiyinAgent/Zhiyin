@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  open,
+  readFile,
+  writeFile,
+  mkdir,
+  rm,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
@@ -334,5 +341,72 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     } finally {
       locker.kill();
     }
+  });
+  it("restores twenty files without starting PowerShell", async () => {
+    const { root, recovery } = await fixture();
+    const paths = Array.from({ length: 20 }, (_, index) => `file-${index}.txt`);
+    for (const path of paths)
+      await writeFile(join(root, path), `before ${path}`);
+    await recovery.prepare(
+      "action-1",
+      root,
+      paths.map((path) => ({ path, change: "updated" as const })),
+    );
+    for (const path of paths) await writeFile(join(root, path), "after");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Edit files",
+        target: "20 files",
+        status: "completed",
+        changes: paths.map((path) => ({ path, change: "updated" as const })),
+      },
+    ]);
+
+    // Nothing on the path, so a restore that needs PowerShell cannot start it.
+    const path = process.env["PATH"];
+    process.env["PATH"] = "";
+    let result;
+    try {
+      result = await recovery.restore(review);
+    } finally {
+      process.env["PATH"] = path;
+    }
+
+    expect(result.files).toEqual(
+      paths.map((path) => ({ path, status: "restored" })),
+    );
+    for (const path of paths)
+      expect(await readFile(join(root, path), "utf8")).toBe(`before ${path}`);
+  });
+
+  it("leaves a file in place while another program has it open for writing", async () => {
+    const { root, recovery } = await fixture();
+    const path = join(root, "note.txt");
+    await writeFile(path, "before");
+    await recovery.prepare("action-1", root, [
+      { path: "note.txt", change: "updated" },
+    ]);
+    await writeFile(path, "agent result");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "note.txt",
+        status: "completed",
+        changes: [{ path: "note.txt", change: "updated" }],
+      },
+    ]);
+    const writer = await open(path, "r+");
+    try {
+      const result = await recovery.restore(review);
+
+      expect(result.files[0]).toMatchObject({ status: "unprotected" });
+    } finally {
+      await writer.close();
+    }
+    expect(await readFile(path, "utf8")).toBe("agent result");
   });
 });

@@ -56,6 +56,9 @@ installing a package is an explicit, visible act.
 - **A failure says what the run or the build reported.** Named tests: `reports a
   script that failed with its output rather than a bare code` and `says what
   went wrong when the environment cannot be built`.
+- **Python reads and writes UTF-8**, whatever the console's code page, and
+  otherwise runs in Zhiyin's own environment. Named test: `runs scripts with
+  Python reading and writing UTF-8, in Zhiyin's own environment`.
 - **No `uv`, no tools.** Named test: `offers no tool until uv is installed, and
   all of them once it is`.
 - **A person is told what a call will do and where anything is downloaded

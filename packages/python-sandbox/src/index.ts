@@ -157,6 +157,15 @@ function reported(run: ProgramRun): string {
   return shortened(`${run.stdout}\n${run.stderr}`);
 }
 
+/**
+ * Python on Windows reads and writes in the console's code page unless told
+ * otherwise, so a script printing "é" or reading a UTF-8 file fails or garbles
+ * it. These make UTF-8 its default for files and for what it prints.
+ */
+function pythonEnvironment(): Record<string, string | undefined> {
+  return { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+}
+
 export function pythonSandbox(
   options: PythonSandboxOptions,
 ): SandboxAutomation {
@@ -183,6 +192,7 @@ export function pythonSandbox(
       timeoutMs: limit,
       ...(signal ? { signal } : {}),
       ...(options.containment ? { containment: options.containment } : {}),
+      environment: pythonEnvironment(),
     });
 
   /**

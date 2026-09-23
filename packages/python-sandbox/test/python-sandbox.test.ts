@@ -28,6 +28,11 @@ type Call = {
   readonly cwd: string;
 };
 
+/** What each program was given to run with, alongside the calls. */
+const environments: (
+  Readonly<Record<string, string | undefined>> | undefined
+)[] = [];
+
 /**
  * A `uv` that behaves: creating the environment puts an interpreter where the
  * connector expects one, so the next call finds a prepared sandbox.
@@ -46,8 +51,15 @@ async function sandboxWith(
   const workspace = await temporaryRoot("workspace");
   const directory = join(await temporaryRoot("data"), "python-sandbox");
   const calls: Call[] = [];
-  const run: RunProgram = async ({ executable, arguments: args, cwd }) => {
+  environments.length = 0;
+  const run: RunProgram = async ({
+    executable,
+    arguments: args,
+    cwd,
+    environment,
+  }) => {
     calls.push({ executable, arguments: args, cwd });
+    environments.push(environment);
     if (args[0] === "venv") {
       await mkdir(join(directory, ".venv", "Scripts"), { recursive: true });
       await writeFile(
@@ -115,6 +127,19 @@ describe("running Python in the sandbox", () => {
     expect(calls.filter((call) => call.arguments[0] === "venv")).toHaveLength(
       1,
     );
+  });
+
+  it("runs scripts with Python reading and writing UTF-8, in Zhiyin's own environment", async () => {
+    const { sandbox, calls, interpreter } = await sandboxWith();
+
+    await sandbox.callTool("run_python", { code: "print('é')" });
+
+    const script = calls.findIndex((call) => call.executable === interpreter);
+    expect(environments[script]).toMatchObject({
+      PYTHONUTF8: "1",
+      PYTHONIOENCODING: "utf-8",
+      PATH: process.env["PATH"],
+    });
   });
 
   it("keeps the script it was given out of the person's folder, and removes it after", async () => {

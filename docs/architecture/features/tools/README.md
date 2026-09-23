@@ -229,6 +229,9 @@ nothing about permission and renders nothing itself.
   non-zero exit as reported, not as a failure to run`, `does not call a stopped
   command a reported one`, and `stops a command that runs longer than it was
   given` guard the distinction.
+- A command that prints without end is stopped with everything it started, and
+  the model is told why and that only the start and end of its output are
+  shown. Named test: `stops a command that prints without end, and says why`.
 - The exact command travels to the interface whole, never shortened for
   display: a command a person cannot finish reading is one they cannot consent
   to. Where it is clipped is the interface's decision, in context.

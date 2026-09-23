@@ -5,7 +5,9 @@ import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync } from "node:fs";
-import { openProcessContainer } from "../../src/index.ts";
+// The container module itself: run under type stripping, which cannot
+// resolve the package entry's `.js` imports of its siblings.
+import { openProcessContainer } from "../../src/windows.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const directory = process.argv[2];

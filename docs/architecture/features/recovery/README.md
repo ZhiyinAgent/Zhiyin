@@ -40,7 +40,13 @@ may be used by rewind or a future recovery surface.
   file changed after the recorded action`.
 - Restoration requires a Windows handle that denies write sharing and repeats
   the digest check before replacement. Named regression: `refuses restoration
-  while another process holds an incompatible file handle`.
+  while another process holds an incompatible file handle` and `leaves a file
+  in place while another program has it open for writing`.
+- Restoring starts no other program: the handle, the digest check and the
+  replacement are made from Zhiyin's own process, so a slow machine cannot turn
+  a restorable file into an unrestorable one. Named regression: `restores
+  twenty files without starting PowerShell`, which runs with no program
+  reachable on the path.
 - A changed source invalidates promised protection. Named regression:
   `invalidates a capture when its source changes before execution`.
 - Unsupported, oversized, expired, evicted, and missing captures are

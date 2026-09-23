@@ -242,7 +242,7 @@ const OVERSIZED_PACKAGE_FILES = {
   "packages/mcp/src/index.ts": 1204,
   "packages/model-client/src/index.ts": 733,
   "packages/contract/src/index.ts": 1000,
-  "packages/recovery/src/index.ts": 707,
+  "packages/recovery/src/index.ts": 640,
 };
 
 const OVERSIZED_RENDERER_FILES = {

@@ -80,6 +80,10 @@ point is a reasonable bet, the same bet the shell tool already makes for
   nothing about a git operation is conversation-scoped state, so `open()`
   always returns the same automation and there is no `forget`. Named test:
   `shares one connection across every conversation, unlike the browser`.
+- **git never waits for someone to type a login.** No one is at a terminal
+  for it, so terminal prompts and the credential manager's own windows are
+  turned off, and a remote that asks for credentials fails at once. Named test:
+  `fails at once instead of waiting for someone to answer`.
 
 ## Testing notes
 

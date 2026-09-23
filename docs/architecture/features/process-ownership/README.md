@@ -72,6 +72,22 @@ feature that leaked them.
 - Shared process execution opens the same atomic container and closes it after
   the process answers, times out, or is cancelled. Named test: `runs a process
   through the shared contained execution path`.
+- **Output is bounded while the process runs, not after.** Past a byte limit
+  across both streams the run is ended with everything it started, and says so
+  (`outputLimit`); a contained run measures its output files as they grow.
+  Named test: `is stopped, with everything it started, once its output passes
+  the limit`, on both the contained and the uncontained path.
+- Only the start and the end of each stream are ever held, with a marker where
+  the middle was left out. Named test: `keeps the start and the end of a long
+  output, and says what it left out`.
+- A process is given exactly the environment its caller hands it, or inherits
+  Zhiyin's own when handed none. Named tests: `gives the program exactly the
+  environment it was handed` and `inherits Zhiyin's own environment when handed
+  none`.
+- Output is read as UTF-8 when it is UTF-8, and otherwise in the console's own
+  code page, which is what a Windows console program writes by default. Named
+  tests: `reads valid UTF-8 as UTF-8` and `is read in the console's code page`
+  (runs only where the console code page is a Western OEM one).
 
 ## Testing notes
 
@@ -93,5 +109,8 @@ availability report is what callers must respect.
 
 ## Deferred work
 
-- Nothing here bounds what a contained process may do while it runs. Containment
-  is about cleanup, not authority.
+- Apart from its time and the size of its output, nothing here bounds what a
+  contained process may do while it runs. Containment is about cleanup, not
+  authority.
+- The output limit is checked on an interval, so a fast writer can pass it by
+  what it prints in one interval before it is stopped.

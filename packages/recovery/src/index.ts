@@ -1,6 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import {
   lstat,
   mkdir,
@@ -19,48 +17,9 @@ import type {
   RewindFileEffect,
   TaskAction,
 } from "@zhiyin/contract";
+import { restoreExclusively } from "./exclusive-restore.js";
 
 const mib = 1024 * 1024;
-const execFileAsync = promisify(execFile);
-const restoreHelper = String.raw`param(
-  [Parameter(Mandatory=$true)][string]$Target,
-  [Parameter(Mandatory=$true)][string]$Expected,
-  [Parameter(Mandatory=$true)][ValidateSet("restore", "remove")][string]$Mode,
-  [string]$Backup
-)
-$temporary = $null
-$replaced = $null
-try {
-  if ($Mode -eq "restore") {
-    if (-not $Backup -or -not [IO.File]::Exists($Backup)) { throw "The retained bytes are unavailable." }
-    $temporary = "$Target.$([Guid]::NewGuid().ToString('N')).restore"
-    [IO.File]::WriteAllBytes($temporary, [IO.File]::ReadAllBytes($Backup))
-  }
-  $share = [IO.FileShare]::Read -bor [IO.FileShare]::Delete
-  $stream = [IO.File]::Open($Target, [IO.FileMode]::Open, [IO.FileAccess]::Read, $share)
-  try {
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { $actual = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace("-", "").ToLowerInvariant() }
-    finally { $sha.Dispose() }
-    if ($actual -ne $Expected) { throw "The file changed while recovery was being applied." }
-    if ($Mode -eq "remove") {
-      [IO.File]::Delete($Target)
-    } else {
-      $replaced = "$Target.$([Guid]::NewGuid().ToString('N')).previous"
-      [IO.File]::Replace($temporary, $Target, $replaced)
-      $temporary = $null
-      [IO.File]::Delete($replaced)
-      $replaced = $null
-    }
-  } finally { $stream.Dispose() }
-  [Console]::Out.Write("ok")
-} catch {
-  [Console]::Error.Write($_.Exception.Message)
-  exit 3
-} finally {
-  if ($temporary -and [IO.File]::Exists($temporary)) { [IO.File]::Delete($temporary) }
-  if ($replaced -and [IO.File]::Exists($replaced)) { [IO.File]::Delete($replaced) }
-}`;
 
 export type RecoveryLimits = {
   readonly totalBytes: number;
@@ -670,41 +629,14 @@ export class FileRecovery implements Recovery {
   }
 
   async #restoreExclusively(target: RestoreTarget): Promise<void> {
-    if (process.platform !== "win32")
-      throw new Error("Exclusive recovery is unavailable on this platform.");
     if (target.expected === "absent")
       throw new Error("There is no current file identity to lock.");
-    const helper = await this.#ensureHelper();
-    try {
-      await execFileAsync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-ExecutionPolicy",
-          "Bypass",
-          "-File",
-          helper,
-          "-Target",
-          target.absolute,
-          "-Expected",
-          target.expected,
-          "-Mode",
-          target.action,
-          ...(target.backup ? ["-Backup", target.backup] : []),
-        ],
-        { windowsHide: true, timeout: 1_500 },
-      );
-    } finally {
-      await rm(helper, { force: true });
-    }
-  }
-
-  async #ensureHelper(): Promise<string> {
-    await mkdir(this.#root, { recursive: true });
-    const path = join(this.#root, `restore-file-${randomUUID()}.ps1`);
-    await writeFile(path, restoreHelper, "utf8");
-    return path;
+    await restoreExclusively({
+      absolute: target.absolute,
+      expected: target.expected,
+      action: target.action,
+      ...(target.backup ? { backup: target.backup } : {}),
+    });
   }
 
   async #manifests(): Promise<

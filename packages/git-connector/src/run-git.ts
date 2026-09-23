@@ -28,6 +28,10 @@ export async function runGit(
     environment: {
       ...process.env,
       GIT_TERMINAL_PROMPT: "0",
+      // Git Credential Manager, Git for Windows' default helper, shows its own
+      // login window whatever the terminal setting says; "never" makes it fail
+      // instead (GCM environment docs, read 2026-09-23).
+      GCM_INTERACTIVE: "never",
       GIT_EDITOR: "true",
       GIT_PAGER: "cat",
     },

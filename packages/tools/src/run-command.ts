@@ -303,7 +303,7 @@ function commandResult(input: {
   readonly exitCode: number | null;
   readonly stdout: string;
   readonly stderr: string;
-  readonly ending: "timeout" | "stopped" | undefined;
+  readonly ending: "timeout" | "stopped" | "outputLimit" | undefined;
   readonly failure: Error | undefined;
   readonly timeoutMs: number;
 }): ToolInvocationResult {
@@ -348,6 +348,15 @@ function commandResult(input: {
     return {
       ok: false,
       reason: `The command ran longer than ${input.timeoutMs} ms and was stopped along with everything it started. Whatever it had already done was not undone.`,
+      value: observation,
+      ...shown(),
+    };
+  }
+  if (input.ending === "outputLimit") {
+    return {
+      ok: false,
+      reason:
+        "The command printed more than a command may and was stopped along with everything it started. Only the start and end of its output are shown. Whatever it had already done was not undone.",
       value: observation,
       ...shown(),
     };
