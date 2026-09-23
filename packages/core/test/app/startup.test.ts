@@ -335,7 +335,7 @@ describe("AgentLoop damaged history", () => {
     await fixture.loop.recoverHistory("recover");
 
     expect(fixture.loop.snapshot().runtime.tasks).toBe("available");
-    expect(fixture.loop.snapshot().tasks).toHaveLength(1);
+    expect(fixture.loop.snapshot().conversations).toHaveLength(1);
     expect(fixture.loop.snapshot().historyRecovery).toBeUndefined();
   });
 

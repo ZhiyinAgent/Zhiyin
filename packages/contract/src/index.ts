@@ -26,6 +26,8 @@ export type WorkStep = {
 };
 
 export { REASONING_EFFORTS, type ReasoningEffort } from "./reasoning.js";
+import type { ConversationSummary, HistoryRecovery } from "./history.js";
+export type { ConversationSummary, HistoryRecovery } from "./history.js";
 export type {
   ModelResponseRecord,
   ModelRetryRecord,
@@ -748,19 +750,6 @@ export type EvidenceState = {
 };
 
 /**
- * Present only while saved history could not be opened. The damaged file has
- * already been kept aside; nothing is written over it until a choice is made.
- */
-export type HistoryRecovery = {
-  /** Conversations that could still be read out of the damaged file. */
-  readonly readable: number;
-  /** Conversations that could not, and would be left behind by a recovery. */
-  readonly damaged: number;
-  /** Where the damaged file was kept, so it can be found and handed on. */
-  readonly keptAt: string;
-};
-
-/**
  * What became of a key that was offered. `unverified` is not a refusal: the key
  * is stored and the check could not be made, which is what somebody offline
  * should be told rather than that their key is wrong.
@@ -798,7 +787,17 @@ export type WorkspaceSnapshot = {
     readonly tasks: "available" | "unavailable";
     readonly capabilities: "available" | "unavailable";
   };
+  /**
+   * The conversations that have been opened. A conversation is read from disk
+   * when it is first opened, not at launch, so this is usually fewer than the
+   * list shows.
+   */
   readonly tasks: readonly WorkspaceTask[];
+  /**
+   * Every conversation, in the list's order, as the list shows it. Absent
+   * means every conversation is open, and the list is `tasks`.
+   */
+  readonly conversations?: readonly ConversationSummary[];
   readonly selectedTaskId: string | null;
   readonly plugins: readonly PluginState[];
   readonly mcpServers: readonly McpServerState[];

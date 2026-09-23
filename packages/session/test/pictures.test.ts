@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, readdir, rm, utimes } from "node:fs/promises";
+import { mkdtemp, readdir, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
 import { FileSessions } from "../src/index.js";
+import { savedText } from "./planted-history.js";
 
 const roots: string[] = [];
 
@@ -79,9 +80,9 @@ describe("pictures a conversation contains", () => {
 
     await sessions.saveWorkspace(snapshot);
 
-    // The history file stays small enough to rewrite on every change: what a
-    // conversation refers to is not what a conversation is made of.
-    const saved = await readFile(join(root, "workspace.json"), "utf8");
+    // A conversation's file stays small enough to read whole when it is
+    // opened: what a conversation refers to is not what it is made of.
+    const saved = await savedText(root);
     expect(saved).toContain(id);
     expect(saved).not.toContain(picture.data);
     // And the reference survives the round trip, so the record still shows it.

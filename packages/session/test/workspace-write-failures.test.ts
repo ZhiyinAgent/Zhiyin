@@ -1,11 +1,11 @@
 /** Filesystem failures must never replace the last committed history. */
 
-import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
-import { FileSessions } from "../src/index.js";
+import { FileSessions, historyFiles, type HistoryFiles } from "../src/index.js";
 
 const roots: string[] = [];
 
@@ -40,15 +40,13 @@ function snapshot(title: string): WorkspaceSnapshot {
 }
 
 async function expectPriorCommitSurvives(
-  workspaceFiles: ConstructorParameters<typeof FileSessions>[1] extends infer O
-    ? O extends { workspaceFiles?: infer F }
-      ? F
-      : never
-    : never,
+  failures: Partial<HistoryFiles>,
 ): Promise<void> {
   const root = await temporaryRoot();
   await new FileSessions(root).saveWorkspace(snapshot("Committed"));
-  const failing = new FileSessions(root, { workspaceFiles });
+  const failing = new FileSessions(root, {
+    historyFiles: { ...historyFiles, ...failures },
+  });
 
   await expect(failing.saveWorkspace(snapshot("Uncommitted"))).rejects.toThrow(
     "Task history could not be saved.",
@@ -59,37 +57,42 @@ async function expectPriorCommitSurvives(
   });
 }
 
-describe("workspace replacement failures", () => {
+function diskFull(): never {
+  const error = new Error("Disk full") as NodeJS.ErrnoException;
+  error.code = "ENOSPC";
+  throw error;
+}
+
+describe("history write failures", () => {
   it("keeps the prior commit when the disk refuses the write", async () => {
     await expectPriorCommitSurvives({
-      write: async () => {
-        const error = new Error("Disk full") as NodeJS.ErrnoException;
-        error.code = "ENOSPC";
-        throw error;
-      },
-      replace: rename,
-      remove: (path) => rm(path, { force: true }),
+      append: async () => diskFull(),
+      create: async () => diskFull(),
     });
   });
 
   it("keeps the prior commit when only part of the new file is written", async () => {
     await expectPriorCommitSurvives({
-      write: async (path, source) => {
-        await writeFile(path, source.slice(0, 20), "utf8");
+      append: async (path, text) => {
+        await appendFile(path, text.slice(0, 20), "utf8");
         throw new Error("Write stopped early");
       },
-      replace: rename,
-      remove: (path) => rm(path, { force: true }),
+      create: async (path, text) => {
+        await writeFile(`${path}.tmp`, text.slice(0, 20), "utf8");
+        throw new Error("Write stopped early");
+      },
     });
   });
 
-  it("keeps the prior commit when replacing the file fails", async () => {
+  it("keeps the prior commit when a part-written save cannot be cut back off", async () => {
     await expectPriorCommitSurvives({
-      write: (path, source) => writeFile(path, source, "utf8"),
-      replace: async () => {
-        throw new Error("Rename failed");
+      append: async (path, text) => {
+        await appendFile(path, text.slice(0, 20), "utf8");
+        throw new Error("Write stopped early");
       },
-      remove: (path) => rm(path, { force: true }),
+      truncate: async () => {
+        throw new Error("Truncate failed");
+      },
     });
   });
 });

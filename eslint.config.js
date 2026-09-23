@@ -223,7 +223,7 @@ const OVERSIZED_ORCHESTRATION_FILES = {
   // `WorkspaceShell`, pushed it up once more, and a plain `refreshConnections`
   // passthrough to the existing `WorkspaceConnections` pushed it up once more
   // after that.
-  "packages/core/src/workspace.ts": 640,
+  "packages/core/src/workspace.ts": 639,
   // Plugin authoring, per-specialist preferences, and MCP tool/test-connection
   // passthroughs, composed alongside the existing tool-gathering, plugin
   // directory, and connection lifecycles, pushed this past the limit even
@@ -241,7 +241,7 @@ const OVERSIZED_PACKAGE_FILES = {
   // feature work may not raise one.
   "packages/mcp/src/index.ts": 1204,
   "packages/model-client/src/index.ts": 733,
-  "packages/contract/src/index.ts": 1000,
+  "packages/contract/src/index.ts": 998,
   "packages/recovery/src/index.ts": 640,
 };
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { FileSessions } from "@zhiyin/session";
 import {
   closeEverything,
   launch,
@@ -121,10 +122,8 @@ describe("installed rewind crash recovery", () => {
     );
 
     expect(await readFile(planted.target, "utf8")).toBe("original bytes");
-    const saved = JSON.parse(
-      await readFile(join(dataDirectory, "workspace.json"), "utf8"),
-    ) as { tasks: { messages: unknown[] }[] };
-    expect(saved.tasks[0]?.messages).toEqual([]);
+    const saved = await new FileSessions(dataDirectory).loadWorkspace();
+    expect(saved?.tasks[0]?.messages).toEqual([]);
     expect(await readdir(planted.journal)).toEqual([]);
   });
 

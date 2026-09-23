@@ -14,8 +14,8 @@ sequencing.
 ## Boundaries
 
 - **Owns:** the durable workspace format — the conversations and the choices a
-  person made — validation at the read boundary, atomic replacement, and
-  human-readable task summaries.
+  person made — validation at the read boundary, writing each save as the
+  difference from the last, and human-readable task summaries.
 - **Does not own:** task transitions (agent loop), rendering restored state
   (renderer), credentials (model client), or usage telemetry (usage).
 - **Talks to other features only through:** load, save, and list operations over
@@ -23,10 +23,16 @@ sequencing.
 
 ## Public interface
 
-- `loadWorkspace()` returns the last valid saved workspace, or nothing on a
-  clean first launch.
-- `saveWorkspace(workspace)` atomically replaces the stored workspace. Only the
-  durable fields are written: the conversations, the selected one, the person's
+- `loadIndex()` returns the list of conversations and the person's choices
+  without opening any conversation, or nothing on a clean first launch.
+- `openConversation(id)` reads one conversation, and says whether the last save
+  before the app closed was cut off and dropped.
+- `loadWorkspace()` opens every conversation at once; one that will not open
+  fails the read.
+- `saveWorkspace(workspace)` writes what changed since the last save. The
+  workspace's `conversations` is the whole list and `tasks` the conversations
+  opened; a listed conversation that is not open is left as it is on disk.
+  Only the durable fields are written: the conversations, the selected one, the person's
   preferences, and the folders they have worked in. Connection, plugin, usage,
   and browser state are true only while the app runs and are read again at
   every launch, so storing them would let a passing runtime state — a connector
@@ -40,13 +46,49 @@ sequencing.
 
 ## Invariants
 
+- **Each conversation is its own log, and a save appends only what changed.**
+  The list of conversations and the person's choices are one more log. A save
+  compares what it is given with what it last wrote and appends the
+  difference as one line — a reply that grew is written as the words added —
+  so its cost follows the change, not everything kept. Nothing depends on a
+  caller reporting what it changed. Named tests: `records a reply that grew as
+  only the words that were added`, `records one changed entry of a long list,
+  not the list`, and, through the core, `writes under 200 KB to stream a
+  2,000-token reply in a history of 100 conversations`.
+- **What is read back is exactly what was saved,** field order included: a
+  pending rewind recognises a conversation by its saved text. Named tests:
+  `keeps the order of fields exactly, even when a field moves`, `treats a
+  field left undefined as absent, as a saved file does`, `rebuilds any sequence
+  of edits exactly`, and, through the core, `leaves a conversation nobody
+  opened exactly as it was saved`.
+- **A line is a whole save or nothing.** Every append is flushed to the disk
+  before it counts. A save cut off by a crash leaves a broken last line, which
+  is dropped when the log is read and reported, and the log goes on from the
+  last whole save; a failed append is cut back off; a log damaged anywhere but
+  its last line is refused. Named tests: `drops a save that was only half
+  written, and says so`, `goes on saving after a half-written save, without the
+  broken line`, `leaves the log as it was when an append fails part way`,
+  `refuses a log damaged anywhere but its last line`, and `opens without the
+  save a crash cut off, and says one was lost`.
+- **A log that outgrows its state starts afresh.** Past four times the size of
+  the state it describes, a fresh file holding only the state is written in
+  full under another name and renamed into place, so there is always one
+  complete file to read. Named tests: `starts a fresh file holding the whole
+  state once the edits outgrow it` and `keeps the previous file when starting a
+  fresh one did not finish`.
+- **Conversations are written before the list that names them,** and removed
+  after it stops naming them, so the list never names a conversation that is
+  not on disk; conversations with no list are damage, not an empty history.
+  Named test: `reports conversations with no list as damage, not as an empty
+  history`.
+
 - New source modules stay below the repository line ceiling, and the existing
   oversized module may shrink but may not grow. The repository lint gate is the
   named regression for this structural boundary.
 
 - **A picture a conversation refers to is stored beside it, not inside it.**
-  The history file is rewritten whenever anything in the conversation changes,
-  so an encoded image kept in it would be rewritten every time; the record
+  A conversation's file is read whole whenever the conversation is opened, so
+  an encoded image kept in it would be read every time; the record
   keeps an id the store issued, and an id it did not issue never becomes a
   path. Named tests: `comes back after the application is closed and opened
   again`, `is kept beside the conversation rather than inside it`, `says
@@ -78,9 +120,9 @@ sequencing.
   provider evidence without losing the saved file`, and `rejects malformed
   retry evidence without losing the saved file`.
 
-- Every status the writer can produce, the reader accepts. One damaged task
-  fails the whole file, so a status the core writes and this rejects is not one
-  lost action — it is every conversation the person has. Named test: `restores
+- Every status the writer can produce, the reader accepts. A conversation that
+  fails the check does not open, so a status the core writes and this rejects
+  is not one lost action — it is the whole conversation. Named test: `restores
   an action that ran and answered without succeeding`.
 
 - A new store instance restores the same visible workspace saved by an earlier
@@ -101,22 +143,29 @@ sequencing.
   partially shaped connection record reaching the renderer.
 - Task update timestamps are optional on read for compatibility with older
   saved workspaces and are written for new or changed tasks.
-- **A damaged history is examined and kept, never repaired in place.**
-  `inspectDamage` says how much can still be read and changes nothing;
-  `preserveDamaged` copies the bytes somewhere they will not be written over
-  and leaves the original where it is, keeping every copy rather than the last;
-  `recoverReadable` keeps the file first, then rewrites the history with the
-  conversations that passed, carrying the settings across and never leaving a
-  selected conversation that did not survive. A file with nothing readable is
-  refused rather than turned into an empty history. Named tests: `reports how
-  much of a damaged history can still be read`, `says when nothing can be read
-  rather than guessing`, `keeps the damaged bytes before anything is decided
-  about them`, `keeps each damaged copy rather than overwriting the last one`,
-  `recovers the conversations that could be read and leaves out the one that
-  could not`, `keeps the damaged file when it recovers what it can`, `chooses a
-  selected conversation that survived the recovery`, and `refuses to recover a
-  file that holds nothing readable, rather than starting empty behind the
-  person's back`.
+- **A damaged conversation fails alone.** The list opens, and so does every
+  other conversation. Named test: `fails alone: the list opens, and so does
+  every other conversation`.
+- **A damaged list is examined and kept, never repaired in place, and never
+  written over.** `inspectDamage` counts the conversations that open on their
+  own and changes nothing; `preserveDamaged` copies the list and every
+  conversation that will not open somewhere they will not be written over, and
+  leaves the originals where they are, keeping every copy rather than the last;
+  `recoverReadable` keeps the damage first, then starts the list afresh from
+  the conversations that open, carrying across each setting that is sound on
+  its own and never leaving a selected conversation that did not survive. A
+  history with nothing readable is refused rather than turned into an empty
+  one, and a save over a list that will not open is refused. Named tests:
+  `reports how much of a damaged history can still be read`, `says when
+  nothing can be read rather than guessing`, `keeps the damaged bytes before
+  anything is decided about them`, `keeps each damaged copy rather than
+  overwriting the last one`, `recovers the conversations that could be read
+  and leaves out the one that could not`, `keeps the damaged file when it
+  recovers what it can`, `keeps each setting that survived, whatever else in
+  the list was damaged`, `chooses a selected conversation that survived the
+  recovery`, `refuses to recover a file that holds nothing readable, rather
+  than starting empty behind the person's back`, and `refuses to save over a
+  history that will not open`.
 - **One instance owns a data folder at a time.** The write queue orders this
   process's saves and can see no other process, so a second instance is refused
   rather than coordinated: it cannot claim the folder and cannot write to it
@@ -136,17 +185,20 @@ sequencing.
   naming a process that is running but is not the app`, and the installed test
   `releases the data lock on an ordinary quit`.
 - **The cost of keeping history is bounded at a stated size.** The target is 200
-  conversations of 40 messages and 20 actions each; save, load, and one further
-  commit each stay within a measured budget, and so does the file. Named tests:
-  `saves and reloads a full history within its measured budget` and `commits one
-  further change to a full history within its measured budget`.
+  conversations of 40 messages and 20 actions each; writing it whole, reading
+  it whole, reading its list at launch, and one further commit each stay within
+  a measured budget, and so does the space on disk. Named tests: `saves and
+  reloads a full history within its measured budget`, `commits one further
+  change to a full history within its measured budget`, and `reads the list of
+  a full history at launch within its measured budget`.
 - Saving a new snapshot replaces the prior committed snapshot. The named test
   `replaces an earlier snapshot with the latest committed state` guards this.
 - Overlapping saves commit in submission order. The named test `commits
   overlapping snapshots in submission order` guards serialized replacement.
-- A refused write, a partial temporary write, or a failed atomic replacement
-  leaves the prior committed workspace readable. The three named tests under
-  `workspace replacement failures` inject those filesystem boundaries.
+- A refused write, a partly written save, or a partly written save that cannot
+  be cut back off leaves the prior committed workspace readable. The three
+  named tests under `history write failures` inject those filesystem
+  boundaries.
 - Invalid nested task records are rejected. The named test `rejects malformed
   nested task state` guards validation beyond the outer snapshot shape.
 - Durable views keep the exact source that is re-rendered after restart, and a

@@ -33,6 +33,7 @@ import type {
   WorkspaceState,
   WorkspaceTask,
 } from "./workspaceState.js";
+import { listedConversations } from "./workspaceState.js";
 import styles from "./app.module.css";
 
 type WorkspaceShellProps = {
@@ -310,11 +311,11 @@ export function WorkspaceShell({
       </button>
       <AppSidebar
         onOpenLibrary={() => openNavigationSurface("library")}
-        tasks={state.tasks.map((task) => ({
-          id: task.id,
-          title: task.title,
-          ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
-          meta: task.updatedLabel,
+        tasks={listedConversations(state).map((item) => ({
+          id: item.id,
+          title: item.title,
+          ...(item.updatedAt ? { updatedAt: item.updatedAt } : {}),
+          meta: item.updatedLabel,
         }))}
         selectedId={state.selectedTaskId ?? ""}
         onSelect={(id) => {

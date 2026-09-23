@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   closeEverything,
   hides,
+  historyIndexFolder,
   launch,
   plantHistory,
   shows,
@@ -20,6 +21,12 @@ import {
 } from "./launch.js";
 
 afterEach(closeEverything);
+
+/** The saved list of conversations, as the bytes on disk. */
+async function listText(folder: string): Promise<string> {
+  const [name] = await readdir(folder);
+  return readFile(join(folder, name!), "utf8");
+}
 
 function conversation(id: string) {
   return {
@@ -126,6 +133,7 @@ describe("the installed app on damaged history", () => {
   it("still holds the damaged bytes on disk while the question is open", async () => {
     const dataDirectory = await temporaryDataDirectory();
     await plantHistory(dataDirectory, damagedButPartlyReadable);
+    const planted = await listText(historyIndexFolder(dataDirectory));
 
     const { window } = await launch({ dataDirectory });
     await shows(
@@ -136,12 +144,10 @@ describe("the installed app on damaged history", () => {
     const kept = await readdir(join(dataDirectory, "damaged-history"));
     expect(kept).toHaveLength(1);
     expect(
-      await readFile(join(dataDirectory, "damaged-history", kept[0]!), "utf8"),
-    ).toBe(damagedButPartlyReadable);
-    // And the file it came from has not been written over.
-    expect(await readFile(join(dataDirectory, "workspace.json"), "utf8")).toBe(
-      damagedButPartlyReadable,
-    );
+      await listText(join(dataDirectory, "damaged-history", kept[0]!, "index")),
+    ).toBe(planted);
+    // And the list it came from has not been written over.
+    expect(await listText(historyIndexFolder(dataDirectory))).toBe(planted);
   });
 
   it("opens the conversations that survived when that is chosen", async () => {
@@ -220,7 +226,7 @@ describe("the installed app on damaged history", () => {
     const kept = await readdir(join(dataDirectory, "damaged-history"));
     expect(kept).toHaveLength(1);
     expect(
-      await readFile(join(dataDirectory, "damaged-history", kept[0]!), "utf8"),
+      await listText(join(dataDirectory, "damaged-history", kept[0]!, "index")),
     ).toBe("this is not a workspace at all");
   });
 });

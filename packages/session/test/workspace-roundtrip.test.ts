@@ -1,9 +1,15 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot, WorkspaceTask } from "@zhiyin/contract";
 import { FileSessions, SessionStoreError } from "../src/index.js";
+import {
+  plantHistory,
+  plantUnreadableHistory,
+  savedIndex,
+  savedText,
+} from "./planted-history.js";
 
 const roots: string[] = [];
 
@@ -84,25 +90,22 @@ describe("saved reasoning", () => {
 
   it("rejects malformed retry evidence without losing the saved file", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            modelResponses: [
-              {
-                finishReason: "stop",
-                termination: "finishReason",
-                complete: true,
-                retries: [{ failure: "rateLimited", delayMs: "soon" }],
-              },
-            ],
-          },
-        ],
-      }),
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          modelResponses: [
+            {
+              finishReason: "stop",
+              termination: "finishReason",
+              complete: true,
+              retries: [{ failure: "rateLimited", delayMs: "soon" }],
+            },
+          ],
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toMatchObject({
       code: "corrupted",
@@ -111,25 +114,22 @@ describe("saved reasoning", () => {
 
   it("rejects malformed provider evidence without losing the saved file", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            modelResponses: [
-              {
-                requestId: "gen-incomplete",
-                finishReason: 42,
-                termination: "invented",
-                complete: "perhaps",
-              },
-            ],
-          },
-        ],
-      }),
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          modelResponses: [
+            {
+              requestId: "gen-incomplete",
+              finishReason: 42,
+              termination: "invented",
+              complete: "perhaps",
+            },
+          ],
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toMatchObject({
       code: "corrupted",
@@ -142,19 +142,16 @@ describe("saved reasoning", () => {
       { text: 42, status: "complete" },
       { text: "Thought", status: "invented" },
     ]) {
-      await writeFile(
-        join(root, "workspace.json"),
-        JSON.stringify({
-          ...snapshot,
-          tasks: [
-            {
-              ...snapshot.tasks[0],
-              compaction: undefined,
-              messages: [{ id: "a", role: "assistant", text: "", reasoning }],
-            },
-          ],
-        }),
-      );
+      await plantHistory(root, {
+        ...snapshot,
+        tasks: [
+          {
+            ...snapshot.tasks[0],
+            compaction: undefined,
+            messages: [{ id: "a", role: "assistant", text: "", reasoning }],
+          },
+        ],
+      });
       await expect(
         new FileSessions(root).loadWorkspace(),
       ).rejects.toMatchObject({ code: "corrupted" });
@@ -320,54 +317,46 @@ describe("FileSessions workspace persistence", () => {
 
   it("rejects malformed nested task state", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            messages: [null],
-            phase: { kind: "invented" },
-          },
-        ],
-      }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          messages: [null],
+          phase: { kind: "invented" },
+        },
+      ],
+    });
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
     );
   });
   it("rejects malformed specialist provenance and handoff state", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            specialistRuns: [
-              {
-                id: "specialist-1",
-                specialist: {
-                  id: "reviewer",
-                  name: "Reviewer",
-                  description: "Reviews work.",
-                  instructions: "Review it.",
-                  provenance: { source: "plugin" },
-                },
-                task: "Review it.",
-                depth: "one",
-                status: "completed",
-                startedAt: "not-a-date",
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          specialistRuns: [
+            {
+              id: "specialist-1",
+              specialist: {
+                id: "reviewer",
+                name: "Reviewer",
+                description: "Reviews work.",
+                instructions: "Review it.",
+                provenance: { source: "plugin" },
               },
-            ],
-          },
-        ],
-      }),
-      "utf8",
-    );
+              task: "Review it.",
+              depth: "one",
+              status: "completed",
+              startedAt: "not-a-date",
+            },
+          ],
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -375,38 +364,30 @@ describe("FileSessions workspace persistence", () => {
   });
   it("rejects malformed durable view source at the persistence boundary", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          { ...snapshot.tasks[0], views: [{ id: "view-1", kind: "diagram" }] },
-        ],
-      }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        { ...snapshot.tasks[0], views: [{ id: "view-1", kind: "diagram" }] },
+      ],
+    });
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
     );
   });
   it("rejects a compaction checkpoint that cannot map back to durable history", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            compaction: {
-              ...snapshot.tasks[0]?.compaction,
-              throughMessageId: "missing-message",
-            },
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          compaction: {
+            ...snapshot.tasks[0]?.compaction,
+            throughMessageId: "missing-message",
           },
-        ],
-      }),
-      "utf8",
-    );
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -414,22 +395,18 @@ describe("FileSessions workspace persistence", () => {
   });
   it("rejects a compaction checkpoint that names unavailable evidence", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            compaction: {
-              ...snapshot.tasks[0]?.compaction,
-              retainedActionIds: ["missing-action"],
-            },
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          compaction: {
+            ...snapshot.tasks[0]?.compaction,
+            retainedActionIds: ["missing-action"],
           },
-        ],
-      }),
-      "utf8",
-    );
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -547,26 +524,22 @@ describe("FileSessions workspace persistence", () => {
 
   it("rejects a damaged stored interaction before it reaches the renderer", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            interactions: [
-              {
-                id: "interaction-quiz",
-                callId: "quiz-call",
-                request: { kind: "quiz", title: "Broken", questions: [] },
-                response: { answers: [] },
-              },
-            ],
-          },
-        ],
-      }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          interactions: [
+            {
+              id: "interaction-quiz",
+              callId: "quiz-call",
+              request: { kind: "quiz", title: "Broken", questions: [] },
+              response: { answers: [] },
+            },
+          ],
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -599,7 +572,7 @@ describe("FileSessions workspace persistence", () => {
 
   it("reports corrupted local state instead of presenting it as an empty history", async () => {
     const root = await temporaryRoot();
-    await writeFile(join(root, "workspace.json"), "not json", "utf8");
+    await plantUnreadableHistory(root);
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -646,14 +619,10 @@ describe("FileSessions workspace persistence", () => {
 
   it("rejects a malformed folder on a conversation", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [{ ...snapshot.tasks[0], workspace: { name: "notes" } }],
-      }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [{ ...snapshot.tasks[0], workspace: { name: "notes" } }],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -662,11 +631,10 @@ describe("FileSessions workspace persistence", () => {
 
   it("rejects malformed folder history at the persistence boundary", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({ ...snapshot, recentWorkspaces: [{ name: "notes" }] }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      recentWorkspaces: [{ name: "notes" }],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -732,27 +700,23 @@ describe("FileSessions workspace persistence", () => {
 
   it("rejects a stored detail whose shape the interface could not draw", async () => {
     const root = await temporaryRoot();
-    await writeFile(
-      join(root, "workspace.json"),
-      JSON.stringify({
-        ...snapshot,
-        tasks: [
-          {
-            ...snapshot.tasks[0],
-            actions: [
-              {
-                id: "a",
-                action: "Search workspace files",
-                target: "budget",
-                status: "completed",
-                details: [{ kind: "matches", items: [{ path: "a.md" }] }],
-              },
-            ],
-          },
-        ],
-      }),
-      "utf8",
-    );
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          actions: [
+            {
+              id: "a",
+              action: "Search workspace files",
+              target: "budget",
+              status: "completed",
+              details: [{ kind: "matches", items: [{ path: "a.md" }] }],
+            },
+          ],
+        },
+      ],
+    });
 
     await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
       SessionStoreError,
@@ -787,15 +751,13 @@ describe("FileSessions workspace persistence", () => {
 
     await new FileSessions(root).saveWorkspace(snapshot);
 
-    const saved = JSON.parse(
-      await readFile(join(root, "workspace.json"), "utf8"),
-    ) as Record<string, unknown>;
+    const saved = await savedIndex(root);
     expect(Object.keys(saved).sort()).toEqual(
-      ["version", "tasks", "selectedTaskId", "preferences", "workspace"]
+      ["version", "conversations", "selectedTaskId", "preferences", "workspace"]
         .filter((key) => key in saved)
         .sort(),
     );
     for (const live of ["mcpServers", "plugins", "usage", "runtime", "browser"])
-      expect(saved).not.toHaveProperty(live);
+      expect(await savedText(root)).not.toContain(`"${live}"`);
   });
 });

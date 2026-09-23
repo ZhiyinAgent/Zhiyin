@@ -156,6 +156,12 @@ export type FileBackup = RecoveryPreparation;
 
 /** How the group reads and saves the conversation it is rewinding. */
 export type RewindHost = {
+  /**
+   * Reads a conversation that is not in memory yet. Called before a pending
+   * operation found after a restart touches it; every other operation is on a
+   * conversation the person has open.
+   */
+  readonly open?: (conversationId: string) => Promise<void>;
   readonly task: (conversationId: string) => WorkspaceTask;
   readonly save: (task: WorkspaceTask) => Promise<void>;
 };
@@ -231,6 +237,7 @@ export class ComposedRewind implements Rewind {
       this.#restoring.add(operation.conversationId);
       let completed = false;
       try {
+        await host.open?.(operation.conversationId);
         const current = host.task(operation.conversationId);
         if (JSON.stringify(current) === JSON.stringify(operation.task)) {
           await this.#journal.complete(operation.id);

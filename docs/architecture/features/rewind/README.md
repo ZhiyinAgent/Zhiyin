@@ -59,7 +59,9 @@ its own.
   can be tried again`.
 - **File restoration and conversation persistence converge after a crash.** A
   durable intent precedes file work, file results precede conversation save,
-  and startup finishes or blocks the exact operation. Named tests: `records
+  and startup finishes or blocks the exact operation. The host is asked to
+  read the conversation first, since after a restart it may not be open yet.
+  Named tests: `records
   durable intent before restoring files`, `finishes a rewind after restart when
   files were restored but history was not saved`, and `clears a journal left
   behind after conversation persistence`. Installed-app tests plant both crash

@@ -47,12 +47,7 @@ import type { UsageTelemetry } from "@zhiyin/usage";
 import { BrowserFeed } from "./browser-feed.js";
 import { ModelSettings } from "./model-settings.js";
 import * as startup from "./startup.js";
-import {
-  requiredTask,
-  stampTaskWorkspace,
-  taskArtifact,
-  taskView,
-} from "./workspace-tasks.js";
+import { requiredTask, stampTaskWorkspace } from "./workspace-tasks.js";
 import { WorkspacePersistence } from "./workspace-persistence.js";
 import { recordUsage } from "./workspace-usage.js";
 import {
@@ -64,6 +59,8 @@ import { WorkspacePlugins } from "./workspace-plugins.js";
 import { WorkspaceConnections } from "./workspace-connections.js";
 import { WorkspaceShell } from "./workspace-shell.js";
 import { closeInTurn } from "./closing.js";
+import * as produced from "./produced-files.js";
+import { ConversationList } from "./conversation-list.js";
 
 /** What the workspace asks of whoever runs turns. */
 export type WorkspaceTurns = Pick<
@@ -108,7 +105,9 @@ export class Workspace {
   readonly #deps: WorkspaceDependencies;
   /** Whoever runs this workspace's turns. */
   readonly turns: WorkspaceTurns;
+  /** The conversations opened so far; the list holds every one. */
   #tasks: WorkspaceTask[] = [];
+  readonly #conversations: ConversationList;
   #selectedTaskId: string | null = null;
   #preferences: WorkspaceSnapshot["preferences"];
   #workspaceSelection: WorkspaceSnapshot["workspace"];
@@ -155,6 +154,7 @@ export class Workspace {
     this.#browser = new BrowserFeed(deps.browsers, (event) => this.emit(event));
     this.#rewinds = new WorkspaceRewinds({
       rewind: deps.rewind,
+      open: (id) => this.#ensureOpen(id).then(() => undefined),
       task: (id) => requiredTask(this.#tasks, id),
       save: (task) => this.#replaceTask(task),
       historyAvailable: () => this.#historyAvailable,
@@ -184,6 +184,9 @@ export class Workspace {
       reportIssue: (notice) => this.#reportIssue(notice),
       emit: (event) => this.emit(event),
     });
+    this.#conversations = new ConversationList(deps.sessions, (task) =>
+      this.turns.settleAfterRestart(task),
+    );
   }
 
   emit(event: AppEvent): void {
@@ -192,16 +195,14 @@ export class Workspace {
 
   async initialize(): Promise<void> {
     if (this.turns.anyRunning()) return;
-    const restored = await startup.loadStartup(
-      this.#deps,
-      {
-        tasks: this.#tasks,
-        selectedTaskId: this.#selectedTaskId,
-        historyRecovery: this.#historyRecovery,
-      },
-      (task) => this.turns.settleAfterRestart(task),
-    );
+    const restored = await startup.loadStartup(this.#deps, {
+      tasks: this.#tasks,
+      conversations: this.#listed(),
+      selectedTaskId: this.#selectedTaskId,
+      historyRecovery: this.#historyRecovery,
+    });
     this.#tasks = restored.tasks;
+    this.#conversations.replace(restored.conversations);
     this.#selectedTaskId = restored.selectedTaskId;
     this.#preferences = restored.preferences;
     this.#workspaceSelection = restored.workspace;
@@ -213,6 +214,8 @@ export class Workspace {
     this.#plugins = restored.plugins;
     this.#mcpServers = [];
     this.#usage = restored.usage;
+    if (this.#selectedTaskId && !(await this.#ensureOpen(this.#selectedTaskId)))
+      this.#selectedTaskId = null;
     const rewindIssue = await this.#rewinds.resume();
     if (rewindIssue) this.#issues = [...this.#issues, rewindIssue];
     if (restored.needsSave) await this.#persistence.save();
@@ -263,6 +266,7 @@ export class Workspace {
         : {}),
       ...(this.#issues.length ? { issues: this.#issues } : {}),
       tasks: this.#tasks,
+      conversations: this.#listed(),
       selectedTaskId: this.#selectedTaskId,
       plugins: this.#plugins,
       mcpServers: this.#mcpServers,
@@ -272,10 +276,34 @@ export class Workspace {
   }
 
   evidence = (): Promise<EvidenceState> =>
-    readEvidence(this.#deps.audit, this.#deps.rewind, this.#tasks);
+    readEvidence(this.#deps.audit, this.#deps.rewind, this.#listed());
 
   clearEvidence = (kind: "corrections" | "recovery"): Promise<EvidenceState> =>
-    clearStoredEvidence(this.#deps.audit, this.#deps.rewind, this.#tasks, kind);
+    clearStoredEvidence(
+      this.#deps.audit,
+      this.#deps.rewind,
+      this.#listed(),
+      kind,
+    );
+
+  #listed = () => this.#conversations.list(this.#tasks);
+
+  /**
+   * Reads a conversation from disk the first time it is needed, and answers
+   * whether it is open. One that cannot be read is reported and stays closed.
+   */
+  async #ensureOpen(taskId: string): Promise<boolean> {
+    if (this.#tasks.some((task) => task.id === taskId)) return true;
+    const opened = await this.#conversations.open(taskId);
+    if (opened.issue) this.#reportIssue(opened.issue);
+    if (!opened.task) return false;
+    // Another caller may have opened it while this one was reading.
+    if (!this.#tasks.some((item) => item.id === taskId))
+      this.#tasks = [...this.#tasks, opened.task];
+    if (opened.changed) await this.#persistence.save();
+    this.emit({ kind: "taskChanged", data: opened.task });
+    return true;
+  }
 
   async createTask(): Promise<string> {
     if (!this.#historyAvailable)
@@ -295,6 +323,7 @@ export class Workspace {
       phase: { kind: "draft" },
     };
     this.#tasks = [task, ...this.#tasks];
+    this.#conversations.add(task);
     this.#selectedTaskId = id;
     await this.#persistence.save();
     this.emit({ kind: "taskChanged", data: task });
@@ -303,10 +332,10 @@ export class Workspace {
   }
 
   async selectTask(taskId: string): Promise<void> {
-    const task = this.#tasks.find((item) => item.id === taskId);
-    if (!task) {
+    if (!this.#conversations.has(taskId))
       throw new Error("The selected task does not exist.");
-    }
+    if (!(await this.#ensureOpen(taskId))) return;
+    const task = requiredTask(this.#tasks, taskId);
     this.#selectedTaskId = taskId;
     const moved = await this.#openTaskWorkspace(task);
     await this.#persistence.save();
@@ -335,6 +364,8 @@ export class Workspace {
   async renameTask(taskId: string, title: string): Promise<void> {
     const value = title.trim();
     if (!value) throw new Error("Enter a conversation name.");
+    // Named from the list, so it may not have been opened yet.
+    if (!(await this.#ensureOpen(taskId))) return;
     const task = requiredTask(this.#tasks, taskId);
     await this.#replaceTask({ ...task, title: value, titleSource: "manual" });
   }
@@ -350,16 +381,16 @@ export class Workspace {
     this.#rewinds.commit(taskId, rewindId, files);
 
   async deleteTask(taskId: string): Promise<void> {
-    const index = this.#tasks.findIndex((task) => task.id === taskId);
-    if (index < 0) throw new Error("The task does not exist.");
+    if (!this.#conversations.has(taskId))
+      throw new Error("The task does not exist.");
     if (this.turns.running(taskId)) await this.turns.cancel(taskId);
     this.#browser.forget(taskId);
     await this.#deps.capabilities.forgetConversation(taskId);
     this.#tasks = this.#tasks.filter((task) => task.id !== taskId);
-    if (this.#selectedTaskId === taskId) {
+    const next = this.#conversations.remove(taskId);
+    if (this.#selectedTaskId === taskId)
       this.#selectedTaskId =
-        this.#tasks[Math.min(index, this.#tasks.length - 1)]?.id ?? null;
-    }
+        next && (await this.#ensureOpen(next)) ? next : null;
     await this.#persistence.save();
     if (this.#selectedTaskId) this.#browser.announce(this.#selectedTaskId);
     this.emit({
@@ -513,53 +544,36 @@ export class Workspace {
     this.emit({ kind: "usageChanged", data: this.#usage });
   }
 
-  /**
-   * Reading and exporting a produced file are not model actions: a person asked
-   * for them directly. The workspace finds the record and the artifacts feature
-   * does the rest; the destination chooser belongs to whoever can open a dialog.
-   */
-  async previewArtifact(
+  previewArtifact = (taskId: string, path: string): Promise<ArtifactPreview> =>
+    produced.previewArtifact(this.#deps.artifacts, this.#tasks, taskId, path);
+
+  exportArtifact = (
     taskId: string,
     path: string,
-  ): Promise<ArtifactPreview> {
-    const artifact = taskArtifact(this.#tasks, taskId, path);
-    if (!artifact)
-      return {
-        status: "missing",
-        path,
-        reason: "This task has no record of that file.",
-      };
-    return this.#deps.artifacts.preview(artifact);
-  }
+    choose: DestinationChooser,
+  ): Promise<ArtifactExport> =>
+    produced.exportArtifact(
+      this.#deps.artifacts,
+      this.#tasks,
+      taskId,
+      path,
+      choose,
+    );
 
-  async exportArtifact(
-    taskId: string,
-    path: string,
-    chooseDestination: DestinationChooser,
-  ): Promise<ArtifactExport> {
-    const artifact = taskArtifact(this.#tasks, taskId, path);
-    if (!artifact)
-      return {
-        status: "failed",
-        reason: "This task has no record of that file.",
-      };
-    return this.#deps.artifacts.exportTo(artifact, chooseDestination);
-  }
-
-  async exportView(
+  exportView = (
     taskId: string,
     viewId: string,
     svg: string,
-    chooseDestination: DestinationChooser,
-  ): Promise<ArtifactExport> {
-    const view = taskView(this.#tasks, taskId, viewId);
-    if (!view)
-      return {
-        status: "failed",
-        reason: "This task has no record of that view.",
-      };
-    return this.#deps.artifacts.exportView(view.title, svg, chooseDestination);
-  }
+    choose: DestinationChooser,
+  ): Promise<ArtifactExport> =>
+    produced.exportView(
+      this.#deps.artifacts,
+      this.#tasks,
+      taskId,
+      viewId,
+      svg,
+      choose,
+    );
 
   /**
    * The workspace's own change to a conversation, held to the same rule as a
@@ -643,6 +657,7 @@ export class Workspace {
     this.#issues = [];
     if (choice === "startFresh") {
       this.#tasks = [];
+      this.#conversations.replace([]);
       this.#selectedTaskId = null;
       await this.#persistence.save();
     }
@@ -705,27 +720,14 @@ export class Workspace {
       !this.#deps.workspace.selectWorkspace
     )
       return false;
-
-    const notice = `The folder for “${task.title}” could not be opened. Choose its new location before using files.`;
-    try {
-      await this.#deps.workspace.selectWorkspace(wanted.path);
-    } catch {
-      if (!this.#issues.includes(notice)) this.#issues.push(notice);
-      return true;
-    }
-    this.#issues = this.#issues.filter((issue) => issue !== notice);
-    const description = await this.#deps.workspace.describeWorkspace();
-    this.#workspaceSelection = {
-      path: wanted.path,
-      name: description.rootName,
-    };
-    this.#recentWorkspaces = startup.withRecentWorkspace(
-      this.#recentWorkspaces,
-      this.#workspaceSelection,
-    );
-    this.#issues = this.#issues.filter(
-      (issue) => issue !== startup.movedWorkspaceNotice,
-    );
+    const moved = await startup.enterFolder(this.#deps.workspace, task, {
+      selection: this.#workspaceSelection,
+      recents: this.#recentWorkspaces,
+      issues: this.#issues,
+    });
+    this.#workspaceSelection = moved.selection;
+    this.#recentWorkspaces = moved.recents;
+    this.#issues = moved.issues;
     return true;
   }
 

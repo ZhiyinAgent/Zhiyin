@@ -7,6 +7,7 @@
 
 import type { Capabilities } from "@zhiyin/capabilities";
 import type {
+  ConversationSummary,
   HistoryRecovery,
   McpServerState,
   PluginState,
@@ -37,6 +38,47 @@ export async function returnToWorkspace(
   }
 }
 
+type FolderState = {
+  readonly selection: WorkspaceSnapshot["workspace"];
+  readonly recents: NonNullable<WorkspaceSnapshot["recentWorkspaces"]>;
+  readonly issues: string[];
+};
+
+/**
+ * Moves the app into the folder a conversation belongs to. A folder that will
+ * not open is reported and nothing else: relabelling the current folder with
+ * the name of one that failed to open would be a lie about where the next
+ * action would run.
+ */
+export async function enterFolder(
+  workspace: WorkspaceContext,
+  task: WorkspaceTask,
+  current: FolderState,
+): Promise<FolderState> {
+  const wanted = task.workspace;
+  if (!wanted || !workspace.selectWorkspace) return current;
+  const notice = `The folder for “${task.title}” could not be opened. Choose its new location before using files.`;
+  try {
+    await workspace.selectWorkspace(wanted.path);
+  } catch {
+    return {
+      ...current,
+      issues: current.issues.includes(notice)
+        ? current.issues
+        : [...current.issues, notice],
+    };
+  }
+  const description = await workspace.describeWorkspace();
+  const selection = { path: wanted.path, name: description.rootName };
+  return {
+    selection,
+    recents: withRecentWorkspace(current.recents, selection),
+    issues: current.issues.filter(
+      (issue) => issue !== notice && issue !== movedWorkspaceNotice,
+    ),
+  };
+}
+
 export const initialUsage: UsageState = {
   status: "unavailable",
   reason: "Usage will appear after the first model request.",
@@ -63,12 +105,15 @@ type StartupDependencies = {
 
 type CurrentStartupState = {
   readonly tasks: readonly WorkspaceTask[];
+  readonly conversations: readonly ConversationSummary[];
   readonly selectedTaskId: string | null;
   readonly historyRecovery: HistoryRecovery | undefined;
 };
 
 export type StartupState = {
+  /** Only what was already open: a launch reads the list, not the conversations. */
   readonly tasks: WorkspaceTask[];
+  readonly conversations: readonly ConversationSummary[];
   readonly selectedTaskId: string | null;
   readonly preferences: WorkspaceSnapshot["preferences"];
   readonly workspace: WorkspaceSnapshot["workspace"];
@@ -99,7 +144,6 @@ async function offerHistoryRecovery(
 export async function loadStartup(
   deps: StartupDependencies,
   current: CurrentStartupState,
-  settleAfterRestart: (task: WorkspaceTask) => WorkspaceTask,
 ): Promise<StartupState> {
   const issues: string[] = [];
   let historyAvailable = true;
@@ -107,7 +151,7 @@ export async function loadStartup(
   let historyRecovery = current.historyRecovery;
   const [restored, loadedPlugins, usage] = await Promise.all([
     deps.sessions
-      .loadWorkspace()
+      .loadIndex()
       .catch(async () => {
         historyAvailable = false;
         historyRecovery ??= await offerHistoryRecovery(deps.sessions);
@@ -132,19 +176,10 @@ export async function loadStartup(
   ]);
 
   let needsSave = false;
-  const tasks = restored
-    ? restored.tasks.map((task) => {
-        const titleSource =
-          task.titleSource ??
-          (task.title === "New task" && task.messages.length === 0
-            ? "generated"
-            : "manual");
-        if (!task.titleSource) needsSave = true;
-        const settled = settleAfterRestart(task);
-        if (settled !== task) needsSave = true;
-        return { ...settled, titleSource };
-      })
-    : [...current.tasks];
+  const tasks = restored ? [] : [...current.tasks];
+  const conversations = restored
+    ? restored.conversations
+    : current.conversations;
   const selectedTaskId = restored
     ? restored.selectedTaskId
     : current.selectedTaskId;
@@ -184,6 +219,7 @@ export async function loadStartup(
 
   return {
     tasks,
+    conversations,
     selectedTaskId,
     preferences,
     workspace,

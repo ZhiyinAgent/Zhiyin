@@ -114,6 +114,7 @@ describe("the core and a turn together", () => {
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       sessions: {
+        ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
         saveWorkspace: async (snapshot) => saved.push(snapshot),
         list: async () => [],
@@ -163,6 +164,7 @@ describe("the core and a turn together", () => {
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       sessions: {
+        ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
         saveWorkspace: async (snapshot) => saved.push(snapshot),
         list: async () => [],

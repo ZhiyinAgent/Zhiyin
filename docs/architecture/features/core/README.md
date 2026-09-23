@@ -172,6 +172,19 @@ directly.
   conversations without waiting for the model catalogue`, `brings the provider
   settings in when the catalogue answers`, and `keeps settings read after a
   change rather than a slower read begun at startup` guard that.
+- **A launch reads the list of conversations, not the conversations.** A
+  conversation is read from disk when something first needs it — the person
+  selects it, or a rewind left unfinished by a crash names it — and is settled
+  then, as it would have been at launch. One that is damaged is reported, kept
+  aside, and stays closed while every other opens; one whose last save was cut
+  off by a crash opens without it, and the person is told. The window is sent
+  the whole list and the opened conversations. Named tests: `reads only the
+  selected conversation at launch, and another when it is selected`, `renames
+  and deletes conversations from the list without their being opened first`,
+  `leaves a
+  conversation nobody opened exactly as it was saved`, `reports a damaged
+  conversation, keeps a copy, and opens every other`, and `says when the last
+  moment before the app closed was not saved`.
 - Saved history that will not open is kept before anything else happens, and
   nothing is written over it until the person chooses. What can still be read
   is counted and offered; recovering keeps those conversations and their

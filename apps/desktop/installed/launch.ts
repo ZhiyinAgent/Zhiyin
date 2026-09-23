@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron } from "playwright-core";
 import type { ElectronApplication, Locator, Page } from "playwright-core";
+import { FileSessions, type SavedWorkspace } from "@zhiyin/session";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, "../../..");
@@ -37,13 +38,35 @@ export async function temporaryDataDirectory(): Promise<string> {
   return directory;
 }
 
-/** Writes a workspace file into a data folder, damaged or otherwise. */
+/**
+ * Puts a saved history into a data folder, damaged or otherwise. A workspace
+ * given as JSON is stored the way the app stores one, whatever it holds — a
+ * conversation the reader will refuse included. Anything else becomes the
+ * list of conversations, unreadable.
+ */
 export async function plantHistory(
   dataDirectory: string,
   contents: string,
 ): Promise<void> {
   await mkdir(dataDirectory, { recursive: true });
-  await writeFile(join(dataDirectory, "workspace.json"), contents, "utf8");
+  let workspace: unknown;
+  try {
+    workspace = JSON.parse(contents);
+  } catch {
+    const index = historyIndexFolder(dataDirectory);
+    await mkdir(index, { recursive: true });
+    await writeFile(join(index, "log-000001.jsonl"), contents, "utf8");
+    return;
+  }
+  // Saving claims the folder; it is let go so the app can own it.
+  const sessions = new FileSessions(dataDirectory);
+  await sessions.saveWorkspace(workspace as SavedWorkspace);
+  await sessions.release();
+}
+
+/** Where the list of conversations is kept in a data folder. */
+export function historyIndexFolder(dataDirectory: string): string {
+  return join(dataDirectory, "history", "index");
 }
 
 export async function launch(

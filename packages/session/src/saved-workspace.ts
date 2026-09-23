@@ -5,7 +5,6 @@
  */
 
 import { REASONING_EFFORTS } from "@zhiyin/contract";
-import type { SavedWorkspace } from "./index.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -122,41 +121,10 @@ function validSpecialistRun(value: unknown): boolean {
     : value.handoff === undefined && typeof value.reason === "string";
 }
 
-export function isSavedWorkspace(value: unknown): value is SavedWorkspace {
-  if (!isRecord(value)) return false;
-  if (value.version !== undefined && value.version !== 1) return false;
-  if (
-    value.preferences !== undefined &&
-    (!isRecord(value.preferences) ||
-      typeof value.preferences.onboarded !== "boolean" ||
-      !Array.isArray(value.preferences.interests) ||
-      !value.preferences.interests.every((item) => typeof item === "string") ||
-      (value.preferences.capabilitiesApplied !== undefined &&
-        typeof value.preferences.capabilitiesApplied !== "boolean"))
-  )
-    return false;
-  if (value.workspace !== undefined && !isFolder(value.workspace)) return false;
-  if (
-    value.recentWorkspaces !== undefined &&
-    (!Array.isArray(value.recentWorkspaces) ||
-      !value.recentWorkspaces.every(isFolder))
-  )
-    return false;
-  if (!Array.isArray(value.tasks)) return false;
-  if (value.selectedTaskId !== null && typeof value.selectedTaskId !== "string")
-    return false;
-  if (
-    new Set(value.tasks.map((task) => (isRecord(task) ? task.id : undefined)))
-      .size !== value.tasks.length
-  )
-    return false;
-  return value.tasks.every(isWorkspaceTask);
-}
-
 /**
- * One conversation, checked on its own. Separate from the whole-file check so a
- * single damaged conversation can be identified and left behind instead of
- * taking every other conversation in the file with it.
+ * One conversation, checked on its own when it is opened. Each conversation
+ * is its own file, so one that fails this is left behind without taking any
+ * other conversation with it.
  */
 export function isWorkspaceTask(task: unknown): boolean {
   return Boolean(
@@ -317,7 +285,7 @@ function validCompaction(
   return value.retainedActionIds.every((id) => actionIds.has(id));
 }
 
-function optionalText(value: unknown): boolean {
+export function optionalText(value: unknown): boolean {
   return value === undefined || typeof value === "string";
 }
 

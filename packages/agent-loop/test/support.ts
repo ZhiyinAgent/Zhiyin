@@ -411,6 +411,33 @@ export function stubDependencies(
     connectionToolchains: {},
     sessions: {
       loadWorkspace: async () => undefined,
+      // Answered from whatever `loadWorkspace` a test gives, so a test states
+      // the saved history once, whole, and the core reads it lazily as it
+      // would from disk.
+      async loadIndex() {
+        const saved = await this.loadWorkspace();
+        return (
+          saved && {
+            ...saved,
+            conversations:
+              saved.conversations ??
+              saved.tasks.map((task) => ({
+                id: task.id,
+                title: task.title,
+                ...(task.titleSource ? { titleSource: task.titleSource } : {}),
+                ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
+                updatedLabel: task.updatedLabel,
+              })),
+          }
+        );
+      },
+      async openConversation(id: string) {
+        const task = (await this.loadWorkspace())?.tasks.find(
+          (item) => item.id === id,
+        );
+        if (!task) throw new Error("No such conversation is saved.");
+        return { task, lost: false };
+      },
       saveWorkspace: async () => {},
       list: async () => [],
       undo: async () => {},

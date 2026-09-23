@@ -1,11 +1,11 @@
 import type { AuditLog } from "@zhiyin/audit";
-import type { EvidenceState, WorkspaceTask } from "@zhiyin/contract";
+import type { ConversationSummary, EvidenceState } from "@zhiyin/contract";
 import type { Rewind } from "@zhiyin/rewind";
 
 export async function readEvidence(
   audit: AuditLog,
   rewind: Rewind,
-  tasks: readonly WorkspaceTask[],
+  tasks: readonly Pick<ConversationSummary, "id" | "title">[],
 ): Promise<EvidenceState> {
   const [allCorrections, recovery] = await Promise.all([
     audit.read(),
@@ -37,7 +37,7 @@ export async function readEvidence(
 export async function clearEvidence(
   audit: AuditLog,
   rewind: Rewind,
-  tasks: readonly WorkspaceTask[],
+  tasks: readonly Pick<ConversationSummary, "id" | "title">[],
   kind: "corrections" | "recovery",
 ): Promise<EvidenceState> {
   if (kind === "corrections") await audit.clear();

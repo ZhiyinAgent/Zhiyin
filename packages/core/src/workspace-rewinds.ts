@@ -17,13 +17,18 @@ export class WorkspaceRewinds {
 
   constructor(options: {
     readonly rewind: Rewind;
+    readonly open: (taskId: string) => Promise<void>;
     readonly task: (taskId: string) => WorkspaceTask;
     readonly save: (task: WorkspaceTask) => Promise<void>;
     readonly historyAvailable: () => boolean;
     readonly running: (taskId: string) => boolean;
   }) {
     this.#rewind = options.rewind;
-    this.#host = { task: options.task, save: options.save };
+    this.#host = {
+      open: options.open,
+      task: options.task,
+      save: options.save,
+    };
     this.#historyAvailable = options.historyAvailable;
     this.#running = options.running;
   }

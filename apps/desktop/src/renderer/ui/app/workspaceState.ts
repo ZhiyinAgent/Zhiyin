@@ -1,6 +1,7 @@
 import type { SessionContext, WorkStep } from "../conversation/index.js";
 import type {
   BrowserPanelState,
+  ConversationSummary,
   ProviderSettings as CoreProviderSettings,
   McpServerState as CoreMcpServerState,
   PluginState as CorePluginState,
@@ -126,7 +127,13 @@ export type WorkspaceState = {
   surface: WorkspaceSurface;
   browser: BrowserPanelState;
   browsers: Record<string, BrowserPanelState>;
+  /** The conversations opened so far. */
   tasks: WorkspaceTask[];
+  /**
+   * Every conversation as the core last listed it. Read through
+   * `listedConversations`, which shows opened ones as they are now.
+   */
+  conversations: readonly ConversationSummary[];
   selectedTaskId: string | null;
   mcpServers: CoreMcpServerState[];
   plugins: CorePluginState[];
@@ -161,6 +168,32 @@ export type WorkspaceAction =
       selectedTaskId: string | null;
     };
 
+/**
+ * The list the sidebar shows: every conversation the core listed, an opened
+ * one as it is now, and one opened since the last list — a new conversation —
+ * first.
+ */
+export function listedConversations(
+  state: Pick<WorkspaceState, "tasks" | "conversations">,
+): {
+  readonly id: string;
+  readonly title: string;
+  readonly updatedAt?: string;
+  readonly updatedLabel: string;
+}[] {
+  const listed = new Set(state.conversations.map((item) => item.id));
+  const opened = new Map(state.tasks.map((task) => [task.id, task]));
+  return [
+    ...state.tasks.filter((task) => !listed.has(task.id)),
+    ...state.conversations.map((item) => opened.get(item.id) ?? item),
+  ].map((item) => ({
+    id: item.id,
+    title: item.title,
+    ...(item.updatedAt ? { updatedAt: item.updatedAt } : {}),
+    updatedLabel: item.updatedLabel,
+  }));
+}
+
 export function createWorkspaceState(
   input: WorkspaceStateInput = {},
 ): WorkspaceState {
@@ -178,6 +211,7 @@ export function createWorkspaceState(
     browser: input.browser ?? closedBrowser,
     browsers: input.browsers ?? {},
     tasks: input.tasks ?? [],
+    conversations: input.conversations ?? [],
     selectedTaskId: input.selectedTaskId ?? null,
     mcpServers: input.mcpServers ?? [],
     plugins: input.plugins ?? [],
@@ -289,6 +323,7 @@ export function workspaceReducer(
             }
           : state.browsers,
         tasks: action.snapshot.tasks.map(taskFromCore),
+        conversations: action.snapshot.conversations ?? action.snapshot.tasks,
         selectedTaskId: action.snapshot.selectedTaskId,
         mcpServers: action.snapshot.mcpServers.map((item) => ({ ...item })),
         plugins: action.snapshot.plugins.map((item) => ({
@@ -364,6 +399,9 @@ export function workspaceReducer(
       return {
         ...state,
         tasks: state.tasks.filter((task) => task.id !== action.taskId),
+        conversations: state.conversations.filter(
+          (item) => item.id !== action.taskId,
+        ),
         selectedTaskId: action.selectedTaskId,
         surface: "thread",
         browser: action.selectedTaskId

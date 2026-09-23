@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
-import { createWorkspaceState, workspaceReducer } from "./workspaceState.js";
+import {
+  createWorkspaceState,
+  listedConversations,
+  workspaceReducer,
+} from "./workspaceState.js";
 
 describe("workspaceReducer", () => {
   it("reconstructs the visible task from a core snapshot and later events", () => {
@@ -66,5 +70,67 @@ describe("workspaceReducer", () => {
       ],
       phase: { kind: "completed" },
     });
+  });
+});
+
+describe("the conversation list", () => {
+  const opened = {
+    id: "open",
+    title: "Opened",
+    updatedLabel: "Now",
+    messages: [],
+    actions: [],
+    phase: { kind: "draft" as const },
+  };
+  const snapshot: WorkspaceSnapshot = {
+    runtime: { tasks: "available", capabilities: "available" },
+    selectedTaskId: "open",
+    tasks: [opened],
+    conversations: [
+      { id: "open", title: "Opened", updatedLabel: "Now" },
+      { id: "closed", title: "Never opened", updatedLabel: "Last week" },
+    ],
+    plugins: [],
+    mcpServers: [],
+    usage: { status: "unavailable", reason: "No usage yet." },
+  };
+  const hydrated = () =>
+    workspaceReducer(createWorkspaceState(), {
+      type: "workspaceHydrated",
+      snapshot,
+    });
+
+  it("shows every conversation, including ones not opened yet", () => {
+    expect(listedConversations(hydrated()).map((item) => item.id)).toEqual([
+      "open",
+      "closed",
+    ]);
+  });
+
+  it("shows an opened conversation as it is now, and a new one first", () => {
+    let state = workspaceReducer(hydrated(), {
+      type: "taskReplaced",
+      task: { ...opened, title: "Renamed" },
+    });
+    state = workspaceReducer(state, {
+      type: "taskReplaced",
+      task: { ...opened, id: "new", title: "New task" },
+    });
+
+    expect(listedConversations(state).map((item) => item.title)).toEqual([
+      "New task",
+      "Renamed",
+      "Never opened",
+    ]);
+  });
+
+  it("drops a deleted conversation, opened or not", () => {
+    const state = workspaceReducer(hydrated(), {
+      type: "taskRemoved",
+      taskId: "closed",
+      selectedTaskId: "open",
+    });
+
+    expect(listedConversations(state).map((item) => item.id)).toEqual(["open"]);
   });
 });
