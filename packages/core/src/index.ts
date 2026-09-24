@@ -45,6 +45,7 @@ export type CoreWorkspace = Pick<
   | "selectTask"
   | "renameTask"
   | "deleteTask"
+  | "kept"
   | "previewRewind"
   | "commitRewind"
   | "setPluginEnabled"
@@ -68,7 +69,6 @@ export type CoreWorkspace = Pick<
   | "shellAvailability"
   | "recheckShell"
   | "driveBrowser"
-  | "readPicture"
   | "previewArtifact"
   | "exportArtifact"
   | "exportView"
@@ -108,6 +108,8 @@ export type CoreDependencies = {
   ) => Promise<string | undefined>;
   /** Opens a URL in the person's own browser, never this app's window. */
   readonly openExternal: (url: string) => Promise<void>;
+  /** Opens a file the app kept in the program the person uses for it. */
+  readonly openPath: (path: string) => Promise<void>;
   readonly version: string;
 };
 
@@ -131,6 +133,7 @@ export class Core {
       chooseFolder,
       chooseSaveLocation,
       openExternal,
+      openPath,
     } = deps;
     const { turns, settings } = workspace;
     this.#commands = {
@@ -146,8 +149,11 @@ export class Core {
       selectNothing: () => workspace.selectNothing(),
       renameTask: (taskId, title) => workspace.renameTask(taskId, title),
       deleteTask: (taskId) => workspace.deleteTask(taskId),
-      sendMessage: (taskId, message, reasoning) =>
-        turns.start(taskId, message, reasoning),
+      sendMessage: (taskId, message, reasoning, attachments) =>
+        turns.start(taskId, message, reasoning, attachments),
+      keepPaste: (text) => workspace.kept.keepPaste(text),
+      openAttachment: async (taskId, id) =>
+        openPath(await workspace.kept.attachmentPath(taskId, id)),
       previewRewind: (taskId, messageId) =>
         workspace.previewRewind(taskId, messageId),
       commitRewind: (taskId, rewindId, files) =>
@@ -192,7 +198,7 @@ export class Core {
       listModels: () => settings.models(),
       listModelProviders: (model) => settings.modelProviders(model),
       selectModel: (model, providers) => settings.selectModel(model, providers),
-      readPicture: (source) => workspace.readPicture(source),
+      readPicture: (source) => workspace.kept.readPicture(source),
       previewArtifact: (taskId, path) =>
         workspace.previewArtifact(taskId, path),
       exportArtifact: (taskId, path) =>

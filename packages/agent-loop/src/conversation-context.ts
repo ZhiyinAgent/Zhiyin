@@ -6,6 +6,7 @@ import type {
 } from "@zhiyin/contract";
 import type { ConversationTools } from "@zhiyin/capabilities";
 import type { ModelMessage, ModelTool } from "@zhiyin/model-client";
+import { modelText } from "./attachments.js";
 import { agentSystemMessage } from "./system-message.js";
 import { harnessNotice } from "./notices.js";
 
@@ -231,7 +232,7 @@ export function compactionPrefix(
   while (keepFrom > 0) {
     const candidate = current.slice(keepFrom - 1).map((message) => ({
       role: message.role,
-      content: message.text,
+      content: modelText(message),
     }));
     if (
       estimatedRequestTokens(candidate, []) > budget.retainRecentEstimatedTokens

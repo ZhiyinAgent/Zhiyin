@@ -32,6 +32,17 @@ export function demoCommands(
     deleteTask: async (taskId) => dispatch({ type: "taskDeleted", taskId }),
     sendMessage: async (taskId, message) =>
       dispatch({ type: "messageSubmitted", taskId, message }),
+    // The demo keeps nothing; a paste is shown as though it were kept.
+    keepPaste: async (text) => ({
+      status: "kept",
+      attachment: {
+        kind: "pastedText",
+        id: "pasted-demo.txt",
+        bytes: new TextEncoder().encode(text).length,
+        lines: text.split("\n").length,
+      },
+    }),
+    openAttachment: async () => {},
     interruptTask: async (taskId) =>
       dispatch({ type: "taskInterrupted", taskId }),
     resolveApproval: async (taskId, _requestId, decision) =>

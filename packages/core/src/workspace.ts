@@ -28,7 +28,6 @@ import type {
   RewindCommitResult,
   RewindPreview,
   ShellAvailability,
-  StoredPicture,
   UsageState,
   WorkspaceContext,
   WorkspaceSnapshot,
@@ -62,6 +61,7 @@ import { WorkspaceShell } from "./workspace-shell.js";
 import { closeInTurn } from "./closing.js";
 import * as produced from "./produced-files.js";
 import { ConversationList } from "./conversation-list.js";
+import { KeptItems } from "./kept-items.js";
 
 /** What the workspace asks of whoever runs turns. */
 export type WorkspaceTurns = Pick<
@@ -130,6 +130,8 @@ export class Workspace {
   readonly #pluginLifecycle: WorkspacePlugins;
   readonly #connections: WorkspaceConnections;
   readonly #shell: WorkspaceShell;
+  /** Pastes and pictures kept beside the conversations. */
+  readonly kept: KeptItems;
 
   constructor(
     deps: WorkspaceDependencies,
@@ -172,6 +174,7 @@ export class Workspace {
       refresh: () => this.#refreshMcpServers(),
     });
     this.#shell = new WorkspaceShell(deps.capabilities);
+    this.kept = new KeptItems(deps.sessions);
     this.turns = runTurns({
       find: (taskId) => this.#tasks.find((task) => task.id === taskId),
       store: (task, options) => this.#store(task, options),
@@ -393,6 +396,9 @@ export class Workspace {
       this.#selectedTaskId =
         next && (await this.#ensureOpen(next)) ? next : null;
     await this.#persistence.save();
+    // What it kept beside itself goes with it: its pictures, pastes and saved
+    // outputs. A file that will not go yet does not keep the conversation.
+    await this.#deps.sessions.forgetConversation(taskId).catch(() => {});
     if (this.#selectedTaskId) this.#browser.announce(this.#selectedTaskId);
     this.emit({
       kind: "taskRemoved",
@@ -519,18 +525,6 @@ export class Workspace {
 
   recheckShell(): Promise<ShellAvailability> {
     return this.#shell.recheck();
-  }
-
-  /**
-   * The bytes behind an `image` detail, for whoever is drawing it. The store
-   * answers why a picture is gone — deleted to stay inside its limits, or
-   * never there — and that answer is passed on rather than replaced.
-   */
-  async readPicture(source: string): Promise<StoredPicture> {
-    return this.#deps.sessions.readPicture(source).catch(() => ({
-      status: "missing" as const,
-      reason: "This picture could not be read.",
-    }));
   }
 
   async #recordUsage(

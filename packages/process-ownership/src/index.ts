@@ -6,9 +6,11 @@
  */
 
 import { spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Writable } from "node:stream";
 import {
   defaultOutputBytes,
   defaultOutputCharacters,
@@ -58,6 +60,15 @@ export type RunProcess = (options: {
   readonly maximumOutputCharacters?: number;
   /** Bytes printed across both streams before the run is stopped. */
   readonly maximumOutputBytes?: number;
+  /**
+   * Handed the whole of each stream as a file once the run has ended, up to
+   * the output limit, so a caller can keep what was left out of the middle.
+   * The files are removed once this returns.
+   */
+  readonly keep?: (files: {
+    readonly stdout: string;
+    readonly stderr: string;
+  }) => Promise<void>;
 }) => Promise<ProcessRun>;
 
 type RunOptions = Parameters<RunProcess>[0];
@@ -186,6 +197,7 @@ async function runContained(
       fileEnds(stdoutFile, edgeOf(options)),
       fileEnds(stderrFile, edgeOf(options)),
     ]);
+    await keptWhole(options, stdoutFile, stderrFile);
     const ending = run.ended();
     return {
       exitCode,
@@ -200,7 +212,48 @@ async function runContained(
   }
 }
 
-function runUncontained(options: RunOptions): Promise<ProcessRun> {
+/** The caller's copy of the whole output; a failure to keep it is not the run's. */
+async function keptWhole(
+  options: RunOptions,
+  stdout: string,
+  stderr: string,
+): Promise<void> {
+  await options.keep?.({ stdout, stderr }).catch(() => undefined);
+}
+
+/**
+ * Without containment the streams arrive in pieces rather than as files, so
+ * they are written to files as they arrive when the caller wants them whole.
+ */
+async function runUncontained(options: RunOptions): Promise<ProcessRun> {
+  if (!options.keep) return runStreams(options);
+  const directory = await mkdtemp(join(tmpdir(), "zhiyin-process-"));
+  const files = {
+    stdout: join(directory, "stdout.txt"),
+    stderr: join(directory, "stderr.txt"),
+  };
+  const out = createWriteStream(files.stdout);
+  const err = createWriteStream(files.stderr);
+  try {
+    const run = await runStreams(options, { stdout: out, stderr: err });
+    await Promise.all(
+      [out, err].map(
+        (stream) => new Promise<void>((resolve) => stream.end(() => resolve())),
+      ),
+    );
+    await keptWhole(options, files.stdout, files.stderr);
+    return run;
+  } finally {
+    out.destroy();
+    err.destroy();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+function runStreams(
+  options: RunOptions,
+  copies?: { readonly stdout: Writable; readonly stderr: Writable },
+): Promise<ProcessRun> {
   const limit = options.maximumOutputBytes ?? defaultOutputBytes;
   return new Promise<ProcessRun>((resolve) => {
     const child = spawn(options.executable, [...options.arguments], {
@@ -214,12 +267,13 @@ function runUncontained(options: RunOptions): Promise<ProcessRun> {
     const run = endings(options, () => {
       if (child.pid !== undefined) void killTree(child.pid);
     });
-    const receive = (ends: OutputEnds) => (chunk: Buffer) => {
+    const receive = (ends: OutputEnds, copy?: Writable) => (chunk: Buffer) => {
       ends.add(chunk);
+      if (stdout.total + stderr.total <= limit) copy?.write(chunk);
       if (stdout.total + stderr.total > limit) run.end("outputLimit");
     };
-    child.stdout?.on("data", receive(stdout));
-    child.stderr?.on("data", receive(stderr));
+    child.stdout?.on("data", receive(stdout, copies?.stdout));
+    child.stderr?.on("data", receive(stderr, copies?.stderr));
     child.on("error", () => {
       run.release();
       resolve({ exitCode: null, stdout: "", stderr: "", failure: "start" });

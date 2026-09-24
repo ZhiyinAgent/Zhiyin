@@ -5,17 +5,10 @@
  * Boundaries and invariants: docs/architecture/features/session/README.md
  */
 
-import {
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type MessageAttachment,
   type ProducedImage,
   type StoredPicture,
   type WorkspaceSnapshot,
@@ -29,47 +22,29 @@ import {
 import { historyFiles, type HistoryFiles } from "./history-log.js";
 import { SessionStoreError } from "./errors.js";
 import { FolderOwnership, type OwnershipOptions } from "./owner-lock.js";
+import {
+  KeptItems,
+  type FileRead,
+  type KeptItem,
+  type KeptKind,
+  type KeptLimits,
+  type KeptSource,
+  type LocatedItem,
+} from "./kept-items.js";
+
+export {
+  defaultKeptLimits,
+  type FileRead,
+  type KeptItem,
+  type KeptKind,
+  type KeptLimits,
+  type KeptSource,
+  type LocatedItem,
+} from "./kept-items.js";
 
 export { SessionStoreError } from "./errors.js";
 export type { OpenedConversation, SavedIndex } from "./history-store.js";
 export { historyFiles, type HistoryFiles } from "./history-log.js";
-
-const mib = 1024 * 1024;
-
-/**
- * How much disk the pictures a conversation refers to may occupy.
- *
- * Screenshots arrive faster than anything else the app keeps — a browser task
- * takes a dozen without being asked — and unlike a recovery copy nobody ever
- * deletes one deliberately. Bounded the same way recovery is (ADR 0019): a
- * ceiling for one picture, a ceiling for all of them, and an age past which a
- * picture is not worth its bytes.
- */
-export type PictureLimits = {
-  /** The whole store. Oldest pictures go first when this is exceeded. */
-  readonly totalBytes: number;
-  /** The largest one picture may be. A larger one is not stored at all. */
-  readonly pictureBytes: number;
-  /** How long a picture is kept, however much room there is. */
-  readonly maximumAgeMs: number;
-};
-
-export const defaultPictureLimits: PictureLimits = {
-  totalBytes: 128 * mib,
-  pictureBytes: 12 * mib,
-  maximumAgeMs: 30 * 24 * 60 * 60 * 1000,
-};
-
-/**
- * What is left where a picture was, so a conversation can say what happened
- * instead of showing a gap. A few dozen bytes: the record of an eviction must
- * not itself be what fills the disk.
- */
-type PictureRemoval = { readonly reason: string; readonly at: string };
-
-const evictedReason = "This screenshot was deleted to save disk space.";
-const oversizeReason = "This screenshot was too large to keep.";
-const unknownReason = "This picture is no longer stored with the conversation.";
 
 export interface SessionSummary {
   readonly id: string;
@@ -117,17 +92,49 @@ export interface Sessions {
    * Keeps a picture a conversation refers to, and answers with the name it is
    * referred to by. Stored beside the conversation rather than inside it: an
    * encoded image is large, and a conversation's file is read whole whenever
-   * the conversation is opened.
+   * the conversation is opened. A connector's pictures are kept apart from the
+   * tools', so one filling up never removes the other's.
    */
-  savePicture(image: ProducedImage): Promise<string>;
+  savePicture(
+    conversationId: string,
+    image: ProducedImage,
+    from?: "tool" | "connector",
+  ): Promise<string>;
   /**
    * The picture, or why it is not there — never a guess at what it was. A
    * picture the store deleted to stay inside its limits says so, because
    * "missing" and "removed on purpose" are different things to be told.
    */
   readPicture(source: string): Promise<StoredPicture>;
-  /** Drops pictures nothing refers to any more. */
-  forgetPictures(sources: readonly string[]): Promise<void>;
+  /**
+   * Keeps a tool's full output, or a long text a person pasted, for a
+   * conversation. A paste made before its conversation exists is kept as a
+   * draft, and is moved into the conversation when its message is sent.
+   */
+  keep(
+    kind: "output" | "pastedText",
+    conversationId: string | undefined,
+    source: KeptSource,
+  ): Promise<KeptItem>;
+  /**
+   * Where a kept output or paste is, or why it is not there. With no
+   * conversation, a draft paste not yet sent.
+   */
+  locate(
+    kind: "output" | "pastedText",
+    conversationId: string | undefined,
+    id: string,
+  ): Promise<LocatedItem>;
+  /** Moves draft pastes into the conversation their message was sent in. */
+  claimDrafts(
+    conversationId: string,
+    ids: readonly string[],
+  ): Promise<readonly MessageAttachment[]>;
+  /** Everything a deleted conversation kept beside itself goes with it. */
+  forgetConversation(conversationId: string): Promise<void>;
+  /** When a file was last read in a conversation, as it was then. */
+  lastRead(conversationId: string, path: string): Promise<FileRead | undefined>;
+  noteRead(conversationId: string, path: string, read: FileRead): Promise<void>;
   list(): Promise<readonly SessionSummary[]>;
   /** Idempotent: undoing twice does nothing the second time. */
   undo(turnId: string): Promise<void>;
@@ -155,7 +162,7 @@ export type DamageReport =
 export class FileSessions implements Sessions {
   readonly #directory: string;
   readonly #ownership: FolderOwnership;
-  readonly #pictureLimits: PictureLimits;
+  readonly #kept: KeptItems;
   readonly #now: () => Date;
   readonly #history: HistoryStore;
   /** Every read and write of the history, in the order they were asked for. */
@@ -164,7 +171,7 @@ export class FileSessions implements Sessions {
   constructor(
     directory: string,
     options: {
-      readonly pictures?: Partial<PictureLimits>;
+      readonly kept?: Partial<Record<KeptKind, Partial<KeptLimits>>>;
       readonly now?: () => Date;
       /** Replaced by boundary tests that make a history write fail or count it. */
       readonly historyFiles?: HistoryFiles;
@@ -175,8 +182,12 @@ export class FileSessions implements Sessions {
       join(directory, "owner.lock"),
       options,
     );
-    this.#pictureLimits = { ...defaultPictureLimits, ...options.pictures };
     this.#now = options.now ?? (() => new Date());
+    this.#kept = new KeptItems(
+      join(directory, "kept"),
+      options.kept ?? {},
+      this.#now,
+    );
     this.#history = new HistoryStore(
       directory,
       options.historyFiles ?? historyFiles,
@@ -201,6 +212,7 @@ export class FileSessions implements Sessions {
   async claim(): Promise<void> {
     await mkdir(this.#directory, { recursive: true });
     await this.#ownership.claim();
+    await this.#kept.clearDrafts();
   }
 
   /** Gives the folder up so the next launch does not have to wait out a lock. */
@@ -208,37 +220,17 @@ export class FileSessions implements Sessions {
     return this.#ownership.release();
   }
 
-  /**
-   * One file per picture, named by the id the conversation refers to it by.
-   * The id is generated here and never taken from anywhere else, so nothing a
-   * model or a server chose can name a path.
-   */
-  #pictureFile(source: string): string | undefined {
-    return /^[0-9a-f-]{36}$/.test(source)
-      ? join(this.#directory, "pictures", source)
-      : undefined;
-  }
-
-  /** Where the note left in a removed picture's place lives. */
-  #removalFile(source: string): string | undefined {
-    const file = this.#pictureFile(source);
-    return file ? `${file}.removed` : undefined;
-  }
-
-  async savePicture(image: ProducedImage): Promise<string> {
-    const id = randomUUID();
-    const file = this.#pictureFile(id);
-    if (!file)
-      throw new SessionStoreError("unavailable", "Invalid picture id.");
-    const encoded = JSON.stringify(image);
+  async savePicture(
+    conversationId: string,
+    image: ProducedImage,
+    from: "tool" | "connector" = "tool",
+  ): Promise<string> {
+    const kind = from === "tool" ? "toolPictures" : "connectorPictures";
     try {
-      await mkdir(join(this.#directory, "pictures"), { recursive: true });
-      // A picture past the per-picture ceiling is refused whole rather than
-      // stored and immediately evicted: one oversized screenshot must not be
-      // able to push out every picture that came before it.
-      if (Buffer.byteLength(encoded, "utf8") > this.#pictureLimits.pictureBytes)
-        await this.#recordRemoval(id, oversizeReason);
-      else await writeFile(file, encoded, "utf8");
+      const kept = await this.#kept.keep(kind, conversationId, {
+        text: JSON.stringify(image),
+      });
+      return this.#kept.source(kind, conversationId, kept.id);
     } catch (error) {
       throw new SessionStoreError(
         "unavailable",
@@ -246,107 +238,77 @@ export class FileSessions implements Sessions {
         { cause: error },
       );
     }
-    // After the write, so the picture just saved is the one kept when the
-    // store is already at its limit.
-    await this.#cleanupPictures(id);
-    return id;
   }
 
   async readPicture(source: string): Promise<StoredPicture> {
-    const file = this.#pictureFile(source);
-    if (!file) return { status: "missing", reason: unknownReason };
-    try {
-      const stored: unknown = JSON.parse(await readFile(file, "utf8"));
-      if (
-        isRecord(stored) &&
-        typeof stored.mediaType === "string" &&
-        typeof stored.data === "string"
-      )
-        return {
-          status: "ready",
-          mediaType: stored.mediaType,
-          data: stored.data,
-        };
-    } catch {
-      // Falls through to whatever was left in its place.
-    }
-    return { status: "missing", reason: await this.#removalReason(source) };
-  }
-
-  async #removalReason(source: string): Promise<string> {
-    const note = this.#removalFile(source);
-    if (!note) return unknownReason;
-    try {
-      const stored: unknown = JSON.parse(await readFile(note, "utf8"));
-      if (isRecord(stored) && typeof stored.reason === "string")
-        return stored.reason;
-    } catch {
-      // No note: the picture was never here, or predates this record.
-    }
-    return unknownReason;
-  }
-
-  async #recordRemoval(source: string, reason: string): Promise<void> {
-    const note = this.#removalFile(source);
-    if (!note) return;
-    const removal: PictureRemoval = {
-      reason,
-      at: this.#now().toISOString(),
+    const located = await this.#kept.locateSource(source, "toolPictures");
+    if (located.status === "ready")
+      try {
+        const stored: unknown = JSON.parse(
+          await readFile(located.path, "utf8"),
+        );
+        if (
+          isRecord(stored) &&
+          typeof stored.mediaType === "string" &&
+          typeof stored.data === "string"
+        )
+          return {
+            status: "ready",
+            mediaType: stored.mediaType,
+            data: stored.data,
+          };
+      } catch {
+        // Unreadable is gone, as far as a conversation can tell.
+      }
+    return {
+      status: "missing",
+      reason:
+        located.status === "missing"
+          ? located.reason
+          : "This picture is no longer stored with the conversation.",
     };
-    await writeFile(note, JSON.stringify(removal), "utf8").catch(() => {
-      // A conversation that cannot say why a picture is gone still says it is.
-    });
   }
 
-  /**
-   * Age first, then size, oldest going first — the same order recovery uses.
-   * `keep` is the picture this cleanup was triggered by: it is never the one
-   * evicted to make room for itself.
-   */
-  async #cleanupPictures(keep?: string): Promise<void> {
-    const folder = join(this.#directory, "pictures");
-    let names: string[];
-    try {
-      names = await readdir(folder);
-    } catch {
-      return;
-    }
-    const cutoff = this.#now().getTime() - this.#pictureLimits.maximumAgeMs;
-    const kept: { id: string; bytes: number; at: number }[] = [];
-    for (const name of names) {
-      if (name.endsWith(".removed")) {
-        // The note outlives the picture, but not for ever.
-        const info = await stat(join(folder, name)).catch(() => undefined);
-        if (info && info.mtimeMs < cutoff)
-          await rm(join(folder, name), { force: true });
-        continue;
-      }
-      const info = await stat(join(folder, name)).catch(() => undefined);
-      if (!info) continue;
-      if (name !== keep && info.mtimeMs < cutoff) {
-        await rm(join(folder, name), { force: true });
-        await this.#recordRemoval(name, evictedReason);
-        continue;
-      }
-      kept.push({ id: name, bytes: info.size, at: info.mtimeMs });
-    }
-    let total = kept.reduce((sum, entry) => sum + entry.bytes, 0);
-    for (const entry of kept.sort((a, b) => a.at - b.at)) {
-      if (total <= this.#pictureLimits.totalBytes) break;
-      if (entry.id === keep) continue;
-      await rm(join(folder, entry.id), { force: true });
-      await this.#recordRemoval(entry.id, evictedReason);
-      total -= entry.bytes;
-    }
+  keep(
+    kind: "output" | "pastedText",
+    conversationId: string | undefined,
+    source: KeptSource,
+  ): Promise<KeptItem> {
+    return this.#kept.keep(kind, conversationId, source);
   }
 
-  async forgetPictures(sources: readonly string[]): Promise<void> {
-    await Promise.all(
-      sources.map(async (source) => {
-        const file = this.#pictureFile(source);
-        if (file) await rm(file, { force: true });
-      }),
-    );
+  locate(
+    kind: "output" | "pastedText",
+    conversationId: string | undefined,
+    id: string,
+  ): Promise<LocatedItem> {
+    return this.#kept.locate(kind, conversationId, id);
+  }
+
+  claimDrafts(
+    conversationId: string,
+    ids: readonly string[],
+  ): Promise<readonly MessageAttachment[]> {
+    return this.#kept.claimDrafts(conversationId, ids);
+  }
+
+  forgetConversation(conversationId: string): Promise<void> {
+    return this.#kept.forget(conversationId);
+  }
+
+  lastRead(
+    conversationId: string,
+    path: string,
+  ): Promise<FileRead | undefined> {
+    return this.#kept.lastRead(conversationId, path);
+  }
+
+  noteRead(
+    conversationId: string,
+    path: string,
+    read: FileRead,
+  ): Promise<void> {
+    return this.#kept.noteRead(conversationId, path, read);
   }
 
   loadIndex(): Promise<SavedIndex | undefined> {

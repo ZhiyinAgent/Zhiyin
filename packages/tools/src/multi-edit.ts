@@ -215,6 +215,33 @@ function count(noun: string, total: number): string {
   return `${total} ${noun}${total === 1 ? "" : "s"}`;
 }
 
+const numberedLine = /^\s*\d+→/;
+
+/** A block every non-empty line of which starts the way read_file numbers it. */
+function unnumbered(block: string): string | undefined {
+  const lines = block.split("\n");
+  const filled = lines.filter((line) => line.trim());
+  if (!filled.length || !filled.every((line) => numberedLine.test(line)))
+    return undefined;
+  return lines.map((line) => line.replace(numberedLine, "")).join("\n");
+}
+
+/**
+ * The replacement as it would read without the line numbers read_file shows,
+ * when the text to find was copied with them. The replacement loses its
+ * numbers too, or they would be written into the file.
+ */
+function withoutLineNumbers(
+  replacement: Replacement,
+): Pick<Replacement, "find" | "replace"> | undefined {
+  const find = unnumbered(replacement.find);
+  if (find === undefined) return undefined;
+  return {
+    find,
+    replace: unnumbered(replacement.replace) ?? replacement.replace,
+  };
+}
+
 /**
  * Applies one file's replacements in order, each to the text the previous one
  * produced. Nothing here touches the disk: the caller decides whether the whole
@@ -225,14 +252,24 @@ function applyReplacements(
   original: string,
 ): { readonly text: string } | Refusal {
   let text = original;
-  for (const replacement of edit.replacements) {
+  for (let replacement of edit.replacements) {
     if (replacement.find === replacement.replace) {
       return correctable(
         `A replacement in ${edit.path} puts back the same text. No file was changed.`,
       );
     }
 
-    const match = findText(text, replacement.find);
+    let match = findText(text, replacement.find);
+    const unnumbered = withoutLineNumbers(replacement);
+    if (match.kind === "none" && unnumbered) {
+      // Only after the text as sent was not found, so a file whose lines
+      // really start with numbers is still edited exactly.
+      const retried = findText(text, unnumbered.find);
+      if (retried.kind !== "none") {
+        match = retried;
+        replacement = { ...replacement, ...unnumbered };
+      }
+    }
     if (match.kind === "unsearchable")
       return correctable(`${edit.path}: ${match.reason} No file was changed.`);
     if (match.kind === "none") {

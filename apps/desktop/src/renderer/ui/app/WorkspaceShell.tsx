@@ -4,6 +4,7 @@ import { HistoryRecoveryGate } from "../recovery/index.js";
 import type {
   CoreApi,
   UserInputResponse,
+  MessageAttachment,
   ReasoningSelection,
 } from "@zhiyin/contract";
 import { ApprovalPrompt } from "../actions/index.js";
@@ -48,6 +49,8 @@ type WorkspaceShellProps = {
     | "renameTask"
     | "deleteTask"
     | "sendMessage"
+    | "keepPaste"
+    | "openAttachment"
     | "interruptTask"
     | "resolveApproval"
     | "resolveUserInput"
@@ -256,10 +259,18 @@ export function WorkspaceShell({
   async function submitMessage(
     message: string,
     reasoning?: ReasoningSelection,
+    attachments?: readonly MessageAttachment[],
   ) {
     const taskId = selectedTask?.id ?? (await commands.createTask());
     setComposerDraft(undefined);
-    await commands.sendMessage(taskId, message, reasoning);
+    if (attachments?.length)
+      await commands.sendMessage(
+        taskId,
+        message,
+        reasoning,
+        attachments.map((attachment) => attachment.id),
+      );
+    else await commands.sendMessage(taskId, message, reasoning);
   }
 
   function openSurface(surface: WorkspaceState["surface"]) {
@@ -542,6 +553,11 @@ export function WorkspaceShell({
                         ? { initialReasoning: selectedTask.reasoning }
                         : {})}
                       onSubmit={submitMessage}
+                      keepPaste={commands.keepPaste}
+                      // A paste not yet sent belongs to no conversation.
+                      openAttachment={(id) =>
+                        void act(() => commands.openAttachment(null, id))
+                      }
                       {...(composerDraft &&
                       composerDraft.taskId === selectedTask?.id
                         ? { draft: composerDraft }

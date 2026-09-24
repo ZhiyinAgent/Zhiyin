@@ -86,6 +86,11 @@ the project has not yet proved.
 
 ## Invariants
 
+- **A connector's answer is bounded here only to protect memory.** Past
+  8,000,000 characters it is shortened rather than thrown away; how much of an
+  answer a model is shown is decided where every tool's answer is sized. Named
+  test: `shortens an oversized result instead of throwing the whole answer
+  away`.
 - New source modules stay below the repository line ceiling, and the existing
   oversized module may shrink but may not grow. The repository lint gate is the
   named regression for this structural boundary.

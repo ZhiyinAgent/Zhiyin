@@ -31,6 +31,7 @@ import { TurnOwnership } from "./turn-ownership.js";
 export { TurnOwnership } from "./turn-ownership.js";
 import { TurnLoop } from "./turn-loop.js";
 import { beginUserTurn } from "./start-turn.js";
+import { modelText } from "./attachments.js";
 import { settledAfterRestart, settledWhenTurnEnded } from "./settling.js";
 import { defaultWorkLimits, WorkLedger } from "./work-limits.js";
 export { WorkLedger, type WorkLimits } from "./work-limits.js";
@@ -97,6 +98,7 @@ export class AgentLoop {
     taskId: string,
     userInput: string,
     reasoning?: ReasoningSelection,
+    attachments: readonly string[] = [],
   ): Promise<void> {
     if (!this.#deps.host.historyAvailable())
       throw new VisibleError(
@@ -111,7 +113,7 @@ export class AgentLoop {
         "Wait for file recovery to finish before starting another turn.",
       );
     const message = userInput.trim();
-    if (!message) return;
+    if (!message && !attachments.length) return;
     if (!this.#deps.host.find(taskId))
       throw new Error("The task does not exist.");
 
@@ -123,6 +125,22 @@ export class AgentLoop {
       this.#deps.workLimits ?? defaultWorkLimits,
       this.#deps.now(),
     );
+    // Pastes kept as drafts move into this conversation as it is sent. One
+    // that is gone is not sent as though it were there.
+    const claimed = attachments.length
+      ? await this.#deps.sessions
+          .claimDrafts(taskId, attachments)
+          .catch((error: unknown) => {
+            this.#activeTurns.finish(taskId, controller);
+            throw error;
+          })
+      : [];
+    if (claimed.length < attachments.length) {
+      this.#activeTurns.finish(taskId, controller);
+      throw new VisibleError(
+        "The pasted text is no longer available. Paste it again.",
+      );
+    }
 
     // A turn runs where its conversation lives, whatever the window last
     // displayed. A no-op when they already agree.
@@ -131,6 +149,7 @@ export class AgentLoop {
     const started = beginUserTurn(existing, message, {
       messageId: this.#deps.newMessageId(),
       sequence: this.#records.nextTimelineSequence(existing),
+      attachments: claimed,
       ...(reasoning ? { reasoning } : {}),
     });
     await this.#records.replaceTask(started.task);
@@ -139,7 +158,7 @@ export class AgentLoop {
       beforeGather: (workspace) =>
         this.#auxiliary.createPlan(
           taskId,
-          message,
+          modelText({ text: message, attachments: claimed }),
           workspace,
           controller.signal,
           started.shouldGenerateInitialTitle,

@@ -30,7 +30,10 @@ import type {
   ToolSpec,
 } from "@zhiyin/contract";
 import { detailsOf, facts, textDetail } from "./action-detail.js";
-import { describeCommand } from "./workspace-path.js";
+import { stat } from "node:fs/promises";
+import { estimatedTokens } from "@zhiyin/contract";
+import { describeBytes, describeCommand } from "./workspace-path.js";
+import type { ConversationItems } from "./conversation-items.js";
 
 /**
  * Containment for one command's process tree, supplied by the application.
@@ -41,7 +44,15 @@ export type CommandContainer = ReturnType<ProcessContainment["open"]>;
 
 const defaultTimeoutMs = 120_000;
 const maximumTimeoutMs = 600_000;
-const maximumOutputCharacters = 100_000;
+/**
+ * What the model is shown of each stream, in estimated tokens: together under
+ * the limit on one result, with room for the rest of the answer. Past it, the
+ * start and the end are shown and the whole output is kept to read again.
+ */
+const outputTokens = 5_000;
+const errorTokens = 1_500;
+/** Characters of each stream held in memory, start and end, to cut from. */
+const heldCharacters = 400_000;
 const maximumCommandLength = 8_000;
 const maximumExplanationLength = 400;
 /**
@@ -195,19 +206,54 @@ function shortened(value: string, maximum: number): string {
   return single.length > maximum ? `${single.slice(0, maximum)}…` : single;
 }
 
-function boundedOutput(value: string): {
+/** The start and the end of a stream, together within `tokens`. */
+function boundedOutput(
+  value: string,
+  tokens: number,
+): {
   readonly text: string;
   readonly truncated: boolean;
 } {
-  if (value.length <= maximumOutputCharacters)
+  if (estimatedTokens(value) <= tokens)
     return { text: value, truncated: false };
   const marker = "\n… output shortened …\n";
-  const edge = Math.floor((maximumOutputCharacters - marker.length) / 2);
-  return {
-    text: `${value.slice(0, edge)}${marker}${value.slice(-edge)}`,
-    truncated: true,
-  };
+  const bytes = Buffer.from(value, "utf8");
+  const edge = Math.floor((tokens * 3 - Buffer.byteLength(marker)) / 2);
+  // A cut inside a character leaves a replacement mark; it is dropped.
+  const head = bytes
+    .subarray(0, edge)
+    .toString("utf8")
+    .replace(/\uFFFD$/, "");
+  const tail = bytes
+    .subarray(bytes.length - edge)
+    .toString("utf8")
+    .replace(/^\uFFFD/, "");
+  return { text: `${head}${marker}${tail}`, truncated: true };
 }
+
+/**
+ * Keeps a stream whole when what the model is shown of it is only its ends,
+ * and says where it was kept and how large it is.
+ */
+async function keptStream(
+  file: string,
+  tokens: number,
+  context: CommandContext,
+): Promise<string | undefined> {
+  const { items, conversationId } = context;
+  if (!items || !conversationId) return undefined;
+  const size = (await stat(file)).size;
+  if (Math.ceil(size / 3) <= tokens) return undefined;
+  const kept = await items.keepOutput(conversationId, file);
+  return kept.status === "kept"
+    ? `Full output (${describeBytes(size)}) saved as output://${kept.id}; read it with read_file`
+    : `The full output was not kept: ${kept.reason}`;
+}
+
+export type CommandContext = {
+  readonly conversationId?: string;
+  readonly items?: ConversationItems;
+};
 
 export function inspectRunCommand(
   workspaceName: string,
@@ -249,6 +295,7 @@ export async function runShellCommand(
   args: unknown,
   signal?: AbortSignal,
   containment?: CommandContainment,
+  context: CommandContext = {},
 ): Promise<ToolInvocationResult> {
   const input = commandArguments(args);
   if (!input) {
@@ -269,6 +316,8 @@ export async function runShellCommand(
   }
 
   const started = Date.now();
+  const saved: { output?: string | undefined; errors?: string | undefined } =
+    {};
   const result = await runProcess({
     executable: shell,
     arguments: ["-c", input.command],
@@ -276,7 +325,13 @@ export async function runShellCommand(
     timeoutMs: input.timeoutMs,
     ...(signal ? { signal } : {}),
     ...(containment ? { containment } : {}),
-    maximumOutputCharacters: maximumOutputCharacters * 4,
+    maximumOutputCharacters: heldCharacters,
+    keep: async (files) => {
+      [saved.output, saved.errors] = await Promise.all([
+        keptStream(files.stdout, outputTokens, context),
+        keptStream(files.stderr, errorTokens, context),
+      ]);
+    },
   });
   if (result.failure === "containment") {
     return {
@@ -294,6 +349,7 @@ export async function runShellCommand(
     ending: result.ending,
     failure: result.failure === "start" ? new Error("start failed") : undefined,
     timeoutMs: input.timeoutMs,
+    saved,
   });
 }
 
@@ -306,9 +362,10 @@ function commandResult(input: {
   readonly ending: "timeout" | "stopped" | "outputLimit" | undefined;
   readonly failure: Error | undefined;
   readonly timeoutMs: number;
+  readonly saved: { output?: string | undefined; errors?: string | undefined };
 }): ToolInvocationResult {
-  const out = boundedOutput(input.stdout);
-  const err = boundedOutput(input.stderr);
+  const out = boundedOutput(input.stdout, outputTokens);
+  const err = boundedOutput(input.stderr, errorTokens);
   const durationMs = Date.now() - input.started;
   const shown = () =>
     detailsOf(
@@ -326,6 +383,8 @@ function commandResult(input: {
     stdout: out.text,
     stderr: err.text,
     outputTruncated: out.truncated || err.truncated,
+    ...(input.saved.output ? { fullOutput: input.saved.output } : {}),
+    ...(input.saved.errors ? { fullErrors: input.saved.errors } : {}),
     durationMs,
   };
 

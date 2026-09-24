@@ -102,7 +102,7 @@ function settingsOf(
  * it is, so the folder can be found by eye; any other is hashed, so nothing a
  * conversation is called can name a path.
  */
-function folderName(id: string): string {
+export function folderName(id: string): string {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id)
     ? `c-${id}`
     : `h-${createHash("sha256").update(id).digest("hex").slice(0, 32)}`;

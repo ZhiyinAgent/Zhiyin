@@ -1,8 +1,13 @@
 import { Fragment, type ReactNode } from "react";
-import type { ReasoningTrace as Trace, TaskPlanItem } from "@zhiyin/contract";
+import type {
+  MessageAttachment,
+  ReasoningTrace as Trace,
+  TaskPlanItem,
+} from "@zhiyin/contract";
 import { Icon, Logo, Notice } from "../shared/index.js";
 import { ConversationSkeleton } from "./ConversationSkeleton.js";
 import { OutcomeCard } from "./OutcomeCard.js";
+import { PastedText } from "./PastedText.js";
 import { ReasoningTrace } from "./ReasoningTrace.js";
 import { StreamingMarkdown } from "./StreamingMarkdown.js";
 import { TaskPlan } from "./TaskPlan.js";
@@ -19,6 +24,7 @@ export type TimelineMessage = {
   readonly id: string;
   readonly role: "user" | "assistant";
   readonly text: string;
+  readonly attachments?: readonly MessageAttachment[];
   readonly interactionId?: string;
   readonly sequence?: number;
   readonly reasoning?: Trace;
@@ -72,6 +78,8 @@ export type TimelinePieces<Action, View, Interaction, SpecialistRun = never> = {
     busy: boolean,
     bubble: ReactNode,
   ) => ReactNode;
+  /** Opens a paste a message carried; its chip is inert when nothing is passed. */
+  readonly openAttachment?: (id: string) => void;
   readonly actions: (actions: Action[]) => ReactNode;
   readonly view: (view: View) => ReactNode;
   readonly interaction: (interaction: Interaction) => ReactNode;
@@ -80,8 +88,41 @@ export type TimelinePieces<Action, View, Interaction, SpecialistRun = never> = {
 };
 
 /** A person’s own message, as the conversation draws it. */
-export function UserTurn({ text }: { text: string }) {
-  return <div className={styles["user-turn"]}>{text}</div>;
+export function UserTurn({
+  text,
+  attachments = [],
+  onOpen,
+}: {
+  text: string;
+  attachments?: readonly MessageAttachment[];
+  onOpen?: (id: string) => void;
+}) {
+  return (
+    <div className={styles["user-turn"]}>
+      {text}
+      {attachments.length > 0 && (
+        <div className={styles["user-turn__attachments"]}>
+          {attachments.map((attachment) => (
+            <PastedText
+              key={attachment.id}
+              attachment={attachment}
+              {...(onOpen ? { onOpen } : {})}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function userTurnExtras(
+  message: TimelineMessage,
+  openAttachment: ((id: string) => void) | undefined,
+) {
+  return {
+    ...(message.attachments ? { attachments: message.attachments } : {}),
+    ...(openAttachment ? { onOpen: openAttachment } : {}),
+  };
 }
 
 function AgentTurn({
@@ -331,10 +372,16 @@ export function ConversationTimeline<
                   pieces.userMessage(
                     block.message,
                     busy,
-                    <UserTurn text={block.message.text} />,
+                    <UserTurn
+                      text={block.message.text}
+                      {...userTurnExtras(block.message, pieces.openAttachment)}
+                    />,
                   )
                 ) : (
-                  <UserTurn text={block.message.text} />
+                  <UserTurn
+                    text={block.message.text}
+                    {...userTurnExtras(block.message, pieces.openAttachment)}
+                  />
                 )
               ) : (
                 <AgentTurn compact={compact}>

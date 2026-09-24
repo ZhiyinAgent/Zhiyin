@@ -363,7 +363,10 @@ describe("pictures in later requests", () => {
     const deps = stubDependencies(() => {});
     const sessions = {
       ...deps.sessions,
-      savePicture: async (image: { mediaType: string; data: string }) => {
+      savePicture: async (
+        _conversationId: string,
+        image: { mediaType: string; data: string },
+      ) => {
         stored.set(`picture-${stored.size + 1}`, image);
         return `picture-${stored.size}`;
       },

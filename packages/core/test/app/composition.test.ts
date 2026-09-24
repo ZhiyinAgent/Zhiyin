@@ -116,6 +116,28 @@ describe("the core and a turn together", () => {
     });
   });
 
+  it("removes what a deleted conversation kept, and nothing of another's", async () => {
+    let nextId = 0;
+    const forgotten: string[] = [];
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      sessions: {
+        ...deps.sessions,
+        forgetConversation: async (taskId) => {
+          forgotten.push(taskId);
+        },
+      },
+      newTaskId: () => `task-${(nextId += 1)}`,
+    });
+    await loop.createTask();
+    const second = await loop.createTask();
+
+    await loop.deleteTask(second);
+
+    expect(forgotten).toEqual([second]);
+  });
+
   it("rehydrates and updates the same workspace snapshot across a restart", async () => {
     const restored: WorkspaceSnapshot = {
       runtime: { tasks: "available", capabilities: "unavailable" },

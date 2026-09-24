@@ -328,3 +328,49 @@ describe("multi_edit", () => {
     await expect(readFile(join(root, "b.md"), "utf8")).resolves.toBe("keep");
   });
 });
+
+describe("text copied from a numbered read", () => {
+  it("is found without its line numbers, and the replacement is written without them", async () => {
+    const root = await workspace({
+      "notes.md": "Owner: Dana\nStatus: draft\n",
+    });
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("multi_edit", {
+      edits: [
+        {
+          path: "notes.md",
+          replacements: [
+            {
+              find: "1→Owner: Dana\n2→Status: draft",
+              replace: "1→Owner: Rowan\n2→Status: final",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true });
+    expect(await readFile(join(root, "notes.md"), "utf8")).toBe(
+      "Owner: Rowan\nStatus: final\n",
+    );
+  });
+
+  it("keeps a file whose lines really start with numbers editable exactly", async () => {
+    const root = await workspace({ "steps.md": "1→mix\n2→bake\n" });
+    const tools = new WorkspaceTools(root);
+
+    await tools.execute("multi_edit", {
+      edits: [
+        {
+          path: "steps.md",
+          replacements: [{ find: "2→bake", replace: "2→cool" }],
+        },
+      ],
+    });
+
+    expect(await readFile(join(root, "steps.md"), "utf8")).toBe(
+      "1→mix\n2→cool\n",
+    );
+  });
+});

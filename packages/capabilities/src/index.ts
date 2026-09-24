@@ -429,7 +429,7 @@ export class ComposedCapabilities implements Capabilities {
     identity?: string,
   ): Promise<ToolInvocationResult> {
     if (owner === "built-in")
-      return this.#members.tools.execute(name, args, signal);
+      return this.#members.tools.execute(name, args, signal, conversationId);
     if (owner === "mcp")
       return this.#members.mcp.execute(
         name,

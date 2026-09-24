@@ -153,8 +153,13 @@ function shortened(value: string, maximum = 16_000): string {
     : trimmed;
 }
 
+/**
+ * What a run printed, as whole as the process layer kept it: its start and its
+ * end. What the model is shown of it is bounded where every tool's result is,
+ * and the rest kept to read again; a cut here would lose a traceback's end.
+ */
 function reported(run: ProgramRun): string {
-  return shortened(`${run.stdout}\n${run.stderr}`);
+  return `${run.stdout}\n${run.stderr}`.trim();
 }
 
 /**

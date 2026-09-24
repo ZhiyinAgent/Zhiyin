@@ -82,6 +82,7 @@ export type TaskMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  attachments?: readonly import("@zhiyin/contract").MessageAttachment[];
   interactionId?: string;
   sequence?: number;
 };

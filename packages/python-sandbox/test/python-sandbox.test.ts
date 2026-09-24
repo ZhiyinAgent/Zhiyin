@@ -182,6 +182,22 @@ describe("running Python in the sandbox", () => {
     });
   });
 
+  it("keeps the end of a long failing run, where the traceback is", async () => {
+    const { sandbox } = await sandboxWith({
+      output: {
+        exitCode: 1,
+        stdout: "progress\n".repeat(5_000),
+        stderr: "Traceback: boom at the end",
+      },
+    });
+
+    expect(
+      await sandbox.callTool("run_python", { code: "raise SystemExit(1)" }),
+    ).toMatchObject({
+      content: [{ text: expect.stringContaining("boom at the end") }],
+    });
+  });
+
   it("refuses anything but a .py file, and a call that names no script at all", async () => {
     const { sandbox } = await sandboxWith();
 

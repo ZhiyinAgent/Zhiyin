@@ -81,6 +81,46 @@ describe("privileged commands", () => {
       validateCommand(CHANNEL.setComponentEnabled, ["research/x", "yes"]),
     ).toThrow();
   });
+  it("accepts a message that is only pastes, but never an empty one", () => {
+    const paste = "pasted-2026-09-24-101500.txt";
+    expect(() =>
+      validateCommand(CHANNEL.sendMessage, ["task", "", undefined, [paste]]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.sendMessage, [
+        "task",
+        "Read",
+        undefined,
+        [paste],
+      ]),
+    ).not.toThrow();
+    for (const args of [
+      ["task", ""],
+      ["task", "", undefined, []],
+      ["task", "Read", undefined, [42]],
+      ["task", "Read", undefined, "pasted.txt"],
+      ["task", "Read", undefined, Array(21).fill(paste)],
+    ])
+      expect(() => validateCommand(CHANNEL.sendMessage, args)).toThrow();
+  });
+  it("takes a paste up to 50 MB to keep, and opens one only by its name", () => {
+    expect(() =>
+      validateCommand(CHANNEL.keepPaste, ["x".repeat(20_000)]),
+    ).not.toThrow();
+    expect(() => validateCommand(CHANNEL.keepPaste, [""])).toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.keepPaste, ["x".repeat(50 * 1024 * 1024 + 1)]),
+    ).toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.openAttachment, [null, "pasted-1.txt"]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.openAttachment, ["task", "pasted-1.txt"]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.openAttachment, ["task", undefined]),
+    ).toThrow();
+  });
   it("accepts a model choice with a bounded list of upstreams", () => {
     expect(() =>
       validateCommand(CHANNEL.selectModel, ["z-ai/glm-5.3-flash", []]),

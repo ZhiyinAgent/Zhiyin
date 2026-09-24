@@ -445,6 +445,19 @@ rendered.
   running. The named test `prevents the composer from starting an overlapping
   turn` guards this. Stop replaces Send in the composer while the response is
   running; the header carries no transient task control.
+- **A paste of 15,000 characters or more never enters the message field.** It
+  is taken on the paste event, kept by the core, and shown as a chip naming its
+  file, size and line count, so a paste of any size never has to be laid out
+  as text. The chip opens the text in the person's own editor and can be taken
+  off; the pastes return with the words when a message could not be sent. A
+  paste over 50 MB is refused with what to do instead. A sent message shows
+  the same chips, opening that conversation's copy. Named tests: `keeps a long
+  paste as an attachment rather than putting it in the field`, `never puts a
+  10 MB paste in the field`, `leaves a short paste to the field`, `opens a kept
+  paste, and can take it off the message`, `refuses a paste over 50 MB and says
+  what to do instead`, `puts the pastes back with the words when a message
+  could not be sent`, `sends a long paste by the name it was kept as, and opens
+  it from the message after`.
 - Conversation age is derived from persisted timestamps and refreshed while
   the app remains open. Legacy records without a timestamp use a neutral
   fallback instead of remaining `Now`. The named test `shows relative

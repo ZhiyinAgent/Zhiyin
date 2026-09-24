@@ -22,6 +22,7 @@ import {
   rewriteCallArguments,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
+import { RoundResults } from "./result-size.js";
 import { toolOutput } from "./notices.js";
 
 /**
@@ -331,6 +332,9 @@ export class SpecialistExecution {
           toolCalls: answerable.map(protocolCall),
         });
         const round = { text, reasoning: "", messages, tools };
+        const sizes = new RoundResults((kept) =>
+          this.#deps.sessions.keep("output", options.taskId, { text: kept }),
+        );
         for (const call of answerable) {
           const quietRetriesLeft =
             maximumQuietRetries - quiet.attempts(call.name);
@@ -355,16 +359,21 @@ export class SpecialistExecution {
             : { result: input.result, quiet: input.quiet };
           controller.signal.throwIfAborted();
           rewriteCallArguments(messages, call);
+          // What the tool answered for the model, without the person's copy
+          // or pictures written out as text.
+          const answered = {
+            ...outcome.result,
+            images: undefined,
+            details: undefined,
+            ...(input.ok && input.note ? { note: input.note } : {}),
+          };
           messages.push({
             role: "tool",
             toolCallId: call.callId,
             name: call.name,
             content: toolOutput(
               call.name,
-              JSON.stringify({
-                ...outcome.result,
-                ...(input.ok && input.note ? { note: input.note } : {}),
-              }),
+              await sizes.fit(JSON.stringify(answered), answered),
             ),
           });
           if (outcome.quiet) quiet.remember(call.name, call.callId);

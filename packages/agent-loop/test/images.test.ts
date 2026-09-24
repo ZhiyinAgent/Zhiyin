@@ -135,7 +135,7 @@ describe("a picture in the record of what happened", () => {
     const saved: { mediaType: string; data: string }[] = [];
     const requests: ModelMessage[][] = [];
     const loop = loopWith(true, requests, {
-      savePicture: async (image) => {
+      savePicture: async (_conversationId, image) => {
         saved.push(image);
         return `picture-${saved.length}`;
       },

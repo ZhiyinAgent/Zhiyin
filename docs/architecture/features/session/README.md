@@ -42,6 +42,13 @@ sequencing.
   app runs` and `keeps history readable whatever state connections were in when
   it was saved`.
 - `list()` returns stable task ids and human-readable labels.
+- What a conversation keeps beside itself: `savePicture(conversationId, image,
+  from)` for a tool's or a connector's picture; `keep(kind, conversationId,
+  source)` for a saved output or a pasted text, from text or a file; `locate`
+  to find one again or say why it is gone; `claimDrafts(conversationId, ids)`
+  to move pastes made before their message was sent into its conversation,
+  answering each one's size and line count; `forgetConversation` to remove all
+  of it; and `lastRead` / `noteRead`, when each file was last read.
 - The interface reserves an undo operation, but undo is not implemented and is
   not currently exposed as a product capability.
 
@@ -135,6 +142,30 @@ sequencing.
   just given, whatever it evicts to do it`, `drops screenshots older than the
   age it keeps them for`, `says so in the conversation when a picture was too
   large to keep`, `distinguishes a picture it never had from one it deleted`.
+- **Each kind kept has its own folder and its own limits,** so one kind filling
+  up never removes another's items: tool pictures, connector pictures, pasted
+  text and saved outputs. Inside each, one folder per conversation, so a
+  deleted conversation takes everything it kept with it. An item past its own
+  size limit is refused and says so; a removed item leaves a note, so what
+  refers to it can say why it is gone. Named tests: `removes the oldest saved
+  outputs past the folder's limit, with a note, and no paste or picture`,
+  `refuses an item past its own limit rather than pushing out others, and says
+  so`, `keeps a file handed to it, such as a command's whole output`, `deletes
+  everything a conversation kept with it, and nothing of another's`.
+- **What a person pasted has no age limit,** only a size limit: it is their
+  material, not a tool's by-product. Saved outputs go after 30 days. Named
+  test: `keeps a saved output for 30 days, and a paste however old it is`.
+- **An id only ever names something the store kept.** Ids are generated here,
+  never taken from a model or a server, and one that is not well formed is
+  refused before it becomes a path. Named test: `never reads outside what it
+  kept for an id a model made up`.
+- **A paste waits as a draft until its message is sent,** named by when it was
+  pasted; a draft never sent is gone at the next launch. Named tests: `is named
+  by when it was pasted, and apart from another pasted the same second`,
+  `waits as a draft until its message starts a conversation, and a draft never
+  sent is gone at the next launch`.
+- **When a file was last read survives a restart,** so a changed file is
+  noticed across one. Named test: `is remembered after the app restarts`.
 - Reasoning traces and conversation effort choices survive restart and are
   validated before reaching the renderer. Named tests: `restores reasoning and
   the conversation's selected effort` and `rejects malformed reasoning records

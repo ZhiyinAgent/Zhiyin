@@ -59,6 +59,10 @@ and call, and routes every change to the member that owns it.
 
 ## Invariants
 
+- **A built-in tool is told which conversation it answers,** so what it reads
+  or keeps for one conversation is never another's. Named test: `tells a
+  built-in tool which conversation it answers, so it reads only what that one
+  kept`.
 - **One name, one owner.** Two sources that both offer a name would let a call
   reach an implementation nobody approved, so the gathering is refused instead.
   Named test: `refuses a connection tool that reuses a built-in tool's name`.

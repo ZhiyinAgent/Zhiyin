@@ -108,6 +108,7 @@ describe("the application's composition", () => {
         chooseFolder: async () => undefined,
         chooseSaveLocation: async () => undefined,
         openExternal: async () => {},
+        openPath: async () => {},
       });
       core.start();
       try {

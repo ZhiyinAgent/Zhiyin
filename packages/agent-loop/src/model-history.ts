@@ -24,6 +24,7 @@ import type {
   WorkspaceTask,
 } from "@zhiyin/contract";
 import type { ModelMessage, ModelToolCall } from "@zhiyin/model-client";
+import { modelText } from "./attachments.js";
 import { compactedSummaryMessage } from "./conversation-context.js";
 import { harnessNotice, type NoticeKind } from "./notices.js";
 import { picturesLetGo } from "./turn-pictures.js";
@@ -382,7 +383,7 @@ async function sentMessage(
   switch (entry.kind) {
     case "message": {
       const message = messages.get(entry.messageId);
-      return message && { role: message.role, content: message.text };
+      return message && { role: message.role, content: modelText(message) };
     }
     case "calls":
       return {

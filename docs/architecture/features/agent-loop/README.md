@@ -178,6 +178,24 @@ browser is not among them: it is reached, and let go of, through capabilities.
   notice, where the older messages were`, and `marks the turn completed with
   the specialist still running, then wakes with its handoff` (which also
   checks the `specialists` notice).
+- **A tool's answer is sized before it is sent, whichever tool gave it.** One
+  answer may take 8,000 estimated tokens and one round's answers together
+  24,000. Past either, the whole answer is kept with the conversation and the
+  model is shown its start, its end and the `output://` address to read the
+  rest with `read_file`; an answer past the round's limit still shows a little
+  of itself. What a tool made for the person (`details`) and picture data are
+  never sent as text, in a turn or in a specialist's run. Named tests: `is its
+  start and its end past 8k tokens, with the whole kept to read again`, `keeps
+  one round's answers together under 24k tokens`, `is what the tool answered,
+  not the copy made for the person`, `shows a specialist the start and end of a
+  large answer, and keeps the whole`.
+- **A long paste reaches the model as an address, never as its text.** The
+  message carries one line per paste naming its `attachment://` address, size
+  and line count; a message may be only pastes, and one whose paste is gone is
+  refused rather than sent empty. Named tests: `reaches the model as an address
+  to read, beside the person's words`, `may be the whole message, and names the
+  conversation when nothing else does`, `of 10 MB sends a message under 1 KB`,
+  `is refused when it was never kept, rather than sending an empty message`.
 - **No system message after the person's first message.** Notices are `user`
   messages at the end of the conversation, because upstreams merge, move or
   reject a system message placed mid-conversation. Only what rarely changes —

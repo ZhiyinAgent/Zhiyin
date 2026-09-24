@@ -25,7 +25,7 @@ export type WorkStep = {
   readonly status: "complete" | "active" | "queued" | "failed";
 };
 
-export { REASONING_EFFORTS, type ReasoningEffort } from "./reasoning.js";
+export { REASONING_EFFORTS } from "./reasoning.js";
 import type { ConversationSummary, HistoryRecovery } from "./history.js";
 export type { ConversationSummary, HistoryRecovery } from "./history.js";
 export type {
@@ -42,37 +42,11 @@ export type {
 import type { ProducedImage, StoredPicture } from "./pictures.js";
 export type { ModelHistoryEntry } from "./model-history.js";
 import type { ModelHistoryEntry } from "./model-history.js";
-import type { ReasoningEffort } from "./reasoning.js";
-
-export type ReasoningSelection =
-  | { readonly enabled: false }
-  | { readonly enabled: true; readonly effort?: ReasoningEffort };
-
-export type ReasoningCapabilities =
-  | {
-      readonly status: "available";
-      readonly required: boolean;
-      readonly defaultEnabled: boolean;
-      readonly defaultEffort?: ReasoningEffort;
-      readonly efforts: readonly ReasoningEffort[];
-    }
-  | { readonly status: "unavailable"; readonly reason: string };
-
-export type ReasoningTrace = {
-  readonly text: string;
-  readonly status: "streaming" | "complete" | "interrupted";
-};
-
-export type TaskMessage = {
-  readonly id: string;
-  readonly role: "user" | "assistant";
-  readonly text: string;
-  readonly reasoning?: ReasoningTrace;
-  /** The structured interaction that already renders this model-facing answer. */
-  readonly interactionId?: string;
-  /** Optional so task history saved before ordered timeline entries can load. */
-  readonly sequence?: number;
-};
+export { estimatedTokens, utf8Bytes } from "./token-estimate.js";
+export type * from "./reasoning.js";
+export type * from "./messages.js";
+import type { ReasoningCapabilities, ReasoningSelection } from "./reasoning.js";
+import type { PasteOutcome, TaskMessage } from "./messages.js";
 
 export type TaskAction = {
   readonly id: string;
@@ -1253,12 +1227,22 @@ export interface CoreApi {
 
   deleteTask(taskId: string): Promise<void>;
 
-  /** Start a model turn for a task. Streaming progress arrives as events. */
+  /**
+   * Start a model turn for a task. Streaming progress arrives as events.
+   * `attachments` names pastes `keepPaste` kept; a message may be only those.
+   */
   sendMessage(
     taskId: string,
     message: string,
     reasoning?: ReasoningSelection,
+    attachments?: readonly string[],
   ): Promise<void>;
+
+  /** Keeps a long paste as a draft attachment, so the composer never holds it. */
+  keepPaste(text: string): Promise<PasteOutcome>;
+
+  /** Opens a pasted text in the person's own editor; `taskId` null for a draft. */
+  openAttachment(taskId: string | null, id: string): Promise<void>;
 
   /** Review the exact conversation revision before discarding anything. */
   previewRewind(taskId: string, messageId: string): Promise<RewindPreview>;
@@ -1553,6 +1537,8 @@ export const CHANNEL = {
   renameTask: "zhiyin:rename-task",
   deleteTask: "zhiyin:delete-task",
   sendMessage: "zhiyin:send-message",
+  keepPaste: "zhiyin:keep-paste",
+  openAttachment: "zhiyin:open-attachment",
   previewRewind: "zhiyin:preview-rewind",
   commitRewind: "zhiyin:commit-rewind",
   interruptTask: "zhiyin:interrupt-task",

@@ -520,6 +520,7 @@ export class ToolCalls {
         outcomeStatus(result),
         result.ok ? undefined : result.reason,
         result,
+        owner === "mcp" ? "connector" : "tool",
       );
       await this.#auxiliary.evaluateActionCriterion(
         taskId,

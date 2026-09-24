@@ -28,6 +28,7 @@ import { harnessNotice, toolOutput } from "./notices.js";
 import { ModelHistory, type SentPicture } from "./model-history.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
+import { RoundResults } from "./result-size.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
   delegateSpecialistTool,
@@ -353,6 +354,9 @@ export class TurnLoop {
           },
           tools: currentAdvertisedTools(),
         };
+        const sizes = new RoundResults((text) =>
+          this.#deps.sessions.keep("output", taskId, { text }),
+        );
 
         for (const call of answerable) {
           const quietRetriesLeft =
@@ -463,16 +467,20 @@ export class TurnLoop {
             fitted,
             this.#deps.host.acceptsImages(),
           );
+          // What the tool answered for the model; `details` is its copy for
+          // the person, and is not sent again.
+          const answered = {
+            ...outcome.result,
+            images: undefined,
+            details: undefined,
+            ...(shown ? { picturesNotSent: shown } : {}),
+            ...note,
+          };
           await history.result(
             call,
             toolOutput(
               call.name,
-              JSON.stringify({
-                ...outcome.result,
-                images: undefined,
-                ...(shown ? { picturesNotSent: shown } : {}),
-                ...note,
-              }),
+              await sizes.fit(JSON.stringify(answered), answered),
             ),
             Boolean(outcome.quiet),
           );
@@ -484,6 +492,7 @@ export class TurnLoop {
                 outcome.actionId,
                 produced,
                 fitted,
+                owner === "mcp" ? "connector" : "tool",
               ),
             );
           await history.rewriteCall(call.callId, call.arguments);
@@ -598,6 +607,7 @@ export class TurnLoop {
     actionId: string | undefined,
     produced: readonly ProducedImage[],
     fitted: FittedPictures,
+    owner: "tool" | "connector",
   ): Promise<SentPicture[]> {
     const kept = (
       this.#records.task(taskId).actions?.find((item) => item.id === actionId)
@@ -609,7 +619,9 @@ export class TurnLoop {
         const source =
           kept.length === produced.length && picture === produced[from]
             ? kept[from]
-            : await this.#deps.sessions.savePicture(picture).catch(() => "");
+            : await this.#deps.sessions
+                .savePicture(taskId, picture, owner)
+                .catch(() => "");
         return { ...picture, source: source ?? "" };
       }),
     );

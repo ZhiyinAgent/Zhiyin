@@ -267,12 +267,31 @@ export function validateCommand(
         text(args[1], 128) &&
         text(args[2], 2_000_000);
       break;
-    case CHANNEL.sendMessage:
+    // Words, pastes kept beforehand, or both; never nothing. The reasoning
+    // choice may be left out before the pastes.
+    case CHANNEL.sendMessage: {
+      const [taskId, message, reasoning, pastes = []] = args;
       valid =
-        (args.length === 2 ||
-          (args.length === 3 && reasoningSelection(args[2]))) &&
-        text(args[0]) &&
-        text(args[1], 100_000);
+        args.length >= 2 &&
+        args.length <= 4 &&
+        text(taskId) &&
+        (reasoning === undefined || reasoningSelection(reasoning)) &&
+        Array.isArray(pastes) &&
+        pastes.length <= 20 &&
+        pastes.every((id) => text(id, 100)) &&
+        (text(message, 100_000) || (message === "" && pastes.length > 0));
+      break;
+    }
+    // The text itself: the store refuses more than 50 MB of it, and no string
+    // longer than that in characters can be less in bytes.
+    case CHANNEL.keepPaste:
+      valid = args.length === 1 && text(args[0], 50 * 1024 * 1024);
+      break;
+    case CHANNEL.openAttachment:
+      valid =
+        args.length === 2 &&
+        (args[0] === null || text(args[0])) &&
+        text(args[1], 100);
       break;
     case CHANNEL.renameTask:
       valid = args.length === 2 && text(args[0]) && text(args[1], 160);

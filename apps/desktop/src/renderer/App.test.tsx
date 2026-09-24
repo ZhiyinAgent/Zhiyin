@@ -38,6 +38,8 @@ function fakeCore(version: string): CoreApi & {
     renameTask: async () => {},
     deleteTask: async () => {},
     sendMessage,
+    keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
+    openAttachment: async () => {},
     previewRewind: async () => {
       throw new Error("No rewind preview configured for this test.");
     },

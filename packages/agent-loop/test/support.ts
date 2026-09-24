@@ -353,6 +353,7 @@ export function stubDependencies(
   let approvalNumber = 0;
   let messageNumber = 0;
   let actionNumber = 0;
+  let keptNumber = 0;
   const browser = {
     refresh: async () => {},
     availability: async () => ({
@@ -446,7 +447,23 @@ export function stubDependencies(
         status: "missing" as const,
         reason: "This picture is no longer stored with the conversation.",
       }),
-      forgetPictures: async () => {},
+      keep: async (
+        _kind: string,
+        _conversationId: string | undefined,
+        source: { text: string } | { file: string },
+      ) => ({
+        status: "kept" as const,
+        id: `kept-${++keptNumber}`,
+        bytes: "text" in source ? Buffer.byteLength(source.text) : 0,
+      }),
+      locate: async () => ({
+        status: "missing" as const,
+        reason: "This output is no longer stored with the conversation.",
+      }),
+      claimDrafts: async () => [],
+      forgetConversation: async () => {},
+      lastRead: async () => undefined,
+      noteRead: async () => {},
       inspectDamage: async () => ({ kind: "unreadable" as const }),
       preserveDamaged: async () => "damaged-history/workspace.json",
       recoverReadable: async () => ({

@@ -56,6 +56,10 @@ installing a package is an explicit, visible act.
 - **A failure says what the run or the build reported.** Named tests: `reports a
   script that failed with its output rather than a bare code` and `says what
   went wrong when the environment cannot be built`.
+- **A long run's end is never dropped here.** The output is passed on as the
+  run reported it, so a traceback at the end survives; how much of it a model
+  is shown is decided where every tool's answer is sized. Named test: `keeps
+  the end of a long failing run, where the traceback is`.
 - **Python reads and writes UTF-8**, whatever the console's code page, and
   otherwise runs in Zhiyin's own environment. Named test: `runs scripts with
   Python reading and writing UTF-8, in Zhiyin's own environment`.

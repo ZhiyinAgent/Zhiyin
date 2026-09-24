@@ -309,14 +309,20 @@ export class TurnRecords {
    * detail naming a picture nobody can read is worse than no detail.
    */
   async #keepPictures(
+    taskId: string,
     result: ToolInvocationResult | undefined,
     title: string,
+    from: "tool" | "connector",
   ): Promise<readonly ActionDetail[]> {
     if (!result?.ok || !result.images?.length) return [];
     const kept: ActionDetail[] = [];
     for (const [index, image] of result.images.entries()) {
       try {
-        const source = await this.#deps.sessions.savePicture(image);
+        const source = await this.#deps.sessions.savePicture(
+          taskId,
+          image,
+          from,
+        );
         kept.push({
           kind: "image",
           label: result.images.length > 1 ? `Picture ${index + 1}` : "Picture",
@@ -389,10 +395,17 @@ export class TurnRecords {
     status: "completed" | "reported" | "failed",
     reason?: string,
     result?: ToolInvocationResult,
+    /** Whose pictures these are: a connector's are kept apart from the tools'. */
+    from: "tool" | "connector" = "tool",
   ): Promise<void> {
     const task = this.task(taskId);
     const existing = (task.actions ?? []).find((item) => item.id === actionId);
-    const pictures = await this.#keepPictures(result, presentation.title);
+    const pictures = await this.#keepPictures(
+      taskId,
+      result,
+      presentation.title,
+      from,
+    );
     const action: TaskAction = {
       ...existing,
       id: actionId,

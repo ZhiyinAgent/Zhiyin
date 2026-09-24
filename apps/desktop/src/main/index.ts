@@ -167,6 +167,11 @@ void app.whenReady().then(() => {
       return result.canceled ? undefined : result.filePath;
     },
     openExternal: (url) => shell.openExternal(url),
+    // Answers why it could not open, or nothing when it did.
+    openPath: async (path) => {
+      const failure = await shell.openPath(path);
+      if (failure) throw new Error(failure);
+    },
     connectionsNeverClose:
       process.env["ZHIYIN_TEST_CONNECTIONS_NEVER_CLOSE"] === "1",
     ...(process.env["ZHIYIN_TEST_CREDENTIALS_UNAVAILABLE"] === "1"

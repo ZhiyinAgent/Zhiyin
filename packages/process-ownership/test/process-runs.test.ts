@@ -94,6 +94,26 @@ describe.each(paths)("a %s run", (_, containment) => {
     expect(run.stdout.length).toBeLessThan(1_100);
   });
 
+  it("hands over the whole of each stream when asked, middle included", async () => {
+    let whole = "";
+    let errors: string | undefined;
+
+    const run = await node(containment, "ends.mjs", ["300000"], {
+      maximumOutputCharacters: 1_000,
+      keep: async (files) => {
+        whole = await readFile(files.stdout, "utf8");
+        errors = await readFile(files.stderr, "utf8");
+      },
+    })();
+
+    expect(run.stdout.length).toBeLessThan(1_100);
+    expect(whole.length).toBeGreaterThan(300_000);
+    expect(whole.startsWith("HEAD")).toBe(true);
+    expect(whole.endsWith("TAIL")).toBe(true);
+    expect(whole).not.toContain("output shortened");
+    expect(errors).toBe("");
+  });
+
   it("gives the program exactly the environment it was handed", async () => {
     process.env["ZHIYIN_PARENT_ONLY"] = "parent";
     try {

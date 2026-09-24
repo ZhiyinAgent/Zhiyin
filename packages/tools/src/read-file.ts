@@ -22,7 +22,9 @@ import type {
   ToolSpec,
 } from "@zhiyin/contract";
 import { detailsOf, facts, textDetail } from "./action-detail.js";
-import { boundedFileText, fileKind } from "./file-content.js";
+import { fileKind } from "./file-content.js";
+import { keptAddress, type ConversationItems } from "./conversation-items.js";
+import { pageLines, readPage } from "./text-pages.js";
 import { parsePageRange, readPdfText, renderPdfPages } from "./read-pdf.js";
 import {
   describeBytes,
@@ -34,26 +36,32 @@ import {
   type PathScope,
 } from "./workspace-path.js";
 
-const maximumBytes = 2 * 1024 * 1024;
-/**
- * How much of a file's text one answer carries. A file is allowed to be larger
- * than a turn can hold; what is not allowed is silently pretending it was not.
- */
-const maximumTextCharacters = 60_000;
+/** A PDF is read whole to find its pages; text is streamed a page at a time. */
+const maximumPdfBytes = 2 * 1024 * 1024;
 /** Enough of the head to tell text from anything else. */
 const sampleBytes = 4096;
 
 export const readFileSpec: ToolSpec = {
   name: "read_file",
   description:
-    "Read one text file, or the text of one PDF. A workspace-relative path reads a file in the current workspace; an absolute path may read a file elsewhere on this computer, which the person is asked about first. A very long file is shortened from the middle, and a long PDF is read a stretch of pages at a time. Images are not read here — use read_image.",
+    "Read one text file, or the text of one PDF. A workspace-relative path reads a file in the current workspace; an absolute path may read a file elsewhere on this computer, which the person is asked about first. `output://<id>` reads a tool's saved output and `attachment://<id>` a text the person pasted, as named in this conversation. Lines come numbered, a page at a time: when more remains, the answer ends by saying which startLine to ask for next. A long PDF is read a stretch of pages at a time. Images are not read here — use read_image.",
   inputSchema: {
     type: "object",
     properties: {
       path: {
         type: "string",
         description:
-          "Workspace-relative path of the file to read, or an absolute path for a file outside the workspace.",
+          "Workspace-relative path of the file to read, an absolute path for a file outside the workspace, or an output:// or attachment:// id.",
+      },
+      startLine: {
+        type: "integer",
+        minimum: 1,
+        description: "Text only: the first line to read. Defaults to 1.",
+      },
+      lineCount: {
+        type: "integer",
+        minimum: 1,
+        description: `Text only: how many lines to read, at most. Defaults to ${pageLines}; a page also stops at about 8,000 tokens.`,
       },
       pages: {
         type: "string",
@@ -76,17 +84,24 @@ type ReadArguments = {
   readonly path: string;
   readonly pages?: string;
   readonly as?: "text" | "image";
+  readonly startLine?: number;
+  readonly lineCount?: number;
 };
+
+const argumentNames = ["path", "pages", "as", "startLine", "lineCount"];
+
+function lineNumber(value: unknown): number | undefined | false {
+  if (value === undefined) return undefined;
+  return typeof value === "number" && Number.isInteger(value) && value >= 1
+    ? value
+    : false;
+}
 
 function readArguments(args: unknown): ReadArguments | undefined {
   if (!args || typeof args !== "object" || Array.isArray(args))
     return undefined;
   const source = args as Record<string, unknown>;
-  if (
-    Object.keys(source).some(
-      (key) => key !== "path" && key !== "pages" && key !== "as",
-    )
-  )
+  if (Object.keys(source).some((key) => !argumentNames.includes(key)))
     return undefined;
   const path = source["path"];
   if (typeof path !== "string" || !path.trim()) return undefined;
@@ -95,10 +110,15 @@ function readArguments(args: unknown): ReadArguments | undefined {
   const shape = source["as"];
   if (shape !== undefined && shape !== "text" && shape !== "image")
     return undefined;
+  const startLine = lineNumber(source["startLine"]);
+  const lineCount = lineNumber(source["lineCount"]);
+  if (startLine === false || lineCount === false) return undefined;
   return {
-    path: normalizePath(path),
+    path: keptAddress(path) ? path.trim() : normalizePath(path),
     ...(pages === undefined ? {} : { pages }),
     ...(shape === undefined ? {} : { as: shape }),
+    ...(startLine === undefined ? {} : { startLine }),
+    ...(lineCount === undefined ? {} : { lineCount }),
   };
 }
 
@@ -114,13 +134,24 @@ export function inspectReadTextFile(
       correctable: true,
     };
   }
+  const command = `read_file(${JSON.stringify(input)})`;
+  const kept = keptAddress(input.path);
+  // What this conversation kept is part of it already: reading it again
+  // reaches nothing new, so it is as contained as a workspace read.
+  if (kept)
+    return {
+      ok: true,
+      action:
+        kept.kind === "output"
+          ? "Read a saved tool output"
+          : "Read a pasted text",
+      target: input.path,
+      access: "read",
+      scope: "workspace",
+      command,
+    };
   const absolute = resolve(root, input.path);
   const scope: PathScope = scopeOf(root, absolute);
-  const command = `read_file(${JSON.stringify({
-    path: input.path,
-    ...(input.pages === undefined ? {} : { pages: input.pages }),
-    ...(input.as === undefined ? {} : { as: input.as }),
-  })})`;
   if (scope === "outside") {
     return {
       ok: true,
@@ -143,17 +174,126 @@ export function inspectReadTextFile(
   };
 }
 
+export type ReadContext = {
+  /** Whether the model this is read for can be shown a picture. */
+  readonly acceptsImages?: boolean;
+  /** Whether a folder is chosen to read files from. */
+  readonly workspace: boolean;
+  readonly conversationId?: string;
+  readonly items?: ConversationItems;
+};
+
+/** Reads what the conversation kept, by the address it was named by. */
+async function readKept(
+  input: ReadArguments,
+  kept: NonNullable<ReturnType<typeof keptAddress>>,
+  context: ReadContext,
+  signal?: AbortSignal,
+): Promise<ToolInvocationResult> {
+  if (!context.items || !context.conversationId)
+    return {
+      ok: false,
+      reason:
+        "Saved output and pasted text can only be read in their conversation.",
+    };
+  const located = await context.items.locate(
+    context.conversationId,
+    kept.kind,
+    kept.id,
+  );
+  if (located.status === "missing")
+    return { ok: false, reason: located.reason };
+  return pagedResult(input.path, located.path, input, signal);
+}
+
+async function pagedResult(
+  target: string,
+  path: string,
+  input: ReadArguments,
+  signal?: AbortSignal,
+  notice?: string,
+  size?: number,
+): Promise<ToolInvocationResult> {
+  const start = input.startLine ?? 1;
+  const page = await readPage(
+    path,
+    start,
+    input.lineCount ?? pageLines,
+    signal,
+    notice,
+  );
+  if (start > 1 && start > page.totalLines)
+    return {
+      ok: false,
+      reason: `${target} has ${page.totalLines.toLocaleString("en-US")} lines, so there is no line ${start}.`,
+    };
+  const whole = start === 1 && page.last >= page.totalLines;
+  return {
+    ok: true,
+    value: {
+      path: target,
+      text: page.text,
+      totalLines: page.totalLines,
+      ...(whole ? {} : { lines: `${page.first}-${page.last}` }),
+    },
+    ...detailsOf(
+      facts(
+        ["File", target],
+        ["Size", size === undefined ? undefined : describeBytes(size)],
+        [
+          "Lines",
+          whole
+            ? page.totalLines
+            : `${page.first}–${page.last} of ${page.totalLines}`,
+        ],
+      ),
+      textDetail("Contents", page.plain, !whole),
+    ),
+  };
+}
+
+/**
+ * Says so when the file changed since this conversation last read it, so an
+ * earlier page is not trusted as current. The read still happens.
+ */
+async function changedNotice(
+  target: string,
+  file: { readonly mtimeMs: number; readonly size: number },
+  context: ReadContext,
+): Promise<string> {
+  const { items, conversationId } = context;
+  if (!items || !conversationId) return "";
+  const previous = await items
+    .lastRead(conversationId, target)
+    .catch(() => undefined);
+  await items
+    .noteRead(conversationId, target, {
+      modifiedMs: file.mtimeMs,
+      size: file.size,
+      readAt: new Date().toISOString(),
+    })
+    .catch(() => undefined);
+  return previous &&
+    (previous.modifiedMs !== file.mtimeMs || previous.size !== file.size)
+    ? `This file changed since your last read at ${previous.readAt}; earlier pages may be out of date.\n`
+    : "";
+}
+
 export async function runReadTextFile(
   root: string,
   args: unknown,
-  signal?: AbortSignal,
-  /** Whether the model this is read for can be shown a picture. */
-  acceptsImages = false,
+  signal: AbortSignal | undefined,
+  context: ReadContext,
 ): Promise<ToolInvocationResult> {
   const inspected = inspectReadTextFile(root, args);
   if (!inspected.ok) return inspected;
   const input = readArguments(args);
   if (!input) return { ok: false, reason: "The file path is invalid." };
+  const kept = keptAddress(input.path);
+  if (kept) return readKept(input, kept, context, signal);
+  if (!context.workspace)
+    return { ok: false, reason: "Choose a folder before using files." };
+  const acceptsImages = context.acceptsImages ?? false;
 
   try {
     const [realRoot, realTarget] = await Promise.all([
@@ -175,12 +315,7 @@ export async function runReadTextFile(
     if (!file.isFile()) {
       return { ok: false, reason: "The selected path is not a file." };
     }
-    if (file.size > maximumBytes) {
-      return {
-        ok: false,
-        reason: "The file is too large to read in one tool call.",
-      };
-    }
+    // Only a PDF is read whole; text is streamed.
     // What the file is, decided by its bytes rather than by its name.
     const handle = await open(realTarget, "r");
     let sample: Buffer;
@@ -196,6 +331,11 @@ export async function runReadTextFile(
     // it is read rather than refused. Everything else that is not text is
     // refused with what it actually is, and where to take it instead.
     if (kind.kind === "binary" && kind.named === "a PDF document") {
+      if (file.size > maximumPdfBytes)
+        return {
+          ok: false,
+          reason: "The PDF is too large to read in one tool call.",
+        };
       const range = parsePageRange(input.pages);
       if (range === "invalid")
         return {
@@ -280,23 +420,14 @@ export async function runReadTextFile(
           : `${inspected.target} is not a text file${kind.named ? ` — it is ${kind.named}` : ""}. Reading it as text would produce nothing meaningful.`,
       };
     }
-    const whole = await readFile(realTarget, {
-      encoding: "utf8",
-      ...(signal ? { signal } : {}),
-    });
-    const bounded = boundedFileText(whole, maximumTextCharacters);
-    return {
-      ok: true,
-      value: {
-        path: inspected.target,
-        text: bounded.text,
-        ...(bounded.truncated ? { truncated: true } : {}),
-      },
-      ...detailsOf(
-        facts(["File", inspected.target], ["Size", describeBytes(file.size)]),
-        textDetail("Contents", bounded.text, bounded.truncated),
-      ),
-    };
+    return pagedResult(
+      inspected.target,
+      realTarget,
+      input,
+      signal,
+      await changedNotice(inspected.target, file, context),
+      file.size,
+    );
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return {

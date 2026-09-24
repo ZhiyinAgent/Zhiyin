@@ -236,7 +236,10 @@ function membersRecording(
         target: "notes.md",
         command: name,
       }),
-      execute: async (name) => ({ ok: true, value: `built-in ${name}` }),
+      execute: async (name, _args, _signal, conversationId) => {
+        asked.push(["tools.execute", name, conversationId]);
+        return { ok: true, value: `built-in ${name}` };
+      },
     },
     mcp,
     browsers: {
@@ -584,6 +587,18 @@ describe("inspecting a plugin", () => {
 });
 
 describe("a call handed back", () => {
+  it("tells a built-in tool which conversation it answers, so it reads only what that one kept", async () => {
+    const { capabilities, asked } = membersRecording();
+
+    await capabilities.execute("conversation-3", "built-in", "read_file", {});
+
+    expect(asked).toContainEqual([
+      "tools.execute",
+      "read_file",
+      "conversation-3",
+    ]);
+  });
+
   it("reaches a connection in the conversation's own scope, withholding what its turn did not activate", async () => {
     const { capabilities, asked } = membersRecording();
     await capabilities.toolsFor("conversation-7", {

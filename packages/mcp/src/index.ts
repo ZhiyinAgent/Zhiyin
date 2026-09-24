@@ -316,7 +316,12 @@ export function routedName(serverId: string, toolName: string): string {
   );
 }
 
-const maximumResultCharacters = 128_000;
+/**
+ * The most a connection may hand back at all. What the model is shown is
+ * bounded later, where every tool's result is: past that, the whole result is
+ * kept for the conversation to read again, so this only guards memory.
+ */
+const maximumResultCharacters = 8_000_000;
 /**
  * How many pictures one action may hand back, and how large each may be.
  *

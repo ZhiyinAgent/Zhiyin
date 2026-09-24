@@ -18,6 +18,8 @@ const stubCommands: CoreApi = {
   renameTask: async () => {},
   deleteTask: async () => {},
   sendMessage: async () => {},
+  keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
+  openAttachment: async () => {},
   previewRewind: async () => {
     throw new Error("No rewind preview configured for this test.");
   },
@@ -750,6 +752,11 @@ describe("WorkspaceShell", () => {
           renameTask: async () => {},
           deleteTask: async () => {},
           sendMessage: async () => {},
+          keepPaste: async () => ({
+            status: "refused",
+            reason: "Not kept here.",
+          }),
+          openAttachment: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
           resolveUserInput: async () => {},
@@ -869,6 +876,74 @@ describe("WorkspaceShell", () => {
     expect(screen.queryByText(/connecting to the core/i)).toBeNull();
   });
 
+  it("sends a long paste by the name it was kept as, and opens it from the message after", async () => {
+    const paste = {
+      kind: "pastedText" as const,
+      id: "pasted-2026-09-24-101500.txt",
+      bytes: 48_000,
+      lines: 1_200,
+    };
+    const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
+    const openAttachment = vi.fn<CoreApi["openAttachment"]>(async () => {});
+    const commands = {
+      ...stubCommands,
+      createTask: async () => "task-new",
+      sendMessage,
+      openAttachment,
+      keepPaste: async () => ({ status: "kept" as const, attachment: paste }),
+    };
+    const { rerender } = render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+        })}
+        dispatch={() => undefined}
+        commands={commands}
+      />,
+    );
+
+    fireEvent.paste(screen.getByLabelText("Message Zhiyin"), {
+      clipboardData: { getData: () => "x".repeat(15_000) },
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Open pasted text/ }),
+    );
+    expect(openAttachment).toHaveBeenLastCalledWith(null, paste.id);
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith("task-new", "", undefined, [
+        paste.id,
+      ]),
+    );
+
+    const task: WorkspaceTask = {
+      id: "task-new",
+      title: "Pasted text",
+      updatedLabel: "Now",
+      messages: [{ id: "u", role: "user", text: "", attachments: [paste] }],
+      phase: { kind: "working", steps: [] },
+    };
+    rerender(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          tasks: [task],
+          selectedTaskId: task.id,
+        })}
+        dispatch={() => undefined}
+        commands={commands}
+      />,
+    );
+    fireEvent.click(
+      within(screen.getByRole("log", { name: "Task conversation" })).getByRole(
+        "button",
+        { name: /Open pasted text/ },
+      ),
+    );
+    expect(openAttachment).toHaveBeenLastCalledWith("task-new", paste.id);
+  });
+
   it("creates a new task and submits its first message", async () => {
     const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
     const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
@@ -913,6 +988,11 @@ describe("WorkspaceShell", () => {
           renameTask: async () => {},
           deleteTask: async () => {},
           sendMessage,
+          keepPaste: async () => ({
+            status: "refused",
+            reason: "Not kept here.",
+          }),
+          openAttachment: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
           resolveUserInput: async () => {},
@@ -1535,6 +1615,11 @@ describe("WorkspaceShell", () => {
           renameTask: async () => {},
           deleteTask: async () => {},
           sendMessage: async () => {},
+          keepPaste: async () => ({
+            status: "refused",
+            reason: "Not kept here.",
+          }),
+          openAttachment: async () => {},
           interruptTask: async () => {},
           resolveApproval,
           resolveUserInput: async () => {},

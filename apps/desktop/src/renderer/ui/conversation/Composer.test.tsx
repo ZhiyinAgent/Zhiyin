@@ -1,6 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { ReasoningCapabilities } from "@zhiyin/contract";
+import type {
+  MessageAttachment,
+  ReasoningCapabilities,
+} from "@zhiyin/contract";
 import { Composer } from "./Composer.js";
 
 const reasoning: ReasoningCapabilities = {
@@ -95,4 +98,139 @@ describe("Composer", () => {
     expect(screen.queryByText(/Enter to send/)).toBeNull();
     expect(screen.queryByText(/Shift\+Enter/)).toBeNull();
   });
+
+  it("keeps a long paste as an attachment rather than putting it in the field", async () => {
+    const onSubmit = vi.fn();
+    const keepPaste = vi.fn(async () => ({
+      status: "kept" as const,
+      attachment: paste,
+    }));
+    render(<Composer onSubmit={onSubmit} keepPaste={keepPaste} />);
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+    const long = "log line\n".repeat(2_000);
+
+    const inserted = fireEvent.paste(field, pasted(long));
+
+    expect(inserted).toBe(false);
+    expect(keepPaste).toHaveBeenCalledWith(long);
+    expect(
+      await screen.findByRole("button", { name: /Open pasted text/ }),
+    ).toHaveTextContent("47 KB · 1,200 lines");
+    expect(field).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith("", undefined, [paste]),
+    );
+    expect(
+      screen.queryByRole("button", { name: /Open pasted text/ }),
+    ).toBeNull();
+  });
+
+  it("never puts a 10 MB paste in the field", async () => {
+    const keepPaste = vi.fn(async () => ({
+      status: "kept" as const,
+      attachment: { ...paste, bytes: 10 * 1024 * 1024 },
+    }));
+    render(<Composer keepPaste={keepPaste} />);
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+
+    const inserted = fireEvent.paste(
+      field,
+      pasted("x".repeat(10 * 1024 * 1024)),
+    );
+
+    expect(inserted).toBe(false);
+    expect(
+      await screen.findByRole("button", { name: /Open pasted text/ }),
+    ).toHaveTextContent("10.0 MB");
+    expect(field).toHaveValue("");
+  });
+
+  it("leaves a short paste to the field", () => {
+    const keepPaste = vi.fn();
+    render(<Composer keepPaste={keepPaste} />);
+
+    const inserted = fireEvent.paste(
+      screen.getByRole("textbox", { name: "Message Zhiyin" }),
+      pasted("a short note"),
+    );
+
+    expect(inserted).toBe(true);
+    expect(keepPaste).not.toHaveBeenCalled();
+  });
+
+  it("opens a kept paste, and can take it off the message", async () => {
+    const openAttachment = vi.fn();
+    render(
+      <Composer
+        keepPaste={async () => ({ status: "kept", attachment: paste })}
+        openAttachment={openAttachment}
+      />,
+    );
+    fireEvent.paste(
+      screen.getByRole("textbox", { name: "Message Zhiyin" }),
+      pasted("x".repeat(15_000)),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Open pasted text/ }),
+    );
+    expect(openAttachment).toHaveBeenCalledWith(paste.id);
+    fireEvent.click(screen.getByRole("button", { name: "Remove pasted text" }));
+    expect(
+      screen.queryByRole("button", { name: /Open pasted text/ }),
+    ).toBeNull();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  });
+
+  it("refuses a paste over 50 MB and says what to do instead", () => {
+    const keepPaste = vi.fn();
+    render(<Composer keepPaste={keepPaste} />);
+
+    fireEvent.paste(
+      screen.getByRole("textbox", { name: "Message Zhiyin" }),
+      pasted("x".repeat(50 * 1024 * 1024 + 1)),
+    );
+
+    expect(keepPaste).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "larger than 50 MB. Save it as a file",
+    );
+  });
+
+  it("puts the pastes back with the words when a message could not be sent", async () => {
+    render(
+      <Composer
+        onSubmit={async () => {
+          throw new Error("offline");
+        }}
+        keepPaste={async () => ({ status: "kept", attachment: paste })}
+      />,
+    );
+    fireEvent.paste(
+      screen.getByRole("textbox", { name: "Message Zhiyin" }),
+      pasted("x".repeat(15_000)),
+    );
+    await screen.findByRole("button", { name: /Open pasted text/ });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "could not be sent",
+    );
+    expect(
+      screen.getByRole("button", { name: /Open pasted text/ }),
+    ).toBeVisible();
+  });
 });
+
+const paste: MessageAttachment = {
+  kind: "pastedText",
+  id: "pasted-2026-09-24-101500.txt",
+  bytes: 48_000,
+  lines: 1_200,
+};
+
+function pasted(text: string) {
+  return { clipboardData: { getData: () => text } };
+}

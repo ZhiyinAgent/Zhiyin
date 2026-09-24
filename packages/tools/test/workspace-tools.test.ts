@@ -22,11 +22,11 @@ describe("WorkspaceTools", () => {
     await tools.selectWorkspace(first);
     expect(
       await tools.execute("read_file", { path: "note.txt" }),
-    ).toMatchObject({ ok: true, value: { text: "first" } });
+    ).toMatchObject({ ok: true, value: { text: "1→first" } });
     await tools.selectWorkspace(second);
     expect(
       await tools.execute("read_file", { path: "note.txt" }),
-    ).toMatchObject({ ok: true, value: { text: "second" } });
+    ).toMatchObject({ ok: true, value: { text: "1→second" } });
   });
   /**
    * A folder that cannot be opened is a change that did not happen. Leaving the
@@ -47,7 +47,7 @@ describe("WorkspaceTools", () => {
     expect(tools.list().map((tool) => tool.name)).toContain("read_file");
     expect(
       await tools.execute("read_file", { path: "note.txt" }),
-    ).toMatchObject({ ok: true, value: { text: "first" } });
+    ).toMatchObject({ ok: true, value: { text: "1→first" } });
   });
 
   it("keeps working in the previous folder when the chosen path is a file", async () => {
@@ -63,7 +63,7 @@ describe("WorkspaceTools", () => {
     expect(tools.workspaceRoot()).toBe(await realpath(first));
     expect(
       await tools.execute("read_file", { path: "note.txt" }),
-    ).toMatchObject({ ok: true, value: { text: "first" } });
+    ).toMatchObject({ ok: true, value: { text: "1→first" } });
   });
 
   it("advertises and reads a UTF-8 file inside the workspace", async () => {
@@ -94,13 +94,14 @@ describe("WorkspaceTools", () => {
       tools.execute("read_file", { path: "docs/notes.md" }),
     ).resolves.toEqual({
       ok: true,
-      value: { path: "docs/notes.md", text: "Project notes" },
+      value: { path: "docs/notes.md", text: "1→Project notes", totalLines: 1 },
       details: [
         {
           kind: "facts",
           items: [
             { label: "File", value: "docs/notes.md" },
             { label: "Size", value: "13 bytes" },
+            { label: "Lines", value: "1" },
           ],
         },
         { kind: "text", label: "Contents", text: "Project notes" },
@@ -230,7 +231,7 @@ describe("WorkspaceTools", () => {
     });
     await expect(
       tools.execute("read_file", { path: "../secret.txt" }),
-    ).resolves.toMatchObject({ ok: true, value: { text: "outside" } });
+    ).resolves.toMatchObject({ ok: true, value: { text: "1→outside" } });
   });
 
   /**

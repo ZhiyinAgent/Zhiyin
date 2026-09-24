@@ -35,9 +35,15 @@ feature that leaked them.
 - `runProcess(...)` is the one argv-based execution path for features that need
   bounded output, timeout and cancellation. It opens containment before launch
   and uses the container's atomic launch operation when containment is supplied.
+  Given a `keep` hook, it also hands over the whole of each stream, as a file,
+  whatever it held in memory.
 
 ## Invariants
 
+- **Bounding what is held never loses what was written.** Output is held in
+  memory as its start and end; asked to, the run also writes each stream whole
+  to a file and hands it over, so a caller can keep the middle too. Named test:
+  `hands over the whole of each stream when asked, middle included`.
 - A process placed in a container, and every descendant it starts afterwards,
   is terminated when the container closes — including a descendant that
   detached itself. The named test `kills a detached grandchild started after

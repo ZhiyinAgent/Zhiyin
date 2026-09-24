@@ -79,6 +79,7 @@ export type Surroundings = {
   readonly chooseFolder: CoreDependencies["chooseFolder"];
   readonly chooseSaveLocation: CoreDependencies["chooseSaveLocation"];
   readonly openExternal: CoreDependencies["openExternal"];
+  readonly openPath: CoreDependencies["openPath"];
   readonly credentialEntry?: CredentialEntry;
   /** Tests only: closing browsers and connections never finishes. */
   readonly connectionsNeverClose?: boolean;
@@ -93,6 +94,7 @@ export function buildCore({
   chooseFolder,
   chooseSaveLocation,
   openExternal,
+  openPath,
   credentialEntry,
   connectionsNeverClose,
 }: Surroundings): Core {
@@ -146,6 +148,26 @@ export function buildCore({
     // reads again whenever the model or the key changes.
     acceptsImages: (): boolean =>
       state.settings.current()?.acceptsImages === true,
+    // A command's whole output and a pasted text, kept with the conversation
+    // and read again by address.
+    items: {
+      locate: (conversationId, kind, id) =>
+        sessions.locate(
+          kind === "attachment" ? "pastedText" : "output",
+          conversationId,
+          id,
+        ),
+      keepOutput: async (conversationId, file) => {
+        const kept = await sessions.keep("output", conversationId, { file });
+        return kept.status === "kept"
+          ? { status: "kept", id: kept.id }
+          : { status: "refused", reason: kept.reason };
+      },
+      lastRead: (conversationId, path) =>
+        sessions.lastRead(conversationId, path),
+      noteRead: (conversationId, path, read) =>
+        sessions.noteRead(conversationId, path, read),
+    },
   });
   const plugins = new ComposedPlugins({
     builtIns: () => loadBuiltInPlugins(builtInPluginsDirectory),
@@ -293,6 +315,7 @@ export function buildCore({
     chooseFolder,
     chooseSaveLocation,
     openExternal,
+    openPath,
     version,
   });
 }

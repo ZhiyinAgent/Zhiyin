@@ -597,7 +597,7 @@ describe("ManagedMcpServers", () => {
           content: [
             {
               type: "text",
-              text: "The answer is at the top. " + "x".repeat(200_000),
+              text: "The answer is at the top. " + "x".repeat(8_200_000),
             },
           ],
         }),
@@ -617,7 +617,7 @@ describe("ManagedMcpServers", () => {
     // A page too long to send is still a page that was read.
     expect(result.ok).toBe(true);
     const encoded = JSON.stringify(result.value);
-    expect(encoded.length).toBeLessThan(140_000);
+    expect(encoded.length).toBeLessThanOrEqual(8_000_000);
     expect(encoded).toContain("The answer is at the top.");
     // And it says so, rather than letting the end look like the end.
     expect(encoded).toContain("shortened");

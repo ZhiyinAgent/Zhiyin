@@ -24,6 +24,7 @@ import {
   recordCriterionEvaluationTool,
   recordPlanTool,
 } from "./auxiliary-tools.js";
+import { modelText } from "./attachments.js";
 import { evidenceText } from "./evidence.js";
 import { actionContextLines } from "./guidance-context.js";
 import {
@@ -244,7 +245,11 @@ export class AuxiliaryWork {
                   ]
                 : []),
               `Messages to compact: ${JSON.stringify(
-                prefix.map(({ id, role, text }) => ({ id, role, text })),
+                prefix.map((message) => ({
+                  id: message.id,
+                  role: message.role,
+                  text: modelText(message),
+                })),
               )}`,
               `Available action evidence: ${this.#boundedEvidence(
                 evidence.map(({ id, action, target, status, evidence }) => ({

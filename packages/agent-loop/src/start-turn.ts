@@ -1,10 +1,15 @@
-import type { ReasoningSelection, WorkspaceTask } from "@zhiyin/contract";
+import type {
+  MessageAttachment,
+  ReasoningSelection,
+  WorkspaceTask,
+} from "@zhiyin/contract";
 import { fallbackConversationTitle } from "./conversation-context.js";
 
 type BeginUserTurnOptions = {
   readonly messageId: string;
   readonly sequence: number;
   readonly reasoning?: ReasoningSelection;
+  readonly attachments?: readonly MessageAttachment[];
 };
 
 /** Builds the one authoritative task transition that opens a user turn. */
@@ -22,6 +27,9 @@ export function beginUserTurn(
     id: options.messageId,
     role: "user" as const,
     text: message,
+    ...(options.attachments?.length
+      ? { attachments: options.attachments }
+      : {}),
     sequence: options.sequence,
   };
 
@@ -31,7 +39,7 @@ export function beginUserTurn(
       ...task,
       ...(options.reasoning ? { reasoning: { ...options.reasoning } } : {}),
       title: shouldGenerateInitialTitle
-        ? fallbackConversationTitle(message)
+        ? fallbackConversationTitle(message) || "Pasted text"
         : task.title,
       ...(shouldGenerateInitialTitle
         ? { titleSource: "generated" as const }

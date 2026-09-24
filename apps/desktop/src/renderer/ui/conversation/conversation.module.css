@@ -825,6 +825,61 @@
   animation: welcome-arrive 650ms ease-out both;
 }
 
+.composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/* A kept paste: named as the file it is, with its size, never its text. */
+.pasted-text {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+}
+
+.pasted-text button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.pasted-text button:disabled {
+  cursor: default;
+}
+
+.pasted-text__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pasted-text__size {
+  color: var(--zy-faint);
+  white-space: nowrap;
+}
+
+.user-turn__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .composer__error {
   color: var(--zy-danger);
   font-size: 13px;

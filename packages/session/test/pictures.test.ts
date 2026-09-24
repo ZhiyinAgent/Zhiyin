@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, utimes } from "node:fs/promises";
+import { mkdtemp, rm, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,7 +26,7 @@ describe("pictures a conversation contains", () => {
   it("comes back after the application is closed and opened again", async () => {
     const root = await temporaryRoot();
 
-    const id = await new FileSessions(root).savePicture(picture);
+    const id = await new FileSessions(root).savePicture("task-1", picture);
 
     expect(await new FileSessions(root).readPicture(id)).toEqual({
       status: "ready",
@@ -37,7 +37,7 @@ describe("pictures a conversation contains", () => {
   it("is kept beside the conversation rather than inside it", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root);
-    const id = await sessions.savePicture(picture);
+    const id = await sessions.savePicture("task-1", picture);
     const snapshot: WorkspaceSnapshot = {
       runtime: { tasks: "available", capabilities: "unavailable" },
       selectedTaskId: "task-1",
@@ -107,17 +107,16 @@ describe("pictures a conversation contains", () => {
   it("forgets the pictures of a conversation that is deleted", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root);
-    const kept = await sessions.savePicture(picture);
-    const dropped = await sessions.savePicture(picture);
+    const kept = await sessions.savePicture("task-1", picture);
+    const dropped = await sessions.savePicture("task-2", picture);
 
-    await sessions.forgetPictures([dropped]);
+    await sessions.forgetConversation("task-2");
 
     expect((await sessions.readPicture(dropped)).status).toBe("missing");
     expect(await sessions.readPicture(kept)).toEqual({
       status: "ready",
       ...picture,
     });
-    expect((await readdir(join(root, "pictures"))).length).toBe(1);
   });
 });
 
@@ -130,20 +129,20 @@ describe("what the picture store keeps", () => {
   /** Ages a stored picture by moving its file's own timestamp back. */
   async function age(root: string, id: string, days: number): Promise<void> {
     const when = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-    await utimes(join(root, "pictures", id), when, when);
+    await utimes(join(root, "kept", ...id.split("/")), when, when);
   }
 
   it("deletes the oldest screenshots to make room for a new one", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root, {
-      pictures: { totalBytes: 2_400 },
+      kept: { toolPictures: { totalBytes: 2_400 } },
     });
-    const oldest = await sessions.savePicture(pictureOf(1_000));
+    const oldest = await sessions.savePicture("task-1", pictureOf(1_000));
     await age(root, oldest, 2);
-    const middle = await sessions.savePicture(pictureOf(1_000));
+    const middle = await sessions.savePicture("task-1", pictureOf(1_000));
     await age(root, middle, 1);
 
-    const newest = await sessions.savePicture(pictureOf(1_000));
+    const newest = await sessions.savePicture("task-1", pictureOf(1_000));
 
     expect((await sessions.readPicture(newest)).status).toBe("ready");
     expect((await sessions.readPicture(middle)).status).toBe("ready");
@@ -153,12 +152,12 @@ describe("what the picture store keeps", () => {
   it("says a screenshot was deleted to save space rather than going blank", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root, {
-      pictures: { totalBytes: 1_400 },
+      kept: { toolPictures: { totalBytes: 1_400 } },
     });
-    const evicted = await sessions.savePicture(pictureOf(1_000));
+    const evicted = await sessions.savePicture("task-1", pictureOf(1_000));
     await age(root, evicted, 1);
 
-    await sessions.savePicture(pictureOf(1_000));
+    await sessions.savePicture("task-1", pictureOf(1_000));
 
     expect(await sessions.readPicture(evicted)).toEqual({
       status: "missing",
@@ -169,12 +168,12 @@ describe("what the picture store keeps", () => {
   it("keeps the picture it was just given, whatever it evicts to do it", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root, {
-      pictures: { totalBytes: 1_200 },
+      kept: { toolPictures: { totalBytes: 1_200 } },
     });
-    const first = await sessions.savePicture(pictureOf(1_000));
+    const first = await sessions.savePicture("task-1", pictureOf(1_000));
     await age(root, first, 1);
 
-    const second = await sessions.savePicture(pictureOf(1_000));
+    const second = await sessions.savePicture("task-1", pictureOf(1_000));
 
     expect((await sessions.readPicture(second)).status).toBe("ready");
     expect((await sessions.readPicture(first)).status).toBe("missing");
@@ -183,10 +182,10 @@ describe("what the picture store keeps", () => {
   it("drops screenshots older than the age it keeps them for", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root);
-    const old = await sessions.savePicture(pictureOf(100));
+    const old = await sessions.savePicture("task-1", pictureOf(100));
     await age(root, old, 40);
 
-    await sessions.savePicture(pictureOf(100));
+    await sessions.savePicture("task-1", pictureOf(100));
 
     expect(await sessions.readPicture(old)).toEqual({
       status: "missing",
@@ -197,10 +196,10 @@ describe("what the picture store keeps", () => {
   it("says so in the conversation when a picture was too large to keep", async () => {
     const root = await temporaryRoot();
     const sessions = new FileSessions(root, {
-      pictures: { pictureBytes: 500 },
+      kept: { toolPictures: { itemBytes: 500 } },
     });
 
-    const id = await sessions.savePicture(pictureOf(1_000));
+    const id = await sessions.savePicture("task-1", pictureOf(1_000));
 
     expect(await sessions.readPicture(id)).toEqual({
       status: "missing",

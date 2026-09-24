@@ -56,6 +56,8 @@ import { renderScatterPlot } from "./render-scatter-plot.js";
 import { renderHistogram } from "./render-histogram.js";
 import { renderBoxPlot } from "./render-box-plot.js";
 import { askUser, renderQuiz } from "./user-input.js";
+import { keptAddress, type ConversationItems } from "./conversation-items.js";
+export type { ConversationItems, FileRead } from "./conversation-items.js";
 
 /** Typed data, never a rendered string and never a magic sentinel value. */
 export type ToolResult = ToolInvocationResult;
@@ -78,6 +80,8 @@ export interface ToolRegistry {
     name: string,
     args: unknown,
     signal?: AbortSignal,
+    /** The conversation the call belongs to, for what it kept. */
+    conversationId?: string,
   ): Promise<ToolResult>;
   completeUserInput?(
     name: string,
@@ -98,8 +102,13 @@ type ToolDefinition = {
   readonly execute: (
     args: unknown,
     signal?: AbortSignal,
+    conversationId?: string,
   ) => Promise<ToolResult>;
-  readonly requiresWorkspace: boolean;
+  /**
+   * Whether the call needs a chosen folder. A tool that also reads what a
+   * conversation kept is offered without one, and answers by the call.
+   */
+  readonly requiresWorkspace: boolean | ((args: unknown) => boolean);
   /** Withdrawn, dynamically, when no shell is currently resolved. */
   readonly requiresShell?: boolean;
   readonly completeUserInput?: (
@@ -128,7 +137,28 @@ export type WorkspaceToolsOptions = {
    * reach a detached descendant or survive this process dying.
    */
   readonly containment?: CommandContainment | undefined;
+  /**
+   * What each conversation kept that a tool can reach: a command's whole
+   * output, pasted text, and when each file was last read. Supplied by the
+   * application; without it, those are not offered.
+   */
+  readonly items?: ConversationItems | undefined;
 };
+
+function needsWorkspace(definition: ToolDefinition, args: unknown): boolean {
+  return typeof definition.requiresWorkspace === "function"
+    ? definition.requiresWorkspace(args)
+    : definition.requiresWorkspace;
+}
+
+/** A read of what the conversation kept, which needs no folder. */
+function readsKeptItem(args: unknown): boolean {
+  const path =
+    args && typeof args === "object"
+      ? (args as Record<string, unknown>)["path"]
+      : undefined;
+  return typeof path === "string" && keptAddress(path) !== undefined;
+}
 
 export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   #root: string;
@@ -136,6 +166,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   #shell: string | undefined;
   readonly #containment: CommandContainment | undefined;
   readonly #acceptsImages: (() => boolean) | undefined;
+  readonly #items: ConversationItems | undefined;
   readonly #definitions: ReadonlyMap<string, ToolDefinition>;
 
   constructor(workspaceRoot?: string, options: WorkspaceToolsOptions = {}) {
@@ -145,6 +176,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
     this.#shell = "shell" in options ? options.shell : resolveShell();
     this.#containment = options.containment;
     this.#acceptsImages = options.acceptsImages;
+    this.#items = options.items;
     this.#definitions = new Map<string, ToolDefinition>([
       [
         listDirectorySpec.name,
@@ -172,15 +204,18 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
         readFileSpec.name,
         {
           spec: readFileSpec,
-          requiresWorkspace: true,
+          // Offered without a folder only when there is something kept to read.
+          requiresWorkspace: options.items
+            ? (args) => !readsKeptItem(args)
+            : true,
           inspect: async (args) => inspectReadTextFile(this.#root, args),
-          execute: (args, signal) =>
-            runReadTextFile(
-              this.#root,
-              args,
-              signal,
-              this.#acceptsImages?.() ?? false,
-            ),
+          execute: (args, signal, conversationId) =>
+            runReadTextFile(this.#root, args, signal, {
+              acceptsImages: this.#acceptsImages?.() ?? false,
+              workspace: this.#available,
+              ...(conversationId ? { conversationId } : {}),
+              ...(this.#items ? { items: this.#items } : {}),
+            }),
         },
       ],
       [
@@ -218,13 +253,21 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
           requiresShell: true,
           inspect: async (args: unknown) =>
             inspectRunCommand(basename(this.#root), args),
-          execute: (args: unknown, signal?: AbortSignal) =>
+          execute: (
+            args: unknown,
+            signal?: AbortSignal,
+            conversationId?: string,
+          ) =>
             runShellCommand(
               this.#shell as string,
               this.#root,
               args,
               signal,
               this.#containment,
+              {
+                ...(conversationId ? { conversationId } : {}),
+                ...(this.#items ? { items: this.#items } : {}),
+              },
             ),
         },
       ],
@@ -250,7 +293,10 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   list(): readonly ToolSpec[] {
     const seeing = this.#acceptsImages?.() ?? false;
     return [...this.#definitions.values()]
-      .filter((definition) => this.#available || !definition.requiresWorkspace)
+      .filter(
+        (definition) =>
+          this.#available || definition.requiresWorkspace !== true,
+      )
       .filter((definition) => seeing || !definition.requiresVision)
       .filter((definition) => this.#shell || !definition.requiresShell)
       .map(({ spec }) => spec);
@@ -298,7 +344,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
 
   async inspect(name: string, args: unknown): Promise<ToolCallInspection> {
     const definition = this.#definitions.get(name);
-    if (definition?.requiresWorkspace && !this.#available)
+    if (definition && needsWorkspace(definition, args) && !this.#available)
       return { ok: false, reason: "Choose a folder before using files." };
     if (definition?.requiresShell && !this.#shell)
       return { ok: false, reason: `The tool “${name}” is not available.` };
@@ -311,14 +357,15 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
     name: string,
     args: unknown,
     signal?: AbortSignal,
+    conversationId?: string,
   ): Promise<ToolResult> {
     const definition = this.#definitions.get(name);
-    if (definition?.requiresWorkspace && !this.#available)
+    if (definition && needsWorkspace(definition, args) && !this.#available)
       return { ok: false, reason: "Choose a folder before using files." };
     if (definition?.requiresShell && !this.#shell)
       return { ok: false, reason: `The tool “${name}” is not available.` };
     return definition
-      ? definition.execute(args, signal)
+      ? definition.execute(args, signal, conversationId)
       : { ok: false, reason: `The tool “${name}” is not available.` };
   }
 

@@ -37,6 +37,7 @@ export function timelinePieces(
   const exportView = commands.exportView;
   const readPicture = commands.readPicture;
   return {
+    openAttachment: (id) => void commands.openAttachment(task.id, id),
     ...(previewRewind && commitRewind
       ? {
           userMessage: (message, busy, bubble) => (

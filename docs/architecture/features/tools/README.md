@@ -41,7 +41,7 @@ nothing about permission and renders nothing itself.
 - Shell execution uses the process-ownership platform mechanism; this feature
   owns shell policy and result wording, not process spawning.
 - A registry: `list() → ToolSpec[]`, `inspect(name, args) → Promise<Inspection>`,
-  `execute(name, args, signal) → Result`, and `completeUserInput(name, args,
+  `execute(name, args, signal, conversationId) → Result`, and `completeUserInput(name, args,
   response) → Result`. Inspection validates arguments and
   supplies a human-readable action and target plus technical detail for the
   permission card's collapsed disclosure. It is asynchronous because some
@@ -79,6 +79,11 @@ nothing about permission and renders nothing itself.
   is a lookup table, not a place for tool-specific logic.
 - `describeWorkspace()` returns the workspace name and a bounded top-level
   inventory for prompt context without reading file contents.
+- `ConversationItems` is this feature's interface for what the application
+  keeps per conversation: `locate` a saved output or pasted text, `keepOutput`
+  a command's whole stream, and `lastRead` / `noteRead` for a file. The
+  application supplies it; the conversation id `execute` receives scopes every
+  call.
 
 ## Invariants
 
@@ -120,11 +125,39 @@ nothing about permission and renders nothing itself.
   takes it, while text with accents, tabs or CRLF is never mistaken for
   binary. Named tests: `refuses a file that is not text, and says what it is
   instead`, `reads a text file that merely contains unusual characters`.
-- **A file longer than a turn can carry is cut from the middle and says so.**
-  Both ends survive, because the top of a file says what it is and the bottom
-  of a log says what happened last. Named tests: `keeps both ends of a very
-  long file and says what it left out`, `leaves a file that fits exactly as it
-  is`.
+- **A text file is read a page at a time, never cut.** Each line comes back
+  numbered; a page stops at 2,000 lines or 8,000 estimated tokens, whichever
+  comes first, and ends by naming the next line to ask for. A line too long to
+  read whole is shortened and says how many characters were left out. The file
+  is streamed, so its size alone never refuses it. Named tests: `reads a short
+  file whole, each line numbered`, `reads line 9,000 of a 20,000-line file`,
+  `reads a long file a page at a time, and says where the next page starts`,
+  `cuts a line too long to read whole, and says how much was left out`, `reads
+  a text file larger than 2 MB, a page at a time`.
+- **A page read after its file changed says so.** The last read of each file is
+  remembered per conversation, so a later page of a file that changed is
+  prefixed with when it was last read. Named test: `says a file changed since
+  the last read, and still reads it`.
+- **What a conversation kept is read by address, within that conversation
+  only.** `output://<id>` and `attachment://<id>` name a saved output and a
+  pasted text; they are read without asking, since they hold nothing the
+  conversation did not already have, and one conversation can never reach
+  another's. Without a folder, `read_file` is offered for these addresses
+  alone. Named tests: `reads a saved output by its id, a page at a time, within
+  its own conversation only`, `reads a pasted text by its attachment id, without
+  asking`, `can read what it kept, and nothing from a folder`.
+- **Text copied from a numbered read still edits.** When no match is found and
+  every line of the text to find carries a read's line prefix, `multi_edit`
+  tries once more without the prefixes, in the replacement too; a file whose
+  lines really begin that way is still matched exactly first. Named tests: `is
+  found without its line numbers, and the replacement is written without them`,
+  `keeps a file whose lines really start with numbers editable exactly`.
+- **A command's output is bounded inline and kept whole.** Standard output
+  shows at most 5,000 estimated tokens and standard error 1,500, each as its
+  start and end; when either did not fit, the whole stream is kept with the
+  conversation and its address returned. Named tests: `returns at most the
+  token limit inline, and keeps the whole of it to read again`, `keeps nothing
+  when the whole output fits`.
 - **A PDF is read as text, a page at a time, and never silently in part.** The
   answer carries the page count, which pages were read, and how to ask for the
   rest. Named tests: `reads its words rather than refusing it as binary`, `reads

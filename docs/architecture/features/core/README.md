@@ -178,6 +178,18 @@ directly.
   at all were set aside by the history store, and the person is told where.
   Named tests: `lists the conversation changed last first` and `says where
   conversations that could not be read at all were kept`.
+- **A deleted conversation takes what it kept with it**: its pictures, pastes
+  and saved outputs, and nothing of another conversation's. A file that will
+  not go yet does not stop the conversation being deleted. Named test: `removes
+  what a deleted conversation kept, and nothing of another's`.
+- **A long paste never has to travel as text again.** It is kept as a draft
+  when it is pasted, sent by the name the store gave it, and opened in the
+  person's own editor by that name before and after sending; only a text file
+  the store kept is ever opened, so nothing opened this way can run. Named
+  tests: `is kept as it is pasted, and opens in the person's editor before and
+  after it is sent`, `opens nothing it did not keep`, and the argument checks
+  `accepts a message that is only pastes, but never an empty one` and `takes a
+  paste up to 50 MB to keep, and opens one only by its name`.
 - **The window is never sent what the model was sent.** A conversation's
   stored model history is often its largest part and nothing in the window
   reads it, so every event leaves it out. Named test: `saves what the model
