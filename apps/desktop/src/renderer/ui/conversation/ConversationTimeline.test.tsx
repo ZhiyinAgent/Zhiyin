@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   ConversationTimeline,
@@ -149,6 +149,110 @@ describe("ConversationTimeline", () => {
         (node) => node.textContent,
       ),
     ).toEqual(["actions a1", "specialistRun s1", "actions a2", "view v1"]);
+  });
+
+  it("says where a condensing failed, and why, in plain words", () => {
+    const { container } = render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          condensings: [
+            {
+              id: "c1",
+              sequence: 1.5,
+              createdAt: "2026-09-24T10:00:00.000Z",
+              targetTokens: 13_600,
+              tokensBefore: 14_200,
+              outcome: "failed",
+              reason: "request-failed",
+              detail: "The provider is overloaded.",
+            },
+          ],
+        }}
+        pieces={pieces}
+      />,
+    );
+
+    const notice = screen.getByText(
+      /Couldn't condense the earlier conversation: the request to the model failed \(The provider is overloaded\.\)/,
+    );
+    expect(notice).toBeVisible();
+    expect(notice).toHaveTextContent(
+      /tries again once the conversation has grown/,
+    );
+    const [first, second] = [...container.querySelectorAll("[data-piece]")];
+    expect(
+      first!.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      second!.compareDocumentPosition(notice) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["nothing-to-condense", /only the newest work was left/],
+    ["too-large", /larger than the model can read at once/],
+    ["unusable", /answer was not a usable summary/],
+  ] as const)("says what a %s failure means", (reason, words) => {
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          condensings: [
+            {
+              id: "c1",
+              sequence: 1.5,
+              createdAt: "2026-09-24T10:00:00.000Z",
+              targetTokens: 13_600,
+              tokensBefore: 14_200,
+              outcome: "failed",
+              reason,
+            },
+          ],
+        }}
+        pieces={pieces}
+      />,
+    );
+
+    expect(screen.getByText(words)).toBeVisible();
+  });
+
+  it("dims what was condensed, up to the last message it covered, and says why", () => {
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            { id: "m3", role: "user", text: "Now the table", sequence: 5 },
+          ],
+          condensedThrough: "m2",
+        }}
+        pieces={pieces}
+      />,
+    );
+
+    const condensed = screen.getByRole("group", {
+      name: "Condensed earlier conversation",
+    });
+    expect(condensed).toHaveAccessibleDescription(
+      "Not in the assistant's memory any more: it works from the summary below.",
+    );
+    expect(condensed).toHaveAttribute("tabindex", "0");
+    expect(
+      within(condensed).getByText("Chart last quarter's sales"),
+    ).toBeVisible();
+    expect(within(condensed).getByText("actions a1 a2")).toBeVisible();
+    expect(within(condensed).getByText("Here is the chart.")).toBeVisible();
+    expect(within(condensed).queryByText("Now the table")).toBeNull();
+    expect(screen.getByText("Now the table")).toBeVisible();
+  });
+
+  it("dims nothing when nothing is condensed, as after a rewind that cut through it", () => {
+    render(<ConversationTimeline task={conversation} pieces={pieces} />);
+
+    expect(screen.queryByRole("group")).toBeNull();
   });
 
   it("draws nothing for a specialist run when no piece is passed for it", () => {

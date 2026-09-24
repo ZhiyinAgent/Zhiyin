@@ -41,6 +41,7 @@ function fakeCore(version: string): CoreApi & {
     keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
     setContextBudget: async () => {},
     setDefaultContextBudget: async () => {},
+    condenseNow: async () => {},
     openAttachment: async () => {},
     previewRewind: async () => {
       throw new Error("No rewind preview configured for this test.");

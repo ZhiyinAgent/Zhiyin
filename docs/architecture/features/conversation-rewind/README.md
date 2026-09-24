@@ -31,7 +31,10 @@ result.
   to a draft and removes later context`. What the model was sent is cut at
   the same message, so no call or result from a removed exchange is sent
   again. Named regression: `keeps what the model was sent before the selected
-  message, and nothing after`.
+  message, and nothing after`. The record of each attempt to condense is cut
+  there too, so a condensing covering a removed message is gone with it.
+  Named regression: `keeps only the attempts to condense made before the
+  selected message`.
 - A changed task invalidates its review. Named regression: `refuses a stale plan
   when the conversation changed`.
 

@@ -1,10 +1,12 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useId, type ReactNode } from "react";
 import type {
   MessageAttachment,
   ReasoningTrace as Trace,
+  TaskCondensing,
   TaskPlanItem,
 } from "@zhiyin/contract";
 import { Icon, Logo, Notice } from "../shared/index.js";
+import { CondensingCard } from "./CondensingCard.js";
 import { ConversationSkeleton } from "./ConversationSkeleton.js";
 import { OutcomeCard } from "./OutcomeCard.js";
 import { PastedText } from "./PastedText.js";
@@ -60,6 +62,10 @@ export type TimelineTask<
   readonly views?: readonly View[];
   readonly interactions?: readonly Interaction[];
   readonly specialistRuns?: readonly SpecialistRun[];
+  /** Each attempt to condense the conversation, drawn by the conversation. */
+  readonly condensings?: readonly TaskCondensing[];
+  /** The last message the model now knows only from a summary. */
+  readonly condensedThrough?: string;
   readonly plan?: readonly TaskPlanItem[];
   readonly phase: TimelinePhase;
 };
@@ -125,6 +131,33 @@ function userTurnExtras(
   };
 }
 
+const condensedNote =
+  "Not in the assistant's memory any more: it works from the summary below.";
+
+/**
+ * What the model now knows only from a summary: still here to read, at less
+ * emphasis, and named as condensed for anyone who cannot see the difference.
+ * Hovering or focusing it says what that means.
+ */
+function CondensedHistory({ children }: { children: ReactNode }) {
+  const noteId = useId();
+  return (
+    <div
+      className={styles["condensed-history"]}
+      role="group"
+      aria-label="Condensed earlier conversation"
+      aria-describedby={noteId}
+      tabIndex={0}
+      title={condensedNote}
+    >
+      <p id={noteId} className={styles["condensed-history__note"]}>
+        {condensedNote}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 function AgentTurn({
   children,
   status = false,
@@ -152,7 +185,8 @@ type TimelineBlock<Action, View, Interaction, SpecialistRun> =
   | { kind: "actions"; actions: Action[] }
   | { kind: "view"; view: View }
   | { kind: "interaction"; interaction: Interaction }
-  | { kind: "specialistRun"; run: SpecialistRun };
+  | { kind: "specialistRun"; run: SpecialistRun }
+  | { kind: "condensing"; condensing: TaskCondensing };
 
 function timelineBlocks<
   Action extends Placed,
@@ -227,6 +261,13 @@ function timelineBlocks<
         index,
       run,
     })),
+    // Always saved with their place, so none needs a fallback of its own.
+    ...(task.condensings ?? []).map((condensing) => ({
+      kind: "condensing" as const,
+      sequence: condensing.sequence,
+      fallbackOrder: Number.MAX_SAFE_INTEGER,
+      condensing,
+    })),
   ].sort(
     (left, right) =>
       left.sequence - right.sequence ||
@@ -250,6 +291,10 @@ function timelineBlocks<
     }
     if (entry.kind === "specialistRun") {
       blocks.push({ kind: "specialistRun", run: entry.run });
+      return blocks;
+    }
+    if (entry.kind === "condensing") {
+      blocks.push({ kind: "condensing", condensing: entry.condensing });
       return blocks;
     }
     const previous = blocks.at(-1);
@@ -351,70 +396,92 @@ export function ConversationTimeline<
     task.phase.kind === "approval" ||
     task.phase.kind === "input";
 
+  const drawn = blocks.map((block, index) => {
+    const key =
+      block.kind === "message"
+        ? block.message.id
+        : block.kind === "view"
+          ? block.view.id
+          : block.kind === "interaction"
+            ? block.interaction.id
+            : block.kind === "specialistRun"
+              ? block.run.id
+              : block.kind === "condensing"
+                ? block.condensing.id
+                : `actions-${block.actions[0]?.id ?? index}`;
+    return (
+      <Fragment key={key}>
+        {block.kind === "message" ? (
+          block.message.role === "user" ? (
+            pieces.userMessage ? (
+              pieces.userMessage(
+                block.message,
+                busy,
+                <UserTurn
+                  text={block.message.text}
+                  {...userTurnExtras(block.message, pieces.openAttachment)}
+                />,
+              )
+            ) : (
+              <UserTurn
+                text={block.message.text}
+                {...userTurnExtras(block.message, pieces.openAttachment)}
+              />
+            )
+          ) : (
+            <AgentTurn compact={compact}>
+              {block.message.reasoning && (
+                <ReasoningTrace trace={block.message.reasoning} />
+              )}
+              {block.message.text.trim() && (
+                <StreamingMarkdown
+                  text={block.message.text}
+                  streaming={block.message.id === streamingMessageId}
+                />
+              )}
+            </AgentTurn>
+          )
+        ) : block.kind === "view" ? (
+          <AgentTurn compact={compact}>{pieces.view(block.view)}</AgentTurn>
+        ) : block.kind === "interaction" ? (
+          <AgentTurn compact={compact}>
+            {pieces.interaction(block.interaction)}
+          </AgentTurn>
+        ) : block.kind === "specialistRun" ? (
+          pieces.specialistRun ? (
+            <AgentTurn compact={compact}>
+              {pieces.specialistRun(block.run)}
+            </AgentTurn>
+          ) : null
+        ) : block.kind === "condensing" ? (
+          <CondensingCard condensing={block.condensing} />
+        ) : (
+          pieces.actions(block.actions)
+        )}
+        {index === latestUserIndex && <TaskPlan items={task.plan ?? []} />}
+      </Fragment>
+    );
+  });
+  const condensedEnd = task.condensedThrough
+    ? blocks.findIndex(
+        (block) =>
+          block.kind === "message" &&
+          block.message.id === task.condensedThrough,
+      )
+    : -1;
+
   return (
     <>
-      {blocks.map((block, index) => {
-        const key =
-          block.kind === "message"
-            ? block.message.id
-            : block.kind === "view"
-              ? block.view.id
-              : block.kind === "interaction"
-                ? block.interaction.id
-                : block.kind === "specialistRun"
-                  ? block.run.id
-                  : `actions-${block.actions[0]?.id ?? index}`;
-        return (
-          <Fragment key={key}>
-            {block.kind === "message" ? (
-              block.message.role === "user" ? (
-                pieces.userMessage ? (
-                  pieces.userMessage(
-                    block.message,
-                    busy,
-                    <UserTurn
-                      text={block.message.text}
-                      {...userTurnExtras(block.message, pieces.openAttachment)}
-                    />,
-                  )
-                ) : (
-                  <UserTurn
-                    text={block.message.text}
-                    {...userTurnExtras(block.message, pieces.openAttachment)}
-                  />
-                )
-              ) : (
-                <AgentTurn compact={compact}>
-                  {block.message.reasoning && (
-                    <ReasoningTrace trace={block.message.reasoning} />
-                  )}
-                  {block.message.text.trim() && (
-                    <StreamingMarkdown
-                      text={block.message.text}
-                      streaming={block.message.id === streamingMessageId}
-                    />
-                  )}
-                </AgentTurn>
-              )
-            ) : block.kind === "view" ? (
-              <AgentTurn compact={compact}>{pieces.view(block.view)}</AgentTurn>
-            ) : block.kind === "interaction" ? (
-              <AgentTurn compact={compact}>
-                {pieces.interaction(block.interaction)}
-              </AgentTurn>
-            ) : block.kind === "specialistRun" ? (
-              pieces.specialistRun ? (
-                <AgentTurn compact={compact}>
-                  {pieces.specialistRun(block.run)}
-                </AgentTurn>
-              ) : null
-            ) : (
-              pieces.actions(block.actions)
-            )}
-            {index === latestUserIndex && <TaskPlan items={task.plan ?? []} />}
-          </Fragment>
-        );
-      })}
+      {condensedEnd >= 0 ? (
+        <>
+          <CondensedHistory>
+            {drawn.slice(0, condensedEnd + 1)}
+          </CondensedHistory>
+          {drawn.slice(condensedEnd + 1)}
+        </>
+      ) : (
+        drawn
+      )}
 
       {task.phase.kind === "loading" && <ConversationSkeleton />}
 

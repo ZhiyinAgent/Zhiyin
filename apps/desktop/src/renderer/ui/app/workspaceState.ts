@@ -93,6 +93,9 @@ export type WorkspaceTask = {
   contextBudget?: CoreWorkspaceTask["contextBudget"];
   /** The size of the last request the loop sent. */
   contextUsage?: CoreWorkspaceTask["contextUsage"];
+  condensings?: NonNullable<CoreWorkspaceTask["condensings"]>;
+  /** The last message the model now knows only from a summary. */
+  condensedThrough?: string;
   id: string;
   title: string;
   /** The folder this conversation was last worked in. */
@@ -299,6 +302,10 @@ function taskFromCore(task: CoreWorkspaceTask): WorkspaceTask {
     ...(task.reasoning ? { reasoning: { ...task.reasoning } } : {}),
     ...(task.contextBudget ? { contextBudget: task.contextBudget } : {}),
     ...(task.contextUsage ? { contextUsage: task.contextUsage } : {}),
+    ...(task.condensings ? { condensings: task.condensings } : {}),
+    ...(task.compaction
+      ? { condensedThrough: task.compaction.throughMessageId }
+      : {}),
     ...(task.workspace ? { workspace: { ...task.workspace } } : {}),
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
     updatedLabel: task.updatedLabel,

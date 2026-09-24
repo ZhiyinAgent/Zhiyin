@@ -260,6 +260,31 @@ describe("a conversation past its budget", () => {
     expect(host.find(taskId)?.phase.kind).toBe("completed");
   });
 
+  it("asks for the summary marked to be read from the cache up to where the previous request ended", async () => {
+    const requests: ModelRequest[] = [];
+    const { host } = loopAndHost(
+      withReads(
+        () => ({ ok: true, value: { text: sized(800) } }),
+        working(12, 3, requests),
+        {
+          modelWindow: {
+            model: "small",
+            contextWindow: 16_000,
+            maximumOutputTokens: 100,
+          },
+        },
+      ),
+    );
+    const taskId = await host.app.createTask();
+
+    await host.app.start(taskId, "Read the whole report");
+
+    const asked = requests.findIndex(condensingAsked);
+    const previous = requests[asked - 1]?.messages ?? [];
+    expect(requests[asked]?.cacheAfter).toContain(previous.length - 1);
+    expect(requests[asked]?.session).toBe(taskId);
+  });
+
   it("of 150k tokens is kept whole on a 1M model's Medium budget, and condensed on Low", async () => {
     const conversation = settled([
       { id: "m1", role: "user", text: sized(150_000), sequence: 0 },
@@ -466,6 +491,104 @@ describe("after condensing", () => {
     expect(after).toContain("Current text of b.txt");
     expect(after).toContain("Re-read by Zhiyin after condensing");
     expect(host.find(taskId)?.phase.kind).toBe("completed");
+  });
+
+  it("the record keeps what was summarised, the summary, what was carried and the files read again, for the conversation to show", async () => {
+    const requests: ModelRequest[] = [];
+    let worked = 0;
+    const deps = stubDependencies(() => {});
+    const { host } = loopAndHost({
+      ...deps,
+      workLimits: endless,
+      modelWindow: {
+        model: "small",
+        contextWindow: 16_000,
+        maximumOutputTokens: 100,
+      },
+      tools: {
+        list: () =>
+          ["edit", "read"].map((name) => ({
+            name,
+            description: `The ${name} tool.`,
+            inputSchema: { type: "object" },
+          })),
+        inspect: async (name, args) => ({
+          ok: true,
+          action: name,
+          target: String((args as { path?: string }).path ?? "notes"),
+          command: `${name}(...)`,
+          access: name === "edit" ? "write" : "read",
+          scope: "workspace",
+          ...(name === "edit"
+            ? {
+                changes: [
+                  {
+                    path: String((args as { path?: string }).path),
+                    change: "updated" as const,
+                  },
+                ],
+              }
+            : {}),
+        }),
+        execute: async (name) => ({
+          ok: true,
+          value: { text: name === "read" ? sized(800) : "ok" },
+        }),
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Allowed" }),
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          requests.push(request);
+          if (condensingAsked(request))
+            yield {
+              kind: "textDelta" as const,
+              text: JSON.stringify({ summary: "## Done\n\nBoth files fixed." }),
+            };
+          else if (++worked === 1)
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "call-edit",
+              name: "edit",
+              argumentsDelta: JSON.stringify({ path: "a.txt" }),
+            };
+          else if (worked <= 11)
+            for (let index = 0; index < 3; index += 1)
+              yield {
+                kind: "toolCallDelta" as const,
+                index,
+                callId: `call-read-${worked}-${index}`,
+                name: "read",
+                argumentsDelta: "{}",
+              };
+          else yield { kind: "textDelta" as const, text: "Done." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    const taskId = await host.app.createTask();
+
+    await host.app.start(taskId, "Fix the file");
+
+    const condensed = host
+      .find(taskId)
+      ?.condensings?.find((record) => record.outcome === "condensed");
+    expect(condensed).toMatchObject({
+      summary: "## Done\n\nBoth files fixed.",
+      reread: ["a.txt"],
+      throughMessageId: host.find(taskId)?.compaction?.throughMessageId,
+    });
+    expect(condensed?.outcome === "condensed" && condensed.carried).toContain(
+      "Fix the file",
+    );
+    // The person's request, and the calls made before the cut.
+    expect(condensed?.outcome === "condensed" && condensed.messages).toBe(1);
+    expect(
+      condensed?.outcome === "condensed" && condensed.actions,
+    ).toBeGreaterThan(1);
   });
 });
 

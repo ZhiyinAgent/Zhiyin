@@ -73,6 +73,64 @@ describe("workspaceReducer", () => {
   });
 });
 
+describe("a conversation's condensings", () => {
+  it("are kept from the core, so the conversation can show where each happened", () => {
+    const condensings = [
+      {
+        id: "condensing-1",
+        sequence: 3,
+        createdAt: "2026-09-24T10:00:00.000Z",
+        targetTokens: 13_600,
+        tokensBefore: 14_200,
+        outcome: "failed" as const,
+        reason: "unusable" as const,
+      },
+    ];
+
+    const state = workspaceReducer(createWorkspaceState(), {
+      type: "taskReplaced",
+      task: {
+        id: "task-1",
+        title: "Long work",
+        updatedLabel: "Now",
+        messages: [],
+        condensings,
+        phase: { kind: "interrupted" },
+      },
+    });
+
+    expect(state.tasks[0]?.condensings).toEqual(condensings);
+  });
+
+  it("say where the condensed part ends, and nothing once a rewind has cut through it", () => {
+    const task = {
+      id: "task-1",
+      title: "Long work",
+      updatedLabel: "Now",
+      messages: [],
+      compaction: {
+        revision: 1,
+        throughMessageId: "m9",
+        summary: "Earlier work.",
+        retainedActionIds: [],
+        createdAt: "2026-09-25T10:00:00.000Z",
+      },
+      phase: { kind: "interrupted" as const },
+    };
+
+    let state = workspaceReducer(createWorkspaceState(), {
+      type: "taskReplaced",
+      task,
+    });
+    expect(state.tasks[0]?.condensedThrough).toBe("m9");
+
+    const { compaction, ...rewound } = task;
+    void compaction;
+    state = workspaceReducer(state, { type: "taskReplaced", task: rewound });
+    expect(state.tasks[0]?.condensedThrough).toBeUndefined();
+  });
+});
+
 describe("the conversation list", () => {
   const opened = {
     id: "open",

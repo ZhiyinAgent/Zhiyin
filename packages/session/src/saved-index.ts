@@ -6,12 +6,9 @@
 
 import type { ConversationSummary } from "@zhiyin/contract";
 import type { SavedSettings } from "./history-store.js";
-import {
-  isFolder,
-  isRecord,
-  optionalText,
-  validContextBudget,
-} from "./saved-workspace.js";
+import { isFolder } from "./saved-workspace.js";
+import { isRecord, optionalText } from "./saved-values.js";
+import { validContextBudget } from "./saved-context.js";
 
 /** A conversation as the list shows it, without opening it. */
 export function isConversationSummary(

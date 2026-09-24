@@ -21,11 +21,12 @@ import {
   contextTarget,
   estimatedTokens,
   type ContextUsage,
+  type TaskCondensing,
   type ToolSpec,
 } from "@zhiyin/contract";
 import type { ModelMessage, ModelTool, ModelUsage } from "@zhiyin/model-client";
 import { estimatedRequestTokens } from "./conversation-context.js";
-import { Condensing } from "./condensing.js";
+import { Condensing, type CondensingOutcome } from "./condensing.js";
 import type { ModelHistory } from "./model-history.js";
 import { harnessNotice } from "./notices.js";
 import { RequestSize } from "./request-size.js";
@@ -68,7 +69,10 @@ export class ContextGuard {
   readonly #records: TurnRecords;
   readonly #condensing: Condensing;
   readonly #size = new RequestSize();
-  readonly #failedAt = new Map<string, number>();
+  /** Conversations the person asked to condense before their next request. */
+  readonly #asked = new Set<string>();
+  /** How many history messages each conversation's last request sent. */
+  readonly #sent = new Map<string, number>();
 
   constructor(deps: AgentLoopDependencies, records: TurnRecords) {
     this.#deps = deps;
@@ -85,9 +89,14 @@ export class ContextGuard {
     ).targetTokens;
   }
 
+  /** Condenses before the conversation's next request, whatever its size. */
+  ask(taskId: string): void {
+    this.#asked.add(taskId);
+  }
+
   /**
    * The history to send next: older results cleared when they have piled up,
-   * and condensed when the request is past its budget.
+   * and condensed when the request is past its budget or the person asked.
    */
   async prepare(
     taskId: string,
@@ -101,15 +110,19 @@ export class ContextGuard {
     const size = (messages: readonly ModelMessage[]) =>
       this.#size.of(taskId, this.#parts(plan, messages)).tokens;
     const before = size(history.messages());
-    const failed = this.#failedAt.get(taskId);
-    if (before > target && !(failed && before < failed * regrowth)) {
+    const waitFor = this.#waitingToGrow(taskId, target);
+    const asked = this.#asked.delete(taskId);
+    if (
+      asked ||
+      (before > target && !(waitFor && before < waitFor * regrowth))
+    ) {
       const model = this.#deps.host.modelWindow();
       const window = model.contextWindow ?? assumedWindow;
       const reply = Math.min(
         model.maximumOutputTokens ?? replyReserve,
         replyReserve,
       );
-      const condensed = await this.#condensing.condense({
+      const outcome = await this.#condensing.condense({
         taskId,
         history,
         fixed: plan.fixed,
@@ -120,16 +133,74 @@ export class ContextGuard {
         size,
         reopen,
         signal,
+        sent: this.#sent.get(taskId),
       });
-      if (condensed) history = condensed;
-      // A condensing that failed, or left the request still past its budget,
-      // is not tried again on every call: only once the request has grown.
-      const after = condensed ? size(history.messages()) : before;
-      if (after > target) this.#failedAt.set(taskId, after);
-      else this.#failedAt.delete(taskId);
+      if (outcome.kind === "condensed") history = outcome.history;
+      if (outcome.kind !== "cancelled")
+        await this.#record(taskId, outcome, {
+          targetTokens: target,
+          tokensBefore: before,
+          tokensAfter: size(history.messages()),
+        });
     }
     await this.#publish(taskId, plan, history);
     return history;
+  }
+
+  /**
+   * The size a request must grow past before condensing is tried again: the
+   * last attempt's, when it failed or left the request past a target that is
+   * still the same. Read from the saved record, so it holds after a restart.
+   */
+  #waitingToGrow(taskId: string, target: number): number | undefined {
+    const last = this.#records.task(taskId).condensings?.at(-1);
+    if (!last || last.targetTokens !== target) return undefined;
+    if (last.outcome === "failed") return last.tokensBefore;
+    return last.tokensAfter > target ? last.tokensAfter : undefined;
+  }
+
+  /** Saves the attempt where it happened in the conversation. */
+  async #record(
+    taskId: string,
+    outcome: Exclude<CondensingOutcome, { kind: "cancelled" }>,
+    sizes: {
+      readonly targetTokens: number;
+      readonly tokensBefore: number;
+      readonly tokensAfter: number;
+    },
+  ): Promise<void> {
+    const task = this.#records.task(taskId);
+    const common = {
+      id: `condensing-${this.#deps.newMessageId()}`,
+      sequence: this.#records.nextTimelineSequence(task),
+      createdAt: this.#deps.now().toISOString(),
+      targetTokens: sizes.targetTokens,
+      tokensBefore: sizes.tokensBefore,
+    };
+    const record: TaskCondensing =
+      outcome.kind === "condensed"
+        ? {
+            ...common,
+            outcome: "condensed",
+            revision: outcome.revision,
+            throughMessageId: outcome.throughMessageId,
+            tokensAfter: sizes.tokensAfter,
+            messages: outcome.messages,
+            actions: outcome.actions,
+            summary: outcome.summary,
+            ...(outcome.carried ? { carried: outcome.carried } : {}),
+            ...(outcome.reread.length ? { reread: outcome.reread } : {}),
+          }
+        : {
+            ...common,
+            outcome: "failed",
+            reason: outcome.reason,
+            ...(outcome.detail ? { detail: outcome.detail } : {}),
+          };
+    await this.#records.replaceTask({
+      ...task,
+      condensings: [...(task.condensings ?? []), record],
+    });
   }
 
   /** The provider's count of the request just sent. */
@@ -139,6 +210,7 @@ export class ContextGuard {
     sent: readonly ModelMessage[],
     usage: ModelUsage | undefined,
   ): void {
+    this.#sent.set(taskId, sent.length);
     if (usage) this.#size.counted(taskId, this.#parts(plan, sent), usage);
   }
 

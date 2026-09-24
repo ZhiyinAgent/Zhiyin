@@ -35,7 +35,7 @@ import type {
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
-import type { AgentLoop, TurnHost } from "@zhiyin/agent-loop";
+import type { TurnHost } from "@zhiyin/agent-loop";
 import type { AuditLog } from "@zhiyin/audit";
 import type { Artifacts, DestinationChooser } from "@zhiyin/artifacts";
 import type { Capabilities } from "@zhiyin/capabilities";
@@ -47,7 +47,12 @@ import type { UsageTelemetry } from "@zhiyin/usage";
 import { BrowserFeed } from "./browser-feed.js";
 import { ModelSettings } from "./model-settings.js";
 import * as startup from "./startup.js";
-import { requiredTask, stampTaskWorkspace } from "./workspace-tasks.js";
+import {
+  requiredTask,
+  stampTaskWorkspace,
+  type WorkspaceTurns,
+} from "./workspace-tasks.js";
+export type { WorkspaceTurns } from "./workspace-tasks.js";
 import { WorkspacePersistence } from "./workspace-persistence.js";
 import { recordUsage } from "./workspace-usage.js";
 import { forTheWindow } from "./window-events.js";
@@ -63,21 +68,6 @@ import { closeInTurn } from "./closing.js";
 import * as produced from "./produced-files.js";
 import { ConversationList } from "./conversation-list.js";
 import { KeptItems } from "./kept-items.js";
-
-/** What the workspace asks of whoever runs turns. */
-export type WorkspaceTurns = Pick<
-  AgentLoop,
-  | "start"
-  | "cancel"
-  | "shutdown"
-  | "resolveApproval"
-  | "resolveUserInput"
-  | "running"
-  | "anyRunning"
-  | "accepts"
-  | "settleAfterRestart"
-  | "settleEndedTurn"
->;
 
 export type WorkspaceDependencies = {
   readonly onboarding?: boolean;

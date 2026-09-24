@@ -17,7 +17,7 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { holdExclusively, type HeldFile } from "@zhiyin/process-ownership";
 import { SessionStoreError } from "./errors.js";
-import { isRecord } from "./saved-workspace.js";
+import { isRecord } from "./saved-values.js";
 
 export type OwnershipOptions = {
   /** Replaced in tests, where a dead process id has to be a known quantity. */

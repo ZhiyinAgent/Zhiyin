@@ -49,6 +49,7 @@ export function ContextRing({
   budget,
   draftTokens,
   onChoose,
+  onCondense,
   disabled,
 }: {
   /** The last request the loop sent; absent before the first. */
@@ -57,6 +58,8 @@ export function ContextRing({
   budget: ContextBudgetChoice;
   draftTokens: number;
   onChoose: (budget: ContextBudgetChoice) => void;
+  /** Condenses the conversation; absent before there is one. */
+  onCondense?: () => Promise<void>;
   disabled: boolean;
 }) {
   const panelId = useId();
@@ -65,6 +68,8 @@ export function ContextRing({
   const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [breakdown, setBreakdown] = useState(false);
+  const [condensing, setCondensing] = useState(false);
+  const [condenseFailure, setCondenseFailure] = useState<string>();
 
   const options = contextBudgets(model);
   const chosen = contextTarget(budget, model);
@@ -95,6 +100,11 @@ export function ContextRing({
       panel.current.style.bottom = `${window.innerHeight - anchor.top + 10}px`;
     }
     position();
+    // Drawn at the end of the page, so focus is taken to it, or the keyboard
+    // could not reach it.
+    panel.current
+      ?.querySelector<HTMLInputElement>('input[type="radio"]:checked')
+      ?.focus();
     window.addEventListener("resize", position);
     document.addEventListener("scroll", position, true);
     return () => {
@@ -237,6 +247,31 @@ export function ContextRing({
             >
               What's using space
             </button>
+            {onCondense && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={condensing}
+                onClick={() => {
+                  setCondensing(true);
+                  setCondenseFailure(undefined);
+                  onCondense()
+                    .catch((error: unknown) =>
+                      setCondenseFailure(
+                        error instanceof Error ? error.message : String(error),
+                      ),
+                    )
+                    .finally(() => setCondensing(false));
+                }}
+              >
+                {condensing ? "Condensing…" : "Condense now"}
+              </button>
+            )}
+            {condenseFailure && (
+              <p className={styles["context-ring__warning"]} role="alert">
+                Couldn't condense: {condenseFailure}
+              </p>
+            )}
           </div>,
           document.body,
         )}

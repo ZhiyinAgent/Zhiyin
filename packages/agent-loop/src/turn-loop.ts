@@ -6,11 +6,7 @@
  * before this begins (a fresh user message and a plan, or nothing).
  */
 
-import type {
-  ProducedImage,
-  ToolSpec,
-  WorkspaceDescription,
-} from "@zhiyin/contract";
+import type { ProducedImage, WorkspaceDescription } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "./quiet-failures.js";
@@ -25,14 +21,14 @@ import {
   specialistRunsText,
 } from "./conversation-context.js";
 import { harnessNotice, toolOutput } from "./notices.js";
-import { ModelHistory, type SentPicture } from "./model-history.js";
+import type { ModelHistory, SentPicture } from "./model-history.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
 import { RoundResults, resultLimits } from "./result-size.js";
-import { ContextGuard } from "./context-guard.js";
+import type { ContextGuard } from "./context-guard.js";
+import { advertisedTools, openTaskHistory } from "./request-plan.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
-  delegateSpecialistTool,
   delegateSpecialistToolName,
   handoffMessage,
   SpecialistExecution,
@@ -80,6 +76,7 @@ export class TurnLoop {
       readonly pluginActivation: PluginActivation;
       readonly ownership: TurnOwnership;
       readonly pendingHandoffs: PendingHandoffs;
+      readonly context: ContextGuard;
     },
   ) {
     this.#deps = deps;
@@ -92,7 +89,7 @@ export class TurnLoop {
     this.#ownership = parts.ownership;
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#round = new ModelRound(deps, parts.records);
-    this.#context = new ContextGuard(deps, parts.records);
+    this.#context = parts.context;
   }
 
   async run(
@@ -133,13 +130,12 @@ export class TurnLoop {
         pluginDirectory,
         ownerOf: toolOwner,
       } = gathered.value;
-      const currentAdvertisedTools = (): readonly ToolSpec[] => [
-        ...availableTools,
-        ...(specialists.length ? [delegateSpecialistTool(specialists)] : []),
-        ...(pluginDirectory.some((entry) => !entry.activated)
-          ? [activatePluginTool]
-          : []),
-      ];
+      const currentAdvertisedTools = () =>
+        advertisedTools({
+          tools: availableTools,
+          specialists,
+          pluginDirectory,
+        });
       const fixedMessages = fixedModelMessages(
         workspace,
         skills,
@@ -558,17 +554,8 @@ export class TurnLoop {
     }
   }
 
-  async #openHistory(taskId: string): Promise<ModelHistory> {
-    return ModelHistory.open(this.#records.task(taskId), {
-      newId: () => this.#deps.newMessageId(),
-      readPicture: (source) => this.#deps.sessions.readPicture(source),
-      save: async (modelHistory) => {
-        await this.#records.replaceTask({
-          ...this.#records.task(taskId),
-          modelHistory,
-        });
-      },
-    });
+  #openHistory(taskId: string): Promise<ModelHistory> {
+    return openTaskHistory(this.#deps, this.#records, taskId);
   }
 
   /**

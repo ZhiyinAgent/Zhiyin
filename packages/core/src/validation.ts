@@ -305,6 +305,9 @@ export function validateCommand(
     case CHANNEL.setDefaultContextBudget:
       valid = args.length === 1 && budget(args[0]);
       break;
+    case CHANNEL.condenseNow:
+      valid = args.length === 1 && text(args[0]);
+      break;
     case CHANNEL.renameTask:
       valid = args.length === 2 && text(args[0]) && text(args[1], 160);
       break;

@@ -288,7 +288,10 @@ sequencing.
   does not offer is refused as corruption. Named tests: `keeps the default
   budget, a conversation's own budget and last measured size, and what a
   condensing carried, across a restart` and `rejects a budget Zhiyin does not
-  offer`.
+  offer`. Each attempt to condense is saved with its place, sizes and outcome,
+  and one with a reason Zhiyin never gives is refused. Named tests: `keeps each
+  attempt to condense a conversation, failed or not, across a restart` and
+  `rejects a condensing record with a reason Zhiyin never gives`.
 - Missing storage means a clean first launch; invalid storage is reported as
   corruption and is never presented as empty history. The named tests `returns
   no workspace on a clean first launch` and `reports corrupted local state

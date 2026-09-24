@@ -82,4 +82,30 @@ describe("the context budget a person chooses", () => {
 
     expect(app.snapshot().tasks[0]?.contextBudget).toBe("medium");
   });
+
+  it("has a conversation condensed when the window asks, and refuses a request naming none", async () => {
+    const app = loopFrom(stubDependencies(() => {}));
+    await app.initialize();
+    const core = new Core({
+      workspace: app,
+      ownership: { claim: async () => {}, release: async () => {} },
+      viewChecks: { answer: () => {}, abandon: () => {} },
+      chooseFolder: async () => undefined,
+      chooseSaveLocation: async () => undefined,
+      openExternal: async () => {},
+      openPath: async () => {},
+      version: "1.0.0",
+    });
+    const taskId = await app.createTask();
+
+    await expect(core.receive(CHANNEL.condenseNow, [])).rejects.toThrow();
+    await core.receive(CHANNEL.condenseNow, [taskId]);
+
+    expect(app.snapshot().tasks[0]?.condensings).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        reason: "nothing-to-condense",
+      }),
+    ]);
+  });
 });

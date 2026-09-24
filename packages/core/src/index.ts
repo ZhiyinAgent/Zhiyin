@@ -77,7 +77,7 @@ export type CoreWorkspace = Pick<
 > & {
   readonly turns: Pick<
     WorkspaceTurns,
-    "start" | "cancel" | "resolveApproval" | "resolveUserInput"
+    "start" | "cancel" | "condenseNow" | "resolveApproval" | "resolveUserInput"
   >;
   readonly settings: Pick<
     ModelSettings,
@@ -158,6 +158,7 @@ export class Core {
         workspace.setContextBudget(taskId, budget),
       setDefaultContextBudget: (budget) =>
         workspace.setDefaultContextBudget(budget),
+      condenseNow: (taskId) => turns.condenseNow(taskId),
       openAttachment: async (taskId, id) =>
         openPath(await workspace.kept.attachmentPath(taskId, id)),
       previewRewind: (taskId, messageId) =>

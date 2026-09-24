@@ -165,6 +165,57 @@ describe("the context ring", () => {
     ).toHaveAccessibleName("Context: 60% of the Medium budget");
   });
 
+  it("is reachable by keyboard: opening it moves focus to the chosen budget, and Escape returns it", () => {
+    ring({ usage: usage(131_000) });
+
+    const meter = screen.getByRole("button", { name: /Context/ });
+    meter.focus();
+    fireEvent.click(meter);
+
+    expect(screen.getByRole("radio", { name: /Medium/ })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("radio", { name: /Medium/ }), {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(meter).toHaveFocus();
+  });
+
+  it("condenses now on request, saying so until it is done", async () => {
+    let finish = () => {};
+    const onCondense = vi.fn(
+      () => new Promise<void>((resolve) => (finish = resolve)),
+    );
+    ring({ usage: usage(131_000), onCondense });
+
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Condense now" }));
+
+    expect(onCondense).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Condensing…" })).toBeDisabled();
+    finish();
+    expect(
+      await screen.findByRole("button", { name: "Condense now" }),
+    ).toBeEnabled();
+  });
+
+  it("says why it could not condense, and offers nothing to condense before a conversation exists", async () => {
+    const { unmount } = ring({
+      usage: usage(131_000),
+      onCondense: () =>
+        Promise.reject(new Error("Saved history is unavailable.")),
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Condense now" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Couldn't condense: Saved history is unavailable.",
+    );
+    unmount();
+
+    ring();
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    expect(screen.queryByRole("button", { name: "Condense now" })).toBeNull();
+  });
+
   it("says when instructions and tools alone take too much of the budget", () => {
     ring({ usage: usage(40_000, 30_000), budget: "low" });
 

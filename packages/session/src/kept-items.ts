@@ -27,7 +27,7 @@ import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import type { MessageAttachment } from "@zhiyin/contract";
-import { isRecord } from "./saved-workspace.js";
+import { isRecord } from "./saved-values.js";
 import { folderName } from "./history-store.js";
 
 export type KeptKind =

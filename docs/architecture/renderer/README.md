@@ -301,7 +301,35 @@ rendered.
   budgets give the same room on a small model`, `is never shown as empty when
   the size or the window is not known`, `follows a model switch, a budget
   change and the message being written`, and `says when instructions and tools
-  alone take too much of the budget`.
+  alone take too much of the budget`. Its menu also offers "Condense now" once
+  a conversation exists, says it is condensing until done, and says why when
+  it could not. The menu is drawn at the end of the page, so opening it takes
+  focus to the chosen budget and Escape brings it back to the ring. Named
+  tests: `is reachable by keyboard: opening it moves focus to the chosen
+  budget, and Escape returns it`, `condenses now on request, saying so until
+  it is done` and `says why it could not condense, and offers nothing to
+  condense before a conversation exists`.
+- **Each condensing is a card where it happened.** Closed, one line says how
+  many messages and actions were summarised and how far the request shrank;
+  open, the summary is formatted text with the person's words as quotes,
+  followed by what Zhiyin carried over and the files it read again. A failed
+  condensing is the same card, saying why and when Zhiyin tries again, with
+  nothing to open. Named tests: `says in one line what was condensed, and
+  opens by keyboard to the summary as formatted text`, `counts one of each in
+  the singular`, `shows a failed condensing as the same card, with its reason
+  and nothing to open`, `says where a condensing failed, and why, in plain
+  words`, `says what a %s failure means` (for each reason), and `are kept from
+  the core, so the conversation can show where each happened`.
+- **What the model knows only from a summary stays readable, at less
+  emphasis, and says so.** Messages up to the last one condensed sit in a
+  group named as condensed earlier conversation, drawn in the secondary text
+  colour, which meets contrast on its own, with a dashed rule beside it; hover
+  or keyboard focus says the assistant works from the summary instead. A
+  rewind that cuts through the condensed part removes its condensing, and the
+  messages return to normal. Named tests: `dims what was condensed, up to the
+  last message it covered, and says why`, `dims nothing when nothing is
+  condensed, as after a rewind that cut through it`, and `say where the
+  condensed part ends, and nothing once a rewind has cut through it`.
 - **A budget chosen in the composer belongs to the conversation.** For an open
   conversation it goes to the core at once; for one not yet started it is held
   and given to the conversation the first message starts, before the message

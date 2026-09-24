@@ -12,6 +12,7 @@ export function useContextBudget(
   state: WorkspaceState,
   selectedTask: WorkspaceTask | null,
   setContextBudget: CoreApi["setContextBudget"],
+  condenseNow: CoreApi["condenseNow"],
 ) {
   const [pending, setPending] = useState<ContextBudgetChoice>();
   // A choice for a conversation not yet started is left behind with it.
@@ -36,6 +37,9 @@ export function useContextBudget(
         if (selectedTask) void setContextBudget(selectedTask.id, choice);
         else setPending(choice);
       },
+      ...(selectedTask
+        ? { onCondense: () => condenseNow(selectedTask.id) }
+        : {}),
     },
     /** Gives a conversation just started the budget chosen before it. */
     adopt: async (taskId: string) => {

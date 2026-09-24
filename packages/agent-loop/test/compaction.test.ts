@@ -392,6 +392,151 @@ describe("conversation context", () => {
   });
 });
 
+describe("a condensing", () => {
+  /** The summariser's answer, or its error, for each request to condense. */
+  function failing(
+    answer: (request: ModelRequest) => Promise<string>,
+    requests: ModelRequest[],
+  ) {
+    const deps = stubDependencies(() => {});
+    return loopFrom({
+      ...deps,
+      modelWindow: smallWindow,
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          requests.push(request);
+          if (asksToCondense(request))
+            yield { kind: "textDelta" as const, text: await answer(request) };
+          else yield { kind: "textDelta" as const, text: "Carried on." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+  }
+
+  it("that fails is recorded where it happened, with its reason, and the next turn does not try again", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = failing(async () => "not json", requests);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+
+    await loop.start("task-1", "Continue");
+    await loop.start("task-1", "And again");
+
+    const task = loop.snapshot().tasks[0];
+    expect(requests.filter(asksToCondense)).toHaveLength(1);
+    expect(task?.condensings).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        reason: "unusable",
+        targetTokens: 13_600,
+      }),
+    ]);
+    const [failure] = task?.condensings ?? [];
+    const asked = task?.messages.find((message) => message.text === "Continue");
+    expect(failure?.sequence).toBeGreaterThan(asked?.sequence ?? Infinity);
+    expect(failure?.tokensBefore).toBeGreaterThan(13_600);
+  });
+
+  it("that fails is not tried again after a restart until the request has grown", async () => {
+    const requests: ModelRequest[] = [];
+    const first = failing(async () => "not json", requests);
+    first.restore([settledTask({ messages: pastItsBudget })]);
+    await first.start("task-1", "Continue");
+
+    const restarted = failing(async () => "not json", requests);
+    restarted.restore(first.snapshot().tasks);
+    await restarted.start("task-1", "After the restart");
+
+    expect(requests.filter(asksToCondense)).toHaveLength(1);
+  });
+
+  it("that fails is tried again at once when the budget changes", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = failing(async () => "not json", requests);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+    await loop.start("task-1", "Continue");
+
+    loop.restore([{ ...loop.snapshot().tasks[0]!, contextBudget: "low" }]);
+    await loop.start("task-1", "On a smaller budget");
+
+    expect(requests.filter(asksToCondense)).toHaveLength(2);
+  });
+
+  it("whose request fails says why", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = failing(async () => {
+      throw new Error("The provider is overloaded.");
+    }, requests);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+
+    await loop.start("task-1", "Continue");
+
+    expect(loop.snapshot().tasks[0]?.condensings).toEqual([
+      expect.objectContaining({
+        outcome: "failed",
+        reason: "request-failed",
+        detail: "The provider is overloaded.",
+      }),
+    ]);
+  });
+
+  it("that works is recorded with the size before and after", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = failing(
+      async () => JSON.stringify({ summary: "The older material was read." }),
+      requests,
+    );
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+
+    await loop.start("task-1", "Continue");
+
+    const [condensed] = loop.snapshot().tasks[0]?.condensings ?? [];
+    expect(condensed).toMatchObject({ outcome: "condensed", revision: 1 });
+    expect(condensed?.reason).toBeUndefined();
+    expect(condensed?.tokensAfter).toBeLessThan(condensed?.tokensBefore ?? 0);
+  });
+
+  it("asks for a summary in Markdown, with the person's words as quotes under their own heading", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = failing(async () => "not json", requests);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+
+    await loop.start("task-1", "Continue");
+
+    const asked = JSON.stringify(
+      requests.find(asksToCondense)?.messages.at(-1),
+    );
+    expect(asked).toContain("Markdown");
+    expect(asked).toContain(
+      "Your instructions and constraints, quoted exactly",
+    );
+    expect(asked).toContain("block quote");
+  });
+
+  it("that is cancelled with its turn leaves no record", async () => {
+    const requests: ModelRequest[] = [];
+    let started = false;
+    const loop = failing(async (request) => {
+      started = true;
+      await new Promise<void>((resolve) =>
+        request.signal?.addEventListener("abort", () => resolve(), {
+          once: true,
+        }),
+      );
+      return "";
+    }, requests);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
+
+    const running = loop.start("task-1", "Continue");
+    await until(() => started);
+    await loop.cancel("task-1");
+    await running;
+
+    expect(loop.snapshot().tasks[0]?.condensings).toBeUndefined();
+  });
+});
+
 describe("the size a picture counts for", () => {
   it("does not condense a conversation because it carries a large picture", async () => {
     const sent: ModelRequest[] = [];

@@ -53,6 +53,7 @@ type WorkspaceShellProps = {
     | "keepPaste"
     | "setContextBudget"
     | "setDefaultContextBudget"
+    | "condenseNow"
     | "openAttachment"
     | "interruptTask"
     | "resolveApproval"
@@ -173,6 +174,7 @@ export function WorkspaceShell({
     state,
     selectedTask,
     commands.setContextBudget,
+    commands.condenseNow,
   );
   const isRunning =
     selectedTask?.phase.kind === "working" ||

@@ -101,6 +101,7 @@ export class ConversationRewind implements RewindPlanner {
     const actions = before(task.actions, boundary);
     const views = before(task.views, boundary);
     const interactions = before(task.interactions, boundary);
+    const condensings = before(task.condensings, boundary);
     const retainedMessageIds = new Set(messages.map((message) => message.id));
     const { compaction: previousCompaction, ...taskWithoutCompaction } = task;
     const compaction =
@@ -124,6 +125,7 @@ export class ConversationRewind implements RewindPlanner {
       artifacts: retainedArtifacts(task, actions),
       views,
       interactions,
+      ...(condensings.length ? { condensings } : {}),
       phase: { kind: "draft" },
       ...(compaction ? { compaction } : {}),
     };

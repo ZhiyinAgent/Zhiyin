@@ -1647,3 +1647,119 @@
 .context-ring__breakdown td:last-child {
   color: var(--zy-muted);
 }
+
+.condensing-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.condensing-card__line,
+.condensing-card__toggle {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.condensing-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.condensing-card__toggle:hover {
+  background: var(--zy-wash-faint);
+}
+
+.condensing-card__toggle:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: -2px;
+}
+
+.condensing-card__chevron {
+  display: inline-flex;
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.condensing-card__chevron--open {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .condensing-card__chevron {
+    transition: none;
+  }
+}
+
+.condensing-card__details {
+  display: grid;
+  gap: 8px;
+  padding: 4px 12px 12px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.condensing-card__details h3 {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.condensing-card__details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/*
+ * Condensed history keeps its text at the secondary text colour, which meets
+ * contrast on its own, rather than fading it with opacity.
+ */
+.condensed-history {
+  position: relative;
+  display: grid;
+  gap: inherit;
+  padding-left: 10px;
+  border-left: 2px dashed var(--zy-line-strong);
+  color: var(--zy-text-soft);
+}
+
+.condensed-history :where(p, li, td, th, blockquote, h1, h2, h3, h4) {
+  color: var(--zy-text-soft);
+}
+
+.condensed-history:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 4px;
+}
+
+.condensed-history__note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.condensed-history:focus-visible > .condensed-history__note {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip-path: none;
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: normal;
+}

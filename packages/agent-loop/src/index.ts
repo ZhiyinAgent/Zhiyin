@@ -30,6 +30,8 @@ import { TurnWaits } from "./turn-waits.js";
 import { TurnOwnership } from "./turn-ownership.js";
 export { TurnOwnership } from "./turn-ownership.js";
 import { TurnLoop } from "./turn-loop.js";
+import { ContextGuard } from "./context-guard.js";
+import { condenseBetweenTurns } from "./request-plan.js";
 import { beginUserTurn } from "./start-turn.js";
 import { modelText } from "./attachments.js";
 import { settledAfterRestart, settledWhenTurnEnded } from "./settling.js";
@@ -50,6 +52,9 @@ export class AgentLoop {
   readonly #pendingHandoffs = new PendingHandoffs();
   readonly #wakeScheduled = new Set<string>();
   readonly #turnLoop: TurnLoop;
+  readonly #context: ContextGuard;
+  /** A condensing the person asked for between turns, until it ends. */
+  readonly #condensing = new Map<string, Promise<void>>();
 
   constructor(deps: AgentLoopDependencies) {
     this.#deps = deps;
@@ -77,6 +82,7 @@ export class AgentLoop {
     this.#pluginActivation = new PluginActivation(deps, {
       records: this.#records,
     });
+    this.#context = new ContextGuard(deps, this.#records);
     this.#turnLoop = new TurnLoop(deps, {
       records: this.#records,
       auxiliary: this.#auxiliary,
@@ -86,6 +92,7 @@ export class AgentLoop {
       pluginActivation: this.#pluginActivation,
       ownership: this.#activeTurns,
       pendingHandoffs: this.#pendingHandoffs,
+      context: this.#context,
     });
   }
 
@@ -100,6 +107,9 @@ export class AgentLoop {
     reasoning?: ReasoningSelection,
     attachments: readonly string[] = [],
   ): Promise<void> {
+    // A message sent while the conversation is being condensed goes out on
+    // the condensed conversation.
+    await this.#condensing.get(taskId);
     if (!this.#deps.host.historyAvailable())
       throw new VisibleError(
         "Saved history is unavailable. Retry after restoring access.",
@@ -164,6 +174,46 @@ export class AgentLoop {
           started.shouldGenerateInitialTitle,
         ),
     });
+  }
+
+  /**
+   * Condenses the conversation because the person asked: at once when nothing
+   * runs in it, else before the running turn's next request to the model.
+   */
+  async condenseNow(taskId: string): Promise<void> {
+    if (!this.#deps.host.historyAvailable())
+      throw new VisibleError(
+        "Saved history is unavailable. Retry after restoring access.",
+      );
+    if (!this.#deps.host.find(taskId))
+      throw new Error("The task does not exist.");
+    if (this.#deps.rewind.restoring(taskId))
+      throw new VisibleError(
+        "Wait for file recovery to finish before condensing.",
+      );
+    this.#context.ask(taskId);
+    if (this.#activeTurns.running(taskId)) return;
+
+    const controller = this.#activeTurns.start(taskId);
+    const condensing = (async () => {
+      try {
+        await this.#deps.host.enterFolderOf(taskId);
+        await condenseBetweenTurns(
+          this.#deps,
+          this.#records,
+          this.#context,
+          taskId,
+          controller.signal,
+        );
+      } finally {
+        this.#activeTurns.finish(taskId, controller);
+      }
+    })();
+    this.#condensing.set(
+      taskId,
+      condensing.catch(() => {}).finally(() => this.#condensing.delete(taskId)),
+    );
+    await condensing;
   }
 
   /**

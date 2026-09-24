@@ -5,26 +5,18 @@
  */
 
 import { REASONING_EFFORTS } from "@zhiyin/contract";
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import {
+  validCondensing,
+  validContextBudget,
+  validContextUsage,
+} from "./saved-context.js";
+import { isRecord, optionalText, validSequence } from "./saved-values.js";
 
 export function isFolder(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.path === "string" &&
     typeof value.name === "string"
-  );
-}
-
-/** Absent, or one of the budgets; absent follows the default. */
-export function validContextBudget(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === "low" ||
-    value === "medium" ||
-    value === "ultra"
   );
 }
 
@@ -165,10 +157,10 @@ export function isWorkspaceTask(task: unknown): boolean {
       (Array.isArray(task.modelResponses) &&
         task.modelResponses.every(validModelResponse))) &&
     validCompaction(task.compaction, task.messages, task.actions) &&
-    (task.contextUsage === undefined ||
-      (isRecord(task.contextUsage) &&
-        typeof task.contextUsage.totalTokens === "number" &&
-        isRecord(task.contextUsage.parts))) &&
+    (task.condensings === undefined ||
+      (Array.isArray(task.condensings) &&
+        task.condensings.every(validCondensing))) &&
+    validContextUsage(task.contextUsage) &&
     validPhase(task.phase) &&
     (task.actions === undefined ||
       (Array.isArray(task.actions) &&
@@ -302,10 +294,6 @@ function validCompaction(
   return value.retainedActionIds.every((id) => actionIds.has(id));
 }
 
-export function optionalText(value: unknown): boolean {
-  return value === undefined || typeof value === "string";
-}
-
 function validContext(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)) return false;
@@ -322,13 +310,6 @@ function validContext(value: unknown): boolean {
         typeof file.name === "string" &&
         typeof file.meta === "string",
     )
-  );
-}
-
-function validSequence(value: unknown): boolean {
-  return (
-    value === undefined ||
-    (typeof value === "number" && Number.isSafeInteger(value) && value >= 0)
   );
 }
 

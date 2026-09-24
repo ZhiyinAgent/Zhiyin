@@ -120,6 +120,33 @@ describe("ConversationRewind", () => {
     ]);
   });
 
+  it("keeps only the attempts to condense made before the selected message", () => {
+    const rewind = new ConversationRewind(() => "rewind-1");
+    const attempt = (id: string, sequence: number) =>
+      ({
+        id,
+        sequence,
+        createdAt: "2026-09-25T10:00:00.000Z",
+        targetTokens: 13_600,
+        tokensBefore: 14_200,
+        outcome: "failed",
+        reason: "unusable",
+      }) as const;
+
+    const planned = rewind.plan(
+      {
+        ...task(),
+        condensings: [attempt("before", 3), attempt("after", 7)],
+      },
+      "u2",
+    );
+
+    if (!planned.ok) throw new Error(planned.reason);
+    expect(planned.task.condensings?.map((record) => record.id)).toEqual([
+      "before",
+    ]);
+  });
+
   it("refuses assistant messages and generated structured answers", () => {
     const rewind = new ConversationRewind(() => "rewind-1");
     const source = task();

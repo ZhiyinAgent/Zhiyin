@@ -4,6 +4,23 @@ import type {
   WorkspaceSnapshot,
   WorkspaceTask,
 } from "@zhiyin/contract";
+import type { AgentLoop } from "@zhiyin/agent-loop";
+
+/** What the workspace asks of whoever runs turns. */
+export type WorkspaceTurns = Pick<
+  AgentLoop,
+  | "start"
+  | "cancel"
+  | "condenseNow"
+  | "shutdown"
+  | "resolveApproval"
+  | "resolveUserInput"
+  | "running"
+  | "anyRunning"
+  | "accepts"
+  | "settleAfterRestart"
+  | "settleEndedTurn"
+>;
 
 export function requiredTask(
   tasks: readonly WorkspaceTask[],

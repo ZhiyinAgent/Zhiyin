@@ -13,7 +13,7 @@ import {
   type StoredPicture,
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
-import { isRecord } from "./saved-workspace.js";
+import { isRecord } from "./saved-values.js";
 import {
   HistoryStore,
   type OpenedConversation,

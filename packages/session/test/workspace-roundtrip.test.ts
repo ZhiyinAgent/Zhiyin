@@ -435,6 +435,71 @@ describe("FileSessions workspace persistence", () => {
       },
     );
   });
+  it("keeps each attempt to condense a conversation, failed or not, across a restart", async () => {
+    const root = await temporaryRoot();
+    const task: WorkspaceTask = {
+      ...snapshot.tasks[0]!,
+      condensings: [
+        {
+          id: "condensing-1",
+          sequence: 4,
+          createdAt: "2026-09-24T10:00:00.000Z",
+          targetTokens: 13_600,
+          tokensBefore: 14_200,
+          outcome: "failed",
+          reason: "request-failed",
+          detail: "The provider is overloaded.",
+        },
+        {
+          id: "condensing-2",
+          sequence: 9,
+          createdAt: "2026-09-24T10:05:00.000Z",
+          targetTokens: 13_600,
+          tokensBefore: 15_800,
+          outcome: "condensed",
+          revision: 1,
+          throughMessageId: "message-1",
+          tokensAfter: 4_100,
+          messages: 12,
+          actions: 30,
+          summary: "## Goal\n\nIntroduce the project.",
+          carried: "The person's latest request, in full:\nIntroduce it.",
+          reread: ["package.json"],
+        },
+      ],
+    };
+    await new FileSessions(root).saveWorkspace({ ...snapshot, tasks: [task] });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ condensings: task.condensings }] },
+    );
+  });
+  it("rejects a condensing record with a reason Zhiyin never gives", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          condensings: [
+            {
+              id: "condensing-1",
+              sequence: 4,
+              createdAt: "2026-09-24T10:00:00.000Z",
+              targetTokens: 13_600,
+              tokensBefore: 14_200,
+              outcome: "failed",
+              reason: "it felt like it",
+            },
+          ],
+        },
+      ],
+    });
+
+    await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
+      SessionStoreError,
+    );
+  });
   it("rejects a budget Zhiyin does not offer", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {
