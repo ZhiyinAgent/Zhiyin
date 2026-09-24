@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { WorkspaceTask } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import { stubDependencies, until, loopFrom } from "./support.js";
@@ -19,43 +19,64 @@ function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
   };
 }
 
-/**
- * Both auxiliary seams behind one stand-in. The conversation's name arrives in
- * the compaction answer rather than a request of its own, so `title` is folded
- * into the compaction response here the way the tool schema asks for it.
- */
-function guidanceFor(
-  responses: {
-    plan?: string;
-    compaction?: string;
-    title?: string;
-  },
-  requests: ModelRequest[],
-) {
-  const compactionAnswer = (): string | undefined => {
-    if (!responses.compaction) return undefined;
-    if (!responses.title) return responses.compaction;
-    try {
-      return JSON.stringify({
-        ...(JSON.parse(responses.compaction) as Record<string, unknown>),
-        title: (JSON.parse(responses.title) as { title?: string }).title,
-      });
-    } catch {
-      return responses.compaction;
-    }
-  };
+/** Both auxiliary seams behind one stand-in, answering with the plan. */
+function guidanceFor(responses: { plan?: string }, requests: ModelRequest[]) {
   const model = {
     send: async function* (request: ModelRequest) {
       requests.push(request);
-      const prompt = request.messages.at(-1)?.content ?? "";
-      const response = prompt.includes("Compact the older conversation")
-        ? compactionAnswer()
-        : responses.plan;
-      if (response) yield { kind: "textDelta" as const, text: response };
+      if (responses.plan)
+        yield { kind: "textDelta" as const, text: responses.plan };
       yield { kind: "done" as const };
     },
   };
   return { guidanceModel: model, judgementModel: model };
+}
+
+/**
+ * A 13,600-token Medium budget, with room past it for the request that asks
+ * for the summary.
+ */
+const smallWindow = {
+  model: "small",
+  contextWindow: 16_000,
+  maximumOutputTokens: 100,
+};
+
+/** About 13k tokens of earlier conversation: past that budget with the rest. */
+const pastItsBudget: WorkspaceTask["messages"] = [
+  {
+    id: "m1",
+    role: "user",
+    text: "OLDER MATERIAL ".repeat(2_600),
+    sequence: 0,
+  },
+  { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
+];
+
+function asksToCondense(request: ModelRequest): boolean {
+  const last = request.messages.at(-1)?.content;
+  return typeof last === "string" && last.includes('kind="condense"');
+}
+
+/**
+ * The conversation's own model: `summary` answers a request to condense, and
+ * anything else is answered with `reply`.
+ */
+function condensing(
+  summary: () => string | Promise<string>,
+  requests: ModelRequest[],
+  reply?: string,
+) {
+  return {
+    ...stubDependencies(() => {}).model,
+    send: async function* (request: ModelRequest) {
+      requests.push(request);
+      if (asksToCondense(request))
+        yield { kind: "textDelta" as const, text: await summary() };
+      else if (reply) yield { kind: "textDelta" as const, text: reply };
+      yield { kind: "done" as const };
+    },
+  };
 }
 
 describe("conversation context", () => {
@@ -195,13 +216,13 @@ describe("conversation context", () => {
         {
           id: "m3",
           role: "user",
-          text: "SECOND-WAVE ".repeat(320),
+          text: "SECOND-WAVE ".repeat(2_900),
           sequence: 2,
         },
         {
           id: "m4",
           role: "assistant",
-          text: "Detailed second answer ".repeat(180),
+          text: "Detailed second answer ".repeat(200),
           sequence: 3,
         },
       ],
@@ -213,26 +234,21 @@ describe("conversation context", () => {
         createdAt: "2026-09-02T18:00:00.000Z",
       },
     });
-    const guidanceRequests: ModelRequest[] = [];
+    const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
-      },
-      ...guidanceFor(
-        {
-          plan: JSON.stringify({ items: [] }),
-          compaction: JSON.stringify({
+      modelWindow: smallWindow,
+      model: condensing(
+        () =>
+          JSON.stringify({
+            title: "Continue second-stage analysis",
             summary:
               "The original question led to a detailed second-stage analysis.",
-            retainedActionIds: [],
           }),
-          title: JSON.stringify({ title: "Continue second-stage analysis" }),
-        },
-        guidanceRequests,
+        requests,
       ),
+      ...guidanceFor({ plan: JSON.stringify({ items: [] }) }, []),
     });
     loop.restore([previous]);
 
@@ -246,48 +262,29 @@ describe("conversation context", () => {
           "The original question led to a detailed second-stage analysis.",
       },
     });
-    const compactionPrompt = guidanceRequests.find((request) =>
-      request.messages
-        .at(-1)
-        ?.content.includes("Compact the older conversation"),
-    );
-    expect(compactionPrompt?.messages.at(-1)?.content).toContain(
+    expect(JSON.stringify(requests.find(asksToCondense)?.messages)).toContain(
       "The first exchange established the original question.",
     );
   });
 
-  it("compacts a manually named conversation without requesting a new title", async () => {
+  it("condenses a manually named conversation without asking for a new title", async () => {
     const previous = settledTask({
       title: "My permanent title",
       titleSource: "manual",
-      messages: [
-        {
-          id: "m1",
-          role: "user",
-          text: "OLDER MATERIAL ".repeat(320),
-          sequence: 0,
-        },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
+      messages: pastItsBudget,
     });
-    const guidanceRequests: ModelRequest[] = [];
+    const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
-      },
-      ...guidanceFor(
-        {
-          plan: JSON.stringify({ items: [] }),
-          compaction: JSON.stringify({
+      modelWindow: smallWindow,
+      model: condensing(
+        () =>
+          JSON.stringify({
+            title: "Do not use this",
             summary: "The earlier material was discussed.",
-            retainedActionIds: [],
           }),
-          title: JSON.stringify({ title: "Do not use this" }),
-        },
-        guidanceRequests,
+        requests,
       ),
     });
     loop.restore([previous]);
@@ -300,66 +297,34 @@ describe("conversation context", () => {
       compaction: { revision: 1 },
     });
     expect(
-      guidanceRequests.some((request) =>
-        request.messages
-          .at(-1)
-          ?.content.includes(
-            "Name this conversation from its compacted summary",
-          ),
-      ),
-    ).toBe(false);
+      requests.find(asksToCondense)?.messages.at(-1)?.content,
+    ).not.toContain('"title"');
   });
 
-  it("keeps a manual rename that arrives while the compaction naming it is still running", async () => {
-    const previous = settledTask({
-      messages: [
-        {
-          id: "m1",
-          role: "user",
-          text: "OLDER MATERIAL ".repeat(320),
-          sequence: 0,
-        },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
-    });
+  it("keeps a manual rename that arrives while the condensing naming it is still running", async () => {
     let compactionStarted = false;
     let releaseCompaction!: () => void;
     const compactionWaiting = new Promise<void>((resolve) => {
       releaseCompaction = resolve;
     });
     const deps = stubDependencies(() => {});
-    const auxiliary = {
-      send: async function* (request: ModelRequest) {
-        const prompt = request.messages.at(-1)?.content ?? "";
-        if (prompt.includes("Compact the older conversation")) {
-          compactionStarted = true;
-          await compactionWaiting;
-          yield {
-            kind: "textDelta" as const,
-            text: JSON.stringify({
-              title: "Late generated title",
-              summary: "The earlier material was discussed.",
-              retainedActionIds: [],
-            }),
-          };
-        }
-        yield { kind: "done" as const };
-      },
-    };
     const loop = loopFrom({
       ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
-      },
-      guidanceModel: auxiliary,
-      judgementModel: auxiliary,
+      modelWindow: smallWindow,
+      model: condensing(async () => {
+        compactionStarted = true;
+        await compactionWaiting;
+        return JSON.stringify({
+          title: "Late generated title",
+          summary: "The earlier material was discussed.",
+        });
+      }, []),
     });
-    loop.restore([previous]);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
 
-    const running = loop.start(previous.id, "Continue");
+    const running = loop.start("task-1", "Continue");
     await until(() => compactionStarted);
-    await loop.renameTask(previous.id, "Chosen while compacting");
+    await loop.renameTask("task-1", "Chosen while compacting");
     releaseCompaction();
     await running;
 
@@ -370,31 +335,18 @@ describe("conversation context", () => {
     });
   });
 
-  it("cancels compaction with its owning turn and publishes no late checkpoint", async () => {
-    const previous = settledTask({
-      messages: [
-        {
-          id: "m1",
-          role: "user",
-          text: "OLDER MATERIAL ".repeat(320),
-          sequence: 0,
-        },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
-    });
+  it("cancels condensing with its owning turn and publishes no late checkpoint", async () => {
     let compactionStarted = false;
-    const model = vi.fn(stubDependencies(() => {}).model.send);
+    const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
-      },
-      judgementModel: {
-        send: async function* (request) {
-          const prompt = request.messages.at(-1)?.content ?? "";
-          if (prompt.includes("Compact the older conversation")) {
+      modelWindow: smallWindow,
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          requests.push(request);
+          if (asksToCondense(request)) {
             compactionStarted = true;
             await new Promise<void>((resolve) =>
               request.signal?.addEventListener("abort", () => resolve(), {
@@ -402,91 +354,62 @@ describe("conversation context", () => {
               }),
             );
           }
-          yield { kind: "done" };
+          yield { kind: "done" as const };
         },
       },
-      model: { ...deps.model, send: model },
     });
-    loop.restore([previous]);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
 
-    const running = loop.start(previous.id, "Continue");
+    const running = loop.start("task-1", "Continue");
     await until(() => compactionStarted);
-    await loop.cancel(previous.id);
+    await loop.cancel("task-1");
     await running;
 
     expect(loop.snapshot().tasks[0]?.compaction).toBeUndefined();
     expect(loop.snapshot().tasks[0]?.phase).toEqual({ kind: "interrupted" });
-    expect(model).not.toHaveBeenCalled();
+    expect(requests.filter((request) => !asksToCondense(request))).toEqual([]);
   });
 
-  it("keeps full context when an attempted compaction is unusable", async () => {
-    const oldMarker = "KEEP-THIS-CONTEXT ".repeat(300);
-    const previous = settledTask({
-      messages: [
-        { id: "m1", role: "user", text: oldMarker, sequence: 0 },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
-    });
+  it("keeps full context when an attempted condensing is unusable", async () => {
     const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
-      },
-      ...guidanceFor(
-        { plan: JSON.stringify({ items: [] }), compaction: "not json" },
-        [],
-      ),
-      model: {
-        ...deps.model,
-        send: async function* (request) {
-          requests.push(request);
-          yield { kind: "done" };
-        },
-      },
+      modelWindow: smallWindow,
+      model: condensing(() => "not json", requests),
     });
-    loop.restore([previous]);
+    loop.restore([settledTask({ messages: pastItsBudget })]);
 
-    await loop.start(previous.id, "Continue");
+    await loop.start("task-1", "Continue");
 
     expect(loop.snapshot().tasks[0]?.compaction).toBeUndefined();
-    expect(JSON.stringify(requests[0]?.messages)).toContain(
-      "KEEP-THIS-CONTEXT",
-    );
+    expect(requests.some(asksToCondense)).toBe(true);
+    expect(
+      JSON.stringify(
+        requests.find((request) => !asksToCondense(request))?.messages,
+      ),
+    ).toContain("OLDER MATERIAL");
   });
 });
 
 describe("the size a picture counts for", () => {
   it("does not condense a conversation because it carries a large picture", async () => {
-    const summaryRequests: ModelRequest[] = [];
     const sent: ModelRequest[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
       acceptsImages: true,
-      // Far below the picture's encoded size, far above the text's.
-      contextBudget: {
-        compactAboveEstimatedTokens: 50_000,
-        retainRecentEstimatedTokens: 1_000,
+      // A 54,400-token budget: far below the picture's encoded size, far
+      // above the text's and the few thousand tokens a provider bills for it.
+      modelWindow: {
+        model: "small",
+        contextWindow: 64_000,
+        maximumOutputTokens: 1_000,
       },
-      model: {
-        ...deps.model,
-        send: async function* (request) {
-          sent.push(request);
-          yield { kind: "textDelta" as const, text: "Seen." };
-          yield { kind: "done" as const };
-        },
-      },
-      ...guidanceFor(
-        {
-          compaction: JSON.stringify({
-            summary: "Condensed.",
-            retainedActionIds: [],
-          }),
-        },
-        summaryRequests,
+      model: condensing(
+        () => JSON.stringify({ summary: "Condensed." }),
+        sent,
+        "Seen.",
       ),
       sessions: {
         ...deps.sessions,
@@ -525,6 +448,7 @@ describe("the size a picture counts for", () => {
     await loop.start("task-1", "What did it show?");
 
     expect(JSON.stringify(sent)).toContain("A".repeat(1_000));
+    expect(sent.some(asksToCondense)).toBe(false);
     expect(loop.snapshot().tasks[0]?.compaction).toBeUndefined();
   });
 });

@@ -18,6 +18,7 @@ import type {
   ModelEvent,
   ModelMessage,
   ModelRequest,
+  ModelUsage,
 } from "@zhiyin/model-client";
 import { estimatedRequestTokens } from "./conversation-context.js";
 import { HeldReveal, type Revealed } from "./held-reveal.js";
@@ -50,6 +51,8 @@ export type RoundResult = {
   readonly reasoning: string;
   readonly finishReason?: string;
   readonly response?: ModelResponseRecord;
+  /** The provider's count of the request, when it gave one. */
+  readonly usage?: ModelUsage;
   readonly assistantId: string;
   /** Set once the answer has appeared in the conversation. */
   readonly assistantSequence?: number;
@@ -63,6 +66,7 @@ class Attempt {
   finishReason: string | undefined;
   response: ModelResponseRecord | undefined;
   reportedUsage = false;
+  usage: ModelUsage | undefined;
   composingSaidAt = 0;
 }
 
@@ -191,6 +195,7 @@ export class ModelRound {
         ? {}
         : { finishReason: attempt.finishReason }),
       ...(response ? { response } : {}),
+      ...(attempt.usage ? { usage: attempt.usage } : {}),
       assistantId,
       ...(assistantSequence === undefined ? {} : { assistantSequence }),
     };
@@ -237,6 +242,7 @@ export class ModelRound {
       }
     } else if (event.kind === "usage") {
       attempt.reportedUsage = true;
+      attempt.usage = event.usage;
       ledger.record(event.usage);
       await this.#deps.host.recordUsage(event.usage);
     } else if (event.kind === "done") {

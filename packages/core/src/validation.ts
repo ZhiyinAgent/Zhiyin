@@ -2,7 +2,12 @@ import {
   ALLOWED_EXTERNAL_URLS,
   CHANNEL,
   REASONING_EFFORTS,
+  typedMessageCharacters,
 } from "@zhiyin/contract";
+
+function budget(value: unknown): boolean {
+  return value === "low" || value === "medium" || value === "ultra";
+}
 
 function reasoningSelection(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -279,7 +284,8 @@ export function validateCommand(
         Array.isArray(pastes) &&
         pastes.length <= 20 &&
         pastes.every((id) => text(id, 100)) &&
-        (text(message, 100_000) || (message === "" && pastes.length > 0));
+        (text(message, typedMessageCharacters) ||
+          (message === "" && pastes.length > 0));
       break;
     }
     // The text itself: the store refuses more than 50 MB of it, and no string
@@ -292,6 +298,12 @@ export function validateCommand(
         args.length === 2 &&
         (args[0] === null || text(args[0])) &&
         text(args[1], 100);
+      break;
+    case CHANNEL.setContextBudget:
+      valid = args.length === 2 && text(args[0]) && budget(args[1]);
+      break;
+    case CHANNEL.setDefaultContextBudget:
+      valid = args.length === 1 && budget(args[0]);
       break;
     case CHANNEL.renameTask:
       valid = args.length === 2 && text(args[0]) && text(args[1], 160);

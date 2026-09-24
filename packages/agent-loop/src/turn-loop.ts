@@ -28,7 +28,8 @@ import { harnessNotice, toolOutput } from "./notices.js";
 import { ModelHistory, type SentPicture } from "./model-history.js";
 import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
-import { RoundResults } from "./result-size.js";
+import { RoundResults, resultLimits } from "./result-size.js";
+import { ContextGuard } from "./context-guard.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
   delegateSpecialistTool,
@@ -64,6 +65,7 @@ export class TurnLoop {
   readonly #ownership: TurnOwnership;
   readonly #pendingHandoffs: PendingHandoffs;
   readonly #round: ModelRound;
+  readonly #context: ContextGuard;
   /** How long each conversation's last request was, to mark where the next repeats it. */
   readonly #lastRequestLength = new Map<string, number>();
 
@@ -90,6 +92,7 @@ export class TurnLoop {
     this.#ownership = parts.ownership;
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#round = new ModelRound(deps, parts.records);
+    this.#context = new ContextGuard(deps, parts.records);
   }
 
   async run(
@@ -143,14 +146,7 @@ export class TurnLoop {
         pluginDirectory,
         this.#deps.now(),
       );
-      let history = await this.#condensedIfNeeded(
-        taskId,
-        await this.#openHistory(taskId),
-        fixedMessages,
-        currentAdvertisedTools(),
-        controller.signal,
-      );
-      controller.signal.throwIfAborted();
+      let history = await this.#openHistory(taskId);
       const requestMessages = (): ModelMessage[] => [
         ...fixedMessages,
         ...history.messages(),
@@ -172,10 +168,22 @@ export class TurnLoop {
           await history.notice("specialists", runs);
         for (const settled of this.#pendingHandoffs.drain(taskId))
           await history.notice("handoff", handoffMessage(settled));
+        const plan = {
+          fixed: fixedMessages,
+          tools: reportOnly ? [] : currentAdvertisedTools(),
+        };
+        history = await this.#context.prepare(
+          taskId,
+          history,
+          plan,
+          () => this.#openHistory(taskId),
+          controller.signal,
+        );
+        controller.signal.throwIfAborted();
         const messages = requestMessages();
         const request = {
           messages,
-          tools: reportOnly ? [] : currentAdvertisedTools(),
+          tools: plan.tools,
           ...(this.#records.task(taskId).reasoning
             ? { reasoning: this.#records.task(taskId).reasoning }
             : {}),
@@ -192,10 +200,17 @@ export class TurnLoop {
           reasoning: roundReasoning,
           finishReason,
           response: modelResponse,
+          usage,
           assistantId,
           assistantSequence,
         } = await this.#round.run(taskId, controller, ledger, request, () =>
           this.#ownsTurn(taskId, controller),
+        );
+        this.#context.counted(
+          taskId,
+          plan,
+          messages.slice(fixedMessages.length),
+          usage,
         );
 
         if (controller.signal.aborted) {
@@ -322,14 +337,6 @@ export class TurnLoop {
           }
 
           ledger.renew(this.#deps.now());
-          history = await this.#condensedIfNeeded(
-            taskId,
-            history,
-            fixedMessages,
-            currentAdvertisedTools(),
-            controller.signal,
-          );
-          controller.signal.throwIfAborted();
           renewed = true;
         }
 
@@ -354,8 +361,9 @@ export class TurnLoop {
           },
           tools: currentAdvertisedTools(),
         };
-        const sizes = new RoundResults((text) =>
-          this.#deps.sessions.keep("output", taskId, { text }),
+        const sizes = new RoundResults(
+          (text) => this.#deps.sessions.keep("output", taskId, { text }),
+          resultLimits(this.#context.targetTokens(taskId)),
         );
 
         for (const call of answerable) {
@@ -561,23 +569,6 @@ export class TurnLoop {
         });
       },
     });
-  }
-
-  /** The history, reopened from its summary when it had to be condensed. */
-  async #condensedIfNeeded(
-    taskId: string,
-    history: ModelHistory,
-    fixedMessages: readonly ModelMessage[],
-    tools: readonly ToolSpec[],
-    signal: AbortSignal,
-  ): Promise<ModelHistory> {
-    const condensed = await this.#auxiliary.compactIfNeeded(
-      taskId,
-      [...fixedMessages, ...history.messages()],
-      tools,
-      signal,
-    );
-    return condensed ? this.#openHistory(taskId) : history;
   }
 
   /**

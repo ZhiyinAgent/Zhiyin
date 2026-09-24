@@ -11,6 +11,8 @@
 
 import type {
   AppEvent,
+  ContextBudgetChoice,
+  ModelWindow,
   WorkspaceSnapshot,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -181,6 +183,18 @@ export class TestHost implements TurnHost {
     return this.images;
   }
 
+  /** The model's size as the app reads it from the catalogue; unknown here. */
+  window: ModelWindow & { readonly model: string } = { model: "test-model" };
+  contextBudget: ContextBudgetChoice = "medium";
+
+  modelWindow(): ModelWindow & { readonly model: string } {
+    return this.window;
+  }
+
+  defaultContextBudget(): ContextBudgetChoice {
+    return this.contextBudget;
+  }
+
   async enterFolderOf(taskId: string): Promise<void> {
     this.enteredFolders.push(taskId);
   }
@@ -234,6 +248,9 @@ export type LoopTestDependencies = Omit<
      * In production the core answers this from the provider's settings.
      */
     readonly acceptsImages?: boolean;
+    /** The model's size as the catalogue lists it; unknown when absent. */
+    readonly modelWindow?: ModelWindow & { readonly model: string };
+    readonly defaultContextBudget?: ContextBudgetChoice;
   };
 
 /** The loop as a test drives it, with the app around it answering beside. */
@@ -314,10 +331,14 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     emit,
     newTaskId,
     acceptsImages,
+    modelWindow,
+    defaultContextBudget,
     ...rest
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
   host.images = acceptsImages === true;
+  if (modelWindow) host.window = modelWindow;
+  if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   const loop = new AgentLoop({
     ...rest,
     model: withOneChannel(rest.model),

@@ -16,9 +16,11 @@ import type {
 import {
   fetchOpenRouterCatalog,
   fetchOpenRouterModelProviders,
+  requestWindow,
   type CatalogFetch,
   type CatalogOptions,
 } from "./catalog.js";
+import { serverSentEvents, withoutStalling } from "./stream.js";
 import type { ModelChoice, ModelChoiceValue } from "./choice.js";
 import {
   classifyFailure,
@@ -319,81 +321,6 @@ const defaultStallTimeoutMs = 300_000;
 
 function defaultFetch(url: string, init: Parameters<ModelFetch>[1]) {
   return fetch(url, init) as Promise<ModelFetchResponse>;
-}
-
-/**
- * The same bytes, but a gap longer than `stallTimeoutMs` between them ends the
- * stream instead of waiting on it.
- *
- * The underlying iterator is asked to close so the abandoned request releases
- * its socket, but that request is not waited on: an iterator suspended inside
- * the very read that stalled will not answer `return()` either, and waiting
- * for it would reintroduce the hang this exists to end.
- */
-async function* withoutStalling(
-  body: AsyncIterable<Uint8Array>,
-  stallTimeoutMs: number,
-): AsyncIterable<Uint8Array> {
-  const iterator = body[Symbol.asyncIterator]();
-  try {
-    for (;;) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const stalled = new Promise<"stalled">((resolve) => {
-        timer = setTimeout(() => resolve("stalled"), stallTimeoutMs);
-      });
-      let step: IteratorResult<Uint8Array> | "stalled";
-      try {
-        step = await Promise.race([iterator.next(), stalled]);
-      } finally {
-        clearTimeout(timer);
-      }
-      if (step === "stalled") {
-        throw new ModelClientError(
-          "networkFailure",
-          "OpenRouter stopped responding partway through. Try again.",
-        );
-      }
-      if (step.done) return;
-      yield step.value;
-    }
-  } finally {
-    void iterator.return?.().catch(() => undefined);
-  }
-}
-
-async function* serverSentEvents(body: AsyncIterable<Uint8Array>) {
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  function takeEvent(): string | undefined {
-    const boundary = /\r?\n\r?\n/.exec(buffer);
-    if (!boundary || boundary.index === undefined) return undefined;
-    const block = buffer.slice(0, boundary.index);
-    buffer = buffer.slice(boundary.index + boundary[0].length);
-    return block;
-  }
-
-  function dataFrom(block: string) {
-    return block
-      .split(/\r?\n/)
-      .filter((line) => line.startsWith("data:"))
-      .map((line) => line.slice(5).trimStart())
-      .join("\n");
-  }
-
-  for await (const chunk of body) {
-    buffer += decoder.decode(chunk, { stream: true });
-    let block = takeEvent();
-    while (block !== undefined) {
-      const data = dataFrom(block);
-      if (data) yield data;
-      block = takeEvent();
-    }
-  }
-
-  buffer += decoder.decode();
-  const data = dataFrom(buffer);
-  if (data) yield data;
 }
 
 export class OpenRouterModelClient implements ModelClient {
@@ -799,6 +726,18 @@ export class OpenRouterModelClient implements ModelClient {
     }
   }
 
+  /** What the catalogue lists of the size of a request to the chosen model. */
+  async #window(chosen: ModelChoiceValue) {
+    const described = await this.#describe();
+    return requestWindow(
+      await this.#catalog
+        .providers(chosen.model, this.#catalogOptions())
+        .catch(() => undefined),
+      chosen.providers,
+      described.ok ? described.value : undefined,
+    );
+  }
+
   async settings(): Promise<ProviderSettings> {
     const chosen = await this.#current();
     const reasoning = await this.#loadReasoning();
@@ -807,9 +746,11 @@ export class OpenRouterModelClient implements ModelClient {
       : (await this.#apiKey?.())
         ? ({ status: "configured", source: "environment" } as const)
         : ({ status: "missing", source: "none" } as const);
+    const window = await this.#window(chosen);
     return {
       ...(reasoning ? { reasoning } : {}),
       acceptsImages: await this.#acceptsImages(),
+      ...window,
       model: chosen.model,
       providers: [...chosen.providers],
       endpoint: this.#endpoint,

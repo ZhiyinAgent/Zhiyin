@@ -1,6 +1,6 @@
 # 0020. Model context compacts without rewriting conversation history
 
-Status: accepted
+Status: superseded by 0050
 
 ## Context
 

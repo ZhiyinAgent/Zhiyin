@@ -14,6 +14,7 @@ import {
   type WorkspaceState,
   type WorkspaceTask,
 } from "../ui/app/index.js";
+import type { ContextBudgetChoice } from "@zhiyin/contract";
 
 type TaskAction = NonNullable<WorkspaceTask["actions"]>[number];
 type ApprovalRequest = Extract<
@@ -32,6 +33,8 @@ export type DemoAction =
   | { type: "taskSelected"; id: string }
   | { type: "taskRenamed"; taskId: string; title: string }
   | { type: "taskDeleted"; taskId: string }
+  | { type: "contextBudgetChosen"; taskId: string; budget: ContextBudgetChoice }
+  | { type: "defaultContextBudgetChosen"; budget: ContextBudgetChoice }
   | { type: "messageSubmitted"; taskId: string; message: string }
   | { type: "approvalRequested"; taskId: string; prompt: ApprovalRequest }
   | { type: "approvalResolved"; taskId: string; allowed: boolean }
@@ -93,6 +96,16 @@ export function demoReducer(
         tasks: updateTask(state, action.taskId, (task) => ({ ...task, title })),
       };
     }
+    case "contextBudgetChosen":
+      return {
+        ...state,
+        tasks: updateTask(state, action.taskId, (task) => ({
+          ...task,
+          contextBudget: action.budget,
+        })),
+      };
+    case "defaultContextBudgetChosen":
+      return { ...state, contextBudget: action.budget };
     // Which conversation is left open once one is deleted is a question about
     // the state, so it is answered here rather than by whoever asked.
     case "taskDeleted": {

@@ -1,5 +1,7 @@
 import type {
   AppEvent,
+  ContextBudgetChoice,
+  ModelWindow,
   PictureFitting,
   WorkspaceContext,
   WorkspaceTask,
@@ -13,7 +15,6 @@ import type { ModelClient } from "@zhiyin/model-client";
 import type { UsageTelemetry } from "@zhiyin/usage";
 import type { ViewValidator } from "@zhiyin/views";
 import type { Rewind } from "@zhiyin/rewind";
-import type { ContextBudget } from "./conversation-context.js";
 import type { WorkLimits } from "./work-limits.js";
 
 export interface AgentLoopDependencies {
@@ -38,7 +39,6 @@ export interface AgentLoopDependencies {
    * whatever that happens to point at.
    */
   readonly judgementModel: Pick<ModelClient, "send">;
-  readonly contextBudget?: ContextBudget;
   readonly workLimits?: WorkLimits;
   readonly pictures?: PictureFitting;
   /**
@@ -68,6 +68,10 @@ export interface TurnHost {
   historyAvailable(): boolean;
   capabilitiesAvailable(): boolean;
   acceptsImages(): boolean;
+  /** The model the next request goes to, and what it lists of its size. */
+  modelWindow(): ModelWindow & { readonly model: string };
+  /** The budget a conversation without its own choice is kept under. */
+  defaultContextBudget(): ContextBudgetChoice;
   enterFolderOf(taskId: string): Promise<void>;
   watchBrowser(taskId: string): void;
   refreshConnections(): Promise<void>;

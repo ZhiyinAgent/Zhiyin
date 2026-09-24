@@ -50,9 +50,22 @@ their owner.
 - A text's size is counted as an encoder would count it, in any script. Named
   tests: `is counted in UTF-8 bytes whatever its script, as an encoder would`
   and `is estimated in tokens as a third of its bytes, rounded up`.
+- **A budget's target is one formula, shared by the loop and the window.**
+  On a window of 300k or more, Low, Medium and Ultra are `min(128k, 0.5W)`,
+  `min(262k, 0.75W)` and `min(1M, 0.85W)`; below it there is no Ultra, and Low
+  and Medium are `min(128k, 0.75W)` and `min(262k, 0.85W)`. Each leaves room
+  for the reply, `min(longest reply, 16,000)`, and a 5% margin. Ultra where it
+  is not offered is Medium, and an unknown window is taken as 128k. Named
+  tests: `is 128k, 262k and 850k on a 1M model for Low, Medium and Ultra`,
+  `differs between two windows for the same choice`, `offers no Ultra below
+  300k, where Low and Medium take a larger share`, `is Medium for a
+  conversation set to Ultra on a model without it`, `always leaves room for
+  the reply and a margin`, and `assumes the smallest window Zhiyin is built for
+  when the model's is unknown`.
 - New source modules stay below the repository line ceiling, and the existing
   oversized module may shrink but may not grow. Named regression: `pins
-  oversized package files at their current size with no growth headroom`.
+  oversized package and renderer files at their current size with no growth
+  headroom`.
 
 ## Testing notes
 

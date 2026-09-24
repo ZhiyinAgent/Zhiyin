@@ -5,9 +5,11 @@ import type {
   ModelProviderList,
   ProviderSettings,
   ApiKeySaveOutcome,
+  ContextBudgetChoice,
 } from "@zhiyin/contract";
 import { CloseButton, Icon } from "../shared/index.js";
 import { ApiKeyDialog } from "./ApiKeyDialog.js";
+import { DefaultContextBudget } from "./DefaultContextBudget.js";
 import { ModelList, type ModelFilter, type ModelOrder } from "./ModelList.js";
 import { ProviderTable, type ProviderOrder } from "./ProviderTable.js";
 import styles from "./model.module.css";
@@ -27,6 +29,9 @@ export function ModelSettings({
   onSelectModel,
   onSaveApiKey,
   onClearApiKey,
+  defaultBudget,
+  fixedTokens,
+  onSetDefaultBudget,
 }: {
   settings: ProviderSettings;
   onClose: () => void;
@@ -35,6 +40,10 @@ export function ModelSettings({
   onSelectModel: (model: string, providers: readonly string[]) => Promise<void>;
   onSaveApiKey: (apiKey: string) => Promise<ApiKeySaveOutcome>;
   onClearApiKey: () => Promise<void>;
+  defaultBudget: ContextBudgetChoice;
+  /** Instructions and tool definitions, as the last request measured them. */
+  fixedTokens?: number;
+  onSetDefaultBudget: (budget: ContextBudgetChoice) => Promise<void>;
 }) {
   const keyMissing = settings.credential.status !== "configured";
   const savedProviders = settings.providers ?? [];
@@ -226,6 +235,13 @@ export function ModelSettings({
           </span>
         )}
       </p>
+
+      <DefaultContextBudget
+        settings={settings}
+        budget={defaultBudget}
+        {...(fixedTokens !== undefined ? { fixedTokens } : {})}
+        onChoose={(budget) => void onSetDefaultBudget(budget)}
+      />
 
       <div className={styles["model-settings__columns"]}>
         <ModelList

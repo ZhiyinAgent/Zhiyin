@@ -43,6 +43,10 @@ export function demoCommands(
       },
     }),
     openAttachment: async () => {},
+    setContextBudget: async (taskId, budget) =>
+      dispatch({ type: "contextBudgetChosen", taskId, budget }),
+    setDefaultContextBudget: async (budget) =>
+      dispatch({ type: "defaultContextBudgetChosen", budget }),
     interruptTask: async (taskId) =>
       dispatch({ type: "taskInterrupted", taskId }),
     resolveApproval: async (taskId, _requestId, decision) =>

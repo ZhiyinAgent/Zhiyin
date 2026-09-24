@@ -126,6 +126,49 @@ describe("Composer", () => {
     ).toBeNull();
   });
 
+  it("sends a message typed past 50,000 characters as a file, and says so before it is sent", async () => {
+    const onSubmit = vi.fn();
+    const keepPaste = vi.fn(async () => ({
+      status: "kept" as const,
+      attachment: paste,
+    }));
+    render(<Composer onSubmit={onSubmit} keepPaste={keepPaste} />);
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+    const long = "a".repeat(50_001);
+
+    fireEvent.change(field, { target: { value: "a".repeat(50_000) } });
+    expect(screen.queryByText(/will be sent as a file/)).toBeNull();
+    fireEvent.change(field, { target: { value: long } });
+    expect(screen.getByText(/will be sent as a file/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(onSubmit).toHaveBeenCalledWith("", undefined, [paste]),
+    );
+    expect(keepPaste).toHaveBeenCalledWith(long);
+    expect(field).toHaveValue("");
+  });
+
+  it("keeps a long typed message in the field when it cannot be kept as a file", async () => {
+    const onSubmit = vi.fn();
+    const keepPaste = vi.fn(async () => ({
+      status: "refused" as const,
+      reason: "The disk is full.",
+    }));
+    render(<Composer onSubmit={onSubmit} keepPaste={keepPaste} />);
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+    const long = "a".repeat(50_001);
+    fireEvent.change(field, { target: { value: long } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The disk is full.",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(field).toHaveValue(long);
+  });
+
   it("never puts a 10 MB paste in the field", async () => {
     const keepPaste = vi.fn(async () => ({
       status: "kept" as const,

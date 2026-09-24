@@ -21,10 +21,11 @@ it cannot affect permission or execution. That work reaches two named model
 dependencies rather than one — presentation and judgement — so a composition can
 serve them from different models. ADR 0046.
 
-The model-facing conversation may be compacted independently of the durable
-human transcript. The loop chooses the cutoff, asks for a bounded summary,
-retains named evidence, and sends later requests that summary followed by what
-the model was sent after the cutoff. ADR 0020.
+The model-facing conversation is held to a budget set from the real window of
+the model in use, independently of the durable human transcript. Before every
+model call the loop may clear older tool results or condense the conversation;
+later requests send the summary in place of what it covered, followed by what
+the model was sent after it. ADR 0050.
 
 This is the feature most at risk of becoming a god class. It owns the order of
 steps and nothing about how a step is performed. Concrete storage, network,
@@ -52,9 +53,10 @@ browser is not among them: it is reached, and let go of, through capabilities.
 
 ## Public interface
 
-- `start` and `cancel` run and stop a turn in one conversation. Starting a turn
-  may compact older model context before the main request; manually renaming a
-  conversation prevents every later automatic title update.
+- `start` and `cancel` run and stop a turn in one conversation. Any model call
+  of a turn may be preceded by clearing older tool results or condensing the
+  conversation; manually renaming a conversation prevents every later automatic
+  title update.
 - `running`, `anyRunning` and `accepts` answer the workspace: whether a turn is
   running, and whether a write to a conversation is still accepted. `running`
   also answers true while a specialist that outlived its own turn is still
@@ -96,8 +98,8 @@ browser is not among them: it is reached, and let go of, through capabilities.
   normalized result returns to the requesting model. Any later consequential
   action receives its own permission decision (ADR 0021).
 - Twenty-four completed tool rounds form a renewable tranche, not a failed
-  turn. If the next response still proposes an action, Continue runs normal
-  compaction, refreshes the tranche, and carries on from the conversation as
+  turn. If the next response still proposes an action, Continue refreshes the
+  tranche, and carries on from the conversation as
   already sent, with a `renewal` notice after the round's results. Pause leaves that proposal unexecuted and allows one
   tool-free progress-report request before the turn stops (ADR 0029).
 - The same checkpoint stops before the next action when a turn reaches 30
@@ -179,8 +181,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   the specialist still running, then wakes with its handoff` (which also
   checks the `specialists` notice).
 - **A tool's answer is sized before it is sent, whichever tool gave it.** One
-  answer may take 8,000 estimated tokens and one round's answers together
-  24,000. Past either, the whole answer is kept with the conversation and the
+  answer may take 8,000 estimated tokens or 5% of the conversation's budget,
+  whichever is less, and one round's answers together 24,000 or 15%. A
+  specialist's run keeps 8,000 and 24,000. Past either, the whole answer is kept with the conversation and the
   model is shown its start, its end and the `output://` address to read the
   rest with `read_file`; an answer past the round's limit still shows a little
   of itself. What a tool made for the person (`details`) and picture data are
@@ -218,7 +221,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
   history already sent after Continue`, `takes a quietly corrected proposal
   back out once the tool succeeds`, `changes the system prompt's date when
   the day changes, and nothing else`, `puts the summary in place of what a
-  condensing covered, with the results it kept`, and `changes the fixed start
+  condensing covered, and changes the start of requests only there`, and `changes the fixed start
   once when a plugin is activated`.
 - **A quiet correction is never stored; a failure the person saw is.** A
   proposal a tool refused quietly is sent back to the model until the tool
@@ -350,21 +353,69 @@ browser is not among them: it is reached, and let go of, through capabilities.
   answer omits it`, `keeps a useful fallback when the first generated title is unusable`,
   `preserves a legacy title as manual when its provenance is unknowable`,
   `increments an existing compaction and regenerates its automatic title`, and
-  `compacts a manually named conversation without requesting a new title` guard
-  these paths. The named test `keeps a manual rename that arrives while a
-  compaction title is pending` guards the concurrent rename boundary.
-- Compaction changes model context, not the durable transcript. It records an
-  exact cutoff, carries only validated references to retained action evidence,
-  labels the summary as untrusted and non-authorizing in a `summary` notice
-  standing where the condensed messages were, with the retained actions'
-  results inside it, and resumes from the same shape after restart. An
-  unusable summary does not discard context. The named tests `compacts only
-  model context, retains evidence, and renames from the summary`, `resumes
-  from a durable summary without removing the human transcript`, `keeps full
-  context when an attempted compaction is unusable`, `puts the summary in place
-  of what a condensing covered, with the results it kept`, and `cancels
-  compaction with its owning turn and publishes no late checkpoint` guard this
-  boundary.
+  `condenses a manually named conversation without asking for a new title` guard
+  these paths. The named test `keeps a manual rename that arrives while the
+  condensing naming it is still running` guards the concurrent rename boundary.
+- Condensing changes model context, not the durable transcript. It records an
+  exact cutoff as a message and a model-history entry, labels the summary as
+  untrusted and non-authorizing in a `summary` notice standing where the
+  condensed messages were, with what Zhiyin carries over word for word beside
+  it, and resumes from the same shape after restart. An unusable summary, or
+  an answer that calls a tool, changes nothing. The named tests `condenses only
+  what the model is sent, keeps the person's request word for word, and renames
+  from the summary`, `resumes from a durable summary without removing the human
+  transcript`, `keeps full context when an attempted condensing is unusable`,
+  `puts the summary in place of what a condensing covered, and changes the
+  start of requests only there`, and `cancels condensing with its owning turn
+  and publishes no late checkpoint` guard this boundary.
+
+### The context budget
+
+- **Every request a conversation sends fits its budget.** The target is set
+  from the person's choice of Low, Medium or Ultra and the window of the model
+  that will serve the request, and is checked before every model call,
+  between rounds of one run of tool calls as well as at the start of a turn.
+  Instructions and tools may take 15% of it, and each part of a request has a
+  limit, so the worst case fits by construction. Named tests: `on a %s window
+  with the %s budget: instructions and tools at their full share, the longest
+  message a person can type (50,000 characters), a history at the budget and rounds of the largest
+  results, every request sent fits the budget` (run for each budget on 128k,
+  262k and 1M windows), and `of 150k tokens is kept whole on a 1M model's
+  Medium budget, and condensed on Low`.
+- **The size of a request is the provider's count, not a guess.** The count
+  for the last request stands, with only what was added since estimated at
+  three characters to a token. It stands only while the model, the fixed start
+  and the messages it covered are unchanged byte for byte, so a model switch,
+  a condensing or a rewind is estimated whole again, and a request the
+  provider did not count never looks smaller. Named tests: `is the provider's
+  count, with only what was added since estimated` and `is estimated whole
+  again after a model switch or a rewind`.
+- **Older tool results are cleared rarely and in one step.** Clearing starts
+  when tool results reach 40% of the target, and only if it frees at least
+  20%; it clears every result with five complete rounds after it at once, each
+  saved and replaced by a `cleared` notice naming how to read it again. Every
+  request between two clearings starts with the whole of the one before it.
+  Clearing is never stretched to avoid condensing. Named tests: `are cleared at
+  most once in 10 rounds of 20k-token results, and every request between
+  repeats the one before it` and `are left alone when a request past its
+  budget would free too little by clearing them, and the conversation is
+  condensed instead`.
+- **Condensing asks the conversation's own model, from the request it last
+  sent.** The request is the one the provider cached, with a `condense` notice
+  added at the end, so it fits the window with room for the summary. A
+  condensing that fails or leaves the request over is not tried again until
+  the request grows by a tenth. Named tests: `is condensed between rounds of
+  one long run, from the request the provider last cached, and the run goes
+  on`, `asks the conversation's own model to condense it, and neither
+  auxiliary model`, and `condenses a long run where it crosses its context
+  budget, and carries it across the renewal`.
+- **After condensing, the model keeps what it would need.** The person's
+  latest request word for word (its start and end past a tenth of the budget),
+  the two before it, the plan and the files changed are carried beside the
+  summary; the newest rounds stay as they were; and up to five files being
+  worked on are read again through `read_file` and marked as re-read by
+  Zhiyin. Named test: `the model has the person's request word for word, and
+  the files changed before it read again as they are now`.
 
 - A validated inert view executes and persists without a permission decision;
   an unvalidated one produces no view. The named tests `checks, runs, and
@@ -424,12 +475,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   auxiliary requests omit the raw tool command.
 - Presentation and judgement are separate dependencies. Writing the plan, the
   conversation's name and an action's copy is presentation; deciding whether
-  evidence satisfies a criterion and distilling the durable summary is
-  judgement. A composition may point them at different models, and neither
+  evidence satisfies a criterion is judgement. Condensing is neither: the
+  conversation's own model writes the summary (ADR 0050). A composition may point them at different models, and neither
   follows the other's choice. The named tests `asks the guidance model for the
   plan and the conversation name`, `asks the judgement model whether a
-  criterion is satisfied`, and `asks the judgement model to compact the
-  conversation` guard the split.
+  criterion is satisfied`, and `asks the conversation's own model to condense
+  it, and neither auxiliary model` guard the split.
 - A generated answer is never discarded for its length where the answer is what
   matters. A criterion verdict and a plan item survive a long explanation,
   shortened to fit; only copy whose length means the request was misread falls
@@ -447,12 +498,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   in another turn. Positive evidence marks an item verified; otherwise its
   prior open state and evidence remain intact. The named test `keeps unmet plan
   work open when a turn asks for more information` guards this distinction.
-- A conversation compacted by the loop is renamed by the same request that
-  compacted it, never a second one, and a manual title is neither asked for nor
-  replaced. The named tests `names a compacted conversation from the compaction
-  answer, without a second request`, `compacts a manually named conversation
-  without requesting a new title`, and `keeps a manual rename that arrives
-  while the compaction naming it is still running` guard this.
+- A conversation condensed by the loop is renamed by the same request that
+  condensed it, never a second one, and a manual title is neither asked for nor
+  replaced. The named tests `names a condensed conversation from the condensing
+  answer, without a second request`, `condenses a manually named conversation
+  without asking for a new title`, and `keeps a manual rename that arrives
+  while the condensing naming it is still running` guard this.
 - An auxiliary call asks for its answer as a tool call and never constrains
   tool choice, so one request shape serves every upstream: `tools` is the only
   structured-answer mechanism every provider of the configured model supports,
@@ -492,11 +543,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   consuming the request`, and `cancels a turn waiting for clarification without
   accepting a late answer` guard these paths.
 - A work-budget checkpoint pauses on an exact core-owned request id. Continue
-  can renew the tranche repeatedly and re-enters durable context compaction;
+  can renew the tranche repeatedly, and the budget check before every call
+  still condenses;
   Pause executes no pending action and makes exactly one tool-free reporting
   request. The named tests `refreshes another 24-round tranche every time the
-  person continues`, `compacts durable context when a renewed budget crosses
-  the context limit`, and `uses exactly one tool-free model call to report
+  person continues`, `condenses a long run where it crosses its context
+  budget, and carries it across the renewal`, and `uses exactly one tool-free model call to report
   progress, then pauses` guard these paths.
 - Overall time, token, and provider-cost limits share that checkpoint. The
   ledger deduplicates provider request identities and is the same instance

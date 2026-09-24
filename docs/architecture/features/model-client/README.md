@@ -38,7 +38,8 @@ one trust boundary.
   their selected model. Routing is bounded by a configured allowlist of
   upstreams; an empty allowlist lets the provider choose freely. ADR 0022.
 - `settings()` returns the selected model, the upstreams routing is restricted
-  to, and the endpoint, plus whether a credential is missing, stored, supplied
+  to, the context window and longest reply a request to it may have, and the
+  endpoint, plus whether a credential is missing, stored, supplied
   by the environment, or unavailable. It never returns the credential.
 - `models()` answers the models this account may use, and `modelProviders(model)`
   the upstreams that serve one of them with price, context window,
@@ -59,6 +60,15 @@ one trust boundary.
 
 ## Invariants
 
+- **The window a request must fit is the smallest it may meet.** A request
+  may be routed to any upstream allowed, so the window and the longest reply
+  are the smallest among those picked, or among all listed when none is.
+  Without that list, the model's own listing is used; without either, they are
+  left unknown rather than guessed. Named tests: `is the smallest window and
+  reply among the upstreams it may be routed to`, `is the model's own listing
+  when its upstreams cannot be listed`, `is left unknown rather than guessed
+  when nothing lists it`, and `reads each upstream's longest reply from the
+  catalogue`.
 - **Each request asks for its cached start the way its provider needs.** Most
   providers behind OpenRouter reuse a cached request start on their own;
   Anthropic and the Qwen models Alibaba serves reuse only what the request

@@ -308,16 +308,18 @@ describe("AgentLoop renewable work budget", () => {
     });
   });
 
-  it("compacts durable context when a renewed budget crosses the context limit", async () => {
+  it("condenses a long run where it crosses its context budget, and carries it across the renewal", async () => {
     const requests: ModelRequest[] = [];
     const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));
     const base = stubDependencies(() => {});
     let requestNumber = 0;
     const loop = loopFrom({
       ...base,
-      contextBudget: {
-        compactAboveEstimatedTokens: 2_000,
-        retainRecentEstimatedTokens: 500,
+      // A 6,800-token Medium budget, crossed about two thirds of the way in.
+      modelWindow: {
+        model: "small",
+        contextWindow: 8_000,
+        maximumOutputTokens: 100,
       },
       tools: workTool(execute),
       permissions: {
@@ -326,26 +328,21 @@ describe("AgentLoop renewable work budget", () => {
           reason: "Read only",
         }),
       },
-      judgementModel: {
-        send: async function* (request) {
-          const prompt = request.messages.at(-1)?.content ?? "";
-          if (prompt.includes("Compact the older conversation")) {
-            yield {
-              kind: "textDelta" as const,
-              text: JSON.stringify({
-                title: "Continue inspection",
-                summary: "The first 24 inspection rounds completed.",
-                retainedActionIds: [],
-              }),
-            };
-          }
-          yield { kind: "done" as const };
-        },
-      },
       model: {
         ...base.model,
         send: async function* (request) {
           requests.push(request);
+          if (JSON.stringify(request.messages.at(-1)).includes("condense")) {
+            yield {
+              kind: "textDelta" as const,
+              text: JSON.stringify({
+                title: "Continue inspection",
+                summary: "The first inspection rounds completed.",
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
           requestNumber += 1;
           if (requestNumber <= 25) {
             yield {
@@ -381,10 +378,10 @@ describe("AgentLoop renewable work budget", () => {
 
     expect(loop.snapshot().tasks[0]?.compaction).toMatchObject({
       revision: 1,
-      summary: "The first 24 inspection rounds completed.",
+      summary: "The first inspection rounds completed.",
     });
     const resumed = JSON.stringify(requests.at(-1)?.messages);
-    expect(resumed).toContain("The first 24 inspection rounds completed.");
+    expect(resumed).toContain("The first inspection rounds completed.");
     expect(resumed).toContain("fresh budget of 24 tool rounds");
     expect(resumed).not.toContain("OLD-FIRST-MARKER");
   });

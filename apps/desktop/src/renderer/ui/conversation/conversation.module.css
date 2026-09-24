@@ -885,6 +885,11 @@
   font-size: 13px;
 }
 
+.composer__note {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
 .user-turn {
   align-self: flex-end;
   width: fit-content;
@@ -1523,4 +1528,122 @@
     opacity: 0.45;
     transform: scale(0.78);
   }
+}
+
+.context-ring svg {
+  width: 20px;
+  height: 20px;
+  transform: rotate(-90deg);
+}
+
+.context-ring__track,
+.context-ring__fill {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.context-ring__track {
+  stroke: var(--zy-line-strong);
+}
+
+.context-ring__fill {
+  stroke: var(--zy-accent);
+  stroke-linecap: round;
+  stroke-dasharray: var(--context-fill) 100;
+}
+
+.context-ring__fill--over {
+  stroke: var(--zy-danger);
+}
+
+/* Unknown is drawn as a moving arc, never as an empty ring. */
+.context-ring__dial--unknown {
+  animation: context-ring-unknown 1.6s linear infinite;
+}
+
+.context-ring__dial--unknown .context-ring__fill {
+  stroke: var(--zy-faint);
+}
+
+@keyframes context-ring-unknown {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-ring__dial--unknown {
+    animation: none;
+  }
+}
+
+.context-ring__panel {
+  width: 272px;
+  display: grid;
+  gap: 8px;
+}
+
+.context-ring__status {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.context-ring__choices {
+  display: grid;
+  gap: 2px;
+}
+
+.context-ring__choices label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.context-ring__choices label:hover,
+.context-ring__choices label:has(input:focus-visible) {
+  background: var(--zy-wash-strong);
+}
+
+.context-ring__warning {
+  margin: 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.context-ring__breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.context-ring__breakdown th,
+.context-ring__breakdown td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+}
+
+.context-ring__breakdown td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring__breakdown td:last-child {
+  color: var(--zy-muted);
 }

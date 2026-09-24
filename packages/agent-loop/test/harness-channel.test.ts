@@ -51,6 +51,8 @@ describe("a notice from Zhiyin", () => {
       "renewal",
       "picture",
       "specialists",
+      "condense",
+      "cleared",
     ]);
   });
 });

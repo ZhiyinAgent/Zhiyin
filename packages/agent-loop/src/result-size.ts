@@ -2,8 +2,8 @@
  * How much of a tool's answer the model is shown, and what happens to the rest.
  *
  * Every result is measured in estimated tokens before it is sent, whichever
- * tool gave it. One result may take 8k; one round's results together, 24k.
- * Past either, the whole answer is kept with the conversation and the model is
+ * tool gave it. One result may take 8k, or 5 % of the conversation's budget
+ * when that is less; one round's results together, 24k or 15 %. Past either, the whole answer is kept with the conversation and the model is
  * shown its start and its end with where the whole is: `read_file` reads it
  * again a page at a time. Nothing is dropped without saying where it went.
  */
@@ -70,13 +70,28 @@ function ends(text: string, tokens: number, between: string): string {
   return `${head}${between}${tail}`;
 }
 
+export type ResultLimits = { readonly result: number; readonly round: number };
+
+/** The limits for a conversation kept under `targetTokens`. */
+export function resultLimits(targetTokens: number): ResultLimits {
+  return {
+    result: Math.min(resultTokens, Math.floor(targetTokens * 0.05)),
+    round: Math.min(roundTokens, Math.floor(targetTokens * 0.15)),
+  };
+}
+
 /** One round's results, measured as they are added. */
 export class RoundResults {
   readonly #keep: KeepOutput;
+  readonly #limits: ResultLimits;
   #used = 0;
 
-  constructor(keep: KeepOutput) {
+  constructor(
+    keep: KeepOutput,
+    limits: ResultLimits = { result: resultTokens, round: roundTokens },
+  ) {
     this.#keep = keep;
+    this.#limits = limits;
   }
 
   /**
@@ -85,7 +100,10 @@ export class RoundResults {
    * out to read again; `sent` is the answer as the model would receive it.
    */
   async fit(sent: string, whole: unknown): Promise<string> {
-    const allowance = Math.min(resultTokens, roundTokens - this.#used);
+    const allowance = Math.min(
+      this.#limits.result,
+      this.#limits.round - this.#used,
+    );
     const tokens = estimatedTokens(sent);
     if (tokens <= allowance) {
       this.#used += tokens;

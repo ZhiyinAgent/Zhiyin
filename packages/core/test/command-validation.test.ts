@@ -81,6 +81,14 @@ describe("privileged commands", () => {
       validateCommand(CHANNEL.setComponentEnabled, ["research/x", "yes"]),
     ).toThrow();
   });
+  it("accepts typed words up to 50,000 characters, and no more", () => {
+    expect(() =>
+      validateCommand(CHANNEL.sendMessage, ["task", "x".repeat(50_000)]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.sendMessage, ["task", "x".repeat(50_001)]),
+    ).toThrow();
+  });
   it("accepts a message that is only pastes, but never an empty one", () => {
     const paste = "pasted-2026-09-24-101500.txt";
     expect(() =>

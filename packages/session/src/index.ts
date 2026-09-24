@@ -63,6 +63,7 @@ export interface SessionSummary {
 export type SavedWorkspace = Pick<
   WorkspaceSnapshot,
   | "preferences"
+  | "contextBudget"
   | "workspace"
   | "recentWorkspaces"
   | "tasks"

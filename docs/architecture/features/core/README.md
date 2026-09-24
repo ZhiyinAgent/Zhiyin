@@ -78,6 +78,9 @@ host the workspace hands the agent loop.
   manager and publish its refreshed server state.
 - Provider credential save and clear commands stay write-only and publish only
   the refreshed credential status.
+- `setContextBudget(taskId, budget)` sets one conversation's budget, and
+  `setDefaultContextBudget(budget)` the one a conversation follows until it is
+  given its own.
 
 ### Model settings
 
@@ -89,6 +92,15 @@ directly.
 
 ## Invariants
 
+- **A conversation's budget is its own, and the rest follow the default.**
+  Both survive a restart, and the window can name only Low, Medium or Ultra.
+  Named tests: `is kept for one conversation, while the others follow the
+  default, across a restart` and `is refused from the window unless it is one
+  of the three budgets`.
+- **No message reaches the loop as more than 50,000 typed characters.**
+  Longer text travels as a kept paste, so the latest message always fits its
+  budget beside what condensing keeps. Named test: `accepts typed words up to
+  50,000 characters, and no more`.
 - **Nothing malformed reaches anyone.** Every command's arguments are checked
   against its channel before anything answers it, and an unknown channel is
   refused. Named tests: `is refused without reaching the loop when its arguments

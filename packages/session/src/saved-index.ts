@@ -6,7 +6,12 @@
 
 import type { ConversationSummary } from "@zhiyin/contract";
 import type { SavedSettings } from "./history-store.js";
-import { isFolder, isRecord, optionalText } from "./saved-workspace.js";
+import {
+  isFolder,
+  isRecord,
+  optionalText,
+  validContextBudget,
+} from "./saved-workspace.js";
 
 /** A conversation as the list shows it, without opening it. */
 export function isConversationSummary(
@@ -40,6 +45,7 @@ export function isSavedSettings(
         typeof value.preferences.capabilitiesApplied !== "boolean"))
   )
     return false;
+  if (!validContextBudget(value.contextBudget)) return false;
   if (value.workspace !== undefined && !isFolder(value.workspace)) return false;
   if (
     value.recentWorkspaces !== undefined &&

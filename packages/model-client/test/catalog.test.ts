@@ -124,6 +124,7 @@ describe("model catalogue", () => {
           name: "Someone",
           quantization: "fp8",
           contextWindow: 262144,
+          maximumOutputTokens: null,
           inputUsdPerMillion: 0.5,
           outputUsdPerMillion: 1.5,
           acceptsTools: true,
@@ -386,5 +387,101 @@ describe("OpenRouterModelClient with a saved choice", () => {
 
     expect((await client.settings()).acceptsImages).toBe(true);
     expect(asked).toContain("vendor/chosen");
+  });
+});
+
+describe("the window a request must fit", () => {
+  const endpoint = (tag: string, window: number, output: number | null) => ({
+    slug: tag,
+    name: tag,
+    quantization: null,
+    contextWindow: window,
+    maximumOutputTokens: output,
+    inputUsdPerMillion: 1,
+    outputUsdPerMillion: 1,
+    acceptsTools: true,
+    responseMs: null,
+    tokensPerSecond: null,
+    uptimePercent: null,
+  });
+  const upstreams = [
+    endpoint("venice/fp4", 198_000, 16_384),
+    endpoint("deepinfra/fp4", 202_752, 131_072),
+    endpoint("novita/bf16", 204_800, null),
+  ];
+  const client = (providers: readonly string[], listed = true) =>
+    new OpenRouterModelClient({
+      apiKey: async () => "key",
+      fetcher: async () => streamResponse(),
+      model: "z-ai/glm-4.6",
+      providers,
+      catalog: {
+        models: async () => ({ status: "ready", models: [] }),
+        providers: async (model) =>
+          listed
+            ? { status: "ready", model, providers: upstreams }
+            : { status: "unavailable", reason: "offline" },
+      },
+      modelInfo: async () => ({
+        context_length: 204_800,
+        top_provider: {
+          context_length: 198_000,
+          max_completion_tokens: 16_384,
+        },
+      }),
+    });
+
+  it("is the smallest window and reply among the upstreams it may be routed to", async () => {
+    expect(
+      await client(["deepinfra/fp4", "novita/bf16"]).settings(),
+    ).toMatchObject({ contextWindow: 202_752, maximumOutputTokens: 131_072 });
+    expect(await client([]).settings()).toMatchObject({
+      contextWindow: 198_000,
+      maximumOutputTokens: 16_384,
+    });
+  });
+
+  it("is the model's own listing when its upstreams cannot be listed", async () => {
+    expect(await client([], false).settings()).toMatchObject({
+      contextWindow: 198_000,
+      maximumOutputTokens: 16_384,
+    });
+  });
+
+  it("is left unknown rather than guessed when nothing lists it", async () => {
+    const settings = await new OpenRouterModelClient({
+      apiKey: async () => "key",
+      fetcher: async () => streamResponse(),
+      catalog: {
+        models: async () => ({ status: "ready", models: [] }),
+        providers: async () => ({ status: "unavailable", reason: "offline" }),
+      },
+    }).settings();
+
+    expect(settings.contextWindow).toBeUndefined();
+    expect(settings.maximumOutputTokens).toBeUndefined();
+  });
+
+  it("reads each upstream's longest reply from the catalogue", async () => {
+    const list = await fetchOpenRouterModelProviders("z-ai/glm-4.6", {
+      fetcher: answers({
+        data: {
+          endpoints: [
+            {
+              tag: "venice/fp4",
+              provider_name: "Venice",
+              context_length: 198000,
+              max_completion_tokens: 16384,
+              pricing: { prompt: "0.0000005", completion: "0.0000015" },
+              supported_parameters: ["tools"],
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(list).toMatchObject({
+      providers: [{ contextWindow: 198_000, maximumOutputTokens: 16_384 }],
+    });
   });
 });

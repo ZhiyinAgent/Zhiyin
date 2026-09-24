@@ -90,6 +90,9 @@ function settingsOf(
 ): Omit<SavedSettings, "selectedTaskId"> {
   return {
     ...(workspace.preferences ? { preferences: workspace.preferences } : {}),
+    ...(workspace.contextBudget
+      ? { contextBudget: workspace.contextBudget }
+      : {}),
     ...(workspace.workspace ? { workspace: workspace.workspace } : {}),
     ...(workspace.recentWorkspaces
       ? { recentWorkspaces: workspace.recentWorkspaces }

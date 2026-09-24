@@ -18,6 +18,16 @@ export function isFolder(value: unknown): boolean {
   );
 }
 
+/** Absent, or one of the budgets; absent follows the default. */
+export function validContextBudget(value: unknown): boolean {
+  return (
+    value === undefined ||
+    value === "low" ||
+    value === "medium" ||
+    value === "ultra"
+  );
+}
+
 function validReasoningSelection(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)) return false;
@@ -132,6 +142,7 @@ export function isWorkspaceTask(task: unknown): boolean {
     typeof task.id === "string" &&
     typeof task.title === "string" &&
     validReasoningSelection(task.reasoning) &&
+    validContextBudget(task.contextBudget) &&
     (task.titleSource === undefined ||
       task.titleSource === "generated" ||
       task.titleSource === "manual") &&
@@ -154,6 +165,10 @@ export function isWorkspaceTask(task: unknown): boolean {
       (Array.isArray(task.modelResponses) &&
         task.modelResponses.every(validModelResponse))) &&
     validCompaction(task.compaction, task.messages, task.actions) &&
+    (task.contextUsage === undefined ||
+      (isRecord(task.contextUsage) &&
+        typeof task.contextUsage.totalTokens === "number" &&
+        isRecord(task.contextUsage.parts))) &&
     validPhase(task.phase) &&
     (task.actions === undefined ||
       (Array.isArray(task.actions) &&
@@ -261,6 +276,8 @@ function validCompaction(
     !Number.isSafeInteger(value.revision) ||
     Number(value.revision) < 1 ||
     typeof value.throughMessageId !== "string" ||
+    !optionalText(value.throughEntryId) ||
+    !optionalText(value.carried) ||
     typeof value.summary !== "string" ||
     !value.summary.trim() ||
     typeof value.createdAt !== "string" ||

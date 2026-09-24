@@ -21,6 +21,7 @@ import {
 import { Icon, Notice } from "../shared/index.js";
 import { WorkspaceSkeleton } from "./WorkspaceSkeleton.js";
 import { useAppShortcuts } from "./useAppShortcuts.js";
+import { useContextBudget } from "./useContextBudget.js";
 import { timelinePieces } from "./timelinePieces.js";
 import { WorkspaceSurfaces } from "./WorkspaceSurfaces.js";
 import { approvalPromptDetails, composerLock } from "./dockState.js";
@@ -50,6 +51,8 @@ type WorkspaceShellProps = {
     | "deleteTask"
     | "sendMessage"
     | "keepPaste"
+    | "setContextBudget"
+    | "setDefaultContextBudget"
     | "openAttachment"
     | "interruptTask"
     | "resolveApproval"
@@ -166,6 +169,11 @@ export function WorkspaceShell({
     (selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
   );
   const context = selectedTask?.context;
+  const budget = useContextBudget(
+    state,
+    selectedTask,
+    commands.setContextBudget,
+  );
   const isRunning =
     selectedTask?.phase.kind === "working" ||
     selectedTask?.phase.kind === "browser" ||
@@ -262,7 +270,8 @@ export function WorkspaceShell({
     reasoning?: ReasoningSelection,
     attachments?: readonly MessageAttachment[],
   ) {
-    const taskId = selectedTask?.id ?? (await commands.createTask());
+    let taskId = selectedTask?.id;
+    if (!taskId) await budget.adopt((taskId = await commands.createTask()));
     setComposerDraft(undefined);
     if (attachments?.length)
       await commands.sendMessage(
@@ -554,6 +563,7 @@ export function WorkspaceShell({
                         ? { initialReasoning: selectedTask.reasoning }
                         : {})}
                       onSubmit={submitMessage}
+                      context={budget.context}
                       keepPaste={commands.keepPaste}
                       // A paste not yet sent belongs to no conversation; one
                       // a rewind put back is still the conversation's.

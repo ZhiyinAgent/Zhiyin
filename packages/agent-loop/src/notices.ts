@@ -32,6 +32,10 @@ export const noticeKinds = [
   "picture",
   /** The specialists delegated to so far, sent again when any of them changes. */
   "specialists",
+  /** Zhiyin asks for the conversation so far to be summarised. */
+  "condense",
+  /** A tool result cleared to make room, and where it can be read again. */
+  "cleared",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

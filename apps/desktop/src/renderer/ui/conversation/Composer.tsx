@@ -6,7 +6,12 @@ import type {
   ReasoningCapabilities,
   ReasoningSelection,
 } from "@zhiyin/contract";
-import { utf8Bytes } from "@zhiyin/contract";
+import {
+  estimatedTokens,
+  typedMessageCharacters,
+  utf8Bytes,
+} from "@zhiyin/contract";
+import { ContextRing } from "./ContextRing.js";
 import { PastedText } from "./PastedText.js";
 import { ReasoningControls } from "./ReasoningControls.js";
 import styles from "./conversation.module.css";
@@ -40,6 +45,8 @@ type ComposerProps = {
    * message, not in a bar of its own above the conversation.
    */
   scope?: ReactNode;
+  /** How full the next request is, and the budget it is held to. */
+  context?: Omit<Parameters<typeof ContextRing>[0], "draftTokens" | "disabled">;
 };
 
 /** A paste this long is kept as a file and shown as a chip, not as text. */
@@ -60,6 +67,7 @@ export function Composer({
   scope,
   reasoningCapabilities,
   initialReasoning,
+  context,
 }: ComposerProps) {
   const [reasoningDraft, setReasoningDraft] = useState<ReasoningSelection>();
   const [sending, setSending] = useState(false);
@@ -127,10 +135,10 @@ export function Composer({
   }, [draft]);
 
   async function submit() {
-    const value = message.trim();
-    const sent = attachments;
+    const typed = message.trim();
+    const kept = attachments;
     if (
-      (!value && !sent.length) ||
+      (!typed && !kept.length) ||
       keeping ||
       disabledReason ||
       running ||
@@ -140,17 +148,36 @@ export function Composer({
     submitting.current = true;
     setSending(true);
     setError("");
-    setMessage("");
-    setAttachments([]);
     try {
-      if (sent.length)
-        await onSubmit?.(value, capabilities ? reasoning : undefined, sent);
-      else if (capabilities) await onSubmit?.(value, reasoning);
-      else await onSubmit?.(value);
-    } catch {
-      setMessage(value);
-      setAttachments(sent);
-      setError("Your message could not be sent. It is still here.");
+      let value = typed;
+      let sent = kept;
+      // Past the limit, what was typed goes as a file, as a long paste does;
+      // if it cannot be kept, it stays in the field unsent.
+      if (typed.length > typedMessageCharacters) {
+        const file = await keepPaste?.(typed).catch(() => undefined);
+        if (file?.status !== "kept") {
+          setError(
+            file
+              ? `Your message was not sent: ${file.reason}`
+              : "Your message could not be kept as a file. It is still here.",
+          );
+          return;
+        }
+        value = "";
+        sent = [...kept, file.attachment];
+      }
+      setMessage("");
+      setAttachments([]);
+      try {
+        if (sent.length)
+          await onSubmit?.(value, capabilities ? reasoning : undefined, sent);
+        else if (capabilities) await onSubmit?.(value, reasoning);
+        else await onSubmit?.(value);
+      } catch {
+        setMessage(typed);
+        setAttachments(kept);
+        setError("Your message could not be sent. It is still here.");
+      }
     } finally {
       submitting.current = false;
       setSending(false);
@@ -221,6 +248,12 @@ export function Composer({
           {keeping > 0 && <span role="status">Keeping the pasted text…</span>}
         </div>
       )}
+      {message.trim().length > typedMessageCharacters && (
+        <p className={styles.composer__note} role="status">
+          Longer than 50,000 characters: it will be sent as a file Zhiyin reads
+          in parts.
+        </p>
+      )}
       {error && (
         <p className={styles.composer__error} role="alert">
           {error}
@@ -245,6 +278,13 @@ export function Composer({
               value={reasoning}
               onChange={setReasoningDraft}
               disabled={Boolean(disabledReason) || sending}
+            />
+          )}
+          {context && (
+            <ContextRing
+              {...context}
+              draftTokens={estimatedTokens(message)}
+              disabled={sending}
             />
           )}
           {disabledReason && <span>{disabledReason}</span>}

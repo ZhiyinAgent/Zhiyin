@@ -44,6 +44,8 @@ export type CoreWorkspace = Pick<
   | "selectNothing"
   | "selectTask"
   | "renameTask"
+  | "setContextBudget"
+  | "setDefaultContextBudget"
   | "deleteTask"
   | "kept"
   | "previewRewind"
@@ -152,6 +154,10 @@ export class Core {
       sendMessage: (taskId, message, reasoning, attachments) =>
         turns.start(taskId, message, reasoning, attachments),
       keepPaste: (text) => workspace.kept.keepPaste(text),
+      setContextBudget: (taskId, budget) =>
+        workspace.setContextBudget(taskId, budget),
+      setDefaultContextBudget: (budget) =>
+        workspace.setDefaultContextBudget(budget),
       openAttachment: async (taskId, id) =>
         openPath(await workspace.kept.attachmentPath(taskId, id)),
       previewRewind: (taskId, messageId) =>

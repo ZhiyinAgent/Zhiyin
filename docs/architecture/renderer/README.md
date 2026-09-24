@@ -285,6 +285,34 @@ rendered.
   slider from the bulb and dismisses with Escape or outside interaction`,
   `keeps unavailable controls compact and supports on/off without effort levels`,
   and `explains mandatory reasoning and disables edits during a turn`.
+- **The context ring shows how full the next request is, against the budget
+  that holds it.** Beside the reasoning control, it fills with the size the
+  loop measured for the last request plus the message being written, as a
+  share of the chosen budget's target for the model chosen now, so a model
+  switch or a budget change shows at once. An unknown size or window is said,
+  never drawn as empty. Its menu offers each budget at its real target, says
+  a larger one costs more on every request, says when two give the same room
+  on a small model, and warns when instructions and tools alone take too much.
+  "What's using space" shows each part and whether the provider counted it.
+  Named tests: `fills as the next request nears the budget, and the breakdown
+  shows the same number`, `offers Low, Medium and Ultra with their real targets
+  on a 1M model, and says a larger one costs more`, `offers no Ultra below
+  300k, and shows Medium for a conversation set to Ultra`, `says why two
+  budgets give the same room on a small model`, `is never shown as empty when
+  the size or the window is not known`, `follows a model switch, a budget
+  change and the message being written`, and `says when instructions and tools
+  alone take too much of the budget`.
+- **A budget chosen in the composer belongs to the conversation.** For an open
+  conversation it goes to the core at once; for one not yet started it is held
+  and given to the conversation the first message starts, before the message
+  is sent, and let go of if another conversation is opened. Settings sets the
+  default new conversations start with. Named tests: `shows how full the
+  conversation is and sends a budget change to the core`, `applies a budget
+  chosen before the first message to the conversation it starts`, `lets go of
+  a budget chosen for a new conversation when another is opened`, `sets the
+  budget new conversations start with, at each budget's real target for the
+  model in use`, `says when instructions and tools alone take too much of the
+  default budget`, and `stays quiet about instructions and tools that fit`.
 
 - What a person was told when they allowed an action stays with the record of
   it having happened: what it would do, what it could reach, and what Zhiyin
@@ -460,6 +488,12 @@ rendered.
   it from the message after`. A rewind puts a message's pastes back in the
   composer with its words, to open or send again. Named test: `puts a rewound
   message's pastes back in the composer with its words, to open or send again`.
+- **A message typed past 50,000 characters is sent as a file.** The field
+  says so before it is sent; on sending, the words are kept as a paste is and
+  go as its chip. If they cannot be kept, they stay in the field unsent, with
+  the reason. Named tests: `sends a message typed past 50,000 characters as a
+  file, and says so before it is sent` and `keeps a long typed message in the
+  field when it cannot be kept as a file`.
 - Conversation age is derived from persisted timestamps and refreshed while
   the app remains open. Legacy records without a timestamp use a neutral
   fallback instead of remaining `Now`. The named test `shows relative

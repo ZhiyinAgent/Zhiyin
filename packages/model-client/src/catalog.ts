@@ -154,6 +154,7 @@ function option(value: unknown): ModelProviderOption | undefined {
         ? quantization
         : null,
     contextWindow,
+    maximumOutputTokens: positive(endpoint["max_completion_tokens"]) ?? null,
     inputUsdPerMillion: input,
     outputUsdPerMillion: output,
     acceptsTools: supports(endpoint["supported_parameters"], "tools"),
@@ -241,4 +242,41 @@ export async function fetchOpenRouterModelProviders(
       reason: "No upstream currently serves this model.",
     };
   return { status: "ready", model, providers };
+}
+
+/**
+ * The window a request must fit and the longest reply it may get: the
+ * smallest among the upstreams it may be routed to — those picked, or every
+ * one listed when none is — since any of them may serve it. Without that list,
+ * the model's own listing; without either, nothing, rather than a guess.
+ */
+export function requestWindow(
+  listed: ModelProviderList | undefined,
+  picked: readonly string[],
+  described: unknown,
+): { contextWindow?: number; maximumOutputTokens?: number } {
+  const smallest = (values: readonly unknown[]) => {
+    const known = values.filter(
+      (value): value is number => typeof value === "number" && value > 0,
+    );
+    return known.length ? Math.min(...known) : undefined;
+  };
+  const reachable =
+    listed?.status === "ready"
+      ? listed.providers.filter(
+          (upstream) => !picked.length || picked.includes(upstream.slug),
+        )
+      : [];
+  const top = record(described);
+  const provider = record(top?.["top_provider"]);
+  const contextWindow = reachable.length
+    ? smallest(reachable.map((upstream) => upstream.contextWindow))
+    : smallest([provider?.["context_length"], top?.["context_length"]]);
+  const maximumOutputTokens = reachable.length
+    ? smallest(reachable.map((upstream) => upstream.maximumOutputTokens))
+    : smallest([provider?.["max_completion_tokens"]]);
+  return {
+    ...(contextWindow ? { contextWindow } : {}),
+    ...(maximumOutputTokens ? { maximumOutputTokens } : {}),
+  };
 }

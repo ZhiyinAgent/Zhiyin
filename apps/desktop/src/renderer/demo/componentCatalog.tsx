@@ -1470,6 +1470,8 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             providers: demoProviders,
           })}
           onSelectModel={async () => {}}
+          defaultBudget="medium"
+          onSetDefaultBudget={async () => {}}
           onSaveApiKey={async () => ({ status: "accepted" as const })}
           onClearApiKey={async () => {}}
         />
@@ -1499,6 +1501,8 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             providers: demoProviders,
           })}
           onSelectModel={async () => {}}
+          defaultBudget="medium"
+          onSetDefaultBudget={async () => {}}
           onSaveApiKey={async () => ({ status: "accepted" as const })}
           onClearApiKey={async () => {}}
         />

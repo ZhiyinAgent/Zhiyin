@@ -19,6 +19,8 @@ const stubCommands: CoreApi = {
   deleteTask: async () => {},
   sendMessage: async () => {},
   keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
+  setContextBudget: async () => {},
+  setDefaultContextBudget: async () => {},
   openAttachment: async () => {},
   previewRewind: async () => {
     throw new Error("No rewind preview configured for this test.");
@@ -841,6 +843,8 @@ describe("WorkspaceShell", () => {
             reason: "Not kept here.",
           }),
           openAttachment: async () => {},
+          setContextBudget: async () => {},
+          setDefaultContextBudget: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
           resolveUserInput: async () => {},
@@ -1056,6 +1060,130 @@ describe("WorkspaceShell", () => {
     );
   });
 
+  it("shows how full the conversation is and sends a budget change to the core", () => {
+    const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
+    const task: WorkspaceTask = {
+      id: "measured",
+      title: "Measured",
+      updatedLabel: "Now",
+      messages: [{ id: "u", role: "user", text: "Look" }],
+      phase: { kind: "interrupted" },
+      contextBudget: "ultra",
+      contextUsage: {
+        model: "wide",
+        totalTokens: 425_000,
+        measured: true,
+        parts: {
+          instructions: 1_000,
+          tools: 4_000,
+          summary: 0,
+          conversation: 400_000,
+          toolResults: 20_000,
+        },
+      },
+    };
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          selectedTaskId: task.id,
+          tasks: [task],
+          runtime: { tasks: "available", capabilities: "available" },
+          contextBudget: "low",
+          provider: {
+            ...createWorkspaceState().provider,
+            contextWindow: 1_000_000,
+          },
+        })}
+        dispatch={() => undefined}
+        commands={{ ...stubCommands, setContextBudget }}
+      />,
+    );
+
+    // The conversation's own choice wins over the app's default.
+    const ring = screen.getByRole("button", { name: /^Context/ });
+    expect(ring).toHaveAccessibleName("Context: 50% of the Ultra budget");
+    fireEvent.click(ring);
+    fireEvent.click(screen.getByRole("radio", { name: /Medium/ }));
+
+    expect(setContextBudget).toHaveBeenCalledWith("measured", "medium");
+  });
+
+  it("applies a budget chosen before the first message to the conversation it starts", async () => {
+    const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
+    const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
+    const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          provider: {
+            ...createWorkspaceState().provider,
+            contextWindow: 1_000_000,
+          },
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          createTask,
+          setContextBudget,
+          sendMessage,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Low/ }));
+    expect(createTask).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: /Low/ })).toBeChecked();
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Start" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+    expect(setContextBudget).toHaveBeenCalledWith("task-new", "low");
+    expect(setContextBudget.mock.invocationCallOrder[0]).toBeLessThan(
+      sendMessage.mock.invocationCallOrder[0]!,
+    );
+  });
+
+  it("lets go of a budget chosen for a new conversation when another is opened", () => {
+    const other: WorkspaceTask = {
+      id: "other",
+      title: "Other",
+      updatedLabel: "Now",
+      messages: [{ id: "u", role: "user", text: "Hi" }],
+      phase: { kind: "interrupted" },
+    };
+    const state = createWorkspaceState({
+      connection: "ready",
+      tasks: [other],
+      runtime: { tasks: "available", capabilities: "available" },
+      provider: {
+        ...createWorkspaceState().provider,
+        contextWindow: 1_000_000,
+      },
+    });
+    const draw = (selectedTaskId: string | null) => (
+      <WorkspaceShell
+        state={{ ...state, selectedTaskId }}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />
+    );
+    const { rerender } = render(draw(null));
+    fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Low/ }));
+
+    rerender(draw("other"));
+    rerender(draw(null));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
+    expect(screen.getByRole("radio", { name: /Medium/ })).toBeChecked();
+  });
+
   it("keeps New task ephemeral until the first message is sent", async () => {
     const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
     const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
@@ -1077,6 +1205,8 @@ describe("WorkspaceShell", () => {
             reason: "Not kept here.",
           }),
           openAttachment: async () => {},
+          setContextBudget: async () => {},
+          setDefaultContextBudget: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
           resolveUserInput: async () => {},
@@ -1704,6 +1834,8 @@ describe("WorkspaceShell", () => {
             reason: "Not kept here.",
           }),
           openAttachment: async () => {},
+          setContextBudget: async () => {},
+          setDefaultContextBudget: async () => {},
           interruptTask: async () => {},
           resolveApproval,
           resolveUserInput: async () => {},

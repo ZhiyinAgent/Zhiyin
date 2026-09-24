@@ -283,6 +283,12 @@ sequencing.
   message boundary; `rejects a compaction checkpoint that names unavailable
   evidence` guards the evidence boundary. The full message list is never
   shortened by saving a checkpoint.
+- The default budget, a conversation's own budget, its last measured size and
+  what a condensing carried word for word are saved with it; a budget Zhiyin
+  does not offer is refused as corruption. Named tests: `keeps the default
+  budget, a conversation's own budget and last measured size, and what a
+  condensing carried, across a restart` and `rejects a budget Zhiyin does not
+  offer`.
 - Missing storage means a clean first launch; invalid storage is reported as
   corruption and is never presented as empty history. The named tests `returns
   no workspace on a clean first launch` and `reports corrupted local state

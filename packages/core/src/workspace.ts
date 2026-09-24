@@ -19,6 +19,7 @@ import type {
   BrowserIntent,
   ComponentContent,
   ComponentContentDraft,
+  ContextBudgetChoice,
   EvidenceState,
   McpConnectionTestOutcome,
   McpServerDefinition,
@@ -111,6 +112,7 @@ export class Workspace {
   readonly #conversations: ConversationList;
   #selectedTaskId: string | null = null;
   #preferences: WorkspaceSnapshot["preferences"];
+  #contextBudget: WorkspaceSnapshot["contextBudget"];
   #workspaceSelection: WorkspaceSnapshot["workspace"];
   #recentWorkspaces: NonNullable<WorkspaceSnapshot["recentWorkspaces"]> = [];
   #issues: string[] = [];
@@ -181,6 +183,8 @@ export class Workspace {
       historyAvailable: () => this.#historyAvailable,
       capabilitiesAvailable: () => this.#capabilitiesAvailable,
       acceptsImages: () => this.settings.current()?.acceptsImages === true,
+      modelWindow: () => ({ model: "", ...this.settings.current() }),
+      defaultContextBudget: () => this.#contextBudget ?? "medium",
       enterFolderOf: (taskId) => this.#enterFolderOf(taskId),
       watchBrowser: (taskId) => this.#browser.watch(taskId),
       refreshConnections: () => this.#refreshMcpServers(),
@@ -209,6 +213,7 @@ export class Workspace {
     this.#conversations.replace(restored.conversations);
     this.#selectedTaskId = restored.selectedTaskId;
     this.#preferences = restored.preferences;
+    this.#contextBudget = restored.contextBudget;
     this.#workspaceSelection = restored.workspace;
     this.#recentWorkspaces = restored.recentWorkspaces;
     this.#issues = restored.issues;
@@ -262,6 +267,7 @@ export class Workspace {
         capabilities: this.#capabilitiesAvailable ? "available" : "unavailable",
       },
       ...(this.#preferences ? { preferences: this.#preferences } : {}),
+      ...(this.#contextBudget ? { contextBudget: this.#contextBudget } : {}),
       ...(this.#workspaceSelection
         ? { workspace: this.#workspaceSelection }
         : {}),
@@ -374,6 +380,21 @@ export class Workspace {
     await this.#replaceTask({ ...task, title: value, titleSource: "manual" });
   }
 
+  async setContextBudget(
+    taskId: string,
+    budget: ContextBudgetChoice,
+  ): Promise<void> {
+    if (!(await this.#ensureOpen(taskId))) return;
+    const task = requiredTask(this.#tasks, taskId);
+    await this.#replaceTask({ ...task, contextBudget: budget });
+  }
+
+  async setDefaultContextBudget(budget: ContextBudgetChoice): Promise<void> {
+    this.#contextBudget = budget;
+    await this.#persistence.save();
+    this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
+  }
+
   previewRewind = (taskId: string, messageId: string): Promise<RewindPreview> =>
     this.#rewinds.preview(taskId, messageId);
 
@@ -421,29 +442,25 @@ export class Workspace {
     ]).finally(() => this.#browser.stopWatching());
   }
 
-  setPluginEnabled(id: string, enabled: boolean): Promise<void> {
-    return this.#pluginLifecycle.setEnabled(id, enabled);
-  }
+  setPluginEnabled = (id: string, enabled: boolean): Promise<void> =>
+    this.#pluginLifecycle.setEnabled(id, enabled);
 
-  setComponentEnabled(id: string, enabled: boolean): Promise<void> {
-    return this.#pluginLifecycle.setComponentEnabled(id, enabled);
-  }
+  setComponentEnabled = (id: string, enabled: boolean): Promise<void> =>
+    this.#pluginLifecycle.setComponentEnabled(id, enabled);
 
-  componentContent(id: string): Promise<ComponentContent | undefined> {
-    return this.#deps.capabilities.componentContent(id);
-  }
+  componentContent = (id: string): Promise<ComponentContent | undefined> =>
+    this.#deps.capabilities.componentContent(id);
 
-  overrideComponent(id: string, content: ComponentContentDraft): Promise<void> {
-    return this.#pluginLifecycle.overrideComponent(id, content);
-  }
+  overrideComponent = (
+    id: string,
+    content: ComponentContentDraft,
+  ): Promise<void> => this.#pluginLifecycle.overrideComponent(id, content);
 
-  resetComponent(id: string): Promise<void> {
-    return this.#pluginLifecycle.resetComponent(id);
-  }
+  resetComponent = (id: string): Promise<void> =>
+    this.#pluginLifecycle.resetComponent(id);
 
-  installToolchain(id: string): Promise<void> {
-    return this.#pluginLifecycle.installToolchain(id);
-  }
+  installToolchain = (id: string): Promise<void> =>
+    this.#pluginLifecycle.installToolchain(id);
 
   installPlugin(
     chooseSource: () => Promise<string | undefined>,
@@ -458,46 +475,36 @@ export class Workspace {
     return this.#pluginLifecycle.update(id, chooseSource);
   }
 
-  rollbackPlugin(id: string): Promise<void> {
-    return this.#pluginLifecycle.rollback(id);
-  }
+  rollbackPlugin = (id: string): Promise<void> =>
+    this.#pluginLifecycle.rollback(id);
 
-  removePlugin(id: string): Promise<void> {
-    return this.#pluginLifecycle.remove(id);
-  }
+  removePlugin = (id: string): Promise<void> =>
+    this.#pluginLifecycle.remove(id);
 
-  createPlugin(displayName: string, description: string): Promise<void> {
-    return this.#pluginLifecycle.create(displayName, description);
-  }
+  createPlugin = (displayName: string, description: string): Promise<void> =>
+    this.#pluginLifecycle.create(displayName, description);
 
-  savePluginContents(
+  savePluginContents = (
     id: string,
     contents: AuthoredPluginContents,
-  ): Promise<void> {
-    return this.#pluginLifecycle.saveContents(id, contents);
-  }
+  ): Promise<void> => this.#pluginLifecycle.saveContents(id, contents);
 
   /** An app-made plugin's whole content, for the component-edit form to open on. */
-  editablePluginContents(
+  editablePluginContents = (
     id: string,
-  ): Promise<AuthoredPluginContents | undefined> {
-    return this.#deps.capabilities.editablePluginContents(id);
-  }
+  ): Promise<AuthoredPluginContents | undefined> =>
+    this.#deps.capabilities.editablePluginContents(id);
 
-  setMcpServerToolEnabled(
+  setMcpServerToolEnabled = (
     id: string,
     toolName: string,
     enabled: boolean,
-  ): Promise<void> {
-    return this.#connections.setToolEnabled(id, toolName, enabled);
-  }
+  ): Promise<void> => this.#connections.setToolEnabled(id, toolName, enabled);
 
-  testMcpConnection(
+  testMcpConnection = (
     server: McpServerDefinition,
     token?: string,
-  ): Promise<McpConnectionTestOutcome> {
-    return this.#connections.test(server, token);
-  }
+  ): Promise<McpConnectionTestOutcome> => this.#connections.test(server, token);
 
   /** One thing the person asked the browser to do, in the open conversation. */
   async driveBrowser(intent: BrowserIntent): Promise<void> {
@@ -507,25 +514,18 @@ export class Workspace {
     await this.#browser.drive(taskId, intent);
   }
 
-  saveMcpServerToken(id: string, token: string): Promise<void> {
-    return this.#connections.saveToken(id, token);
-  }
+  saveMcpServerToken = (id: string, token: string): Promise<void> =>
+    this.#connections.saveToken(id, token);
 
-  clearMcpServerToken(id: string): Promise<void> {
-    return this.#connections.clearToken(id);
-  }
+  clearMcpServerToken = (id: string): Promise<void> =>
+    this.#connections.clearToken(id);
 
-  refreshConnections(): Promise<void> {
-    return this.#connections.refresh();
-  }
+  refreshConnections = (): Promise<void> => this.#connections.refresh();
 
-  shellAvailability(): Promise<ShellAvailability> {
-    return this.#shell.availability();
-  }
+  shellAvailability = (): Promise<ShellAvailability> =>
+    this.#shell.availability();
 
-  recheckShell(): Promise<ShellAvailability> {
-    return this.#shell.recheck();
-  }
+  recheckShell = (): Promise<ShellAvailability> => this.#shell.recheck();
 
   async #recordUsage(
     modelUsage: Parameters<TurnHost["recordUsage"]>[0],

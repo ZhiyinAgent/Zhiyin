@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type {
   ModelCatalog,
@@ -47,6 +53,7 @@ const providers: ModelProviderList = {
       name: "Crusoe",
       quantization: "fp4",
       contextWindow: 1_048_576,
+      maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.15,
       outputUsdPerMillion: 0.5,
       acceptsTools: true,
@@ -59,6 +66,7 @@ const providers: ModelProviderList = {
       name: "Relace",
       quantization: "fp4",
       contextWindow: 1_048_576,
+      maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.09,
       outputUsdPerMillion: 0.3,
       acceptsTools: true,
@@ -71,6 +79,7 @@ const providers: ModelProviderList = {
       name: "Z.AI",
       quantization: "fp8",
       contextWindow: 1_048_576,
+      maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.075,
       outputUsdPerMillion: 0.25,
       acceptsTools: false,
@@ -93,6 +102,8 @@ function renderPanel(
     onSelectModel,
     onSaveApiKey: async () => ({ status: "accepted" as const }),
     onClearApiKey: async () => {},
+    defaultBudget: "medium" as const,
+    onSetDefaultBudget: async () => {},
     ...overrides,
   };
   render(<ModelSettings {...props} />);
@@ -100,6 +111,50 @@ function renderPanel(
 }
 
 describe("ModelSettings", () => {
+  it("sets the budget new conversations start with, at each budget's real target for the model in use", () => {
+    const onSetDefaultBudget = vi.fn(async () => {});
+    renderPanel({
+      settings: { ...connected, contextWindow: 1_000_000 },
+      onSetDefaultBudget,
+    });
+
+    const choices = screen.getByRole("radiogroup", {
+      name: "Budget for new conversations",
+    });
+    expect(
+      within(choices).getByRole("radio", { name: /Medium.*262K/ }),
+    ).toBeChecked();
+    expect(
+      within(choices).getByRole("radio", { name: /Low.*128K/ }),
+    ).not.toBeChecked();
+    fireEvent.click(
+      within(choices).getByRole("radio", { name: /Ultra.*850K/ }),
+    );
+
+    expect(onSetDefaultBudget).toHaveBeenCalledWith("ultra");
+  });
+
+  it("says when instructions and tools alone take too much of the default budget", () => {
+    renderPanel({
+      settings: { ...connected, contextWindow: 1_000_000 },
+      defaultBudget: "low",
+      fixedTokens: 30_000,
+    });
+
+    expect(
+      screen.getByText(/Instructions and tools take 23% of the Low budget/),
+    ).toBeVisible();
+  });
+
+  it("stays quiet about instructions and tools that fit", () => {
+    renderPanel({
+      settings: { ...connected, contextWindow: 1_000_000 },
+      fixedTokens: 5_000,
+    });
+
+    expect(screen.queryByText(/Instructions and tools take/)).toBeNull();
+  });
+
   it("finds a model from an inexact query", async () => {
     renderPanel();
     await screen.findByRole("radio", { name: /Claude Sonnet 5/ });
@@ -233,7 +288,12 @@ describe("ModelSettings", () => {
     expect(
       screen.getAllByRole("button", { name: "Add a key" }).length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByRole("radio")).toBeNull();
+    for (const column of ["Models", "Providers"])
+      expect(
+        within(screen.getByRole("region", { name: column })).queryByRole(
+          "radio",
+        ),
+      ).toBeNull();
     expect(screen.getByLabelText("Search models")).toBeDisabled();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Add a key" })[0]!);

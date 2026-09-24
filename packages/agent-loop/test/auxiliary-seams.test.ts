@@ -4,9 +4,9 @@
  * The loop asks a second model for two different kinds of thing, and they are
  * not interchangeable. Writing a label for an action is presentation: a weaker
  * model writes a slightly worse title. Deciding whether evidence satisfies a
- * criterion, or distilling a conversation into the summary every later turn
- * relies on, is judgement: a weaker model is wrong in ways nothing downstream
- * can detect.
+ * criterion is judgement: a weaker model is wrong in ways nothing downstream
+ * can detect. Condensing a conversation is neither: it is asked of the
+ * conversation's own model, from the request that model already has cached.
  *
  * One seam could not tell them apart, so both followed whichever model the
  * person had selected. These tests hold the two apart so a composition can
@@ -54,6 +54,31 @@ function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
     },
     ...overrides,
   };
+}
+
+/**
+ * A 13,600-token Medium budget, with room past it for the request that asks
+ * for the summary.
+ */
+const smallWindow = {
+  model: "small",
+  contextWindow: 16_000,
+  maximumOutputTokens: 100,
+};
+
+/** About 13k tokens of earlier conversation: past that budget with the rest. */
+function pastItsBudget(): WorkspaceTask {
+  return settledTask({
+    messages: [
+      {
+        id: "m1",
+        role: "user",
+        text: "OLDER MATERIAL ".repeat(2_600),
+        sequence: 0,
+      },
+      { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
+    ],
+  });
 }
 
 describe("auxiliary model seams", () => {
@@ -118,91 +143,71 @@ describe("auxiliary model seams", () => {
     expect(loop.snapshot().tasks[0]?.plan?.[0]?.status).toBe("verified");
   });
 
-  it("asks the judgement model to compact the conversation", async () => {
-    const previous = settledTask({
-      messages: [
-        {
-          id: "m1",
-          role: "user",
-          text: "OLDER MATERIAL ".repeat(320),
-          sequence: 0,
-        },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
-    });
+  it("asks the conversation's own model to condense it, and neither auxiliary model", async () => {
     const guidance: ModelRequest[] = [];
     const judgement: ModelRequest[] = [];
-    const deps = stubDependencies(() => {});
+    const main: ModelRequest[] = [];
     const loop = loopFrom({
-      ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
+      ...stubDependencies(() => {}),
+      modelWindow: smallWindow,
+      model: {
+        ...stubDependencies(() => {}).model,
+        ...recorder(main, {
+          "about to be condensed": {
+            title: "Continue the earlier work",
+            summary: "The earlier material was discussed.",
+          },
+        }),
       },
       guidanceModel: recorder(guidance, {
         "Create an ordered plan": { items: [] },
       }),
-      judgementModel: recorder(judgement, {
-        "Compact the older conversation": {
-          title: "Continue the earlier work",
-          summary: "The earlier material was discussed.",
-          retainedActionIds: [],
-        },
-      }),
+      judgementModel: recorder(judgement),
     });
-    loop.restore([previous]);
+    loop.restore([pastItsBudget()]);
 
-    await loop.start(previous.id, "Continue");
+    await loop.start("task-1", "Continue");
 
-    expect(promptsOf(judgement)).toContain("Compact the older conversation");
-    expect(promptsOf(guidance)).not.toContain("Compact the older conversation");
+    expect(promptsOf(main)).toContain("about to be condensed");
+    expect(promptsOf(guidance)).not.toContain("about to be condensed");
+    expect(promptsOf(judgement)).not.toContain("about to be condensed");
     expect(loop.snapshot().tasks[0]).toMatchObject({
       compaction: { summary: "The earlier material was discussed." },
     });
   });
 
-  it("names a compacted conversation from the compaction answer, without a second request", async () => {
-    const previous = settledTask({
-      messages: [
-        {
-          id: "m1",
-          role: "user",
-          text: "OLDER MATERIAL ".repeat(320),
-          sequence: 0,
-        },
-        { id: "m2", role: "assistant", text: "Earlier answer", sequence: 1 },
-      ],
-    });
-    const judgement: ModelRequest[] = [];
-    const deps = stubDependencies(() => {});
+  it("names a condensed conversation from the condensing answer, without a second request", async () => {
+    const guidance: ModelRequest[] = [];
+    const main: ModelRequest[] = [];
     const loop = loopFrom({
-      ...deps,
-      contextBudget: {
-        compactAboveEstimatedTokens: 4_000,
-        retainRecentEstimatedTokens: 1_000,
+      ...stubDependencies(() => {}),
+      modelWindow: smallWindow,
+      model: {
+        ...stubDependencies(() => {}).model,
+        ...recorder(main, {
+          "about to be condensed": {
+            title: "Continue second-stage analysis",
+            summary: "The earlier material was discussed.",
+          },
+        }),
       },
-      guidanceModel: recorder([], { "Create an ordered plan": { items: [] } }),
-      judgementModel: recorder(judgement, {
-        "Compact the older conversation": {
-          title: "Continue second-stage analysis",
-          summary: "The earlier material was discussed.",
-          retainedActionIds: [],
-        },
+      guidanceModel: recorder(guidance, {
+        "Create an ordered plan": { items: [] },
       }),
     });
-    loop.restore([previous]);
+    loop.restore([pastItsBudget()]);
 
-    await loop.start(previous.id, "Continue");
+    await loop.start("task-1", "Continue");
 
     expect(loop.snapshot().tasks[0]).toMatchObject({
       title: "Continue second-stage analysis",
       titleSource: "generated",
     });
     expect(
-      judgement.filter((request) =>
-        request.messages.at(-1)?.content.includes("Compact the older"),
+      main.filter((request) =>
+        request.messages.at(-1)?.content.includes("about to be condensed"),
       ),
     ).toHaveLength(1);
-    expect(promptsOf(judgement)).not.toContain("Name this conversation");
+    expect(promptsOf(guidance)).not.toContain("Name this conversation");
   });
 });

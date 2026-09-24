@@ -89,6 +89,10 @@ export type TaskMessage = {
 
 export type WorkspaceTask = {
   reasoning?: import("@zhiyin/contract").ReasoningSelection;
+  /** Absent follows the app's default. */
+  contextBudget?: CoreWorkspaceTask["contextBudget"];
+  /** The size of the last request the loop sent. */
+  contextUsage?: CoreWorkspaceTask["contextUsage"];
   id: string;
   title: string;
   /** The folder this conversation was last worked in. */
@@ -112,6 +116,8 @@ export type WorkspaceState = {
   /** Present only while saved conversations could not be opened. */
   historyRecovery?: CoreWorkspaceSnapshot["historyRecovery"];
   preferences?: CoreWorkspaceSnapshot["preferences"];
+  /** The budget a conversation without its own choice follows. */
+  contextBudget?: CoreWorkspaceSnapshot["contextBudget"];
   workspace?: CoreWorkspaceSnapshot["workspace"];
   recentWorkspaces: NonNullable<CoreWorkspaceSnapshot["recentWorkspaces"]>;
   issues?: readonly string[];
@@ -213,6 +219,7 @@ export function createWorkspaceState(
 ): WorkspaceState {
   return {
     ...(input.preferences ? { preferences: input.preferences } : {}),
+    ...(input.contextBudget ? { contextBudget: input.contextBudget } : {}),
     ...(input.workspace ? { workspace: input.workspace } : {}),
     recentWorkspaces: input.recentWorkspaces ?? [],
     ...(input.issues ? { issues: input.issues } : {}),
@@ -290,6 +297,8 @@ function taskFromCore(task: CoreWorkspaceTask): WorkspaceTask {
     id: task.id,
     title: task.title,
     ...(task.reasoning ? { reasoning: { ...task.reasoning } } : {}),
+    ...(task.contextBudget ? { contextBudget: task.contextBudget } : {}),
+    ...(task.contextUsage ? { contextUsage: task.contextUsage } : {}),
     ...(task.workspace ? { workspace: { ...task.workspace } } : {}),
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
     updatedLabel: task.updatedLabel,
@@ -323,6 +332,7 @@ export function workspaceReducer(
         ...state,
         historyRecovery: action.snapshot.historyRecovery,
         preferences: action.snapshot.preferences,
+        contextBudget: action.snapshot.contextBudget,
         workspace: action.snapshot.workspace,
         recentWorkspaces: action.snapshot.recentWorkspaces ?? [],
         issues: action.snapshot.issues ?? [],

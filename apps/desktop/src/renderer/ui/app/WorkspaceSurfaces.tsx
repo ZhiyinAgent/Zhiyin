@@ -14,6 +14,7 @@ import styles from "./app.module.css";
 
 type SurfaceCommands = Pick<
   CoreApi,
+  | "setDefaultContextBudget"
   | "setPluginEnabled"
   | "installPlugin"
   | "updatePlugin"
@@ -43,6 +44,20 @@ type SurfaceCommands = Pick<
   | "readEvidence"
   | "clearEvidence"
 >;
+
+/**
+ * Instructions and tool definitions as last measured: the open conversation's,
+ * else the newest one measured. They are near alike across conversations.
+ */
+function fixedPart(state: WorkspaceState): { fixedTokens?: number } {
+  const usage =
+    state.tasks.find((task) => task.id === state.selectedTaskId)
+      ?.contextUsage ??
+    state.tasks.find((task) => task.contextUsage)?.contextUsage;
+  return usage
+    ? { fixedTokens: usage.parts.instructions + usage.parts.tools }
+    : {};
+}
 
 export function WorkspaceSurfaces({
   state,
@@ -118,6 +133,9 @@ export function WorkspaceSurfaces({
             }
             onSaveApiKey={(apiKey) => commands.saveProviderApiKey(apiKey)}
             onClearApiKey={() => commands.clearProviderApiKey()}
+            defaultBudget={state.contextBudget ?? "medium"}
+            {...fixedPart(state)}
+            onSetDefaultBudget={commands.setDefaultContextBudget}
           />
         </div>
       )}

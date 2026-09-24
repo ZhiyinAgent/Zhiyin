@@ -71,40 +71,6 @@ export const recordConversationTitleTool: ModelTool = {
   },
 };
 
-/**
- * Consumed by `compactionFrom`, and by `conversationTitleFrom` when asked for.
- *
- * The name is asked for here rather than in a request of its own. This model
- * has just read the whole of the older conversation, which is more than a
- * second request could be given, and a conversation that has grown long enough
- * to compact is exactly the one whose first-message name has gone stale.
- */
-export function recordCompactionTool(
-  withConversationTitle: boolean,
-): ModelTool {
-  return {
-    name: "record_compaction",
-    description: "Record the compacted summary of the older conversation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        ...(withConversationTitle ? { title: conversationTitleProperty } : {}),
-        summary: { type: "string" },
-        retainedActionIds: {
-          type: "array",
-          maxItems: 16,
-          items: { type: "string" },
-          description: "Action IDs from the supplied evidence, never invented.",
-        },
-      },
-      required: withConversationTitle
-        ? ["title", "summary", "retainedActionIds"]
-        : ["summary", "retainedActionIds"],
-      additionalProperties: false,
-    },
-  };
-}
-
 /** Consumed by `actionPresentationFrom`. */
 export const recordActionPresentationTool: ModelTool = {
   name: "record_action_presentation",

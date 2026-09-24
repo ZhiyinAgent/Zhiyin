@@ -393,6 +393,59 @@ describe("FileSessions workspace persistence", () => {
       SessionStoreError,
     );
   });
+  it("keeps the default budget, a conversation's own budget and last measured size, and what a condensing carried, across a restart", async () => {
+    const root = await temporaryRoot();
+    const task: WorkspaceTask = {
+      ...snapshot.tasks[0]!,
+      contextBudget: "ultra",
+      contextUsage: {
+        model: "wide",
+        totalTokens: 40_000,
+        measured: true,
+        parts: {
+          instructions: 1_000,
+          tools: 4_000,
+          summary: 500,
+          conversation: 30_000,
+          toolResults: 4_500,
+        },
+      },
+      compaction: {
+        ...snapshot.tasks[0]!.compaction!,
+        throughEntryId: "entry-1",
+        carried: "The person's latest request, in full:\nIntroduce it.",
+      },
+    };
+    await new FileSessions(root).saveWorkspace({
+      ...snapshot,
+      contextBudget: "low",
+      tasks: [task],
+    });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      {
+        contextBudget: "low",
+        tasks: [
+          {
+            contextBudget: "ultra",
+            contextUsage: task.contextUsage,
+            compaction: task.compaction,
+          },
+        ],
+      },
+    );
+  });
+  it("rejects a budget Zhiyin does not offer", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [{ ...snapshot.tasks[0], contextBudget: "enormous" }],
+    });
+
+    await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
+      SessionStoreError,
+    );
+  });
   it("rejects a compaction checkpoint that names unavailable evidence", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {

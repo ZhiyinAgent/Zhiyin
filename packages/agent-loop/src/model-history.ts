@@ -9,13 +9,14 @@
  * after turn and after the app restarts, and new material only ever goes at
  * the end.
  *
- * Three things change what was already sent, each on purpose: a condensing
- * replaces what it condenses with its summary; pictures past the most one
- * request carries are let go of several at a time, so the start changes once
- * rather than with every new picture; and a proposal a tool refused quietly is
- * taken back out once the tool succeeds. That last kind is never stored at
- * all: it was a correction between the model and a tool, not part of the
- * conversation.
+ * Four things change what was already sent, each on purpose: a condensing
+ * replaces what it condenses with its summary; older tool results are
+ * cleared to a receipt many at a time once they pile up; pictures past the
+ * most one request carries are let go of several at a time, so the start
+ * changes once rather than with every new picture; and a proposal a tool
+ * refused quietly is taken back out once the tool succeeds. That last kind is
+ * never stored at all: it was a correction between the model and a tool, not
+ * part of the conversation.
  */
 
 import type {
@@ -139,6 +140,95 @@ export class ModelHistory {
   /** What follows the fixed start of every request. */
   messages(): readonly ModelMessage[] {
     return this.#items.map((item) => item.message);
+  }
+
+  /**
+   * Where a kept tail may begin: before a message, a notice or a round's
+   * calls, never between a call and its result or a result and its pictures.
+   */
+  boundaries(): number[] {
+    const kinds = new Map(this.#entries.map((entry) => [entry.id, entry.kind]));
+    return this.#items.flatMap((item, index) => {
+      const kind = item.entryId && kinds.get(item.entryId);
+      return kind === "message" || kind === "notice" || kind === "calls"
+        ? [index]
+        : [];
+    });
+  }
+
+  /**
+   * The last stored entry before the item at `index`, and the last message
+   * entry at or before that: the condensing checkpoint for a tail from there.
+   */
+  checkpointBefore(
+    index: number,
+  ): { readonly entryId: string; readonly messageId?: string } | undefined {
+    const entryId = this.#items
+      .slice(0, index)
+      .findLast((item) => item.entryId)?.entryId;
+    if (!entryId) return undefined;
+    const through = this.#entries.findIndex((entry) => entry.id === entryId);
+    const message = this.#entries
+      .slice(0, through + 1)
+      .findLast(
+        (entry) => isStoredMessage(entry) && entry.messageId !== undefined,
+      );
+    return {
+      entryId,
+      ...(message && isStoredMessage(message) && message.messageId
+        ? { messageId: message.messageId }
+        : {}),
+    };
+  }
+
+  /**
+   * Stored results, each with how many complete rounds came after the round
+   * it answered; a quiet one is never stored and never listed.
+   */
+  results(): {
+    readonly entryId: string;
+    readonly content: string;
+    readonly roundsAfter: number;
+  }[] {
+    const rounds = this.#items.flatMap((item, index) =>
+      item.message.role === "assistant" && item.message.toolCalls?.length
+        ? [index]
+        : [],
+    );
+    return this.#items.flatMap((item, index) => {
+      if (item.message.role !== "tool" || !item.entryId) return [];
+      const round = rounds.findLastIndex((start) => start < index);
+      return [
+        {
+          entryId: item.entryId,
+          content: item.message.content,
+          roundsAfter: rounds.length - 1 - round,
+        },
+      ];
+    });
+  }
+
+  /** Results replaced by what stands for them, stored in one write. */
+  async replaceResults(
+    replacements: ReadonlyMap<string, string>,
+  ): Promise<void> {
+    if (!replacements.size) return;
+    for (const item of this.#items) {
+      const content = item.entryId && replacements.get(item.entryId);
+      if (
+        content === undefined ||
+        content === "" ||
+        item.message.role !== "tool"
+      )
+        continue;
+      item.message = { ...item.message, content };
+    }
+    for (const [index, entry] of this.#entries.entries()) {
+      const content = replacements.get(entry.id);
+      if (entry.kind === "result" && content)
+        this.#entries[index] = { ...entry, content };
+    }
+    await this.#save();
   }
 
   async notice(kind: NoticeKind, text: string): Promise<void> {
@@ -360,6 +450,10 @@ function firstAfterCondensing(
   entries: readonly ModelHistoryEntry[],
 ): number {
   if (!task.compaction) return 0;
+  const throughEntry = task.compaction.throughEntryId
+    ? entries.findIndex((entry) => entry.id === task.compaction?.throughEntryId)
+    : -1;
+  if (throughEntry >= 0) return throughEntry + 1;
   const through = task.messages.findIndex(
     (message) => message.id === task.compaction?.throughMessageId,
   );

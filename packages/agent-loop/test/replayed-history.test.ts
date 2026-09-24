@@ -527,58 +527,72 @@ describe("what changes the start of a request, on purpose", () => {
     );
   });
 
-  it("puts the summary in place of what a condensing covered, with the results it kept", async () => {
+  it("puts the summary in place of what a condensing covered, and changes the start of requests only there", async () => {
     const requests: ModelMessage[][] = [];
-    let condensed = false;
-    let firstAction = "";
-    const summariser = {
-      send: async function* (request: ModelRequest) {
-        const prompt = JSON.stringify(request.messages.at(-1));
-        if (prompt.includes("Compact the older conversation") && !condensed) {
-          condensed = true;
-          yield {
-            kind: "textDelta" as const,
-            text: JSON.stringify({
-              summary: "The person asked for the first note.",
-              retainedActionIds: [firstAction],
-            }),
-          };
-        }
-        yield { kind: "done" as const };
-      },
-    };
+    let answers = 0;
     const loop = loopFrom(
       withTools(
         stubDependencies(() => {}),
         { read_note: {} },
-        callsThenAnswers("read_note"),
+        async function* (request: ModelRequest) {
+          const last = request.messages.at(-1);
+          if (JSON.stringify(last).includes('kind=\\"condense\\"'))
+            yield {
+              kind: "textDelta" as const,
+              text: JSON.stringify({
+                summary: "The person asked for the first note.",
+              }),
+            };
+          else if (last?.role === "user")
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: `call-${answers + 1}`,
+              name: "read_note",
+              argumentsDelta: "{}",
+            };
+          // The first answer is long enough that the next turn passes the
+          // budget.
+          else
+            yield {
+              kind: "textDelta" as const,
+              text: ++answers === 1 ? "padding ".repeat(2_025) : "Answered.",
+            };
+          yield { kind: "done" as const };
+        },
         requests,
         {
-          contextBudget: {
-            compactAboveEstimatedTokens: 0,
-            retainRecentEstimatedTokens: 1,
+          // A 6,800-token Medium budget.
+          modelWindow: {
+            model: "small",
+            contextWindow: 8_000,
+            maximumOutputTokens: 100,
           },
-          judgementModel: summariser,
-          guidanceModel: summariser,
         },
       ),
     );
     const taskId = await loop.createTask();
 
     await loop.start(taskId, "First");
-    firstAction = loop.snapshot().tasks[0]?.actions?.[0]?.id ?? "";
-    await loop.start(taskId, "Second");
+    await loop.start(taskId, `Second ${"padding ".repeat(150)}`);
     await loop.start(taskId, "Third");
 
-    expect(prefixBreaks(requests).map((change) => change.request)).toEqual([2]);
-    const afterCondensing = conversationOf(requests[2] ?? []);
-    expect(afterCondensing).toHaveLength(2);
+    const condensing = requests.findIndex((messages) =>
+      JSON.stringify(messages.at(-1)).includes('kind=\\"condense\\"'),
+    );
+    expect(condensing).toBeGreaterThan(0);
+    expect(prefixBreaks(requests).map((change) => change.request)).toEqual([
+      condensing + 1,
+    ]);
+    const afterCondensing = conversationOf(requests[condensing + 1] ?? []);
     expect(afterCondensing[0]).toContain('kind="summary"');
     expect(afterCondensing[0]).toContain(
       "The person asked for the first note.",
     );
-    expect(afterCondensing[0]).toContain("read_note result");
-    expect(afterCondensing[1]).toBe("user Second");
+    expect(afterCondensing[1]).toMatch(/^user Second/);
+    expect(
+      afterCondensing.some((line) => line.startsWith("assistant padding")),
+    ).toBe(false);
   });
 
   it("changes the fixed start once when a plugin is activated", async () => {
