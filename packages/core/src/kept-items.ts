@@ -40,14 +40,19 @@ export class KeptItems {
   }
 
   /**
-   * Where a paste is, for opening outside the app. Only a text file is ever
-   * handed on, so nothing opened this way can run.
+   * Where a paste is, for opening outside the app: the conversation's own, or
+   * a draft not yet sent. Only a text file is ever handed on, so nothing
+   * opened this way can run.
    */
   async attachmentPath(taskId: string | null, id: string): Promise<string> {
-    const located = id.endsWith(".txt")
-      ? await this.#sessions.locate("pastedText", taskId ?? undefined, id)
+    if (!id.endsWith(".txt"))
+      throw new VisibleError("This pasted text is no longer available.");
+    let located = taskId
+      ? await this.#sessions.locate("pastedText", taskId, id)
       : undefined;
     if (located?.status !== "ready")
+      located = await this.#sessions.locate("pastedText", undefined, id);
+    if (located.status !== "ready")
       throw new VisibleError("This pasted text is no longer available.");
     return located.path;
   }

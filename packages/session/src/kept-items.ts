@@ -288,7 +288,8 @@ export class KeptItems {
    * Moves draft pastes into the conversation their message was sent in. A
    * name already taken there is kept apart with a suffix, and the answer says
    * what each paste is called now, how large it is and how many lines it has.
-   * A draft that is not there is left out.
+   * A paste already in this conversation, from a message rewound and sent
+   * again, stays where it is. One that is in neither is left out.
    */
   async claimDrafts(
     conversationId: string,
@@ -299,11 +300,16 @@ export class KeptItems {
     await mkdir(to, { recursive: true });
     const claimed: MessageAttachment[] = [];
     for (const id of ids) {
-      if (!validId(id) || !(await exists(join(from, id)))) continue;
+      if (!validId(id)) continue;
       let target = id;
-      for (let suffix = 2; await exists(join(to, target)); suffix += 1)
-        target = id.replace(/(\.txt)?$/, `-${suffix}$1`);
-      await rename(join(from, id), join(to, target));
+      if (await exists(join(from, id))) {
+        for (let suffix = 2; await exists(join(to, target)); suffix += 1)
+          target = id.replace(/(\.txt)?$/, `-${suffix}$1`);
+        await rename(join(from, id), join(to, target));
+      }
+      // Otherwise it may already be this conversation's: a message rewound
+      // and sent again.
+      else if (!(await exists(join(to, id)))) continue;
       claimed.push({
         kind: "pastedText",
         id: target,

@@ -11,11 +11,17 @@ import type {
   WorkspaceTask,
 } from "./workspaceState.js";
 import type { WorkspaceCommands } from "./WorkspaceShell.js";
+import type { MessageAttachment } from "@zhiyin/contract";
 
 /** What the shell hands back when a rewind lands. */
 type RewindLanding = {
   say(message: string): void;
-  restoreDraft(draft: { id: string; taskId: string; text: string }): void;
+  restoreDraft(draft: {
+    id: string;
+    taskId: string;
+    text: string;
+    attachments?: readonly MessageAttachment[];
+  }): void;
 };
 
 /**
@@ -61,6 +67,9 @@ export function timelinePieces(
                   id: `${task.id}:${message.id}:${Date.now()}`,
                   taskId: task.id,
                   text: draft,
+                  ...(message.attachments
+                    ? { attachments: message.attachments }
+                    : {}),
                 });
               }}
             />

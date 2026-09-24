@@ -150,6 +150,7 @@ export function WorkspaceShell({
     readonly id: string;
     readonly taskId: string;
     readonly text: string;
+    readonly attachments?: readonly MessageAttachment[];
   }>();
   const conversationRef = useRef<HTMLDivElement>(null);
   const followConversationTail = useRef(true);
@@ -554,9 +555,12 @@ export function WorkspaceShell({
                         : {})}
                       onSubmit={submitMessage}
                       keepPaste={commands.keepPaste}
-                      // A paste not yet sent belongs to no conversation.
+                      // A paste not yet sent belongs to no conversation; one
+                      // a rewind put back is still the conversation's.
                       openAttachment={(id) =>
-                        void act(() => commands.openAttachment(null, id))
+                        void act(() =>
+                          commands.openAttachment(selectedTask?.id ?? null, id),
+                        )
                       }
                       {...(composerDraft &&
                       composerDraft.taskId === selectedTask?.id

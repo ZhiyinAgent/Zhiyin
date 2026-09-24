@@ -164,6 +164,10 @@ sequencing.
   by when it was pasted, and apart from another pasted the same second`,
   `waits as a draft until its message starts a conversation, and a draft never
   sent is gone at the next launch`.
+- **A paste sent again after a rewind is already its conversation's,** and is
+  sent as it is; one kept for another conversation is never taken. Named
+  tests: `is already its conversation's, and is sent again as it is`, `is never
+  taken from another conversation`.
 - **When a file was last read survives a restart,** so a changed file is
   noticed across one. Named test: `is remembered after the app restarts`.
 - Reasoning traces and conversation effort choices survive restart and are

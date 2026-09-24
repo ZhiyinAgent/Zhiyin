@@ -644,6 +644,90 @@ describe("WorkspaceShell", () => {
     expect(screen.getByText("Here is a draft.")).toBeVisible();
   });
 
+  it("puts a rewound message's pastes back in the composer with its words, to open or send again", async () => {
+    const paste = {
+      kind: "pastedText" as const,
+      id: "pasted-2026-09-24-101500.txt",
+      bytes: 48_000,
+      lines: 1_200,
+    };
+    const openAttachment = vi.fn<CoreApi["openAttachment"]>(async () => {});
+    const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId: "task-1",
+          tasks: [
+            {
+              id: "task-1",
+              title: "Read a log",
+              updatedLabel: "Now",
+              messages: [
+                {
+                  id: "message-1",
+                  role: "user",
+                  text: "Summarise this",
+                  attachments: [paste],
+                  sequence: 0,
+                },
+                {
+                  id: "message-2",
+                  role: "assistant",
+                  text: "A summary.",
+                  sequence: 1,
+                },
+              ],
+              phase: {
+                kind: "completed",
+                outcome: { title: "Done", summary: "Summarised." },
+              },
+            },
+          ],
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          previewRewind: async () => ({
+            id: "rewind-1",
+            taskId: "task-1",
+            messageId: "message-1",
+            draft: "Summarise this",
+            discardedMessages: 2,
+            discardedActions: [],
+            files: [],
+          }),
+          openAttachment,
+          sendMessage,
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Rewind to this message" }),
+    );
+    await screen.findByRole("dialog", { name: "Rewind conversation" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Rewind conversation" }),
+    );
+
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+    await waitFor(() => expect(field).toHaveValue("Summarise this"));
+    const composer = within(field.closest("form")!);
+    fireEvent.click(composer.getByRole("button", { name: /Open pasted text/ }));
+    expect(openAttachment).toHaveBeenCalledWith("task-1", paste.id);
+    fireEvent.click(composer.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(sendMessage).toHaveBeenCalledWith(
+        "task-1",
+        "Summarise this",
+        undefined,
+        [paste.id],
+      ),
+    );
+  });
+
   it("places durable tool-result views in conversation order", () => {
     render(
       <WorkspaceShell

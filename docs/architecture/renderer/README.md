@@ -457,7 +457,9 @@ rendered.
   paste, and can take it off the message`, `refuses a paste over 50 MB and says
   what to do instead`, `puts the pastes back with the words when a message
   could not be sent`, `sends a long paste by the name it was kept as, and opens
-  it from the message after`.
+  it from the message after`. A rewind puts a message's pastes back in the
+  composer with its words, to open or send again. Named test: `puts a rewound
+  message's pastes back in the composer with its words, to open or send again`.
 - Conversation age is derived from persisted timestamps and refreshed while
   the app remains open. Legacy records without a timestamp use a neutral
   fallback instead of remaining `Now`. The named test `shows relative

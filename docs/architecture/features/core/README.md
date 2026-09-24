@@ -187,7 +187,8 @@ directly.
   person's own editor by that name before and after sending; only a text file
   the store kept is ever opened, so nothing opened this way can run. Named
   tests: `is kept as it is pasted, and opens in the person's editor before and
-  after it is sent`, `opens nothing it did not keep`, and the argument checks
+  after it is sent`, `opens a paste not yet sent from a conversation that is
+  open`, `opens nothing it did not keep`, and the argument checks
   `accepts a message that is only pastes, but never an empty one` and `takes a
   paste up to 50 MB to keep, and opens one only by its name`.
 - **The window is never sent what the model was sent.** A conversation's

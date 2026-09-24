@@ -84,6 +84,19 @@ describe("a long paste", () => {
     ]);
   });
 
+  it("opens a paste not yet sent from a conversation that is open", async () => {
+    const { core, workspace, opened } = await coreKeepingPastes();
+    const taskId = await workspace.createTask();
+
+    const kept = (await core.receive(CHANNEL.keepPaste, [
+      "draft text",
+    ])) as PasteOutcome;
+    if (kept.status !== "kept") throw new Error(kept.reason);
+    await core.receive(CHANNEL.openAttachment, [taskId, kept.attachment.id]);
+
+    expect(await readFile(opened[0] ?? "", "utf8")).toBe("draft text");
+  });
+
   it("opens nothing it did not keep", async () => {
     const { core, opened } = await coreKeepingPastes();
 

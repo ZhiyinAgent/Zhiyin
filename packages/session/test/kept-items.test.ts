@@ -229,6 +229,33 @@ describe("a long text a person pasted", () => {
   });
 });
 
+describe("a paste sent again after its message was rewound", () => {
+  it("is already its conversation's, and is sent again as it is", async () => {
+    const sessions = new FileSessions(await temporaryRoot());
+    const draft = await kept(sessions, "pastedText", undefined, "a\nb\nc");
+    await sessions.claimDrafts("task-1", [draft]);
+
+    const again = await sessions.claimDrafts("task-1", [draft]);
+
+    expect(again).toEqual([
+      { kind: "pastedText", id: draft, bytes: 5, lines: 3 },
+    ]);
+    expect(
+      await readFile(
+        await pathOf(sessions, "pastedText", "task-1", draft),
+        "utf8",
+      ),
+    ).toBe("a\nb\nc");
+  });
+
+  it("is never taken from another conversation", async () => {
+    const sessions = new FileSessions(await temporaryRoot());
+    const other = await kept(sessions, "pastedText", "task-2", "theirs");
+
+    expect(await sessions.claimDrafts("task-1", [other])).toEqual([]);
+  });
+});
+
 describe("when a file was last read", () => {
   it("is remembered after the app restarts", async () => {
     const root = await temporaryRoot();

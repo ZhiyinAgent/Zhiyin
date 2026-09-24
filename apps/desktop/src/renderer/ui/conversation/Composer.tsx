@@ -12,7 +12,12 @@ import { ReasoningControls } from "./ReasoningControls.js";
 import styles from "./conversation.module.css";
 
 type ComposerProps = {
-  draft?: { readonly id: string; readonly text: string };
+  /** Words and pastes put back, as a rewind does; each loaded once. */
+  draft?: {
+    readonly id: string;
+    readonly text: string;
+    readonly attachments?: readonly MessageAttachment[];
+  };
   disabledReason?: string;
   disabledPlaceholder?: string;
   onSubmit?: (
@@ -117,6 +122,7 @@ export function Composer({
     if (!draft || loadedDraftId.current === draft.id) return;
     loadedDraftId.current = draft.id;
     setMessage(draft.text);
+    setAttachments(draft.attachments ?? []);
     setError("");
   }, [draft]);
 
