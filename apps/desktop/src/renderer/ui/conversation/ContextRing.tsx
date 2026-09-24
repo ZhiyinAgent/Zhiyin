@@ -1,20 +1,14 @@
 /**
- * How full the next request is against the budget the person chose, beside
- * the reasoning control and working the same way. It reads the size the loop
- * measured for the last request it sent, plus the message being written, and
- * the budget's target for the model chosen now — so it follows a model switch
- * or a budget change at once. When the size or the window is not known it says
- * so, and is never drawn as empty.
+ * How much of the budget the person chose the conversation already uses,
+ * beside the reasoning control and working the same way. It reads the size
+ * the loop measured for the last request it sent — instructions and tools
+ * included — against the budget's target for the model chosen now, so it
+ * follows a model switch or a budget change at once. Before the first message
+ * nothing is used yet and it reads 0%; the message being written is not
+ * counted until it is sent. When the model's window is not known it says so.
  */
 
-import {
-  useEffect,
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   contextBudgets,
@@ -24,7 +18,7 @@ import {
   type ContextUsage,
   type ModelWindow,
 } from "@zhiyin/contract";
-import { Dialog } from "../shared/index.js";
+import { Dialog, Icon } from "../shared/index.js";
 import styles from "./conversation.module.css";
 
 const names: Record<ContextBudgetChoice, string> = {
@@ -33,21 +27,15 @@ const names: Record<ContextBudgetChoice, string> = {
   ultra: "Ultra",
 };
 
-/** Room kept for the answer, as the loop keeps it. */
-const replyReserve = 16_000;
-
 function short(tokens: number): string {
   if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(2))}M`;
   return `${Math.round(tokens / 1_000)}K`;
 }
 
-const whole = (tokens: number) => tokens.toLocaleString("en-US");
-
 export function ContextRing({
   usage,
   model,
   budget,
-  draftTokens,
   onChoose,
   onCondense,
   disabled,
@@ -56,7 +44,6 @@ export function ContextRing({
   usage?: ContextUsage;
   model: ModelWindow & { readonly model: string };
   budget: ContextBudgetChoice;
-  draftTokens: number;
   onChoose: (budget: ContextBudgetChoice) => void;
   /** Condenses the conversation; absent before there is one. */
   onCondense?: () => Promise<void>;
@@ -80,8 +67,8 @@ export function ContextRing({
       options.filter((other) => other.targetTokens === option.targetTokens)
         .length > 1,
   );
-  const known = usage !== undefined && model.contextWindow !== undefined;
-  const total = (usage?.totalTokens ?? 0) + draftTokens;
+  const known = model.contextWindow !== undefined;
+  const total = usage?.totalTokens ?? 0;
   const percent = Math.round((total / chosen.targetTokens) * 100);
   const label = known
     ? `Context: ${percent}% of the ${names[chosen.budget]} budget`
@@ -127,18 +114,32 @@ export function ContextRing({
     return () => document.removeEventListener("pointerdown", dismiss);
   }, [open, breakdown]);
 
-  const reply = Math.min(
-    model.maximumOutputTokens ?? replyReserve,
-    replyReserve,
-  );
-  const rows: [string, number][] = usage
+  const rows: readonly (readonly [string, number, string])[] = usage
     ? [
-        ["Instructions", usage.parts.instructions],
-        ["Tool definitions", usage.parts.tools],
-        ["Summary", usage.parts.summary],
-        ["Conversation", usage.parts.conversation],
-        ["Tool results", usage.parts.toolResults],
-        ["Your message", draftTokens],
+        [
+          "Setup",
+          fixed,
+          "Zhiyin's instructions and the tools it can use. Sent with every message.",
+        ],
+        ...(usage.parts.summary > 0
+          ? [
+              [
+                "Summary",
+                usage.parts.summary,
+                "A short version of older messages, written when the conversation was compacted.",
+              ] as const,
+            ]
+          : []),
+        [
+          "Conversation",
+          usage.parts.conversation + usage.parts.toolResults,
+          "Your messages, Zhiyin's replies, and what it read or ran along the way.",
+        ],
+        [
+          "Free",
+          Math.max(0, chosen.targetTokens - total),
+          "Room left before Zhiyin compacts older messages on its own.",
+        ],
       ]
     : [];
 
@@ -167,29 +168,33 @@ export function ContextRing({
         disabled={disabled}
         onClick={() => setOpen(!open)}
       >
-        <svg
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-          className={known ? undefined : styles["context-ring__dial--unknown"]}
-          style={
-            {
-              "--context-fill": `${Math.min(100, known ? percent : 25)}`,
-            } as CSSProperties
-          }
-        >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
           <circle
             className={styles["context-ring__track"]}
             cx="10"
             cy="10"
             r="7"
           />
-          <circle
-            className={`${styles["context-ring__fill"]}${known && percent >= 100 ? ` ${styles["context-ring__fill--over"]}` : ""}`}
-            cx="10"
-            cy="10"
-            r="7"
-            pathLength="100"
-          />
+          {/* Set on the arc itself, not inherited, so Chromium repaints it on
+              every change; at 0% there is no arc, not a round-capped dot. */}
+          {known && total > 0 && (
+            <circle
+              className={`${styles["context-ring__fill"]}${percent >= 100 ? ` ${styles["context-ring__fill--over"]}` : ""}`}
+              cx="10"
+              cy="10"
+              r="7"
+              pathLength="100"
+              style={{ strokeDasharray: `${Math.min(100, percent)} 100` }}
+            />
+          )}
+          {!known && (
+            <circle
+              className={styles["context-ring__point"]}
+              cx="10"
+              cy="10"
+              r="1.75"
+            />
+          )}
         </svg>
       </button>
       {open &&
@@ -202,10 +207,37 @@ export function ContextRing({
             role="dialog"
             aria-label="Context"
           >
-            <p className={styles["context-ring__status"]} aria-live="polite">
-              {known
-                ? `${percent}% of ${short(chosen.targetTokens)} tokens`
-                : "The size is known once a message has been sent to a listed model."}
+            <div className={styles["reasoning-controls__heading"]}>
+              <button
+                type="button"
+                className={styles["reasoning-controls__reset"]}
+                aria-label="What's using space"
+                title="What's using space"
+                disabled={!usage}
+                onClick={() => {
+                  setOpen(false);
+                  setBreakdown(true);
+                }}
+              >
+                <Icon name="usage" />
+              </button>
+              <span
+                className={`${styles["reasoning-controls__level"]}${known && percent >= 100 ? ` ${styles["context-ring__level--over"]}` : ""}${known ? "" : ` ${styles["context-ring__level--unknown"]}`}`}
+                aria-live="polite"
+                title={
+                  known
+                    ? `${short(total)} of ${short(chosen.targetTokens)} tokens`
+                    : "This model does not list its context window"
+                }
+              >
+                {known ? `${percent}%` : "Not measured"}
+              </span>
+              <span />
+            </div>
+            <p className={styles["reasoning-controls__caption"]}>
+              {same.length > 1
+                ? `${same.map((option) => names[option.budget]).join(" and ")} are equal on this model`
+                : "Larger costs more per request"}
             </p>
             <div
               role="radiogroup"
@@ -225,32 +257,18 @@ export function ContextRing({
                 </label>
               ))}
             </div>
-            <p className={styles["reasoning-controls__caption"]}>
-              A larger budget keeps more of the conversation word for word, and
-              costs more on every request.
-              {same.length > 1 &&
-                ` ${same.map((option) => names[option.budget]).join(" and ")} give the same room on this model: its window leaves no more.`}
-            </p>
             {usage && !fixedPartFits(usage, chosen.targetTokens) && (
               <p className={styles["context-ring__warning"]} role="note">
                 Instructions and tools take{" "}
                 {Math.round((fixed / chosen.targetTokens) * 100)}% of this
-                budget. Turn off connectors this conversation does not need, or
-                choose a larger budget.
+                budget.
               </p>
             )}
-            <button
-              type="button"
-              className="text-button"
-              disabled={!usage}
-              onClick={() => setBreakdown(true)}
-            >
-              What's using space
-            </button>
             {onCondense && (
               <button
                 type="button"
-                className="text-button"
+                className={styles["context-ring__compact"]}
+                title="Summarise older messages so the conversation takes less space"
                 disabled={condensing}
                 onClick={() => {
                   setCondensing(true);
@@ -264,12 +282,12 @@ export function ContextRing({
                     .finally(() => setCondensing(false));
                 }}
               >
-                {condensing ? "Condensing…" : "Condense now"}
+                {condensing ? "Compacting…" : "Compact"}
               </button>
             )}
             {condenseFailure && (
               <p className={styles["context-ring__warning"]} role="alert">
-                Couldn't condense: {condenseFailure}
+                Couldn't compact: {condenseFailure}
               </p>
             )}
           </div>,
@@ -283,46 +301,79 @@ export function ContextRing({
             trigger.current?.focus();
           }}
         >
+          <p className={styles["context-ring__breakdown-total"]}>
+            {percent}% of the {names[chosen.budget]} budget (
+            {short(chosen.targetTokens)})
+          </p>
           <table className={styles["context-ring__breakdown"]}>
             <tbody>
-              {rows.map(([name, tokens]) => (
-                <tr key={name}>
-                  <th scope="row">{name}</th>
-                  <td>{whole(tokens)}</td>
-                  <td>Estimated</td>
-                </tr>
+              {rows.map(([name, tokens, meaning]) => (
+                <BreakdownRow
+                  key={name}
+                  name={name}
+                  tokens={tokens}
+                  meaning={meaning}
+                />
               ))}
-              <tr>
-                <th scope="row">Next request</th>
-                <td>{whole(total)}</td>
-                <td>
-                  {usage.measured ? "Counted by the provider" : "Estimated"}
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Kept for the answer</th>
-                <td>{whole(reply)}</td>
-                <td />
-              </tr>
             </tbody>
           </table>
-          <p>
-            <strong>
-              {known
-                ? `${percent}% of ${short(chosen.targetTokens)}`
-                : "Not known yet"}
-            </strong>{" "}
-            — the {names[chosen.budget]} budget.
-          </p>
-          <p>
-            The model's own limit:{" "}
-            <span>
-              {model.contextWindow ? whole(model.contextWindow) : "not listed"}
-            </span>{" "}
-            tokens.
-          </p>
         </Dialog>
       )}
     </div>
+  );
+}
+
+/**
+ * One part of the request. What it is, in plain words, shows as a tooltip
+ * while the pointer rests on its icon or the keyboard focuses it. Drawn at the
+ * end of the page above the icon, so the dialog's edges never cut it off.
+ */
+function BreakdownRow({
+  name,
+  tokens,
+  meaning,
+}: {
+  name: string;
+  tokens: number;
+  meaning: string;
+}) {
+  const [at, setAt] = useState<{ x: number; y: number }>();
+  const tipId = useId();
+  const show = (target: HTMLElement) => {
+    const box = target.getBoundingClientRect();
+    setAt({ x: box.left + box.width / 2, y: box.top });
+  };
+  const hide = () => setAt(undefined);
+  return (
+    <tr>
+      <th scope="row">
+        {name}
+        <button
+          type="button"
+          className={styles["context-ring__about"]}
+          aria-label={`What is ${name}?`}
+          aria-describedby={at ? tipId : undefined}
+          onMouseEnter={(event) => show(event.currentTarget)}
+          onMouseLeave={hide}
+          onFocus={(event) => show(event.currentTarget)}
+          onBlur={hide}
+        >
+          <Icon name="info" />
+        </button>
+        {at &&
+          createPortal(
+            <span
+              id={tipId}
+              role="tooltip"
+              className={styles["context-ring__tip"]}
+              style={{ left: at.x, top: at.y }}
+            >
+              {meaning}
+            </span>,
+            document.body,
+          )}
+      </th>
+      <td>{tokens < 1_000 ? `${tokens}` : short(tokens)}</td>
+    </tr>
   );
 }

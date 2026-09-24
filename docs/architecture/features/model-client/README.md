@@ -43,7 +43,7 @@ one trust boundary.
   by the environment, or unavailable. It never returns the credential.
 - `models()` answers the models this account may use, and `modelProviders(model)`
   the upstreams that serve one of them with price, context window,
-  quantization and recent behaviour. Both report a reason instead of an empty
+  quantization, service tier, region and recent behaviour. Both report a reason instead of an empty
   list when the catalogue cannot be read.
 - `selectModel(model, providers)` stores both as one change. An empty provider
   list means unrestricted routing.
@@ -180,6 +180,11 @@ one trust boundary.
   an agent that cannot call a tool cannot run this app. Named tests: `lists only
   models that can call tools` and `says an upstream cannot run tools instead of
   hiding it`.
+- **An upstream's tier and region are read from its tag, not its provider
+  name**, because one provider can serve a model several ways: `openai/flex` is
+  cheaper and slower and never falls back to a standard tier when busy,
+  `openai/fast` is the priority tier, and `azure/eu` is a region. Named test:
+  `tells an upstream's service tier and region apart from its provider`.
 - **An absent measurement is absent, never zero.** The provider reports latency,
   throughput and uptime only for models with recent traffic, and only to an
   authenticated caller — so the catalogue request is signed. Named tests:

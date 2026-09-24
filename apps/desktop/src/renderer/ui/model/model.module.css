@@ -697,42 +697,13 @@
   }
 }
 
-.model-budget {
-  display: grid;
-  gap: 6px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--zy-line);
-}
-
-.model-budget__choices {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 14px;
-}
-
-.model-budget__choices label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  cursor: pointer;
-}
-
-.model-budget__choices label span {
-  color: var(--zy-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.model-budget__caption {
-  margin: 0;
-  color: var(--zy-muted);
-  font-size: 12px;
-}
-
-.model-budget__warning {
-  margin: 0;
+.model-note {
+  margin: 10px 0 0;
   padding: 8px 10px;
+  border: 1px solid var(--zy-amber-line);
   border-radius: 8px;
-  background: var(--zy-wash-strong);
+  background: var(--zy-amber-fill);
+  color: var(--zy-amber);
   font-size: 12px;
+  line-height: 1.45;
 }

@@ -30,6 +30,29 @@ describe("Composer", () => {
     expect(composer).toHaveValue("Earlier request");
   });
 
+  it("shows the context already used, not what the message being written would add", () => {
+    render(
+      <Composer
+        context={{
+          model: {
+            model: "wide",
+            contextWindow: 1_000_000,
+            maximumOutputTokens: 131_072,
+          },
+          budget: "medium",
+          onChoose: () => {},
+        }}
+      />,
+    );
+    const ring = screen.getByRole("button", { name: /^Context/ });
+    expect(ring).toHaveAccessibleName("Context: 0% of the Medium budget");
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Zhiyin" }), {
+      target: { value: "word ".repeat(40_000) },
+    });
+    expect(ring).toHaveAccessibleName("Context: 0% of the Medium budget");
+  });
+
   it("blocks typing while a response is in progress", () => {
     const onSubmit = vi.fn();
     render(<Composer running onSubmit={onSubmit} />);

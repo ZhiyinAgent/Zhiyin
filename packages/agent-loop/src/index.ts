@@ -179,6 +179,8 @@ export class AgentLoop {
   /**
    * Condenses the conversation because the person asked: at once when nothing
    * runs in it, else before the running turn's next request to the model.
+   * Asked again while one runs, it waits for that one rather than queueing
+   * another for the next message.
    */
   async condenseNow(taskId: string): Promise<void> {
     if (!this.#deps.host.historyAvailable())
@@ -189,8 +191,10 @@ export class AgentLoop {
       throw new Error("The task does not exist.");
     if (this.#deps.rewind.restoring(taskId))
       throw new VisibleError(
-        "Wait for file recovery to finish before condensing.",
+        "Wait for file recovery to finish before compacting.",
       );
+    const pending = this.#condensing.get(taskId);
+    if (pending) return pending;
     this.#context.ask(taskId);
     if (this.#activeTurns.running(taskId)) return;
 

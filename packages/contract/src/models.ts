@@ -28,6 +28,14 @@ export type ModelProviderOption = {
   readonly slug: string;
   readonly name: string;
   readonly quantization: string | null;
+  /**
+   * A provider's discounted or faster tier of the same model, when this is
+   * one: flex is cheaper and slower and fails rather than waits when busy;
+   * priority is faster and costs more.
+   */
+  readonly tier: "flex" | "priority" | null;
+  /** Where it runs, when the provider offers the model in more than one. */
+  readonly region: string | null;
   readonly contextWindow: number;
   /** The longest reply this upstream gives; null when it does not say. */
   readonly maximumOutputTokens: number | null;

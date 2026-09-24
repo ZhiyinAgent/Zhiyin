@@ -159,7 +159,11 @@ export class ContextGuard {
     return last.tokensAfter > target ? last.tokensAfter : undefined;
   }
 
-  /** Saves the attempt where it happened in the conversation. */
+  /**
+   * Saves the attempt where it happened in the conversation. A failure that
+   * repeats the last one, for the same reason at the same size, is not saved
+   * again, so asking repeatedly with nothing new leaves one notice.
+   */
   async #record(
     taskId: string,
     outcome: Exclude<CondensingOutcome, { kind: "cancelled" }>,
@@ -170,6 +174,16 @@ export class ContextGuard {
     },
   ): Promise<void> {
     const task = this.#records.task(taskId);
+    const last = task.condensings?.at(-1);
+    if (
+      outcome.kind === "failed" &&
+      last?.outcome === "failed" &&
+      last.reason === outcome.reason &&
+      last.detail === outcome.detail &&
+      last.targetTokens === sizes.targetTokens &&
+      last.tokensBefore === sizes.tokensBefore
+    )
+      return;
     const common = {
       id: `condensing-${this.#deps.newMessageId()}`,
       sequence: this.#records.nextTimelineSequence(task),

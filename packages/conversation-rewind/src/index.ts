@@ -125,7 +125,8 @@ export class ConversationRewind implements RewindPlanner {
       artifacts: retainedArtifacts(task, actions),
       views,
       interactions,
-      ...(condensings.length ? { condensings } : {}),
+      // Set even when empty, or the spread above would keep what was dropped.
+      condensings,
       phase: { kind: "draft" },
       ...(compaction ? { compaction } : {}),
     };

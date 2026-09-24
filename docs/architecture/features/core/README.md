@@ -80,7 +80,9 @@ host the workspace hands the agent loop.
   the refreshed credential status.
 - `setContextBudget(taskId, budget)` sets one conversation's budget, and
   `setDefaultContextBudget(budget)` the one a conversation follows until it is
-  given its own. `condenseNow(taskId)` has the loop condense the conversation.
+  given its own. The window gives every new conversation its own budget when
+  its first message is sent. `condenseNow(taskId)` has the loop condense the
+  conversation.
 
 ### Model settings
 
@@ -97,7 +99,7 @@ directly.
   Named tests: `is kept for one conversation, while the others follow the
   default, across a restart` and `is refused from the window unless it is one
   of the three budgets`.
-- **"Condense now" reaches the loop only naming a conversation.** Named test:
+- **"Compact" reaches the loop only naming a conversation.** Named test:
   `has a conversation condensed when the window asks, and refuses a request
   naming none`.
 - **No message reaches the loop as more than 50,000 typed characters.**

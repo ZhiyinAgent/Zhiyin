@@ -96,11 +96,13 @@ describe("condensing on request", () => {
     expect(task?.phase.kind).toBe("completed");
   });
 
-  it("says so when there is nothing old enough to condense", async () => {
+  it("says once in the conversation when there is nothing old enough, however often it is asked", async () => {
     const requests: ModelRequest[] = [];
     const loop = model(requests);
     loop.restore([{ ...settledTask(), messages: withinItsBudget.slice(2) }]);
 
+    await loop.condenseNow("task-1");
+    await loop.condenseNow("task-1");
     await loop.condenseNow("task-1");
 
     expect(requests).toHaveLength(0);
@@ -110,6 +112,23 @@ describe("condensing on request", () => {
         reason: "nothing-to-condense",
       }),
     ]);
+  });
+
+  it("asked again while it compacts, waits for that one instead of queueing another for the next message", async () => {
+    const requests: ModelRequest[] = [];
+    const condensing = released();
+    const loop = model(requests, { condensing: condensing.held });
+    loop.restore([settledTask()]);
+
+    const first = loop.condenseNow("task-1");
+    await until(() => requests.length === 1);
+    const second = loop.condenseNow("task-1");
+    condensing.release();
+    await Promise.all([first, second]);
+    await loop.start("task-1", "Continue");
+
+    expect(requests.map(asksToCondense)).toEqual([true, false]);
+    expect(loop.snapshot().tasks[0]?.condensings).toHaveLength(1);
   });
 
   it("asked while a turn runs, condenses before the next request to the model", async () => {

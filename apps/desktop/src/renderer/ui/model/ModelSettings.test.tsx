@@ -52,6 +52,8 @@ const providers: ModelProviderList = {
       slug: "crusoe/fp4",
       name: "Crusoe",
       quantization: "fp4",
+      tier: null,
+      region: null,
       contextWindow: 1_048_576,
       maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.15,
@@ -65,6 +67,8 @@ const providers: ModelProviderList = {
       slug: "relace/fp4",
       name: "Relace",
       quantization: "fp4",
+      tier: null,
+      region: null,
       contextWindow: 1_048_576,
       maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.09,
@@ -78,6 +82,8 @@ const providers: ModelProviderList = {
       slug: "z-ai/fp8",
       name: "Z.AI",
       quantization: "fp8",
+      tier: null,
+      region: null,
       contextWindow: 1_048_576,
       maximumOutputTokens: 131_072,
       inputUsdPerMillion: 0.075,
@@ -88,6 +94,32 @@ const providers: ModelProviderList = {
       uptimePercent: 86.1,
     },
   ],
+};
+
+/** One model reached through a provider's tiers and regions. */
+const tiered: ModelProviderList = {
+  status: "ready",
+  model: "openai/gpt-6-luna",
+  providers: [
+    ["openai/flex", "OpenAI", "flex", null, 0.05],
+    ["openai", "OpenAI", null, null, 0.1],
+    ["openai/fast", "OpenAI", "priority", null, 0.2],
+    ["azure/eu", "Azure", null, "eu", 0.11],
+  ].map(([slug, name, tier, region, input]) => ({
+    slug: slug as string,
+    name: name as string,
+    quantization: null,
+    tier: tier as "flex" | "priority" | null,
+    region: region as string | null,
+    contextWindow: 1_050_000,
+    maximumOutputTokens: 128_000,
+    inputUsdPerMillion: input as number,
+    outputUsdPerMillion: (input as number) * 5,
+    acceptsTools: true,
+    responseMs: 1_900,
+    tokensPerSecond: 50,
+    uptimePercent: 100,
+  })),
 };
 
 function renderPanel(
@@ -102,8 +134,6 @@ function renderPanel(
     onSelectModel,
     onSaveApiKey: async () => ({ status: "accepted" as const }),
     onClearApiKey: async () => {},
-    defaultBudget: "medium" as const,
-    onSetDefaultBudget: async () => {},
     ...overrides,
   };
   render(<ModelSettings {...props} />);
@@ -111,48 +141,14 @@ function renderPanel(
 }
 
 describe("ModelSettings", () => {
-  it("sets the budget new conversations start with, at each budget's real target for the model in use", () => {
-    const onSetDefaultBudget = vi.fn(async () => {});
-    renderPanel({
-      settings: { ...connected, contextWindow: 1_000_000 },
-      onSetDefaultBudget,
-    });
-
-    const choices = screen.getByRole("radiogroup", {
-      name: "Budget for new conversations",
-    });
-    expect(
-      within(choices).getByRole("radio", { name: /Medium.*262K/ }),
-    ).toBeChecked();
-    expect(
-      within(choices).getByRole("radio", { name: /Low.*128K/ }),
-    ).not.toBeChecked();
-    fireEvent.click(
-      within(choices).getByRole("radio", { name: /Ultra.*850K/ }),
-    );
-
-    expect(onSetDefaultBudget).toHaveBeenCalledWith("ultra");
-  });
-
-  it("says when instructions and tools alone take too much of the default budget", () => {
-    renderPanel({
-      settings: { ...connected, contextWindow: 1_000_000 },
-      defaultBudget: "low",
-      fixedTokens: 30_000,
-    });
+  it("leaves the budget to the context ring: there is no budget here", () => {
+    renderPanel({ settings: { ...connected, contextWindow: 1_000_000 } });
 
     expect(
-      screen.getByText(/Instructions and tools take 23% of the Low budget/),
-    ).toBeVisible();
-  });
-
-  it("stays quiet about instructions and tools that fit", () => {
-    renderPanel({
-      settings: { ...connected, contextWindow: 1_000_000 },
-      fixedTokens: 5_000,
-    });
-
-    expect(screen.queryByText(/Instructions and tools take/)).toBeNull();
+      screen.queryByRole("radiogroup", {
+        name: "Budget for new conversations",
+      }),
+    ).toBeNull();
   });
 
   it("finds a model from an inexact query", async () => {
@@ -217,6 +213,38 @@ describe("ModelSettings", () => {
     expect(
       screen.getByRole("checkbox", { name: /Any provider/ }),
     ).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("names each upstream by its provider and variant, and says what a tier trades", async () => {
+    renderPanel({ onListModelProviders: async () => tiered });
+
+    expect(
+      await screen.findByRole("checkbox", { name: "OpenAI, flex tier" }),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "OpenAI" })).toBeVisible();
+    expect(
+      screen.getByRole("checkbox", { name: "OpenAI, priority tier" }),
+    ).toBeVisible();
+    expect(screen.getByRole("checkbox", { name: "Azure, EU" })).toBeVisible();
+    expect(
+      screen.getByText("Flex tier: cheaper, slower, may refuse when busy"),
+    ).toBeVisible();
+    expect(screen.getByText("Priority tier: faster, costs more")).toBeVisible();
+    expect(screen.getByText("Region: EU")).toBeVisible();
+    expect(screen.queryByText(/Precision not stated/)).toBeNull();
+  });
+
+  it("warns that flex alone fails when busy, until a standard upstream is chosen too", async () => {
+    renderPanel({ onListModelProviders: async () => tiered });
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "OpenAI, flex tier" }),
+    );
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Only flex is chosen: when it is busy, requests fail instead of moving on. Choose a standard provider too.",
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "OpenAI" }));
+    expect(screen.queryByRole("note")).toBeNull();
   });
 
   it("refuses an upstream that cannot run tools", async () => {

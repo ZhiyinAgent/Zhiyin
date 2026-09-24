@@ -42,6 +42,12 @@ rendered.
 
 ## Invariants
 
+- **A refusal from the core reads as the core's own words.** Electron hands
+  the window a command's error wrapped as "Error invoking remote method
+  '<channel>': VisibleError: …"; the preload bridge takes that wrapping off,
+  once, for every command. Named tests: `reads as the core's own words,
+  without Electron's wrapping`, `keeps a message that spans lines whole` and
+  `leaves an error Electron did not wrap as it is`.
 - **A renderer module cannot grow into an unbounded component.** Production
   TypeScript and TSX files have the same 600-effective-line ceiling as other
   source layers. The two existing exceptions are pinned at their current size
@@ -285,41 +291,51 @@ rendered.
   slider from the bulb and dismisses with Escape or outside interaction`,
   `keeps unavailable controls compact and supports on/off without effort levels`,
   and `explains mandatory reasoning and disables edits during a turn`.
-- **The context ring shows how full the next request is, against the budget
-  that holds it.** Beside the reasoning control, it fills with the size the
-  loop measured for the last request plus the message being written, as a
-  share of the chosen budget's target for the model chosen now, so a model
-  switch or a budget change shows at once. An unknown size or window is said,
-  never drawn as empty. Its menu offers each budget at its real target, says
-  a larger one costs more on every request, says when two give the same room
-  on a small model, and warns when instructions and tools alone take too much.
-  "What's using space" shows each part and whether the provider counted it.
-  Named tests: `fills as the next request nears the budget, and the breakdown
-  shows the same number`, `offers Low, Medium and Ultra with their real targets
-  on a 1M model, and says a larger one costs more`, `offers no Ultra below
-  300k, and shows Medium for a conversation set to Ultra`, `says why two
-  budgets give the same room on a small model`, `is never shown as empty when
-  the size or the window is not known`, `follows a model switch, a budget
-  change and the message being written`, and `says when instructions and tools
-  alone take too much of the budget`. Its menu also offers "Condense now" once
-  a conversation exists, says it is condensing until done, and says why when
-  it could not. The menu is drawn at the end of the page, so opening it takes
-  focus to the chosen budget and Escape brings it back to the ring. Named
-  tests: `is reachable by keyboard: opening it moves focus to the chosen
-  budget, and Escape returns it`, `condenses now on request, saying so until
-  it is done` and `says why it could not condense, and offers nothing to
-  condense before a conversation exists`.
+- **The context ring shows how much of the budget the conversation already
+  uses.** Beside the reasoning control, it fills with the size the loop
+  measured for the last request, instructions and tools included, as a share
+  of the chosen budget's target for the model chosen now, so a model switch or
+  a budget change shows at once. A new conversation reads 0%, and the message
+  being written is not counted until it is sent. An unknown window is said.
+  Its menu offers each budget at its real target, says a larger one costs more
+  on every request, says when two give the same room on a small model, and
+  warns when instructions and tools alone take too much. "What's using space"
+  shows four parts in plain words — Setup, Summary when there is one,
+  Conversation and Free — each explained in a tooltip on hover or focus. Named
+  tests: `fills as the next request nears the budget, and the breakdown says
+  in plain words what uses it, explained on hover or focus`, `offers Low,
+  Medium and Ultra with their real targets on a 1M model, and says a larger
+  one costs more`, `offers no Ultra below 300k, and shows Medium for a
+  conversation set to Ultra`, `says why two budgets give the same room on a
+  small model`, `starts a new conversation at 0%, and says so when the window
+  is not known`, `draws no arc once a new conversation starts at 0%, however
+  full the last one was`, `follows a model switch and a budget change`, `shows
+  the context already used, not what the message being written would add`, and
+  `says when instructions and tools alone take too much of the budget`. Its
+  menu also offers "Compact" once a conversation exists, in words since an
+  icon there read as closing the menu, says it is compacting until done, and
+  says why when it could not. The person sees "compact" throughout; the code
+  keeps the name condensing. The menu is drawn at the end of the page, so
+  opening it takes focus to the chosen budget and Escape brings it back to the
+  ring. Named tests: `is reachable by keyboard: opening it moves focus to the
+  chosen budget, and Escape returns it`, `compacts on request, saying so until
+  it is done` and `says why it could not compact, and offers nothing to
+  compact before a conversation exists`.
 - **Each condensing is a card where it happened.** Closed, one line says how
   many messages and actions were summarised and how far the request shrank;
   open, the summary is formatted text with the person's words as quotes,
   followed by what Zhiyin carried over and the files it read again. A failed
   condensing is the same card, saying why and when Zhiyin tries again, with
-  nothing to open. Named tests: `says in one line what was condensed, and
-  opens by keyboard to the summary as formatted text`, `counts one of each in
-  the singular`, `shows a failed condensing as the same card, with its reason
-  and nothing to open`, `says where a condensing failed, and why, in plain
-  words`, `says what a %s failure means` (for each reason), and `are kept from
-  the core, so the conversation can show where each happened`.
+  nothing to open. "Nothing old enough to summarise" is shown only until the
+  next message, since it is news only until the conversation moves on; a
+  rewind past it removes it. Named tests: `says in one line what was
+  condensed, and opens by keyboard to the summary as formatted text`, `counts
+  one of each in the singular`, `shows a failed condensing as the same card,
+  with its reason and nothing to open`, `says where a condensing failed, and
+  why, in plain words`, `says what a %s failure means` (for each reason),
+  `says there is nothing old enough to compact only until the next message`,
+  and `are kept from the core, so the conversation can show where each
+  happened`.
 - **What the model knows only from a summary stays readable, at less
   emphasis, and says so.** Messages up to the last one condensed sit in a
   group named as condensed earlier conversation, drawn in the secondary text
@@ -330,17 +346,25 @@ rendered.
   last message it covered, and says why`, `dims nothing when nothing is
   condensed, as after a rewind that cut through it`, and `say where the
   condensed part ends, and nothing once a rewind has cut through it`.
-- **A budget chosen in the composer belongs to the conversation.** For an open
-  conversation it goes to the core at once; for one not yet started it is held
-  and given to the conversation the first message starts, before the message
-  is sent, and let go of if another conversation is opened. Settings sets the
-  default new conversations start with. Named tests: `shows how full the
-  conversation is and sends a budget change to the core`, `applies a budget
-  chosen before the first message to the conversation it starts`, `lets go of
-  a budget chosen for a new conversation when another is opened`, `sets the
-  budget new conversations start with, at each budget's real target for the
-  model in use`, `says when instructions and tools alone take too much of the
-  default budget`, and `stays quiet about instructions and tools that fit`.
+- **Each upstream is named by its provider and variant, and flex alone is
+  warned about.** Two rows both called "OpenAI" cannot be told apart, so a row
+  is named with its tier and region and says what the tier trades. A flex tier
+  fails rather than falling back when busy, so choosing only flex rows shows a
+  note until a standard one is chosen too. Named tests: `names each upstream by
+  its provider and variant, and says what a tier trades` and `warns that flex
+  alone fails when busy, until a standard upstream is chosen too`.
+- **The budget is chosen in one place, the composer's ring.** Chosen in an
+  open conversation, it is that conversation's alone and goes to the core at
+  once. Chosen on the new-conversation screen, it becomes the default for new
+  conversations. Each conversation is given the budget it starts on before its
+  first message is sent, so a later default never changes it. Settings has no
+  budget. Named tests: `shows how full the conversation is and sends a budget
+  change to the core`, `changes only the open conversation when its budget is
+  chosen, never the default`, `makes a budget chosen before the first message
+  the default, and fixes it on the conversation that message starts`, `starts
+  a new conversation on the default, fixed on it so a later default leaves it
+  alone`, and `leaves the budget to the context ring: there is no budget
+  here`.
 
 - What a person was told when they allowed an action stays with the record of
   it having happened: what it would do, what it could reach, and what Zhiyin

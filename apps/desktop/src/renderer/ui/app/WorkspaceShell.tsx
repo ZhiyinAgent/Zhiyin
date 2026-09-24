@@ -170,12 +170,7 @@ export function WorkspaceShell({
     (selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
   );
   const context = selectedTask?.context;
-  const budget = useContextBudget(
-    state,
-    selectedTask,
-    commands.setContextBudget,
-    commands.condenseNow,
-  );
+  const budget = useContextBudget(state, selectedTask, commands);
   const isRunning =
     selectedTask?.phase.kind === "working" ||
     selectedTask?.phase.kind === "browser" ||

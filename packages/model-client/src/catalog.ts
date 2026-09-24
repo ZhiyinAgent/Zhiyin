@@ -11,6 +11,10 @@
  * - Routing accepts an upstream slug including its variant suffix
  *   (`deepinfra/fp4`), which is exactly the `tag` each endpoint carries. A bare
  *   provider slug matches every variant.
+ * - One provider may list the same model several times, told apart only by
+ *   that suffix: a service tier (`openai/flex`, `openai/fast`), a region
+ *   (`azure/eu`, `amazon-bedrock/us-east-1`) or a precision (`deepinfra/fp4`).
+ *   Checked against the live endpoints list on 2026-09-25.
  *
  * Wire fields do not escape: everything is translated to the contract's own
  * types before it leaves this module.
@@ -127,6 +131,22 @@ function entry(value: unknown): ModelCatalogEntry | undefined {
   };
 }
 
+const tiers: Record<string, "flex" | "priority"> = {
+  flex: "flex",
+  fast: "priority",
+  priority: "priority",
+};
+const regionPattern = /^(global|us|eu|asia|apac|[a-z]{2}(-[a-z]+)+-\d+)$/;
+
+/** The tier and region a variant suffix names, if any. */
+function variant(slug: string) {
+  const parts = slug.split("/").slice(1);
+  return {
+    tier: parts.map((part) => tiers[part]).find(Boolean) ?? null,
+    region: parts.find((part) => regionPattern.test(part)) ?? null,
+  };
+}
+
 function option(value: unknown): ModelProviderOption | undefined {
   const endpoint = record(value);
   if (!endpoint) return undefined;
@@ -153,6 +173,7 @@ function option(value: unknown): ModelProviderOption | undefined {
       typeof quantization === "string" && quantization !== "unknown"
         ? quantization
         : null,
+    ...variant(slug),
     contextWindow,
     maximumOutputTokens: positive(endpoint["max_completion_tokens"]) ?? null,
     inputUsdPerMillion: input,

@@ -55,6 +55,23 @@ describe("conversation rewind composition", () => {
     expect(replacementIds.every((id) => !discardedIds.includes(id))).toBe(true);
   });
 
+  it("leaves no compact notice behind when the message before it is rewound and sent again", async () => {
+    const agent = loop();
+    const taskId = await agent.createTask();
+    await agent.start(taskId, "Hello, who are you?");
+    await agent.turns.condenseNow(taskId);
+    expect(agent.snapshot().tasks[0]?.condensings).toHaveLength(1);
+    const messageId = agent.snapshot().tasks[0]?.messages[0]?.id;
+    if (!messageId) throw new Error("Message missing");
+
+    const preview = await agent.previewRewind(taskId, messageId);
+    await agent.commitRewind(taskId, preview.id, "keep");
+    expect(agent.snapshot().tasks[0]?.condensings ?? []).toEqual([]);
+    await agent.start(taskId, "Hello, who are you?");
+
+    expect(agent.snapshot().tasks[0]?.condensings ?? []).toEqual([]);
+  });
+
   it("rejects a reviewed rewind after the conversation changes", async () => {
     const agent = loop();
     const taskId = await agent.createTask();

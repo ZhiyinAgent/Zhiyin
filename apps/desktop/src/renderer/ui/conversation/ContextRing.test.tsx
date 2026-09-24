@@ -30,7 +30,6 @@ function ring(props: Partial<Parameters<typeof ContextRing>[0]> = {}) {
     <ContextRing
       model={wide}
       budget="medium"
-      draftTokens={0}
       onChoose={onChoose}
       disabled={false}
       {...props}
@@ -40,7 +39,7 @@ function ring(props: Partial<Parameters<typeof ContextRing>[0]> = {}) {
 }
 
 describe("the context ring", () => {
-  it("fills as the next request nears the budget, and the breakdown shows the same number", () => {
+  it("fills as the next request nears the budget, and the breakdown says in plain words what uses it, explained on hover or focus", () => {
     ring({ usage: usage(131_000) });
 
     const meter = screen.getByRole("button", { name: /Context/ });
@@ -51,13 +50,34 @@ describe("the context ring", () => {
     const breakdown = screen.getByRole("dialog", {
       name: "What's using space",
     });
-    expect(within(breakdown).getByText("50% of 262K")).toBeVisible();
-    expect(within(breakdown).getByText("Tool results")).toBeVisible();
-    expect(within(breakdown).getByText("30,000")).toBeVisible();
     expect(
-      within(breakdown).getByText("Counted by the provider"),
+      within(breakdown).getByText("50% of the Medium budget (262K)"),
     ).toBeVisible();
-    expect(within(breakdown).getByText("1,000,000")).toBeVisible();
+    const row = (part: string) =>
+      within(breakdown).queryByRole("row", { name: new RegExp(`^${part}`) });
+    expect(row("Setup")).toHaveTextContent("5K");
+    expect(row("Conversation")).toHaveTextContent("126K");
+    expect(row("Free")).toHaveTextContent("131K");
+    expect(row("Summary")).toBeNull();
+    expect(within(breakdown).queryByText("Estimated")).toBeNull();
+
+    const about = within(breakdown).getByRole("button", {
+      name: "What is Setup?",
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseEnter(about);
+    const tip = screen.getByRole("tooltip");
+    expect(tip).toHaveTextContent(
+      "Zhiyin's instructions and the tools it can use. Sent with every message.",
+    );
+    expect(about).toHaveAccessibleDescription(tip.textContent!);
+    fireEvent.mouseLeave(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.focus(about);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    fireEvent.blur(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("offers Low, Medium and Ultra with their real targets on a 1M model, and says a larger one costs more", () => {
@@ -75,7 +95,7 @@ describe("the context ring", () => {
     expect(
       within(choices).getByRole("radio", { name: /Ultra.*850K/ }),
     ).toBeVisible();
-    expect(screen.getByText(/costs more on every request/)).toBeVisible();
+    expect(screen.getByText("Larger costs more per request")).toBeVisible();
     fireEvent.click(within(choices).getByRole("radio", { name: /Low/ }));
     expect(onChoose).toHaveBeenCalledWith("low");
   });
@@ -109,24 +129,21 @@ describe("the context ring", () => {
       screen.getByRole("radio", { name: /Medium.*45K/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        /Low and Medium give the same room on this model: its window leaves no more/,
-      ),
+      screen.getByText("Low and Medium are equal on this model"),
     ).toBeVisible();
   });
 
-  it("is never shown as empty when the size or the window is not known", () => {
+  it("starts a new conversation at 0%, and says so when the window is not known", () => {
     const { rerender } = ring();
 
     expect(
       screen.getByRole("button", { name: /Context/ }),
-    ).toHaveAccessibleName("Context: size not known yet");
+    ).toHaveAccessibleName("Context: 0% of the Medium budget");
     rerender(
       <ContextRing
         usage={usage(20_000)}
         model={{ model: "unlisted" }}
         budget="medium"
-        draftTokens={0}
         onChoose={() => {}}
         disabled={false}
       />,
@@ -136,7 +153,26 @@ describe("the context ring", () => {
     ).toHaveAccessibleName("Context: size not known yet");
   });
 
-  it("follows a model switch, a budget change and the message being written", () => {
+  it("draws no arc once a new conversation starts at 0%, however full the last one was", () => {
+    const { container, rerender } = ring({ usage: usage(131_000) });
+    const arc = () => container.querySelector("circle[pathLength]");
+    expect(arc()).toHaveStyle({ strokeDasharray: "50 100" });
+
+    rerender(
+      <ContextRing
+        model={wide}
+        budget="medium"
+        onChoose={() => {}}
+        disabled={false}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /Context/ }),
+    ).toHaveAccessibleName("Context: 0% of the Medium budget");
+    expect(arc()).toBeNull();
+  });
+
+  it("follows a model switch and a budget change", () => {
     const { rerender } = ring({ usage: usage(131_000) });
     const draw = (props: Partial<Parameters<typeof ContextRing>[0]>) =>
       rerender(
@@ -144,7 +180,6 @@ describe("the context ring", () => {
           usage={usage(131_000)}
           model={wide}
           budget="medium"
-          draftTokens={0}
           onChoose={() => {}}
           disabled={false}
           {...props}
@@ -159,10 +194,6 @@ describe("the context ring", () => {
     expect(
       screen.getByRole("button", { name: /Context/ }),
     ).toHaveAccessibleName("Context: 59% of the Medium budget");
-    draw({ draftTokens: 26_200 });
-    expect(
-      screen.getByRole("button", { name: /Context/ }),
-    ).toHaveAccessibleName("Context: 60% of the Medium budget");
   });
 
   it("is reachable by keyboard: opening it moves focus to the chosen budget, and Escape returns it", () => {
@@ -180,7 +211,7 @@ describe("the context ring", () => {
     expect(meter).toHaveFocus();
   });
 
-  it("condenses now on request, saying so until it is done", async () => {
+  it("compacts on request, saying so until it is done", async () => {
     let finish = () => {};
     const onCondense = vi.fn(
       () => new Promise<void>((resolve) => (finish = resolve)),
@@ -188,32 +219,32 @@ describe("the context ring", () => {
     ring({ usage: usage(131_000), onCondense });
 
     fireEvent.click(screen.getByRole("button", { name: /Context/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Condense now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Compact" }));
 
     expect(onCondense).toHaveBeenCalledOnce();
-    expect(screen.getByRole("button", { name: "Condensing…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Compacting…" })).toBeDisabled();
     finish();
     expect(
-      await screen.findByRole("button", { name: "Condense now" }),
+      await screen.findByRole("button", { name: "Compact" }),
     ).toBeEnabled();
   });
 
-  it("says why it could not condense, and offers nothing to condense before a conversation exists", async () => {
+  it("says why it could not compact, and offers nothing to compact before a conversation exists", async () => {
     const { unmount } = ring({
       usage: usage(131_000),
       onCondense: () =>
         Promise.reject(new Error("Saved history is unavailable.")),
     });
     fireEvent.click(screen.getByRole("button", { name: /Context/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Condense now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Compact" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't condense: Saved history is unavailable.",
+      "Couldn't compact: Saved history is unavailable.",
     );
     unmount();
 
     ring();
     fireEvent.click(screen.getByRole("button", { name: /Context/ }));
-    expect(screen.queryByRole("button", { name: "Condense now" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Compact" })).toBeNull();
   });
 
   it("says when instructions and tools alone take too much of the budget", () => {

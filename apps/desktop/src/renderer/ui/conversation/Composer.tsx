@@ -6,11 +6,7 @@ import type {
   ReasoningCapabilities,
   ReasoningSelection,
 } from "@zhiyin/contract";
-import {
-  estimatedTokens,
-  typedMessageCharacters,
-  utf8Bytes,
-} from "@zhiyin/contract";
+import { typedMessageCharacters, utf8Bytes } from "@zhiyin/contract";
 import { ContextRing } from "./ContextRing.js";
 import { PastedText } from "./PastedText.js";
 import { ReasoningControls } from "./ReasoningControls.js";
@@ -46,7 +42,7 @@ type ComposerProps = {
    */
   scope?: ReactNode;
   /** How full the next request is, and the budget it is held to. */
-  context?: Omit<Parameters<typeof ContextRing>[0], "draftTokens" | "disabled">;
+  context?: Omit<Parameters<typeof ContextRing>[0], "disabled">;
 };
 
 /** A paste this long is kept as a file and shown as a chip, not as text. */
@@ -280,13 +276,7 @@ export function Composer({
               disabled={Boolean(disabledReason) || sending}
             />
           )}
-          {context && (
-            <ContextRing
-              {...context}
-              draftTokens={estimatedTokens(message)}
-              disabled={sending}
-            />
-          )}
+          {context && <ContextRing {...context} disabled={sending} />}
           {disabledReason && <span>{disabledReason}</span>}
         </div>
         {running ? (

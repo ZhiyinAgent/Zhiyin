@@ -33,8 +33,11 @@ result.
   again. Named regression: `keeps what the model was sent before the selected
   message, and nothing after`. The record of each attempt to condense is cut
   there too, so a condensing covering a removed message is gone with it.
-  Named regression: `keeps only the attempts to condense made before the
-  selected message`.
+  This holds when none is kept, too: the list is set even when empty, so a
+  "nothing to compact" notice does not return when the message before it is
+  sent again. Named regressions: `keeps only the attempts to condense made
+  before the selected message` and `leaves no compact notice behind when the
+  message before it is rewound and sent again`.
 - A changed task invalidates its review. Named regression: `refuses a stale plan
   when the conversation changed`.
 

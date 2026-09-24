@@ -1316,6 +1316,50 @@ export const componentCatalog: ComponentCatalogEntry[] = [
     ),
   },
   {
+    id: "context-ring",
+    title: "Context ring, unmeasured, part full and past its budget",
+    description:
+      "A new conversation reads 0%; a model with no listed window is said to be unknown without looking empty or busy; once measured it fills against the chosen budget, and past it turns to a warning. Its menu chooses the budget, shows what uses space and compacts on request.",
+    render: () => {
+      const usage = (totalTokens: number) => ({
+        model: "wide",
+        totalTokens,
+        measured: true,
+        parts: {
+          instructions: 3_000,
+          tools: 9_000,
+          summary: 0,
+          conversation: totalTokens - 42_000,
+          toolResults: 30_000,
+        },
+      });
+      const wide = {
+        model: "wide",
+        contextWindow: 1_000_000,
+        maximumOutputTokens: 131_072,
+      };
+      const context = {
+        model: wide,
+        budget: "medium" as const,
+        onChoose: () => undefined,
+        onCondense: async () => undefined,
+      };
+      return (
+        <div className="lab-stack">
+          <Composer onAddContext={() => undefined} context={context} />
+          <Composer
+            onAddContext={() => undefined}
+            context={{ ...context, usage: usage(99_500) }}
+          />
+          <Composer
+            onAddContext={() => undefined}
+            context={{ ...context, budget: "low", usage: usage(131_000) }}
+          />
+        </div>
+      );
+    },
+  },
+  {
     id: "frame",
     title: "App frame",
     description: "Navigation, task header, and completed-result handoff.",
@@ -1470,8 +1514,6 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             providers: demoProviders,
           })}
           onSelectModel={async () => {}}
-          defaultBudget="medium"
-          onSetDefaultBudget={async () => {}}
           onSaveApiKey={async () => ({ status: "accepted" as const })}
           onClearApiKey={async () => {}}
         />
@@ -1501,8 +1543,6 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             providers: demoProviders,
           })}
           onSelectModel={async () => {}}
-          defaultBudget="medium"
-          onSetDefaultBudget={async () => {}}
           onSaveApiKey={async () => ({ status: "accepted" as const })}
           onClearApiKey={async () => {}}
         />

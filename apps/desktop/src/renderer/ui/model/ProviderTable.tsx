@@ -41,6 +41,34 @@ function sorted(
   }
 }
 
+/** "eu" reads "EU", "global" reads "Global", a zone such as "us-east-1" as is. */
+function regionName(region: string): string {
+  if (region.length === 2) return region.toUpperCase();
+  return region === "global" ? "Global" : region;
+}
+
+/** The provider, then the tier and region that tell its upstreams apart. */
+function rowName(provider: ModelProviderOption): string {
+  return [
+    provider.name,
+    ...(provider.tier ? [`${provider.tier} tier`] : []),
+    ...(provider.region ? [regionName(provider.region)] : []),
+  ].join(", ");
+}
+
+const tierTrades = {
+  flex: "Flex tier: cheaper, slower, may refuse when busy",
+  priority: "Priority tier: faster, costs more",
+} as const;
+
+function variantLine(provider: ModelProviderOption): string {
+  return [
+    ...(provider.tier ? [tierTrades[provider.tier]] : []),
+    ...(provider.region ? [`Region: ${regionName(provider.region)}`] : []),
+    ...(provider.quantization ? [`${provider.quantization} precision`] : []),
+  ].join(" · ");
+}
+
 export function ProviderTable({
   list,
   loading,
@@ -63,6 +91,15 @@ export function ProviderTable({
   keyMissing: boolean;
 }) {
   const automatic = selected.length === 0;
+  // Flex never falls back to a standard tier, so flex alone fails when busy.
+  const flexOnly =
+    !automatic &&
+    list?.status === "ready" &&
+    selected.every(
+      (slug) =>
+        list.providers.find((provider) => provider.slug === slug)?.tier ===
+        "flex",
+    );
 
   return (
     <section className={styles["model-column"]} aria-label="Providers">
@@ -192,7 +229,7 @@ export function ProviderTable({
                 role="checkbox"
                 aria-checked={picked}
                 disabled={!provider.acceptsTools}
-                aria-label={provider.name}
+                aria-label={rowName(provider)}
                 title={
                   provider.acceptsTools
                     ? undefined
@@ -214,11 +251,9 @@ export function ProviderTable({
                       </span>
                     )}
                   </strong>
-                  <span>
-                    {provider.quantization
-                      ? `${provider.quantization} precision`
-                      : "Precision not stated"}
-                  </span>
+                  {variantLine(provider) && (
+                    <span>{variantLine(provider)}</span>
+                  )}
                 </span>
                 <span className={styles["model-cell"]}>
                   {perMillion(provider.inputUsdPerMillion)}
@@ -253,6 +288,12 @@ export function ProviderTable({
               </button>
             );
           })}
+          {flexOnly && (
+            <p className={styles["model-note"]} role="note">
+              Only flex is chosen: when it is busy, requests fail instead of
+              moving on. Choose a standard provider too.
+            </p>
+          )}
         </div>
       )}
     </section>

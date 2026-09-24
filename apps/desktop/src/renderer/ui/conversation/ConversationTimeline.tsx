@@ -145,7 +145,7 @@ function CondensedHistory({ children }: { children: ReactNode }) {
     <div
       className={styles["condensed-history"]}
       role="group"
-      aria-label="Condensed earlier conversation"
+      aria-label="Compacted earlier conversation"
       aria-describedby={noteId}
       tabIndex={0}
       title={condensedNote}
@@ -262,12 +262,22 @@ function timelineBlocks<
       run,
     })),
     // Always saved with their place, so none needs a fallback of its own.
-    ...(task.condensings ?? []).map((condensing) => ({
-      kind: "condensing" as const,
-      sequence: condensing.sequence,
-      fallbackOrder: Number.MAX_SAFE_INTEGER,
-      condensing,
-    })),
+    // "Nothing old enough" is news only until the conversation moves on.
+    ...(task.condensings ?? [])
+      .filter(
+        (condensing) =>
+          condensing.outcome !== "failed" ||
+          condensing.reason !== "nothing-to-condense" ||
+          !task.messages.some(
+            (message) => (message.sequence ?? -1) >= condensing.sequence,
+          ),
+      )
+      .map((condensing) => ({
+        kind: "condensing" as const,
+        sequence: condensing.sequence,
+        fallbackOrder: Number.MAX_SAFE_INTEGER,
+        condensing,
+      })),
   ].sort(
     (left, right) =>
       left.sequence - right.sequence ||

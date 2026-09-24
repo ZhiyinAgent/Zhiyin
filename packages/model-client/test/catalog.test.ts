@@ -123,6 +123,8 @@ describe("model catalogue", () => {
           slug: "someone/fp8",
           name: "Someone",
           quantization: "fp8",
+          tier: null,
+          region: null,
           contextWindow: 262144,
           maximumOutputTokens: null,
           inputUsdPerMillion: 0.5,
@@ -170,6 +172,45 @@ describe("model catalogue", () => {
         },
       ],
     });
+  });
+
+  it("tells an upstream's service tier and region apart from its provider", async () => {
+    const endpoint = (tag: string, provider_name: string) => ({
+      tag,
+      provider_name,
+      quantization: "unknown",
+      context_length: 1_050_000,
+      pricing: { prompt: "0.0000001", completion: "0.0000005" },
+      supported_parameters: ["tools"],
+    });
+    const list = await fetchOpenRouterModelProviders("openai/gpt-6-luna", {
+      fetcher: answers({
+        data: {
+          endpoints: [
+            endpoint("openai/flex", "OpenAI"),
+            endpoint("openai", "OpenAI"),
+            endpoint("openai/fast", "OpenAI"),
+            endpoint("azure/eu", "Azure"),
+            endpoint("amazon-bedrock/us-east-1", "Amazon Bedrock"),
+            endpoint("google-vertex/global/flex", "Google Vertex"),
+            endpoint("someone/fp8", "Someone"),
+          ],
+        },
+      }),
+    });
+
+    if (list.status !== "ready") throw new Error(list.reason);
+    expect(
+      list.providers.map(({ slug, tier, region }) => ({ slug, tier, region })),
+    ).toEqual([
+      { slug: "openai/flex", tier: "flex", region: null },
+      { slug: "openai", tier: null, region: null },
+      { slug: "openai/fast", tier: "priority", region: null },
+      { slug: "azure/eu", tier: null, region: "eu" },
+      { slug: "amazon-bedrock/us-east-1", tier: null, region: "us-east-1" },
+      { slug: "google-vertex/global/flex", tier: "flex", region: "global" },
+      { slug: "someone/fp8", tier: null, region: null },
+    ]);
   });
 
   it("turns a refused key into an actionable reason rather than an empty list", async () => {

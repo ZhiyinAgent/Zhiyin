@@ -412,18 +412,20 @@ browser is not among them: it is reached, and let go of, through capabilities.
   auxiliary model`, and `condenses a long run where it crosses its context
   budget, and carries it across the renewal`.
 - **Every attempt to condense is recorded where it happened, with how it
-  ended.** A failure says why: only the newest work was left, the conversation
-  is larger than the window, the request failed (with the provider's words),
-  or the answer was not a usable summary. One the person stopped with its turn
-  leaves no record. The record is what decides the next attempt: after a
-  failure, or a condensing that left the request past its target, none is
-  made until the request grows by a tenth, after a restart as well; a changed
-  target tries at once. Named tests: `that fails is recorded where it
-  happened, with its reason, and the next turn does not try again`, `that
-  fails is not tried again after a restart until the request has grown`, `that
-  fails is tried again at once when the budget changes`, `whose request fails
-  says why`, `that works is recorded with the size before and after`, and
-  `that is cancelled with its turn leaves no record`.
+  ended.** A failure says why: there were no older messages to summarise, the
+  conversation is larger than the window, the request failed (with the
+  provider's words), or the answer was not a usable summary. One the person
+  stopped with its turn leaves no record, and a failure that repeats the last
+  one, for the same reason at the same size, is not saved again. The record is
+  what decides the next attempt: after a failure, or a condensing that left
+  the request past its target, none is made until the request grows by a
+  tenth, after a restart as well; a changed target tries at once. Named tests:
+  `that fails is recorded where it happened, with its reason, and the next
+  turn does not try again`, `that fails is not tried again after a restart
+  until the request has grown`, `that fails is tried again at once when the
+  budget changes`, `whose request fails says why`, `that works is recorded
+  with the size before and after`, and `that is cancelled with its turn leaves
+  no record`.
 - **A request already past the window is condensed a part at a time, and no
   message leaves the model's view unsummarised.** When the model's window is
   smaller than the conversation, after a switch to a smaller model, the oldest
@@ -435,12 +437,16 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - **The person can condense at any time.** Asked between turns, the loop
   condenses at once from the request the next turn would start with, whatever
   the conversation's size; a message sent meanwhile waits for it and goes out
-  on the condensed conversation. Asked during a turn, it condenses before
-  that turn's next request to the model. Named tests: `condenses at once while
-  nothing runs, though the conversation is within its budget`, `says so when
-  there is nothing old enough to condense`, `asked while a turn runs,
-  condenses before the next request to the model`, and `holds a message sent
-  while it condenses, then sends it on the condensed conversation`.
+  on the condensed conversation. Asked during a turn, it condenses before that
+  turn's next request to the model. Asked again while one runs, it waits for
+  that one rather than queueing another, which would otherwise run on the next
+  message. Named tests: `condenses at once while nothing runs, though the
+  conversation is within its budget`, `says once in the conversation when
+  there is nothing old enough, however often it is asked`, `asked again while
+  it compacts, waits for that one instead of queueing another for the next
+  message`, `asked while a turn runs, condenses before the next request to the
+  model`, and `holds a message sent while it condenses, then sends it on the
+  condensed conversation`.
 - **After condensing, the model keeps what it would need.** The person's
   latest request word for word (its start and end past a tenth of the budget),
   the two before it, the plan and the files changed are carried beside the

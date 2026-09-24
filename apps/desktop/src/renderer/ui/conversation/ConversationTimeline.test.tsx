@@ -174,7 +174,7 @@ describe("ConversationTimeline", () => {
     );
 
     const notice = screen.getByText(
-      /Couldn't condense the earlier conversation: the request to the model failed \(The provider is overloaded\.\)/,
+      /Couldn't compact the earlier conversation: the request to the model failed \(The provider is overloaded\.\)/,
     );
     expect(notice).toBeVisible();
     expect(notice).toHaveTextContent(
@@ -191,7 +191,6 @@ describe("ConversationTimeline", () => {
   });
 
   it.each([
-    ["nothing-to-condense", /only the newest work was left/],
     ["too-large", /larger than the model can read at once/],
     ["unusable", /answer was not a usable summary/],
   ] as const)("says what a %s failure means", (reason, words) => {
@@ -218,6 +217,42 @@ describe("ConversationTimeline", () => {
     expect(screen.getByText(words)).toBeVisible();
   });
 
+  it("says there is nothing old enough to compact only until the next message", () => {
+    const notice = {
+      id: "c1",
+      sequence: 5,
+      createdAt: "2026-09-24T10:00:00.000Z",
+      targetTokens: 13_600,
+      tokensBefore: 2_000,
+      outcome: "failed" as const,
+      reason: "nothing-to-condense" as const,
+    };
+    const { rerender } = render(
+      <ConversationTimeline
+        task={{ ...conversation, condensings: [notice] }}
+        pieces={pieces}
+      />,
+    );
+    expect(
+      screen.getByText(/no older messages to summarise yet/),
+    ).toBeVisible();
+
+    rerender(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            ...conversation.messages,
+            { id: "m3", role: "user", text: "Next", sequence: 5 },
+          ],
+          condensings: [notice],
+        }}
+        pieces={pieces}
+      />,
+    );
+    expect(screen.queryByText(/no older messages to summarise yet/)).toBeNull();
+  });
+
   it("dims what was condensed, up to the last message it covered, and says why", () => {
     render(
       <ConversationTimeline
@@ -234,7 +269,7 @@ describe("ConversationTimeline", () => {
     );
 
     const condensed = screen.getByRole("group", {
-      name: "Condensed earlier conversation",
+      name: "Compacted earlier conversation",
     });
     expect(condensed).toHaveAccessibleDescription(
       "Not in the assistant's memory any more: it works from the summary below.",

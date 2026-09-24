@@ -4,26 +4,23 @@ import type { WorkspaceState, WorkspaceTask } from "./workspaceState.js";
 
 /**
  * The budget the composer's ring shows and changes: the conversation's own,
- * else the app's default, else Medium. A choice made before the first message
- * belongs to no conversation yet, so it is held here and given to the one that
- * message starts, before the message is sent.
+ * else the app's default, else Medium. Chosen for an open conversation, it is
+ * that conversation's alone. Chosen before the first message, it becomes the
+ * default for new conversations, shown at once rather than when the core
+ * confirms it. A conversation is given the budget it starts on before its
+ * first message is sent, so a later default leaves it where it began.
  */
 export function useContextBudget(
   state: WorkspaceState,
   selectedTask: WorkspaceTask | null,
-  setContextBudget: CoreApi["setContextBudget"],
-  condenseNow: CoreApi["condenseNow"],
+  commands: Pick<
+    CoreApi,
+    "setContextBudget" | "setDefaultContextBudget" | "condenseNow"
+  >,
 ) {
-  const [pending, setPending] = useState<ContextBudgetChoice>();
-  // A choice for a conversation not yet started is left behind with it.
-  const [shownFor, setShownFor] = useState(selectedTask?.id);
-  if (shownFor !== selectedTask?.id) {
-    setShownFor(selectedTask?.id);
-    setPending(undefined);
-  }
-
+  const [chosen, setChosen] = useState<ContextBudgetChoice>();
   const budget =
-    (selectedTask ? selectedTask.contextBudget : pending) ??
+    (selectedTask ? selectedTask.contextBudget : chosen) ??
     state.contextBudget ??
     "medium";
   return {
@@ -34,16 +31,20 @@ export function useContextBudget(
       model: state.provider,
       budget,
       onChoose: (choice: ContextBudgetChoice) => {
-        if (selectedTask) void setContextBudget(selectedTask.id, choice);
-        else setPending(choice);
+        if (selectedTask)
+          void commands.setContextBudget(selectedTask.id, choice);
+        else {
+          setChosen(choice);
+          void commands.setDefaultContextBudget(choice);
+        }
       },
       ...(selectedTask
-        ? { onCondense: () => condenseNow(selectedTask.id) }
+        ? { onCondense: () => commands.condenseNow(selectedTask.id) }
         : {}),
     },
-    /** Gives a conversation just started the budget chosen before it. */
+    /** Fixes the budget a conversation just started begins on. */
     adopt: async (taskId: string) => {
-      if (!selectedTask && pending) await setContextBudget(taskId, pending);
+      if (!selectedTask) await commands.setContextBudget(taskId, budget);
     },
   };
 }

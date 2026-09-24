@@ -34,7 +34,7 @@ describe("the condensing card", () => {
     render(<CondensingCard condensing={condensed} />);
 
     const toggle = screen.getByRole("button", {
-      name: "Earlier conversation condensed: 42 messages and 18 actions summarised, 180K → 12K tokens",
+      name: "Earlier conversation compacted: 42 messages and 18 actions summarised, 180K → 12K tokens",
     });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByText("Ship the release notes.")).toBeNull();
@@ -45,7 +45,7 @@ describe("the condensing card", () => {
 
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     const details = screen.getByRole("region", {
-      name: "Earlier conversation condensed",
+      name: "Earlier conversation compacted",
     });
     expect(
       within(details).getByRole("heading", {
@@ -81,7 +81,7 @@ describe("the condensing card", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Earlier conversation condensed: 1 message and 1 action summarised, 180K → 900 tokens",
+        name: "Earlier conversation compacted: 1 message and 1 action summarised, 180K → 900 tokens",
       }),
     ).toBeVisible();
   });
@@ -103,7 +103,7 @@ describe("the condensing card", () => {
 
     expect(
       screen.getByText(
-        /Couldn't condense the earlier conversation: the model's answer was not a usable summary/,
+        /Couldn't compact the earlier conversation: the model's answer was not a usable summary/,
       ),
     ).toBeVisible();
     expect(screen.queryByRole("button")).toBeNull();

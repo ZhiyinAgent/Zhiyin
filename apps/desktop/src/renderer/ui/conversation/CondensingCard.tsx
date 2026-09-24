@@ -6,7 +6,7 @@ import styles from "./conversation.module.css";
 
 const meaning: Record<CondensingFailure, (detail?: string) => string> = {
   "nothing-to-condense": () =>
-    "only the newest work was left, and it is kept as it is",
+    "there are no older messages to summarise yet; the most recent exchanges are always kept whole",
   "too-large": () => "it is larger than the model can read at once",
   "request-failed": (detail) =>
     `the request to the model failed${detail ? ` (${detail})` : ""}`,
@@ -34,7 +34,7 @@ export function CondensingCard({ condensing }: { condensing: TaskCondensing }) {
     return (
       <div className={styles["condensing-card"]} role="status">
         <p className={styles["condensing-card__line"]}>
-          Couldn't condense the earlier conversation:{" "}
+          Couldn't compact the earlier conversation:{" "}
           {meaning[condensing.reason](condensing.detail)}. Zhiyin tries again
           once the conversation has grown, or when its budget changes.
         </p>
@@ -51,7 +51,7 @@ export function CondensingCard({ condensing }: { condensing: TaskCondensing }) {
         onClick={() => setOpen(!open)}
       >
         <span>
-          Earlier conversation condensed:{" "}
+          Earlier conversation compacted:{" "}
           {counted(condensing.messages, "message")} and{" "}
           {counted(condensing.actions, "action")} summarised,{" "}
           {tokens(condensing.tokensBefore)} → {tokens(condensing.tokensAfter)}{" "}
@@ -67,7 +67,7 @@ export function CondensingCard({ condensing }: { condensing: TaskCondensing }) {
         <section
           id={detailsId}
           className={styles["condensing-card__details"]}
-          aria-label="Earlier conversation condensed"
+          aria-label="Earlier conversation compacted"
         >
           <MarkdownMessage>{condensing.summary}</MarkdownMessage>
           {condensing.carried && (

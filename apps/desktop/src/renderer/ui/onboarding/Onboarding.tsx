@@ -56,6 +56,7 @@ export function Onboarding({
   }
   return (
     <StandalonePage
+      layout="split"
       tagline="A little more you."
       label="WELCOME TO ZHIYIN"
       title={

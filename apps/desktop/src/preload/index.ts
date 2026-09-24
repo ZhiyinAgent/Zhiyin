@@ -1,7 +1,7 @@
 /**
  * The bridge, and the entire surface the renderer is given. It exposes exactly
  * the contract's `CoreApi` — no Node, no Electron, no filesystem — and contains
- * no logic of its own.
+ * no logic of its own beyond taking Electron's wrapping off a refusal.
  */
 
 import { contextBridge, ipcRenderer } from "electron";
@@ -14,16 +14,20 @@ import {
   type CoreApi,
   type ViewCheckRequest,
 } from "@zhiyin/contract";
+import { remoteError } from "./remote-error.js";
 
 /**
- * One function per command, sending its arguments exactly as given. The names
- * come from the channel list, so the bridge offers exactly the commands that
- * travel.
+ * One function per command, sending its arguments exactly as given and
+ * answering with the core's own words when it refuses. The names come from
+ * the channel list, so the bridge offers exactly the commands that travel.
  */
 const commands = Object.fromEntries(
   Object.entries(COMMAND_CHANNELS).map(([name, channel]) => [
     name,
-    (...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+    (...args: unknown[]) =>
+      ipcRenderer.invoke(channel, ...args).catch((error: unknown) => {
+        throw remoteError(error);
+      }),
   ]),
 ) as Commands;
 

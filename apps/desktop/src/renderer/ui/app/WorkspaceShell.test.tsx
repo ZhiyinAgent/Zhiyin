@@ -1111,9 +1111,12 @@ describe("WorkspaceShell", () => {
     expect(setContextBudget).toHaveBeenCalledWith("measured", "medium");
   });
 
-  it("applies a budget chosen before the first message to the conversation it starts", async () => {
+  it("makes a budget chosen before the first message the default, and fixes it on the conversation that message starts", async () => {
     const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
     const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
+    const setDefaultContextBudget = vi.fn<CoreApi["setDefaultContextBudget"]>(
+      async () => {},
+    );
     const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
     render(
       <WorkspaceShell
@@ -1130,6 +1133,7 @@ describe("WorkspaceShell", () => {
           ...stubCommands,
           createTask,
           setContextBudget,
+          setDefaultContextBudget,
           sendMessage,
         }}
       />,
@@ -1137,6 +1141,7 @@ describe("WorkspaceShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
     fireEvent.click(screen.getByRole("radio", { name: /Low/ }));
+    expect(setDefaultContextBudget).toHaveBeenCalledWith("low");
     expect(createTask).not.toHaveBeenCalled();
     expect(screen.getByRole("radio", { name: /Low/ })).toBeChecked();
     fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
@@ -1151,7 +1156,45 @@ describe("WorkspaceShell", () => {
     );
   });
 
-  it("lets go of a budget chosen for a new conversation when another is opened", () => {
+  it("starts a new conversation on the default, fixed on it so a later default leaves it alone", async () => {
+    const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
+    const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
+    const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          contextBudget: "ultra",
+          provider: {
+            ...createWorkspaceState().provider,
+            contextWindow: 1_000_000,
+          },
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          createTask,
+          setContextBudget,
+          sendMessage,
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Start" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(sendMessage).toHaveBeenCalled());
+    expect(setContextBudget).toHaveBeenCalledWith("task-new", "ultra");
+  });
+
+  it("changes only the open conversation when its budget is chosen, never the default", () => {
+    const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
+    const setDefaultContextBudget = vi.fn<CoreApi["setDefaultContextBudget"]>(
+      async () => {},
+    );
     const other: WorkspaceTask = {
       id: "other",
       title: "Other",
@@ -1159,31 +1202,32 @@ describe("WorkspaceShell", () => {
       messages: [{ id: "u", role: "user", text: "Hi" }],
       phase: { kind: "interrupted" },
     };
-    const state = createWorkspaceState({
-      connection: "ready",
-      tasks: [other],
-      runtime: { tasks: "available", capabilities: "available" },
-      provider: {
-        ...createWorkspaceState().provider,
-        contextWindow: 1_000_000,
-      },
-    });
-    const draw = (selectedTaskId: string | null) => (
+    render(
       <WorkspaceShell
-        state={{ ...state, selectedTaskId }}
+        state={createWorkspaceState({
+          connection: "ready",
+          selectedTaskId: other.id,
+          tasks: [other],
+          runtime: { tasks: "available", capabilities: "available" },
+          provider: {
+            ...createWorkspaceState().provider,
+            contextWindow: 1_000_000,
+          },
+        })}
         dispatch={() => undefined}
-        commands={stubCommands}
-      />
+        commands={{
+          ...stubCommands,
+          setContextBudget,
+          setDefaultContextBudget,
+        }}
+      />,
     );
-    const { rerender } = render(draw(null));
-    fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Low/ }));
-
-    rerender(draw("other"));
-    rerender(draw(null));
 
     fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
-    expect(screen.getByRole("radio", { name: /Medium/ })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: /Ultra/ }));
+
+    expect(setContextBudget).toHaveBeenCalledWith("other", "ultra");
+    expect(setDefaultContextBudget).not.toHaveBeenCalled();
   });
 
   it("keeps New task ephemeral until the first message is sent", async () => {

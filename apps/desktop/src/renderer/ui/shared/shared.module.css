@@ -243,6 +243,64 @@
   margin: clamp(32px, 6vh, 90px) auto 32px;
 }
 
+/*
+ * Split: the heading and the way forward on the left, what the page asks for
+ * on the right, the whole centred in the window below its top bar.
+ */
+.standalone-page:has(> .standalone-page__body--split) {
+  display: flex;
+  flex-direction: column;
+}
+
+.standalone-page__body--split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-areas:
+    "intro content"
+    "footer content";
+  grid-template-rows: auto 1fr;
+  column-gap: clamp(40px, 6vw, 96px);
+  align-items: start;
+  width: min(1180px, 100%);
+  margin: auto;
+  padding-block: 32px;
+}
+
+.standalone-page__body--split > .standalone-page__intro {
+  grid-area: intro;
+}
+
+.standalone-page__body--split > .standalone-page__content {
+  grid-area: content;
+  align-self: center;
+}
+
+.standalone-page__body--split > .standalone-page__footer {
+  grid-area: footer;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-top: 8px;
+}
+
+.standalone-page__body--split > [role="alert"] {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .standalone-page__body--split {
+    display: block;
+    margin: clamp(32px, 6vh, 90px) auto 32px;
+    padding-block: 0;
+  }
+
+  .standalone-page__body--split > .standalone-page__footer {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 30px;
+  }
+}
+
 .standalone-page__label {
   color: var(--zy-accent);
   font-size: 11px;

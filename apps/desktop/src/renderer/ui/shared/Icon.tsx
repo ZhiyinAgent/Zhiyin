@@ -10,6 +10,7 @@ type IconName =
   | "file"
   | "folder"
   | "globe"
+  | "info"
   | "lock"
   | "lightbulb"
   | "pause"
@@ -52,6 +53,12 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   lightbulb: (
     <path d="M9 17h6m-5 3h4M9 17v-2a5 5 0 1 1 6 0v2M12 2V1M4.2 4.2l-1-1M2 10H1m21 0h1m-3.2-5.8 1-1" />
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 8h.01" />
+    </>
   ),
   lock: (
     <>
