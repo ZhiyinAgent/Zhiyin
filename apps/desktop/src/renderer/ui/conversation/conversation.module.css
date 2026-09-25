@@ -1676,6 +1676,12 @@
   font-weight: 600;
 }
 
+.context-ring__lowered {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
 .context-ring__about {
   display: inline-grid;
   place-items: center;

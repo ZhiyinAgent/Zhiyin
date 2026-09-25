@@ -301,41 +301,44 @@ rendered.
   on every request, says when two give the same room on a small model, and
   warns when instructions and tools alone take too much. "What's using space"
   shows four parts in plain words — Setup, Summary when there is one,
-  Conversation and Free — each explained in a tooltip on hover or focus. Named
-  tests: `fills as the next request nears the budget, and the breakdown says
-  in plain words what uses it, explained on hover or focus`, `offers Low,
-  Medium and Ultra with their real targets on a 1M model, and says a larger
-  one costs more`, `offers no Ultra below 300k, and shows Medium for a
-  conversation set to Ultra`, `says why two budgets give the same room on a
-  small model`, `starts a new conversation at 0%, and says so when the window
-  is not known`, `draws no arc once a new conversation starts at 0%, however
-  full the last one was`, `follows a model switch and a budget change`, `shows
-  the context already used, not what the message being written would add`, and
-  `says when instructions and tools alone take too much of the budget`. Its
-  menu also offers "Compact" once a conversation exists, in words since an
-  icon there read as closing the menu, says it is compacting until done, and
-  says why when it could not. The person sees "compact" throughout; the code
-  keeps the name condensing. The menu is drawn at the end of the page, so
-  opening it takes focus to the chosen budget and Escape brings it back to the
-  ring. Named tests: `is reachable by keyboard: opening it moves focus to the
-  chosen budget, and Escape returns it`, `compacts on request, saying so until
-  it is done` and `says why it could not compact, and offers nothing to
-  compact before a conversation exists`.
+  Conversation and Free — each explained in a tooltip on hover or focus, and
+  says when the limit was lowered after the provider refused a request, and at
+  what size. Named tests: `fills as the next request nears the budget, and the
+  breakdown says in plain words what uses it, explained on hover or focus`,
+  `says in the breakdown when the limit was lowered after the provider refused
+  a request`, `offers Low, Medium and Ultra with their real targets on a 1M
+  model, and says a larger one costs more`, `offers no Ultra below 300k, and
+  shows Medium for a conversation set to Ultra`, `says why two budgets give
+  the same room on a small model`, `starts a new conversation at 0%, and says
+  so when the window is not known`, `draws no arc once a new conversation
+  starts at 0%, however full the last one was`, `follows a model switch and a
+  budget change`, `shows the context already used, not what the message being
+  written would add`, and `says when instructions and tools alone take too
+  much of the budget`. Its menu also offers "Compact" once a conversation
+  exists, in words since an icon there read as closing the menu, says it is
+  compacting until done, and says why when it could not. The person sees
+  "compact" throughout; the code keeps the name condensing. The menu is drawn
+  at the end of the page, so opening it takes focus to the chosen budget and
+  Escape brings it back to the ring. Named tests: `is reachable by keyboard:
+  opening it moves focus to the chosen budget, and Escape returns it`,
+  `compacts on request, saying so until it is done` and `says why it could not
+  compact, and offers nothing to compact before a conversation exists`.
 - **Each condensing is a card where it happened.** Closed, one line says how
   many messages and actions were summarised and how far the request shrank;
   open, the summary is formatted text with the person's words as quotes,
   followed by what Zhiyin carried over and the files it read again. A failed
   condensing is the same card, saying why and when Zhiyin tries again, with
-  nothing to open. "Nothing old enough to summarise" is shown only until the
-  next message, since it is news only until the conversation moves on; a
-  rewind past it removes it. Named tests: `says in one line what was
-  condensed, and opens by keyboard to the summary as formatted text`, `counts
-  one of each in the singular`, `shows a failed condensing as the same card,
-  with its reason and nothing to open`, `says where a condensing failed, and
-  why, in plain words`, `says what a %s failure means` (for each reason),
-  `says there is nothing old enough to compact only until the next message`,
-  and `are kept from the core, so the conversation can show where each
-  happened`.
+  nothing to open. One that followed the provider refusing the request as too
+  long says so. "Nothing old enough to summarise" is shown only until the next
+  message, since it is news only until the conversation moves on; a rewind
+  past it removes it. Named tests: `says in one line what was condensed, and
+  opens by keyboard to the summary as formatted text`, `counts one of each in
+  the singular`, `says when it followed the provider refusing the request as
+  too long`, `shows a failed condensing as the same card, with its reason and
+  nothing to open`, `says where a condensing failed, and why, in plain words`,
+  `says what a %s failure means` (for each reason), `says there is nothing old
+  enough to compact only until the next message`, and `are kept from the core,
+  so the conversation can show where each happened`.
 - **What the model knows only from a summary stays readable, at less
   emphasis, and says so.** Messages up to the last one condensed sit in a
   group named as condensed earlier conversation, drawn in the secondary text

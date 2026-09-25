@@ -70,6 +70,11 @@ export interface TurnHost {
   acceptsImages(): boolean;
   /** The model the next request goes to, and what it lists of its size. */
   modelWindow(): ModelWindow & { readonly model: string };
+  /**
+   * The provider refused a request of `refusedTokens` as too long: plan with
+   * `contextWindow` from now on, where that is lower than the window listed.
+   */
+  lowerWindow(contextWindow: number, refusedTokens: number): void;
   /** The budget a conversation without its own choice is kept under. */
   defaultContextBudget(): ContextBudgetChoice;
   enterFolderOf(taskId: string): Promise<void>;

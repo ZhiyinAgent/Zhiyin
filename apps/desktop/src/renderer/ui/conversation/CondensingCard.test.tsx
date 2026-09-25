@@ -72,6 +72,37 @@ describe("the condensing card", () => {
     expect(details.textContent).not.toContain("## ");
   });
 
+  it("says when it followed the provider refusing the request as too long", () => {
+    const { rerender } = render(
+      <CondensingCard condensing={{ ...condensed, afterRefusal: true }} />,
+    );
+    expect(
+      screen.getByRole("button", {
+        name: /^Earlier conversation compacted after the provider refused the request as too long: 42 messages/,
+      }),
+    ).toBeVisible();
+
+    rerender(
+      <CondensingCard
+        condensing={{
+          id: "c2",
+          sequence: 8,
+          createdAt: "2026-09-25T09:00:00.000Z",
+          targetTokens: 5_000,
+          tokensBefore: 8_000,
+          outcome: "failed",
+          reason: "too-large",
+          afterRefusal: true,
+        }}
+      />,
+    );
+    expect(
+      screen.getByText(
+        /^Couldn't compact the earlier conversation after the provider refused the request as too long:/,
+      ),
+    ).toBeVisible();
+  });
+
   it("counts one of each in the singular", () => {
     render(
       <CondensingCard

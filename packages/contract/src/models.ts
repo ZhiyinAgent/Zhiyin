@@ -87,6 +87,11 @@ export type ProviderSettings = {
   readonly contextWindow?: number;
   readonly maximumOutputTokens?: number;
   /**
+   * Set when the window was lowered below the catalogue's because the provider
+   * refused a request this large as too long.
+   */
+  readonly refusedTokens?: number;
+  /**
    * The upstreams routing is restricted to. Absent or empty means unrestricted,
    * which is the default: a single upstream has no recovery when it is busy.
    */

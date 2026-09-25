@@ -148,6 +148,8 @@ export type TaskCondensing = {
   /** The target the request was held to when it was tried. */
   readonly targetTokens: number;
   readonly tokensBefore: number;
+  /** Made because the provider refused the request as too long. */
+  readonly afterRefusal?: true;
 } & (
   | {
       readonly outcome: "condensed";

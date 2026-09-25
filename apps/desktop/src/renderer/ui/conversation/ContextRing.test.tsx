@@ -80,6 +80,22 @@ describe("the context ring", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("says in the breakdown when the limit was lowered after the provider refused a request", () => {
+    ring({
+      usage: usage(4_000),
+      model: { ...wide, contextWindow: 7_000, refusedTokens: 8_200 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
+
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "Limit lowered after the provider refused a request of 8K tokens.",
+      ),
+    ).toBeVisible();
+  });
+
   it("offers Low, Medium and Ultra with their real targets on a 1M model, and says a larger one costs more", () => {
     const { onChoose } = ring({ usage: usage(20_000) });
 

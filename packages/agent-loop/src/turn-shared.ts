@@ -5,6 +5,7 @@ import type {
   ModelClientErrorCode,
   ModelMessage,
   ModelToolCall,
+  TokenLimitDetail,
 } from "@zhiyin/model-client";
 
 /**
@@ -46,6 +47,19 @@ export type PresentedAction = {
  * A model client failure, recognised by what it carries rather than by its
  * class: the loop holds the client's interface, never its implementation.
  */
+/**
+ * The counts a refusal as too long carried, empty when it carried none;
+ * nothing when the failure was anything else.
+ */
+export function refusedAsTooLong(error: unknown): TokenLimitDetail | undefined {
+  if (modelFailure(error)?.code !== "contextExceeded") return undefined;
+  const tokens = (error as { readonly tokens?: TokenLimitDetail }).tokens;
+  return tokens ?? {};
+}
+
+export const noLongerFits =
+  "This conversation no longer fits the selected model, even after condensing it.";
+
 export function modelFailure(
   error: unknown,
 ):

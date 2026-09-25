@@ -44,6 +44,7 @@ export function validCondensing(value: unknown): boolean {
     typeof value.createdAt === "string" &&
     count(value.targetTokens) &&
     count(value.tokensBefore) &&
+    (value.afterRefusal === undefined || value.afterRefusal === true) &&
     (value.outcome === "condensed"
       ? count(value.revision) &&
         typeof value.throughMessageId === "string" &&

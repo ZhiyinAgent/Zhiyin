@@ -15,12 +15,27 @@ import type {
 } from "@zhiyin/contract";
 import type { ModelClient } from "@zhiyin/model-client";
 
+/** Which choice a lowered window was learned on: the model and its upstreams. */
+const choiceOf = (settings: ProviderSettings) =>
+  JSON.stringify([settings.model, [...(settings.providers ?? [])].sort()]);
+
 export class ModelSettings {
   readonly #model: ModelClient;
   readonly #emit: (event: AppEvent) => void;
   /** Unknown until the model has been looked up in the provider's catalogue. */
   #current: ProviderSettings | undefined;
   #reads = 0;
+  /**
+   * The window learned from a provider's refusal as too long, for the rest of
+   * the session and only for the choice it was refused on.
+   */
+  #lowered:
+    | {
+        readonly choice: string;
+        readonly contextWindow: number;
+        readonly refusedTokens: number;
+      }
+    | undefined;
 
   constructor(model: ModelClient, emit: (event: AppEvent) => void) {
     this.#model = model;
@@ -28,7 +43,39 @@ export class ModelSettings {
   }
 
   current(): ProviderSettings | undefined {
-    return this.#current;
+    const current = this.#current;
+    const lowered = this.#lowered;
+    if (!current || !lowered || lowered.choice !== choiceOf(current))
+      return current;
+    if (lowered.contextWindow >= (current.contextWindow ?? Infinity))
+      return current;
+    return {
+      ...current,
+      contextWindow: lowered.contextWindow,
+      refusedTokens: lowered.refusedTokens,
+    };
+  }
+
+  /** What a turn asks of the model: what it accepts, and the window it has. */
+  forTurns() {
+    return {
+      acceptsImages: () => this.current()?.acceptsImages === true,
+      modelWindow: () => ({ model: "", ...this.current() }),
+      lowerWindow: (contextWindow: number, refusedTokens: number) =>
+        this.lowerWindow(contextWindow, refusedTokens),
+    };
+  }
+
+  /**
+   * Plans with a smaller window than the catalogue lists, because the provider
+   * refused a request of `refusedTokens` as too long. Never raises it.
+   */
+  lowerWindow(contextWindow: number, refusedTokens: number): void {
+    const current = this.#current;
+    if (!current) return;
+    if (contextWindow >= (this.current()?.contextWindow ?? Infinity)) return;
+    this.#lowered = { choice: choiceOf(current), contextWindow, refusedTokens };
+    this.#emit({ kind: "providerSettingsChanged", data: this.current()! });
   }
 
   /**
@@ -41,7 +88,7 @@ export class ModelSettings {
     const settings = await this.#model.settings();
     if (read !== this.#reads) return;
     this.#current = settings;
-    this.#emit({ kind: "providerSettingsChanged", data: settings });
+    this.#emit({ kind: "providerSettingsChanged", data: this.current()! });
   }
 
   /**

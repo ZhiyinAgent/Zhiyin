@@ -89,11 +89,19 @@ host the workspace hands the agent loop.
 The provider key, the models on offer and who serves them, and the model chosen
 sit beside the workspace rather than inside it, because none of them touches a
 conversation. The workspace starts the first read and asks them whether the
-model can be shown a picture; the core routes the settings commands to them
-directly.
+model can be shown a picture and what window a request has; the core routes
+the settings commands to them directly.
 
 ## Invariants
 
+- **A window lowered after a refusal holds for the choice it was refused on.**
+  The loop lowers it when the provider refuses a request as too long; it is
+  never raised that way, holds when the same choice is read again, says the
+  size refused, and goes when another model or other upstreams are chosen.
+  ADR 0051. Named tests: `is lowered for the model and upstreams it was
+  refused on, and says what was refused`, `is never raised by a refusal that
+  states a larger limit`, `holds when the same choice is read again` and `is
+  let go when another model or other upstreams are chosen`.
 - **A conversation's budget is its own, and the rest follow the default.**
   Both survive a restart, and the window can name only Low, Medium or Ultra.
   Named tests: `is kept for one conversation, while the others follow the

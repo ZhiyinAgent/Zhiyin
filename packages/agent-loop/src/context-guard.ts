@@ -24,7 +24,12 @@ import {
   type TaskCondensing,
   type ToolSpec,
 } from "@zhiyin/contract";
-import type { ModelMessage, ModelTool, ModelUsage } from "@zhiyin/model-client";
+import type {
+  ModelMessage,
+  ModelTool,
+  ModelUsage,
+  TokenLimitDetail,
+} from "@zhiyin/model-client";
 import { estimatedRequestTokens } from "./conversation-context.js";
 import { Condensing, type CondensingOutcome } from "./condensing.js";
 import type { ModelHistory } from "./model-history.js";
@@ -36,6 +41,11 @@ import type { AgentLoopDependencies } from "./dependencies.js";
 const clearFrom = 0.4;
 const leastCleared = 0.2;
 export const protectedRounds = 5;
+/**
+ * Of a refused request's size, what is planned with when the provider did not
+ * say its limit: it refused that size, so its limit is below it.
+ */
+const belowRefused = 0.9;
 /** A condensing that failed is tried again once the request has grown this much. */
 const regrowth = 1.1;
 /** The smallest window Zhiyin is built for, assumed when a model's is unknown. */
@@ -71,6 +81,8 @@ export class ContextGuard {
   readonly #size = new RequestSize();
   /** Conversations the person asked to condense before their next request. */
   readonly #asked = new Set<string>();
+  /** Conversations whose next condensing follows a refusal as too long. */
+  readonly #refused = new Set<string>();
   /** How many history messages each conversation's last request sent. */
   readonly #sent = new Map<string, number>();
 
@@ -95,6 +107,24 @@ export class ContextGuard {
   }
 
   /**
+   * The provider refused the last request as too long. The window is lowered
+   * to the limit it stated, else to nine tenths of what it said was sent, else
+   * of what was estimated; the conversation is then condensed to a target
+   * within that before the request is sent again.
+   */
+  refused(taskId: string, said: TokenLimitDetail): void {
+    const refusedTokens =
+      said.sent ?? this.#records.task(taskId).contextUsage?.totalTokens;
+    const window =
+      said.limit ??
+      (refusedTokens ? Math.floor(refusedTokens * belowRefused) : undefined);
+    if (window && refusedTokens)
+      this.#deps.host.lowerWindow(window, refusedTokens);
+    this.#asked.add(taskId);
+    this.#refused.add(taskId);
+  }
+
+  /**
    * The history to send next: older results cleared when they have piled up,
    * and condensed when the request is past its budget or the person asked.
    */
@@ -112,6 +142,7 @@ export class ContextGuard {
     const before = size(history.messages());
     const waitFor = this.#waitingToGrow(taskId, target);
     const asked = this.#asked.delete(taskId);
+    const afterRefusal = this.#refused.delete(taskId);
     if (
       asked ||
       (before > target && !(waitFor && before < waitFor * regrowth))
@@ -138,6 +169,7 @@ export class ContextGuard {
       if (outcome.kind === "condensed") history = outcome.history;
       if (outcome.kind !== "cancelled")
         await this.#record(taskId, outcome, {
+          afterRefusal,
           targetTokens: target,
           tokensBefore: before,
           tokensAfter: size(history.messages()),
@@ -168,6 +200,7 @@ export class ContextGuard {
     taskId: string,
     outcome: Exclude<CondensingOutcome, { kind: "cancelled" }>,
     sizes: {
+      readonly afterRefusal: boolean;
       readonly targetTokens: number;
       readonly tokensBefore: number;
       readonly tokensAfter: number;
@@ -190,6 +223,7 @@ export class ContextGuard {
       createdAt: this.#deps.now().toISOString(),
       targetTokens: sizes.targetTokens,
       tokensBefore: sizes.tokensBefore,
+      ...(sizes.afterRefusal ? { afterRefusal: true as const } : {}),
     };
     const record: TaskCondensing =
       outcome.kind === "condensed"

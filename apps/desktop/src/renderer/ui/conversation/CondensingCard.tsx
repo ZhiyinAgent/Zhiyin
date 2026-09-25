@@ -29,12 +29,15 @@ const tokens = (count: number) =>
 export function CondensingCard({ condensing }: { condensing: TaskCondensing }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
+  const refused = condensing.afterRefusal
+    ? " after the provider refused the request as too long"
+    : "";
 
   if (condensing.outcome === "failed")
     return (
       <div className={styles["condensing-card"]} role="status">
         <p className={styles["condensing-card__line"]}>
-          Couldn't compact the earlier conversation:{" "}
+          Couldn't compact the earlier conversation{refused}:{" "}
           {meaning[condensing.reason](condensing.detail)}. Zhiyin tries again
           once the conversation has grown, or when its budget changes.
         </p>
@@ -51,7 +54,7 @@ export function CondensingCard({ condensing }: { condensing: TaskCondensing }) {
         onClick={() => setOpen(!open)}
       >
         <span>
-          Earlier conversation compacted:{" "}
+          Earlier conversation compacted{refused}:{" "}
           {counted(condensing.messages, "message")} and{" "}
           {counted(condensing.actions, "action")} summarised,{" "}
           {tokens(condensing.tokensBefore)} → {tokens(condensing.tokensAfter)}{" "}

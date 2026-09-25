@@ -184,11 +184,19 @@ export class TestHost implements TurnHost {
   }
 
   /** The model's size as the app reads it from the catalogue; unknown here. */
-  window: ModelWindow & { readonly model: string } = { model: "test-model" };
+  window: ModelWindow & {
+    readonly model: string;
+    readonly refusedTokens?: number;
+  } = { model: "test-model" };
   contextBudget: ContextBudgetChoice = "medium";
 
   modelWindow(): ModelWindow & { readonly model: string } {
     return this.window;
+  }
+
+  lowerWindow(contextWindow: number, refusedTokens: number): void {
+    if (contextWindow >= (this.window.contextWindow ?? Infinity)) return;
+    this.window = { ...this.window, contextWindow, refusedTokens };
   }
 
   defaultContextBudget(): ContextBudgetChoice {

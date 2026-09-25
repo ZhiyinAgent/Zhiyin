@@ -291,7 +291,10 @@ sequencing.
   offer`. Each attempt to condense is saved with its place, sizes and outcome,
   and one with a reason Zhiyin never gives is refused. Named tests: `keeps each
   attempt to condense a conversation, failed or not, across a restart` and
-  `rejects a condensing record with a reason Zhiyin never gives`.
+  `rejects a condensing record with a reason Zhiyin never gives`. Whether it
+  followed a refusal as too long is kept too, and any other mark is refused.
+  Named test: `keeps that a condensing followed a refusal as too long, and
+  rejects any other mark`.
 - Missing storage means a clean first launch; invalid storage is reported as
   corruption and is never presented as empty history. The named tests `returns
   no workspace on a clean first launch` and `reports corrupted local state

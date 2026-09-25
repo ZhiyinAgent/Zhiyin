@@ -447,6 +447,21 @@ browser is not among them: it is reached, and let go of, through capabilities.
   message`, `asked while a turn runs, condenses before the next request to the
   model`, and `holds a message sent while it condenses, then sends it on the
   condensed conversation`.
+- **A step refused as too long is recovered once.** Before any of its answer
+  showed, the window is lowered through the host to the limit the provider
+  stated, else nine tenths of what it said was sent, else of the estimate;
+  the conversation is condensed to its target within that, whatever its
+  size, with the record marked as following the refusal; and the step is sent
+  again. A second refusal on the step ends the turn saying the conversation no
+  longer fits; any other refusal is never condensed. ADR 0051. Named tests:
+  `is recovered once: condensed, noted as following the refusal, and the same
+  step sent again`, `plans with the provider's stated limit, so the next ten
+  turns are not refused`, `without a stated limit, plans with nine tenths of
+  what the provider said was sent`, `with no counts at all, plans below the
+  size it estimated for the refused request`, `ends the turn saying the
+  conversation no longer fits when the retried step is refused too`, `is not
+  recovered once the answer has begun to show`, and `is never condensed, and
+  leaves the window as listed`.
 - **After condensing, the model keeps what it would need.** The person's
   latest request word for word (its start and end past a tenth of the budget),
   the two before it, the plan and the files changed are carried beside the

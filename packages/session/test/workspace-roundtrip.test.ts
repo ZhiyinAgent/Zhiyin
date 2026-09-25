@@ -500,6 +500,40 @@ describe("FileSessions workspace persistence", () => {
       SessionStoreError,
     );
   });
+  it("keeps that a condensing followed a refusal as too long, and rejects any other mark", async () => {
+    const record = {
+      id: "condensing-1",
+      sequence: 4,
+      createdAt: "2026-09-24T10:00:00.000Z",
+      targetTokens: 13_600,
+      tokensBefore: 14_200,
+      outcome: "failed" as const,
+      reason: "nothing-to-condense" as const,
+      afterRefusal: true as const,
+    };
+    const kept = await temporaryRoot();
+    await new FileSessions(kept).saveWorkspace({
+      ...snapshot,
+      tasks: [{ ...snapshot.tasks[0]!, condensings: [record] }],
+    });
+    await expect(new FileSessions(kept).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ condensings: [record] }] },
+    );
+
+    const marked = await temporaryRoot();
+    await plantHistory(marked, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          condensings: [{ ...record, afterRefusal: "yes" }],
+        },
+      ],
+    });
+    await expect(
+      new FileSessions(marked).loadWorkspace(),
+    ).rejects.toBeInstanceOf(SessionStoreError);
+  });
   it("rejects a budget Zhiyin does not offer", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {

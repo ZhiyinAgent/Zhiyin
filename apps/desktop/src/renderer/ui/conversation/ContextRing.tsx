@@ -42,7 +42,11 @@ export function ContextRing({
 }: {
   /** The last request the loop sent; absent before the first. */
   usage?: ContextUsage;
-  model: ModelWindow & { readonly model: string };
+  /** With how large a refused request was, when the window was lowered after it. */
+  model: ModelWindow & {
+    readonly model: string;
+    readonly refusedTokens?: number;
+  };
   budget: ContextBudgetChoice;
   onChoose: (budget: ContextBudgetChoice) => void;
   /** Condenses the conversation; absent before there is one. */
@@ -317,6 +321,12 @@ export function ContextRing({
               ))}
             </tbody>
           </table>
+          {model.refusedTokens !== undefined && (
+            <p className={styles["context-ring__lowered"]}>
+              Limit lowered after the provider refused a request of{" "}
+              {short(model.refusedTokens)} tokens.
+            </p>
+          )}
         </Dialog>
       )}
     </div>

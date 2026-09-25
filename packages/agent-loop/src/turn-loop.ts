@@ -44,8 +44,10 @@ import {
   maximumQuietRetries,
   modelFailure,
   namelessCallFailure,
+  noLongerFits,
   pauseReportInstruction,
   protocolCall,
+  refusedAsTooLong,
 } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
@@ -152,6 +154,8 @@ export class TurnLoop {
 
       let reportOnly = false;
       let delegatedChildren = options?.initialDelegatedChildren ?? 0;
+      /** The provider refused this step as too long, and it was condensed. */
+      let refused = false;
       while (true) {
         const runs = specialistRunsText(
           this.#records.task(taskId).specialistRuns ?? [],
@@ -190,6 +194,25 @@ export class TurnLoop {
             messages.length,
           ),
         };
+        const shown = this.#records.task(taskId).messages.length;
+        const answered = await this.#round
+          .run(taskId, controller, ledger, request, () =>
+            this.#ownsTurn(taskId, controller),
+          )
+          .catch((error: unknown) => {
+            // Recovered once per step, and only before any of an answer showed.
+            const said = refusedAsTooLong(error);
+            if (!said || this.#records.task(taskId).messages.length !== shown)
+              throw error;
+            if (refused) throw new VisibleError(noLongerFits);
+            this.#context.refused(taskId, said);
+            return undefined;
+          });
+        if (!answered) {
+          refused = true;
+          continue;
+        }
+        refused = false;
         const {
           calls,
           text: roundText,
@@ -199,9 +222,7 @@ export class TurnLoop {
           usage,
           assistantId,
           assistantSequence,
-        } = await this.#round.run(taskId, controller, ledger, request, () =>
-          this.#ownsTurn(taskId, controller),
-        );
+        } = answered;
         this.#context.counted(
           taskId,
           plan,
