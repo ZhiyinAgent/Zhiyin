@@ -128,14 +128,16 @@ describe("a history log", () => {
 
   it("starts a fresh file holding the whole state once the edits outgrow it", async () => {
     const file = await temporaryFile();
-    const states = Array.from({ length: 400 }, (_, index) => ({
-      text: "x".repeat(index * 400),
+    // Each save replaces the whole text, so its edits are as large as the
+    // state: kept as edits, 24 saves would take 24 times the state.
+    const states = Array.from({ length: 24 }, (_, index) => ({
+      text: `${index} `.padEnd(20_000, "x"),
     }));
-    await saved(file, [{ text: "" }, ...states.slice(1)]);
+    await saved(file, states);
 
     await onlyFile(file);
     expect((await readFile(file, "utf8")).length).toBeLessThan(
-      4 * JSON.stringify(states.at(-1)).length + 70_000,
+      6 * JSON.stringify(states.at(-1)).length,
     );
     expect((await HistoryLog.open(file)).state).toEqual(states.at(-1));
   });
