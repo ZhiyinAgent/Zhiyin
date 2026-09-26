@@ -179,6 +179,7 @@ export function isWorkspaceTask(task: unknown): boolean {
               action.detail,
               action.claim,
               action.reason,
+              action.planItemId,
             ].every(optionalText) &&
             validChanges(action.changes) &&
             validDetails(action.details) &&
@@ -238,22 +239,44 @@ export function isWorkspaceTask(task: unknown): boolean {
       (Array.isArray(task.interactions) &&
         task.interactions.every(validInteraction))) &&
     (task.plan === undefined ||
-      (Array.isArray(task.plan) &&
-        task.plan.every(
-          (item) =>
-            isRecord(item) &&
-            typeof item.id === "string" &&
-            typeof item.title === "string" &&
-            typeof item.criterion === "string" &&
-            optionalText(item.verification) &&
-            [
-              "pending",
-              "active",
-              "checking",
-              "verified",
-              "needs-attention",
-            ].includes(String(item.status)),
-        ))),
+      (Array.isArray(task.plan) && task.plan.every(validPlanItem))),
+  );
+}
+
+/** One plan item: the judge's verdict and, apart from it, the worker's progress. */
+function validPlanItem(item: unknown): boolean {
+  const listOf = (
+    value: unknown,
+    valid: (entry: Record<string, unknown>) => boolean,
+  ) =>
+    value === undefined ||
+    (Array.isArray(value) &&
+      value.every((entry) => isRecord(entry) && valid(entry)));
+  return (
+    isRecord(item) &&
+    typeof item.id === "string" &&
+    typeof item.title === "string" &&
+    typeof item.criterion === "string" &&
+    optionalText(item.verification) &&
+    ["pending", "active", "checking", "verified", "needs-attention"].includes(
+      String(item.status),
+    ) &&
+    (item.progress === undefined ||
+      ["pending", "in_progress", "done", "cancelled"].includes(
+        String(item.progress),
+      )) &&
+    optionalText(item.progressNote) &&
+    listOf(
+      item.evidence,
+      (entry) =>
+        typeof entry.callId === "string" && typeof entry.shows === "string",
+    ) &&
+    listOf(
+      item.steps,
+      (entry) =>
+        typeof entry.text === "string" && typeof entry.done === "boolean",
+    ) &&
+    (item.addedBy === undefined || item.addedBy === "assistant")
   );
 }
 
@@ -397,7 +420,8 @@ function validPendingUserInputRequest(value: unknown): boolean {
       typeof value.title === "string" &&
       typeof value.completedRounds === "number" &&
       Number.isSafeInteger(value.completedRounds) &&
-      value.completedRounds > 0)
+      value.completedRounds > 0 &&
+      optionalText(value.reason))
   );
 }
 

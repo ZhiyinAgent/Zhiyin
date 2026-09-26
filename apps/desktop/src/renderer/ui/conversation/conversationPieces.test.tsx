@@ -50,6 +50,50 @@ describe("TaskPlan", () => {
       within(plan).getByText("package.json names the project."),
     ).toBeVisible();
   });
+
+  it("shows what the assistant says beside the assessment, and never one for the other", () => {
+    render(
+      <TaskPlan
+        items={[
+          {
+            id: "plan-1",
+            title: "List the reports",
+            criterion: "The reports folder was listed.",
+            status: "verified",
+            progress: "done",
+          },
+          {
+            id: "plan-2",
+            title: "Write the summary",
+            criterion: "summary.md names every report.",
+            status: "pending",
+            progress: "done",
+          },
+          {
+            id: "plan-3",
+            title: "Check the totals",
+            criterion: "The totals match the CSV.",
+            status: "pending",
+            progress: "cancelled",
+            progressNote: "The person asked for no check.",
+            addedBy: "assistant",
+          },
+        ]}
+      />,
+    );
+
+    const plan = screen.getByRole("region", { name: "Task plan" });
+    expect(
+      within(plan).getByText("Done (the assistant says) · Assessed as done"),
+    ).toBeVisible();
+    expect(within(plan).getByText("Done (the assistant says)")).toBeVisible();
+    expect(within(plan).getByText("Cancelled")).toBeVisible();
+    expect(
+      within(plan).getByText("The person asked for no check."),
+    ).toBeVisible();
+    expect(within(plan).getByText("Added by the assistant")).toBeVisible();
+    expect(within(plan).getByText("1/3 assessed as done")).toBeVisible();
+  });
 });
 
 describe("WorkTrace", () => {

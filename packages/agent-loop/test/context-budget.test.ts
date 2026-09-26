@@ -68,7 +68,9 @@ function working(
           index,
           callId: `call-${worked}-${index}`,
           name: "read",
-          argumentsDelta: "{}",
+          // A different part each time: the same call repeated is a loop, and
+          // would bring the loop guard's notices into a test of budgets.
+          argumentsDelta: JSON.stringify({ part: `${worked}-${index}` }),
         };
     yield { kind: "done" };
   };
@@ -197,12 +199,12 @@ describe("older tool results", () => {
         () => ({ ok: true, value: { text: sized(800) } }),
         working(9, 3, requests),
         {
-          // A 13,600-token Medium budget: each answer is held to 680 tokens
-          // and a round to 2,040, so six rounds cross it while only the first
+          // A 14,875-token Medium budget: each answer is held to 743 tokens
+          // and a round to 2,231, so six rounds cross it while only the first
           // is older than the five protected ones.
           modelWindow: {
             model: "small",
-            contextWindow: 16_000,
+            contextWindow: 17_500,
             maximumOutputTokens: 100,
           },
         },
@@ -613,7 +615,7 @@ describe("the worst case a budget must hold", () => {
       // what the loop's own instructions take.
       const read = {
         name: "read",
-        description: sized(target * 0.15 - 1_300, "definition "),
+        description: sized(target * 0.15 - 1_550, "definition "),
         inputSchema: { type: "object" },
       };
       // A history just under the budget once the rest is added, in rounds.

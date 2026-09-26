@@ -1,12 +1,11 @@
 import type {
   TaskPlanItem,
   ToolCallInspection,
-  ToolInvocationResult,
   WorkspaceDescription,
 } from "@zhiyin/contract";
 import type { ModelClient, ModelRequest } from "@zhiyin/model-client";
 import {
-  actionPresentationFrom,
+  actionLabelFrom,
   criterionEvaluationFrom,
   planFrom,
 } from "./task-guidance.js";
@@ -22,7 +21,6 @@ import { conversationTitleFrom } from "./conversation-context.js";
 import type { AgentLoopDependencies } from "./index.js";
 import type { TurnRecords } from "./turn-records.js";
 import {
-  type PresentedAction,
   modelFailure,
   auxiliarySystemMessage,
   workspaceInventory,
@@ -156,20 +154,24 @@ export class AuxiliaryWork {
     });
   }
 
-  async presentAction(
+  /**
+   * The title and description a model writes for an action that did not say
+   * what it is for, or nothing when it gave no usable answer. Never on the
+   * way to the action: the action is shown from what the code knows, and this
+   * replaces that copy when it answers. It no longer guesses a plan item;
+   * the working model names that itself (ADR 0052).
+   */
+  async labelAction(
     taskId: string,
     inspection: Extract<ToolCallInspection, { readonly ok: true }>,
     signal: AbortSignal,
-    fallback?: {
-      readonly title: string;
-      readonly description: string;
-    },
-  ): Promise<PresentedAction> {
+  ): Promise<
+    { readonly title: string; readonly description: string } | undefined
+  > {
     const task = this.#records.task(taskId);
     const userIntent =
       [...task.messages].reverse().find((message) => message.role === "user")
         ?.text ?? task.title;
-    const plan = task.plan ?? [];
     const response = await this.askGuidance(
       {
         messages: [
@@ -181,26 +183,14 @@ export class AuxiliaryWork {
               "Use a specific two-to-six-word verb phrase for the title.",
               "Write one concise sentence explaining the action's purpose in this task. Do not repeat the target, task question, or wording from earlier actions unless necessary.",
               "Never claim it is safe or approved. Zhiyin's own account of an action is a claim, not evidence: say what was requested, never assert what it will do.",
-              /*
-               * The allowed values, never an example of one. This line used to
-               * end `"planItemId":"plan-1 or null"`, and models returned that
-               * string verbatim — 7 of 12 answers across two local models and
-               * the configured remote one, measured 2026-09-19. It fails
-               * validation, so every one of them lost its attribution.
-               */
-              plan.length
-                ? `Set planItemId to the plan item this action serves, one of: ${plan
-                    .map((item) => item.id)
-                    .join(", ")}. Use null when it serves none of them.`
-                : "Set planItemId to null: this task has no plan.",
-              'Return {"title":"…","description":"…","planItemId":…}.',
+              'Return {"title":"…","description":"…"}.',
               ...actionContextLines({
                 userIntent,
                 action: inspection.action,
                 target: inspection.target,
                 claim: inspection.claim,
                 earlierActions: task.actions ?? [],
-                plan,
+                plan: task.plan ?? [],
               }),
             ].join("\n"),
           },
@@ -210,84 +200,8 @@ export class AuxiliaryWork {
         signal,
       },
       signal,
-    );
-    const generated = actionPresentationFrom(response ?? "", {
-      action: inspection.action,
-      target: inspection.target,
-      planItemIds: plan.map((item) => item.id),
-      userIntent,
-      ...(fallback
-        ? {
-            fallbackTitle: fallback.title,
-            fallbackDescription: fallback.description,
-          }
-        : {}),
-    });
-    /*
-     * Attribution comes from the answer or not at all. It used to fall back to
-     * the first active or pending item, which is position, not attribution: an
-     * action nothing could attribute was then judged against that item's
-     * criterion and could mark it done. An unattributed action is not evidence
-     * for any plan item, and the end-of-turn assessment still sees every item.
-     */
-    const planItemId = generated.planItemId;
-    if (planItemId) {
-      await this.#updatePlanItem(taskId, planItemId, (item) => ({
-        ...item,
-        status: "active",
-      }));
-    }
-    return { ...generated, ...(planItemId ? { planItemId } : {}) };
-  }
-
-  async evaluateActionCriterion(
-    taskId: string,
-    presentation: PresentedAction,
-    inspection: Extract<ToolCallInspection, { readonly ok: true }>,
-    result: ToolInvocationResult,
-    signal: AbortSignal,
-  ): Promise<void> {
-    if (!presentation.planItemId || signal.aborted) return;
-    const item = this.#records
-      .task(taskId)
-      .plan?.find((candidate) => candidate.id === presentation.planItemId);
-    if (!item || item.status === "verified") return;
-
-    await this.#updatePlanItem(taskId, item.id, (current) => ({
-      ...current,
-      status: "checking",
-    }));
-    const response = await this.askJudgement(
-      {
-        messages: [
-          { role: "system", content: auxiliarySystemMessage },
-          {
-            role: "user",
-            content: [
-              "Decide whether this single criterion is satisfied by the supplied action result.",
-              "A useful action is not enough: mark satisfied only when the evidence directly supports the criterion.",
-              'Return {"satisfied":true or false,"summary":"..."}.',
-              `Criterion: ${item.criterion}`,
-              `Action: ${presentation.title}`,
-              `Target: ${inspection.target}`,
-              `Result: ${this.#boundedEvidence(result)}`,
-            ].join("\n"),
-          },
-        ],
-        maximumOutputTokens: 140,
-        tools: [recordCriterionEvaluationTool],
-        signal,
-      },
-      signal,
-    );
-    if (signal.aborted) return;
-    const evaluation = response ? criterionEvaluationFrom(response) : undefined;
-    await this.#updatePlanItem(taskId, item.id, (current) => ({
-      ...current,
-      status: evaluation?.satisfied ? "verified" : "active",
-      ...(evaluation ? { verification: evaluation.summary } : {}),
-    }));
-    if (evaluation?.satisfied) await this.#activateNextPlanItem(taskId);
+    ).catch(() => undefined);
+    return response ? actionLabelFrom(response) : undefined;
   }
 
   async evaluateRemainingCriteria(
@@ -296,7 +210,7 @@ export class AuxiliaryWork {
     signal: AbortSignal,
   ): Promise<void> {
     const pending = (this.#records.task(taskId).plan ?? []).filter(
-      (item) => item.status !== "verified",
+      (item) => item.status !== "verified" && item.progress !== "cancelled",
     );
     for (const item of pending) {
       if (signal.aborted) return;
@@ -518,15 +432,5 @@ export class AuxiliaryWork {
       ...task,
       plan: task.plan.map((item) => (item.id === itemId ? update(item) : item)),
     });
-  }
-
-  async #activateNextPlanItem(taskId: string): Promise<void> {
-    const task = this.#records.task(taskId);
-    const next = task.plan?.find((item) => item.status === "pending");
-    if (!next) return;
-    await this.#updatePlanItem(taskId, next.id, (item) => ({
-      ...item,
-      status: "active",
-    }));
   }
 }

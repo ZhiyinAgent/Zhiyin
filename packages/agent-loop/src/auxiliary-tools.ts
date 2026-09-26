@@ -71,7 +71,7 @@ export const recordConversationTitleTool: ModelTool = {
   },
 };
 
-/** Consumed by `actionPresentationFrom`. */
+/** Consumed by `actionLabelFrom`. */
 export const recordActionPresentationTool: ModelTool = {
   name: "record_action_presentation",
   description: "Record the interface title and description for an action.",
@@ -88,12 +88,8 @@ export const recordActionPresentationTool: ModelTool = {
         maxLength: guidanceTextLimits.description,
         description: "One sentence on the action's purpose in this task.",
       },
-      planItemId: {
-        type: ["string", "null"],
-        description: "The plan item this action serves, or null.",
-      },
     },
-    required: ["title", "description", "planItemId"],
+    required: ["title", "description"],
     additionalProperties: false,
   },
 };

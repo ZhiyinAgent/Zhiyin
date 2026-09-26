@@ -276,7 +276,17 @@ sequencing.
 - A pending renewable work-budget checkpoint retains its core-owned request id
   and bounded round count in storage. The named test `persists the exact
   renewable work-budget prompt` guards the format; the agent loop remains
-  responsible for restoring an unfinished turn as interrupted.
+  responsible for restoring an unfinished turn as interrupted. Why it was
+  asked, when Zhiyin saw the work repeat itself, is kept as text or not at
+  all: `keeps why the work-budget question was asked, and rejects a reason that
+  is not text`.
+- A plan item keeps the working model's progress apart from the judge's
+  verdict: progress is one of pending, in progress, done or cancelled, with a
+  cancel reason, cited calls each with what they show, steps, and a mark on a
+  criterion the assistant added; an action keeps the plan item it served. Any
+  other value is refused. ADR 0052. Named test: `keeps the working model's
+  progress on a plan apart from its verdict, and rejects progress it cannot
+  have`.
 - A model-context checkpoint maps to an exact durable message and only to
   existing action evidence. The round-trip fixture and named test `rejects a
   compaction checkpoint that cannot map back to durable history` guard the

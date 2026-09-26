@@ -11,18 +11,24 @@ import { fixedModelMessages } from "./conversation-context.js";
 import { delegateSpecialistTool } from "./specialist-execution.js";
 import { activatePluginTool } from "./plugin-activation.js";
 import { ModelHistory } from "./model-history.js";
+import { selfDescribing } from "./self-description.js";
+import { updatePlanTool } from "./plan-progress.js";
 import type { ContextGuard, RequestPlan } from "./context-guard.js";
 import type { TurnRecords } from "./turn-records.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
 
-/** The tools a request offers: the gathered ones, and how to reach more. */
+/**
+ * The tools a request offers: the gathered ones, each able to say what a call
+ * is for, the plan's own tool, and how to reach more.
+ */
 export function advertisedTools(gathered: {
   readonly tools: readonly ToolSpec[];
   readonly specialists: Parameters<typeof delegateSpecialistTool>[0];
   readonly pluginDirectory: readonly { readonly activated: boolean }[];
 }): readonly ToolSpec[] {
   return [
-    ...gathered.tools,
+    ...gathered.tools.map(selfDescribing),
+    updatePlanTool,
     ...(gathered.specialists.length
       ? [delegateSpecialistTool(gathered.specialists)]
       : []),

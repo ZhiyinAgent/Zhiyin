@@ -241,7 +241,7 @@ const OVERSIZED_PACKAGE_FILES = {
   // feature work may not raise one.
   "packages/mcp/src/index.ts": 1204,
   "packages/model-client/src/index.ts": 639,
-  "packages/contract/src/index.ts": 928,
+  "packages/contract/src/index.ts": 924,
   "packages/recovery/src/index.ts": 640,
 };
 
@@ -250,7 +250,7 @@ const OVERSIZED_RENDERER_FILES = {
   // the module-wide ceiling was introduced. Splitting a component may lower a
   // pin; ordinary UI work may not raise one.
   "apps/desktop/src/renderer/ui/capabilities/CapabilityLibrary.tsx": 764,
-  "apps/desktop/src/renderer/ui/user-input/UserInputPrompt.tsx": 866,
+  "apps/desktop/src/renderer/ui/user-input/UserInputPrompt.tsx": 804,
 };
 
 const OVERSIZED_FILES = {

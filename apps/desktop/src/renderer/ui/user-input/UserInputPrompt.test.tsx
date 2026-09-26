@@ -114,6 +114,28 @@ describe("UserInputPrompt", () => {
     });
   });
 
+  it("says why the work may be going nowhere when Zhiyin saw it repeat itself", () => {
+    render(
+      <UserInputPrompt
+        prompt={
+          {
+            ...workBudget,
+            reason:
+              "The assistant repeated the same list_directory call 4 times.",
+          } as PendingUserInputRequest
+        }
+        onSubmit={async () => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "The assistant repeated the same list_directory call 4 times.",
+      ),
+    ).toBeVisible();
+  });
+
   it("answers several clarifying questions once", async () => {
     let release: (() => void) | undefined;
     const onSubmit = vi.fn(

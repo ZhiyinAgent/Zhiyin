@@ -499,7 +499,14 @@ rendered.
 - The task plan is distinct from temporary work activity and durable action
   history. It shows each criterion and never labels unresolved work as complete.
   The named test `shows criteria and live reviewer states without claiming
-  unfinished work` guards the component states.
+  unfinished work` guards the component states. What the assistant says of an
+  item and the assessment are shown side by side in their own words, "Done
+  (the assistant says) · Assessed as done", with a cancel reason and a mark on
+  a criterion the assistant added: `shows what the assistant says beside the
+  assessment, and never one for the other`. ADR 0052.
+- The work-budget question says what was repeated when Zhiyin saw the work go
+  in circles. Named test: `says why the work may be going nowhere when Zhiyin
+  saw it repeat itself`.
 - Inspected tool actions appear when execution starts and remain visible after
   they settle. A completed action uses its success icon without repeating
   `Completed`; exceptional states retain their text labels. The named tests `keeps running, completed, failed, and denied

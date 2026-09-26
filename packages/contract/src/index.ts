@@ -47,6 +47,8 @@ export * from "./context-budget.js";
 export type * from "./reasoning.js";
 export type * from "./messages.js";
 export type * from "./models.js";
+export type * from "./plan.js";
+import type { TaskPlanItem } from "./plan.js";
 import type {
   ApiKeySaveOutcome,
   ModelCatalog,
@@ -85,6 +87,8 @@ export type TaskAction = {
    */
   readonly detail?: string;
   readonly claim?: string;
+  /** The plan item the working model said this action serves. */
+  readonly planItemId?: string;
   /** What was called and with what. Absent on records saved before it existed. */
   readonly invocation?: ToolInvocation;
   /** Optional so task history saved before ordered timeline entries can load. */
@@ -104,15 +108,6 @@ export type TaskAction = {
     | "blocked"
     | "cancelled";
   readonly reason?: string;
-};
-
-export type TaskPlanItem = {
-  readonly id: string;
-  readonly title: string;
-  readonly criterion: string;
-  readonly status:
-    "pending" | "active" | "checking" | "verified" | "needs-attention";
-  readonly verification?: string;
 };
 
 /**
@@ -210,6 +205,8 @@ export type WorkBudgetRequest = {
   readonly kind: "workBudget";
   readonly title: string;
   readonly completedRounds: number;
+  /** Why the work may be going nowhere, when Zhiyin saw it repeat itself. */
+  readonly reason?: string;
 };
 
 export type PendingUserInputRequest = (UserInputRequest | WorkBudgetRequest) & {

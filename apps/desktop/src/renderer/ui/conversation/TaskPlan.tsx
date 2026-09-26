@@ -2,13 +2,34 @@ import type { TaskPlanItem } from "@zhiyin/contract";
 import { Icon } from "../shared/index.js";
 import styles from "./conversation.module.css";
 
-const statusLabel: Record<TaskPlanItem["status"], string> = {
+const progressLabel: Record<NonNullable<TaskPlanItem["progress"]>, string> = {
   pending: "Pending",
-  active: "In progress",
+  in_progress: "In progress",
+  done: "Done (the assistant says)",
+  cancelled: "Cancelled",
+};
+
+const verdictLabel: Partial<Record<TaskPlanItem["status"], string>> = {
   checking: "Checking",
   verified: "Assessed as done",
   "needs-attention": "Unresolved",
 };
+
+/**
+ * Where an item stands: what the assistant says, then the assessment, each in
+ * its own words so one is never read as the other. Plans saved before the
+ * assistant reported progress carry it in the assessment's field.
+ */
+function standing(item: TaskPlanItem): string {
+  const progress = item.progress
+    ? progressLabel[item.progress]
+    : item.status === "active"
+      ? "In progress"
+      : item.status === "pending"
+        ? "Pending"
+        : undefined;
+  return [progress, verdictLabel[item.status]].filter(Boolean).join(" · ");
+}
 
 export function TaskPlan({ items }: { items: readonly TaskPlanItem[] }) {
   if (items.length === 0) return null;
@@ -44,9 +65,19 @@ export function TaskPlan({ items }: { items: readonly TaskPlanItem[] }) {
             <div className={styles["task-plan__content"]}>
               <div className={styles["task-plan__summary"]}>
                 <strong>{item.title}</strong>
-                <span>{statusLabel[item.status]}</span>
+                <span>{standing(item)}</span>
               </div>
               <p>{item.criterion}</p>
+              {item.addedBy && (
+                <p className={styles["task-plan__verification"]}>
+                  Added by the assistant
+                </p>
+              )}
+              {item.progressNote && (
+                <p className={styles["task-plan__verification"]}>
+                  {item.progressNote}
+                </p>
+              )}
               {item.verification && (
                 <p className={styles["task-plan__verification"]}>
                   {item.verification}

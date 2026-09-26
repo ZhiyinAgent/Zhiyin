@@ -374,6 +374,9 @@ export class TurnRecords {
           }
         : {}),
       ...(policy ? { policy } : {}),
+      ...(presentation.planItemId
+        ? { planItemId: presentation.planItemId }
+        : {}),
       status,
       sequence: existing?.sequence ?? this.nextTimelineSequence(task),
       ...(reason ? { reason } : {}),
@@ -383,6 +386,24 @@ export class TurnRecords {
       actions: existing
         ? actions.map((item) => (item.id === id ? action : item))
         : [...actions, action],
+    });
+  }
+
+  /** An action's label, replaced by the one written for it in the background. */
+  async relabelAction(
+    taskId: string,
+    actionId: string,
+    label: { readonly title: string; readonly description: string },
+  ): Promise<void> {
+    const task = this.task(taskId);
+    if (!task.actions?.some((item) => item.id === actionId)) return;
+    await this.replaceTask({
+      ...task,
+      actions: task.actions.map((item) =>
+        item.id === actionId
+          ? { ...item, action: label.title, description: label.description }
+          : item,
+      ),
     });
   }
 

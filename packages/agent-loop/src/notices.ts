@@ -36,6 +36,10 @@ export const noticeKinds = [
   "condense",
   /** A tool result cleared to make room, and where it can be read again. */
   "cleared",
+  /** The plan the turn is judged on, at its start and again when it goes stale. */
+  "plan",
+  /** The model has repeated the same action, and should change approach. */
+  "loop",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

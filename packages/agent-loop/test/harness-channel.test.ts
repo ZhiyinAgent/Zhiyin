@@ -53,6 +53,8 @@ describe("a notice from Zhiyin", () => {
       "specialists",
       "condense",
       "cleared",
+      "plan",
+      "loop",
     ]);
   });
 });

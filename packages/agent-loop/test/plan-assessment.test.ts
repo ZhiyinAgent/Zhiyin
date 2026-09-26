@@ -235,13 +235,13 @@ describe("plan assessment", () => {
 });
 
 /**
- * What the action-copy request tells the model about plan attribution.
+ * Where an action's plan item comes from.
  *
- * The request used to end by printing its own answer shape, placeholder
- * included — `"planItemId":"plan-1 or null"` — and models returned that string
- * verbatim. Measured 2026-09-19 against MiniCPM5-1B and 2B and against the
- * configured remote model: 7 of 12 answers. The value fails validation, so
- * attribution silently fell through to guessing by position.
+ * The request that names an action used to guess it too. It printed its own
+ * answer shape, placeholder included — `"planItemId":"plan-1 or null"` — and
+ * models returned that string verbatim: 7 of 12 answers, measured 2026-09-19.
+ * The working model now names the item itself (ADR 0052), and the naming
+ * request's answer is never read for one.
  */
 describe("plan attribution", () => {
   const toolTurn = (
@@ -287,11 +287,6 @@ describe("plan attribution", () => {
         yield { kind: "done" };
       },
     },
-    /*
-     * Satisfied by an action's result, unsatisfied by the final response. So an
-     * item can only reach "verified" here by having been attributed to the one
-     * action this turn runs — which is exactly what the test is looking for.
-     */
     judgementModel: {
       send: async function* (
         request: ModelRequest,
@@ -309,7 +304,7 @@ describe("plan attribution", () => {
     },
   });
 
-  it("names the plan items the model may choose instead of printing a placeholder", async () => {
+  it("takes no plan item from the answer that names an action", async () => {
     const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {}, [{ kind: "done" }]);
     const loop = loopFrom({
@@ -339,51 +334,8 @@ describe("plan attribution", () => {
 
     await loop.start(taskId, "What is this project called?");
 
-    const copy = requests
-      .find((request) =>
-        request.messages.at(-1)?.content.includes("interface title"),
-      )
-      ?.messages.at(-1)?.content;
-    expect(copy).toBeDefined();
-    // The allowed values, not an example of them.
-    expect(copy).toContain("plan-1");
-    expect(copy).toContain("plan-2");
-    expect(copy).not.toContain("plan-1 or null");
-  });
-
-  it("leaves the plan alone when the model attributes the action to nothing", async () => {
-    const requests: ModelRequest[] = [];
-    const deps = stubDependencies(() => {}, [{ kind: "done" }]);
-    const loop = loopFrom({
-      ...deps,
-      ...toolTurn(requests, {
-        title: "Read project manifest",
-        description: "Check the declared name.",
-        planItemId: null,
-      }),
-      model: {
-        ...deps.model,
-        send: async function* (request: ModelRequest) {
-          if (!request.messages.some((m) => m.role === "tool"))
-            yield {
-              kind: "toolCallDelta",
-              index: 0,
-              callId: "c1",
-              name: "read_file",
-              argumentsDelta: '{"path":"package.json"}',
-            };
-          else yield { kind: "textDelta", text: "It is zhiyin." };
-          yield { kind: "done" };
-        },
-      },
-    });
-    const taskId = await loop.createTask();
-
-    await loop.start(taskId, "What is this project called?");
-
-    // An action nothing attributed is not evidence for the first pending item.
-    const plan = loop.snapshot().tasks[0]?.plan ?? [];
-    expect(plan.map((item) => item.status)).not.toContain("verified");
+    // Only the working model links an action, through its plan_item argument.
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.planItemId).toBeUndefined();
   });
 });
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  actionPresentationFrom,
+  actionLabelFrom,
   criterionEvaluationFrom,
+  factsLabel,
   planFrom,
 } from "../src/task-guidance.js";
 
@@ -35,42 +36,25 @@ describe("task guidance", () => {
     ).toBeUndefined();
   });
 
-  it("uses structured action copy and falls back to a target-specific title", () => {
+  it("reads the labelling answer, and nothing from one without both parts", () => {
     expect(
-      actionPresentationFrom(
+      actionLabelFrom(
         '{"title":"Read project manifest","description":"Use package metadata to identify the project.","planItemId":"plan-1"}',
-        {
-          action: "Read a workspace file",
-          target: "package.json",
-          planItemIds: ["plan-1"],
-          userIntent: "What is the current project?",
-        },
       ),
     ).toEqual({
       title: "Read project manifest",
       description: "Use package metadata to identify the project.",
-      planItemId: "plan-1",
     });
+    expect(actionLabelFrom("")).toBeUndefined();
+    expect(actionLabelFrom('{"title":"Read it"}')).toBeUndefined();
+  });
 
-    expect(
-      actionPresentationFrom("", {
-        action: "Read a workspace file",
-        target: "package.json",
-        planItemIds: [],
-        userIntent: "What is the current project?",
-      }),
-    ).toEqual({
+  it("labels an action from what the code knows, specific to its target", () => {
+    expect(factsLabel("Read a workspace file", "package.json")).toEqual({
       title: "Read package.json",
       description: "Inspect package.json for evidence relevant to this task.",
     });
-    expect(
-      actionPresentationFrom("", {
-        action: "List a workspace directory",
-        target: "Workspace root",
-        planItemIds: [],
-        userIntent: "What is the current project?",
-      }),
-    ).toMatchObject({
+    expect(factsLabel("List a workspace directory", "Workspace root")).toEqual({
       title: "List workspace root",
       description:
         "Review the workspace root before choosing the next relevant file.",

@@ -108,6 +108,10 @@ export class TurnWaits {
     backup: FileBackup | undefined,
     signal: AbortSignal,
     call?: AssembledToolCall,
+    /** A label being written in the background, shown once it arrives. */
+    labelled?: Promise<
+      { readonly title: string; readonly description: string } | undefined
+    >,
   ): Promise<"allow" | "deny" | "cancelled"> {
     return this.#withPromptSlot(taskId, async () => {
       const task = this.#records.task(taskId);
@@ -165,6 +169,9 @@ export class TurnWaits {
           },
         },
       });
+      void labelled
+        ?.then((label) => label && this.#relabel(taskId, approvalId, label))
+        .catch(() => undefined);
       return await decision;
     });
   }
@@ -235,11 +242,13 @@ export class TurnWaits {
     taskId: string,
     completedRounds: number,
     signal: AbortSignal,
+    reason?: string,
   ): Promise<"continue" | "pause" | "cancelled"> {
     const request: WorkBudgetRequest = {
       kind: "workBudget",
       title: "Continue working?",
       completedRounds,
+      ...(reason ? { reason } : {}),
     };
     const outcome = await this.waitForUserInput(
       taskId,
@@ -266,6 +275,28 @@ export class TurnWaits {
     return outcome.response.answers[0]?.answerIds?.[0] === "continue"
       ? "continue"
       : "pause";
+  }
+
+  /** The prompt still showing, given the label written for it. */
+  async #relabel(
+    taskId: string,
+    approvalId: string,
+    label: { readonly title: string; readonly description: string },
+  ): Promise<void> {
+    const task = this.#records.task(taskId);
+    if (task.phase.kind !== "approval" || task.phase.prompt.id !== approvalId)
+      return;
+    await this.#records.replaceTask({
+      ...task,
+      phase: {
+        ...task.phase,
+        prompt: {
+          ...task.phase.prompt,
+          action: label.title,
+          reason: label.description,
+        },
+      },
+    });
   }
 
   #approvalKey(taskId: string, callId: string): string {

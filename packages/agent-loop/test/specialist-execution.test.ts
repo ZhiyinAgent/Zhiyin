@@ -166,6 +166,84 @@ describe("specialist child execution", () => {
     ]);
   });
 
+  it("delivers a handoff that arrived while the parent was answering its last request", async () => {
+    const base = stubDependencies(() => {});
+    let answering = false;
+    const loop = loopFrom({
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Reviews behavior and regressions.",
+              instructions: "Inspect the evidence and report concrete risks.",
+            },
+          ],
+        }),
+      ]),
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Reviewer specialist")) {
+            // Settles only once the parent is answering its last request.
+            await until(() => answering);
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "finish-1",
+              name: "finish_specialist",
+              argumentsDelta: JSON.stringify({
+                summary: "The change is covered.",
+                findings: [],
+                recommendations: [],
+                limitations: [],
+              }),
+            };
+          } else if (!text.includes("Review the proposed change.")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Review the proposed change.",
+              }),
+            };
+          } else if (text.includes("finished in the background")) {
+            yield { kind: "textDelta" as const, text: "Review complete." };
+          } else {
+            // The parent's last request is still being answered when the
+            // specialist settles.
+            answering = true;
+            await until(
+              () =>
+                loop.snapshot().tasks[0]?.specialistRuns?.[0]?.status ===
+                "completed",
+            );
+            yield { kind: "textDelta" as const, text: "Waiting for it." };
+          }
+          yield { kind: "done" as const };
+        },
+      },
+      newSpecialistRunId: () => "specialist-1",
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Review this change");
+    await until(() => {
+      const phase = loop.snapshot().tasks[0]?.phase;
+      return (
+        phase?.kind === "completed" &&
+        phase.outcome.summary === "Review complete."
+      );
+    });
+  });
+
   it("cancels a running specialist with its parent and retains the interruption", async () => {
     const base = stubDependencies(() => {});
     let requestNumber = 0;

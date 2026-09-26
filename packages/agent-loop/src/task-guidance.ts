@@ -1,9 +1,8 @@
 import type { TaskPlanItem } from "@zhiyin/contract";
 
-type ActionPresentation = {
+type ActionLabel = {
   readonly title: string;
   readonly description: string;
-  readonly planItemId?: string;
 };
 
 const maximumPlanItems = 4;
@@ -131,41 +130,22 @@ function specificDescription(action: string, target: string): string {
   return "";
 }
 
-export function actionPresentationFrom(
-  value: string,
-  context: {
-    readonly action: string;
-    readonly target: string;
-    readonly planItemIds: readonly string[];
-    readonly userIntent: string;
-    readonly fallbackTitle?: string;
-    readonly fallbackDescription?: string;
-  },
-): ActionPresentation {
+/** The labelling call's answer, or nothing when it lacks either part. */
+export function actionLabelFrom(value: string): ActionLabel | undefined {
   const record = recordFrom(value);
   const title = boundedText(record?.["title"], maximumTitleLength);
   const description = boundedText(
     record?.["description"],
     maximumDescriptionLength,
   );
-  const requestedPlanItemId = boundedText(record?.["planItemId"], 32);
-  if (title && description) {
-    return {
-      title,
-      description,
-      ...(requestedPlanItemId &&
-      context.planItemIds.includes(requestedPlanItemId)
-        ? { planItemId: requestedPlanItemId }
-        : {}),
-    };
-  }
+  return title && description ? { title, description } : undefined;
+}
 
+/** An action named from what the code knows about it, with no model call. */
+export function factsLabel(action: string, target: string): ActionLabel {
   return {
-    title:
-      context.fallbackTitle ?? specificTitle(context.action, context.target),
-    description:
-      context.fallbackDescription ??
-      specificDescription(context.action, context.target),
+    title: specificTitle(action, target),
+    description: specificDescription(action, target),
   };
 }
 

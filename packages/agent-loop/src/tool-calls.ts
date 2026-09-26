@@ -19,6 +19,8 @@ import type { TurnRecords } from "./turn-records.js";
 import type { AuxiliaryWork } from "./auxiliary-work.js";
 import type { TurnWaits } from "./turn-waits.js";
 import type { AssembledToolCall, PresentedAction } from "./turn-shared.js";
+import { linkedItem, type SelfDescription } from "./self-description.js";
+import { factsLabel } from "./task-guidance.js";
 
 /**
  * What a tool call produced, and whether the person was ever told about it. A
@@ -34,6 +36,8 @@ type ToolCallOutcome = {
    * scaled to fit the model — can be added to the same record.
    */
   readonly actionId?: string;
+  /** A change to the workspace that succeeded: progress, to the loop guard. */
+  readonly changed?: boolean;
 };
 
 /** Bounded so a refused edit's arguments cannot fill the audit record. */
@@ -109,13 +113,12 @@ export class ToolCalls {
       repair: this.#repair,
       audit: (taskId, toolName, kind, reason, extra) =>
         this.#audit(taskId, toolName, kind, reason, extra),
-      fail: (taskId, call, reason, signal) =>
+      fail: (taskId, call, reason) =>
         this.recordFailedProposal(
           taskId,
           call,
           "The requested action used invalid input.",
           reason,
-          signal,
         ),
     });
   }
@@ -142,6 +145,7 @@ export class ToolCalls {
     controller: AbortController,
     quietRetriesLeft: number,
     round: RoundEvidence,
+    said: SelfDescription = {},
   ): Promise<ToolCallOutcome> {
     if (!owner) {
       const result = refusal(
@@ -154,7 +158,6 @@ export class ToolCalls {
         call,
         "Zhiyin requested a capability that is not connected.",
         result.reason,
-        controller.signal,
       );
       return { result };
     }
@@ -206,7 +209,6 @@ export class ToolCalls {
         call,
         "The requested action could not be inspected.",
         result.reason,
-        controller.signal,
       );
       return { result };
     }
@@ -357,16 +359,29 @@ export class ToolCalls {
       return { result };
     }
 
-    const presentation =
-      inspection.presentation ??
-      (await this.#auxiliary.presentAction(
-        taskId,
-        inspection,
-        controller.signal,
-      ));
-    controller.signal.throwIfAborted();
+    // Named by the call itself, or from what the code knows; a call that did
+    // not say what it is for is named by a model in the background, and never
+    // waited for (ADR 0052).
+    const planItemId = linkedItem(this.#records.task(taskId).plan ?? [], said);
+    const facts = factsLabel(inspection.action, inspection.target);
+    let presentation: PresentedAction = {
+      ...(inspection.presentation ??
+        (said.purpose ? { ...facts, description: said.purpose } : facts)),
+      ...(planItemId ? { planItemId } : {}),
+    };
+    const labelled =
+      inspection.presentation || said.purpose
+        ? undefined
+        : this.#auxiliary.labelAction(taskId, inspection, controller.signal);
 
     const actionId = this.#records.nextActionId(taskId);
+    void labelled
+      ?.then(async (label) => {
+        if (!label) return;
+        presentation = { ...label, ...(planItemId ? { planItemId } : {}) };
+        await this.#records.relabelAction(taskId, actionId, label);
+      })
+      .catch(() => undefined);
     let backup: FileBackup | undefined;
     if (
       owner === "built-in" &&
@@ -405,6 +420,7 @@ export class ToolCalls {
         backup,
         controller.signal,
         call,
+        labelled,
       );
     } else {
       decision = permission.outcome;
@@ -522,13 +538,6 @@ export class ToolCalls {
         result,
         owner === "mcp" ? "connector" : "tool",
       );
-      await this.#auxiliary.evaluateActionCriterion(
-        taskId,
-        presentation,
-        inspection,
-        result,
-        controller.signal,
-      );
       this.#records.emitToolActivity(
         taskId,
         call,
@@ -536,7 +545,11 @@ export class ToolCalls {
         result,
       );
     }
-    return { result, actionId };
+    return {
+      result,
+      actionId,
+      ...(inspection.access === "change" && result.ok ? { changed: true } : {}),
+    };
   }
 
   /**
@@ -582,7 +595,6 @@ export class ToolCalls {
     call: AssembledToolCall,
     description: string,
     reason: string,
-    signal: AbortSignal,
   ): Promise<void> {
     const inspection = {
       ok: true as const,
@@ -590,15 +602,7 @@ export class ToolCalls {
       target: "Unavailable",
       command: call.name,
     };
-    const presentation = await this.#auxiliary.presentAction(
-      taskId,
-      inspection,
-      signal,
-      {
-        title: inspection.action,
-        description,
-      },
-    );
+    const presentation = { title: inspection.action, description };
     await this.#records.recordToolAction(
       taskId,
       this.#records.nextActionId(taskId),

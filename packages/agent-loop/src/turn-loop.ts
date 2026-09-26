@@ -10,6 +10,8 @@ import type { ProducedImage, WorkspaceDescription } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "./quiet-failures.js";
+import { LoopGuard } from "./loop-guard.js";
+import { PlanProgress } from "./plan-progress.js";
 import {
   fitPictures,
   pictureCaption,
@@ -64,6 +66,7 @@ export class TurnLoop {
   readonly #pendingHandoffs: PendingHandoffs;
   readonly #round: ModelRound;
   readonly #context: ContextGuard;
+  readonly #plan: PlanProgress;
   /** How long each conversation's last request was, to mark where the next repeats it. */
   readonly #lastRequestLength = new Map<string, number>();
 
@@ -92,6 +95,7 @@ export class TurnLoop {
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#round = new ModelRound(deps, parts.records);
     this.#context = parts.context;
+    this.#plan = new PlanProgress(parts.records);
   }
 
   async run(
@@ -151,12 +155,15 @@ export class TurnLoop {
       ];
 
       const quiet = new QuietFailures();
+      const guard = new LoopGuard();
+      this.#plan.begin(taskId, () => availableTools);
 
       let reportOnly = false;
       let delegatedChildren = options?.initialDelegatedChildren ?? 0;
       /** The provider refused this step as too long, and it was condensed. */
       let refused = false;
       while (true) {
+        await this.#plan.remind(taskId, history);
         const runs = specialistRunsText(
           this.#records.task(taskId).specialistRuns ?? [],
         );
@@ -336,6 +343,7 @@ export class TurnLoop {
             taskId,
             ledger.completedToolRounds(),
             controller.signal,
+            guard.reason(),
           );
           if (decision === "cancelled") {
             await this.#interruptIfCurrent(taskId, controller);
@@ -403,8 +411,13 @@ export class TurnLoop {
             if (input.quiet) quiet.remember(call.name, call.callId);
             continue;
           }
-          const parsed = input.arguments;
-          const note = input.note ? { note: input.note } : {};
+          const own = await this.#plan.take(taskId, call, input);
+          const { args: parsed, said, note } = own;
+          if (own.answered) {
+            const answer = JSON.stringify({ ...own.answered, ...note });
+            await history.result(call, toolOutput(call.name, answer), false);
+            continue;
+          }
           if (call.name === delegateSpecialistToolName) {
             const delegation = await this.#specialists.delegate({
               taskId,
@@ -474,7 +487,9 @@ export class TurnLoop {
             controller,
             quietRetriesLeft,
             round,
+            said,
           );
+          guard.observe(call.name, parsed, outcome);
           if (controller.signal.aborted) {
             await this.#interruptIfCurrent(taskId, controller);
             return;
@@ -525,6 +540,7 @@ export class TurnLoop {
           else if (outcome.result.ok) history.forget(quiet.take(call.name));
         }
         await history.endRound();
+        await guard.tell(history);
         if (renewed)
           await history.notice(
             "renewal",

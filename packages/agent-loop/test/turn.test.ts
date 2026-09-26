@@ -902,7 +902,15 @@ describe("AgentLoop", () => {
     const taskId = await loop.createTask();
 
     const running = loop.start(taskId, "What is the current project?");
-    await until(() => loop.snapshot().tasks[0]?.phase.kind === "approval");
+    // The copy is written in the background, and replaces the approval's
+    // own once it arrives.
+    await until(() => {
+      const phase = loop.snapshot().tasks[0]?.phase;
+      return (
+        phase?.kind === "approval" &&
+        phase.prompt.action === "Read project manifest"
+      );
+    });
 
     expect(loop.snapshot().tasks[0]).toMatchObject({
       plan: [

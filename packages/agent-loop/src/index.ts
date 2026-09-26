@@ -174,6 +174,7 @@ export class AgentLoop {
           started.shouldGenerateInitialTitle,
         ),
     });
+    this.#wakeIfQueued(taskId);
   }
 
   /**
@@ -242,6 +243,7 @@ export class AgentLoop {
         this.#records.task(taskId).specialistRuns ?? []
       ).length,
     });
+    this.#wakeIfQueued(taskId);
   }
 
   /**
@@ -253,6 +255,16 @@ export class AgentLoop {
    */
   #deliverHandoff(taskId: string, result: SpecialistExecutionResult): void {
     this.#pendingHandoffs.push(taskId, result);
+    this.#wakeIfQueued(taskId);
+  }
+
+  /**
+   * Wakes the task for a handoff still queued. Called as a handoff arrives,
+   * and again as each turn ends: one that arrived after a running turn last
+   * looked at the queue would otherwise wait for the person's next message.
+   */
+  #wakeIfQueued(taskId: string): void {
+    if (!this.#pendingHandoffs.waiting(taskId)) return;
     if (this.#activeTurns.running(taskId)) return;
     if (this.#wakeScheduled.has(taskId)) return;
     this.#wakeScheduled.add(taskId);
