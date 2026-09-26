@@ -12,7 +12,7 @@ import {
   type ReasoningCapabilities,
   type ReasoningSelection,
 } from "@zhiyin/contract";
-import { Icon } from "../shared/index.js";
+import { Icon, useDismiss } from "../shared/index.js";
 import styles from "./conversation.module.css";
 
 const effortOrder = REASONING_EFFORTS;
@@ -57,19 +57,9 @@ export function ReasoningControls({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
-    slider.current?.focus();
-    function dismiss(event: PointerEvent) {
-      if (
-        event.target instanceof Node &&
-        !root.current?.contains(event.target) &&
-        !panel.current?.contains(event.target)
-      )
-        setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
+    if (open) slider.current?.focus();
   }, [open]);
+  useDismiss(open, [root, panel], () => setOpen(false));
 
   if (capabilities.status === "unavailable")
     return (

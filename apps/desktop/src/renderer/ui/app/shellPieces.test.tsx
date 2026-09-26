@@ -55,6 +55,19 @@ describe("WorkspacePicker", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("closes when the person clicks away, or the window loses focus", () => {
+    render(<WorkspacePicker recent={[]} onChoose={() => undefined} />);
+    const trigger = screen.getByRole("button", { name: /^Workspace folder/ });
+
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(trigger);
+    fireEvent.blur(window);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("says a folder has not been chosen yet rather than naming a default", () => {
     render(<WorkspacePicker recent={[]} onChoose={() => undefined} />);
 
@@ -211,6 +224,54 @@ describe("AppSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
     expect(onOpenSettings).toHaveBeenCalledOnce();
+  });
+
+  it("closes the app menu, a conversation's menu and its delete question when the person clicks away, or the window loses focus", () => {
+    render(
+      <AppSidebar
+        selectedId="release"
+        onSelect={() => undefined}
+        onOpenSettings={() => undefined}
+        tasks={[{ id: "release", title: "Prepare release notes", meta: "Now" }]}
+      />,
+    );
+    const row = screen.getByRole("button", { name: /prepare release notes/i });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    fireEvent.blur(window);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.contextMenu(row);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.contextMenu(row);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.blur(window);
+    expect(
+      screen.queryByRole("group", { name: "Delete Prepare release notes" }),
+    ).toBeNull();
+  });
+
+  it("lets a click on the window's top bar reach the app while a menu is open", () => {
+    render(
+      <AppSidebar
+        selectedId=""
+        onSelect={() => undefined}
+        onOpenSettings={() => undefined}
+        tasks={[]}
+      />,
+    );
+
+    expect(document.documentElement).not.toHaveAttribute("data-layer-open");
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    expect(document.documentElement).toHaveAttribute("data-layer-open");
+    fireEvent.pointerDown(document.body);
+    expect(document.documentElement).not.toHaveAttribute("data-layer-open");
   });
 
   it("renames a conversation in place from its context menu", () => {

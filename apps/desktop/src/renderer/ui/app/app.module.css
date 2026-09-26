@@ -17,6 +17,13 @@
   -webkit-app-region: drag;
 }
 
+/* While a menu or dialog is open, a click on the bar closes it instead of
+   dragging the window, which the page would never be told of (useDismiss). */
+:root[data-layer-open] .app-sidebar__brand,
+:root[data-layer-open] .session-header {
+  -webkit-app-region: no-drag;
+}
+
 .app-sidebar__brand button,
 .session-header button,
 .session-header a,

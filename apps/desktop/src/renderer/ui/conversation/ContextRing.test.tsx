@@ -285,7 +285,7 @@ describe("the context ring", () => {
     expect(meter).toHaveFocus();
   });
 
-  it("compacts on request, saying so until it is done", async () => {
+  it("closes when Compact is chosen, and says it is compacting until it is done", async () => {
     let finish = () => {};
     const onCondense = vi.fn(
       () => new Promise<void>((resolve) => (finish = resolve)),
@@ -296,6 +296,8 @@ describe("the context ring", () => {
     fireEvent.click(screen.getByRole("button", { name: "Compact" }));
 
     expect(onCondense).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog", { name: "Context" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
     expect(screen.getByRole("button", { name: "Compacting…" })).toBeDisabled();
     finish();
     expect(
@@ -319,6 +321,36 @@ describe("the context ring", () => {
     ring();
     fireEvent.click(screen.getByRole("button", { name: /Context/ }));
     expect(screen.queryByRole("button", { name: "Compact" })).toBeNull();
+  });
+
+  it("closes when the person clicks away, or the window loses focus", () => {
+    ring({ usage: usage(131_000) });
+    const meter = screen.getByRole("button", { name: /Context/ });
+
+    fireEvent.click(meter);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Context" })).toBeNull();
+
+    fireEvent.click(meter);
+    fireEvent.blur(window);
+    expect(screen.queryByRole("dialog", { name: "Context" })).toBeNull();
+  });
+
+  it("closes the breakdown when the person clicks outside it", () => {
+    ring({ usage: usage(131_000) });
+
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
+    const breakdown = screen.getByRole("dialog", {
+      name: "What's using space",
+    });
+    fireEvent.pointerDown(breakdown);
+    expect(breakdown).toBeInTheDocument();
+    fireEvent.pointerDown(breakdown.parentElement!);
+
+    expect(
+      screen.queryByRole("dialog", { name: "What's using space" }),
+    ).toBeNull();
   });
 
   it("says when instructions and tools alone take too much of the budget", () => {

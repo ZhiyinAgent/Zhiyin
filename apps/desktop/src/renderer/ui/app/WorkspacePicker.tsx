@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Icon } from "../shared/index.js";
+import { Icon, useDismiss } from "../shared/index.js";
 import styles from "./app.module.css";
 
 export type WorkspaceFolder = { readonly path: string; readonly name: string };
@@ -110,23 +110,17 @@ export function WorkspacePicker({
     };
   }, [open, place]);
 
+  useDismiss(open, [container, menu], close);
+
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (container.current?.contains(target) || menu.current?.contains(target))
-        return;
-      close();
-    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       close();
       trigger.current?.focus();
     };
-    document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [open, close]);

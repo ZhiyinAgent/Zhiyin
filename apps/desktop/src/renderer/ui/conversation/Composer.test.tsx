@@ -93,6 +93,21 @@ describe("Composer", () => {
     expect(onAddContext).toHaveBeenCalledOnce();
   });
 
+  it("closes the reasoning settings when the person clicks away, or the window loses focus", () => {
+    render(<Composer reasoningCapabilities={reasoning} />);
+    const settings = screen.getByRole("button", { name: "Reasoning settings" });
+
+    fireEvent.click(settings);
+    fireEvent.pointerDown(screen.getByRole("dialog", { name: "Reasoning" }));
+    expect(screen.getByRole("dialog", { name: "Reasoning" })).toBeVisible();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Reasoning" })).toBeNull();
+
+    fireEvent.click(settings);
+    fireEvent.blur(window);
+    expect(screen.queryByRole("dialog", { name: "Reasoning" })).toBeNull();
+  });
+
   it("keeps every control unavailable while the composer itself is paused", () => {
     render(
       <Composer

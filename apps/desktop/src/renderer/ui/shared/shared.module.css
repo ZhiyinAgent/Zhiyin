@@ -233,6 +233,11 @@
   -webkit-app-region: drag;
 }
 
+/* A click on the bar closes an open dialog instead of dragging (useDismiss). */
+:root[data-layer-open] .standalone-page__brand {
+  -webkit-app-region: no-drag;
+}
+
 .standalone-page__brand > span {
   color: var(--zy-muted);
   font-size: 13px;

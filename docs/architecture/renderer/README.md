@@ -520,6 +520,19 @@ rendered.
   shortened, the exact text, and where to edit it`; and the shell connects the
   two: `keeps the person's own instructions in Settings, and the ring's
   breakdown leads back there`.
+- What floats over the page closes on a press outside it (`useDismiss`, ADR
+  0055). Only the top layer closes; popovers also close when the window loses
+  focus, dialogs do not; while one is open the top bar stops dragging so a
+  click there reaches the page; Compact closes the context panel and reopens
+  it on failure. Named tests: `closes when the person clicks outside it, and
+  not inside it`, `closes only the dialog on top when one opens over another`,
+  `stays open when the window loses focus, so a key can be copied from
+  elsewhere`, `closes the app menu, a conversation's menu and its delete
+  question when the person clicks away, or the window loses focus`, `lets a
+  click on the window's top bar reach the app while a menu is open`, `closes
+  the reasoning settings when the person clicks away, or the window loses
+  focus`, `closes the breakdown when the person clicks outside it`, and
+  `closes when Compact is chosen, and says it is compacting until it is done`.
 - The work-budget question says what was repeated when Zhiyin saw the work go
   in circles. Named test: `says why the work may be going nowhere when Zhiyin
   saw it repeat itself`.

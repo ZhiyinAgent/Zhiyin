@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import styles from "./shared.module.css";
+import { useDismiss } from "./useDismiss.js";
 
 export function Dialog({
   title,
@@ -16,6 +17,7 @@ export function Dialog({
 }) {
   const titleId = useId();
   const dialog = useRef<HTMLDivElement>(null);
+  useDismiss(true, [dialog], onClose, { closeOnBlur: false });
 
   useEffect(() => {
     const returnTo =

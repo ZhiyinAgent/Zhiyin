@@ -6,3 +6,4 @@ export { Logo } from "./Logo.js";
 export { Notice } from "./Notice.js";
 export { StandalonePage } from "./StandalonePage.js";
 export { SurfacePanel } from "./SurfacePanel.js";
+export { useDismiss } from "./useDismiss.js";

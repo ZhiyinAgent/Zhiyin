@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Icon, Logo } from "../shared/index.js";
+import { Icon, Logo, useDismiss } from "../shared/index.js";
 import styles from "./app.module.css";
 
 export type SidebarTask = {
@@ -104,6 +104,7 @@ export function AppSidebar({
   const [renameValue, setRenameValue] = useState("");
   const [clock, setClock] = useState(now);
   const taskMenuRef = useRef<HTMLDivElement>(null);
+  const appMenuRef = useRef<HTMLDivElement>(null);
   const renameFinished = useRef(false);
 
   useEffect(() => {
@@ -111,23 +112,19 @@ export function AppSidebar({
     return () => window.clearInterval(interval);
   }, [now]);
 
+  useDismiss(Boolean(taskMenu), [taskMenuRef], () => setTaskMenu(null));
+  useDismiss(menuOpen, [appMenuRef], () => setMenuOpen(false));
+
   useEffect(() => {
-    if (!taskMenu) return;
-    function close(event: PointerEvent) {
-      if (!taskMenuRef.current?.contains(event.target as Node)) {
-        setTaskMenu(null);
-      }
-    }
+    if (!taskMenu && !menuOpen) return;
     function escape(event: KeyboardEvent) {
-      if (event.key === "Escape") setTaskMenu(null);
+      if (event.key !== "Escape") return;
+      setTaskMenu(null);
+      setMenuOpen(false);
     }
-    document.addEventListener("pointerdown", close);
     document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [taskMenu]);
+    return () => document.removeEventListener("keydown", escape);
+  }, [taskMenu, menuOpen]);
 
   function startRename(task: SidebarTask) {
     setTaskMenu(null);
@@ -302,7 +299,7 @@ export function AppSidebar({
         ))}
       </div>
 
-      <div className={styles["app-sidebar__profile"]}>
+      <div className={styles["app-sidebar__profile"]} ref={appMenuRef}>
         <span className={styles["profile-avatar"]}>
           <Icon name="user" />
         </span>

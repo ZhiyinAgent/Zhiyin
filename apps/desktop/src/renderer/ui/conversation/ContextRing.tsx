@@ -8,7 +8,7 @@
  * counted until it is sent. When the model's window is not known it says so.
  */
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   contextBudgets,
@@ -19,7 +19,7 @@ import {
   type ModelWindow,
   type StandingInstruction,
 } from "@zhiyin/contract";
-import { Dialog, Icon } from "../shared/index.js";
+import { Dialog, Icon, useDismiss } from "../shared/index.js";
 import { InstructionSources } from "./InstructionSources.js";
 import styles from "./conversation.module.css";
 
@@ -112,19 +112,7 @@ export function ContextRing({
     };
   }, [open]);
 
-  useEffect(() => {
-    if (!open || breakdown) return;
-    function dismiss(event: PointerEvent) {
-      if (
-        event.target instanceof Node &&
-        !root.current?.contains(event.target) &&
-        !panel.current?.contains(event.target)
-      )
-        setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [open, breakdown]);
+  useDismiss(open, [root, panel], () => setOpen(false));
 
   const rows: readonly (readonly [string, number, string])[] = usage
     ? [
@@ -283,14 +271,18 @@ export function ContextRing({
                 title="Summarise older messages so the conversation takes less space"
                 disabled={condensing}
                 onClick={() => {
+                  // An action, so the panel closes; it opens again to say
+                  // why if the action fails.
+                  setOpen(false);
                   setCondensing(true);
                   setCondenseFailure(undefined);
                   onCondense()
-                    .catch((error: unknown) =>
+                    .catch((error: unknown) => {
                       setCondenseFailure(
                         error instanceof Error ? error.message : String(error),
-                      ),
-                    )
+                      );
+                      setOpen(true);
+                    })
                     .finally(() => setCondensing(false));
                 }}
               >
