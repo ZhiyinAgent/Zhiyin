@@ -4,17 +4,20 @@ import type {
   PendingUserInputRequest,
   QuizAnswer,
   QuizQuestion,
-  TaskInteraction,
   UserInputResponse,
 } from "@zhiyin/contract";
 import styles from "./user-input.module.css";
+import { FolderInstructionsPrompt } from "./FolderInstructionsPrompt.js";
+import { quizOutcome, sameSet } from "./quiz.js";
 import { WorkBudgetPrompt } from "./WorkBudgetPrompt.js";
+
+export { InteractionCard } from "./InteractionCard.js";
 
 type Answers = Record<string, readonly string[]>;
 type TextAnswers = Record<string, string>;
 type QuestionPrompt = Exclude<
   PendingUserInputRequest,
-  { readonly kind: "workBudget" }
+  { readonly kind: "workBudget" | "folderInstructions" }
 >;
 
 function optionDescription(
@@ -61,6 +64,8 @@ export function UserInputPrompt({
 }) {
   return prompt.kind === "workBudget" ? (
     <WorkBudgetPrompt prompt={prompt} onSubmit={onSubmit} />
+  ) : prompt.kind === "folderInstructions" ? (
+    <FolderInstructionsPrompt prompt={prompt} onSubmit={onSubmit} />
   ) : prompt.kind === "quiz" ? (
     <QuizPrompt prompt={prompt} onSubmit={onSubmit} />
   ) : (
@@ -385,21 +390,6 @@ function quizResponse(
   };
 }
 
-type QuizOutcome = "correct" | "incomplete" | "wrong";
-
-function quizOutcome(
-  question: QuizQuestion,
-  selectedIds: readonly string[],
-): QuizOutcome {
-  if (sameSet(selectedIds, question.correctAnswerIds)) return "correct";
-  if (
-    question.selection === "multiple" &&
-    selectedIds.every((id) => question.correctAnswerIds.includes(id))
-  )
-    return "incomplete";
-  return "wrong";
-}
-
 function QuizPrompt({
   prompt,
   onSubmit,
@@ -708,133 +698,6 @@ function QuizPrompt({
           )}
         </div>
       </footer>
-    </section>
-  );
-}
-
-function selectedLabels(
-  interaction: TaskInteraction,
-  questionId: string,
-): string[] {
-  const response = interaction.response.answers.find(
-    (answer) => answer.questionId === questionId,
-  );
-  if (response?.text) return [response.text];
-  const ids = response?.answerIds ?? [];
-  const question = interaction.request.questions.find(
-    (candidate) => candidate.id === questionId,
-  );
-  const options =
-    interaction.request.kind === "quiz"
-      ? ((
-          question as Extract<typeof question, { answers: unknown }> | undefined
-        )?.answers ?? [])
-      : ((
-          question as
-            Extract<typeof question, { options?: unknown }> | undefined
-        )?.options ?? []);
-  return ids.map(
-    (id) =>
-      options.find((option: { id: string }) => option.id === id)?.label ?? id,
-  );
-}
-
-type ScoreBand = "strong" | "fair" | "weak" | "poor";
-
-/** Bands follow the product scale: 80%+ strong, 50%+ fair, 30%+ weak. */
-function scoreBand(score: number, total: number): ScoreBand {
-  const ratio = total === 0 ? 0 : score / total;
-  if (ratio >= 0.8) return "strong";
-  if (ratio >= 0.5) return "fair";
-  if (ratio >= 0.3) return "weak";
-  return "poor";
-}
-
-function sameSet(left: readonly string[], right: readonly string[]): boolean {
-  return (
-    left.length === right.length && left.every((value) => right.includes(value))
-  );
-}
-
-export function InteractionCard({
-  interaction,
-}: {
-  interaction: TaskInteraction;
-}) {
-  const quiz = interaction.request.kind === "quiz";
-  const score = quiz
-    ? interaction.request.questions.filter((question) => {
-        const selected =
-          interaction.response.answers.find(
-            (answer) => answer.questionId === question.id,
-          )?.answerIds ?? [];
-        return sameSet(selected, question.correctAnswerIds);
-      }).length
-    : 0;
-  return (
-    <section
-      className={`${styles["interaction-card"]} ${styles[`interaction-card--${interaction.request.kind}`]}`}
-      aria-label={`${interaction.request.title} ${quiz ? "quiz result" : "answers"}`}
-    >
-      <header className={styles["interaction-card__header"]}>
-        <div>
-          <p>{quiz ? "Quiz complete" : "Answered"}</p>
-          <h3>{interaction.request.title}</h3>
-        </div>
-        {quiz && (
-          <strong
-            className={`${styles["interaction-card__score"]} ${
-              styles[
-                `interaction-card__score--${scoreBand(
-                  score,
-                  interaction.request.questions.length,
-                )}`
-              ]
-            }`}
-          >
-            {score} of {interaction.request.questions.length} correct
-          </strong>
-        )}
-      </header>
-      <div className={styles["interaction-card__answers"]}>
-        {interaction.request.questions.map((question, index) => {
-          const labels = selectedLabels(interaction, question.id);
-          const selectedIds =
-            interaction.response.answers.find(
-              (answer) => answer.questionId === question.id,
-            )?.answerIds ?? [];
-          const outcome =
-            quiz &&
-            "correctAnswerIds" in question &&
-            quizOutcome(question, selectedIds);
-          return (
-            <div
-              className={`${styles["interaction-card__answer"]}${outcome ? ` ${styles[`interaction-card__answer--${outcome}`]}` : ""}`}
-              role="group"
-              aria-label={question.prompt}
-              key={question.id}
-            >
-              <p>
-                <span>{index + 1}</span>
-                {question.prompt}
-              </p>
-              <strong>{labels.join(", ")}</strong>
-              {outcome && (
-                <em>
-                  {outcome === "correct"
-                    ? "Correct"
-                    : outcome === "incomplete"
-                      ? "Incomplete"
-                      : "Incorrect"}
-                </em>
-              )}
-              {"explanation" in question && question.explanation && (
-                <small>{question.explanation}</small>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </section>
   );
 }

@@ -541,6 +541,27 @@ export class TurnRecords {
     }
   }
 
+  /**
+   * Ends a turn the person paused, with the progress report it asked for, or
+   * says the report never came.
+   */
+  async finishPausedReport(taskId: string, report: string): Promise<void> {
+    const task = this.task(taskId);
+    await this.replaceTask({
+      ...task,
+      phase: report.trim()
+        ? {
+            kind: "completed",
+            outcome: { title: "Work paused", summary: report },
+          }
+        : {
+            kind: "interrupted",
+            reason:
+              "Work paused, but the model did not return the requested progress report.",
+          },
+    });
+  }
+
   async interrupt(taskId: string, reason?: string): Promise<void> {
     const task = this.#deps.host.find(taskId);
     if (!task) return;

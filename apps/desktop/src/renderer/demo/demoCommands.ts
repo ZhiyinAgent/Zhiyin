@@ -47,6 +47,8 @@ export function demoCommands(
       dispatch({ type: "contextBudgetChosen", taskId, budget }),
     setDefaultContextBudget: async (budget) =>
       dispatch({ type: "defaultContextBudgetChosen", budget }),
+    setPersonalInstructions: async (text) =>
+      dispatch({ type: "personalInstructionsSaved", text }),
     condenseNow: async () => {},
     interruptTask: async (taskId) =>
       dispatch({ type: "taskInterrupted", taskId }),

@@ -1687,6 +1687,59 @@
   font-size: 12px;
 }
 
+.instruction-sources {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.instruction-sources h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__source {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+}
+
+.instruction-sources__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__head span,
+.instruction-sources__note {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.instruction-sources summary {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.instruction-sources pre {
+  max-height: 200px;
+  margin: 6px 0 0;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.instruction-sources__source .button {
+  justify-self: start;
+}
+
 .context-ring__about {
   display: inline-grid;
   place-items: center;

@@ -292,6 +292,11 @@ sequencing.
   it relied on as a list of text. Any other status or shape is refused. ADR
   0053. Named test: `keeps each of the judge's three verdicts and the calls one
   relied on`.
+- The person's own instructions and their answer about each folder's
+  instructions are kept with the settings; a task keeps the sources its last
+  turn sent, and a pending folder question survives a restart. Malformed ones
+  are refused. ADR 0054. Named test: `keeps the person's own instructions and
+  their folder choices across a restart, and rejects malformed ones`.
 - A model-context checkpoint maps to an exact durable message and only to
   existing action evidence. The round-trip fixture and named test `rejects a
   compaction checkpoint that cannot map back to durable history` guard the

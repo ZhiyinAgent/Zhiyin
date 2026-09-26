@@ -21,6 +21,7 @@ const stubCommands: CoreApi = {
   keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
   setContextBudget: async () => {},
   setDefaultContextBudget: async () => {},
+  setPersonalInstructions: async () => {},
   condenseNow: async () => {},
   openAttachment: async () => {},
   previewRewind: async () => {
@@ -846,6 +847,7 @@ describe("WorkspaceShell", () => {
           openAttachment: async () => {},
           setContextBudget: async () => {},
           setDefaultContextBudget: async () => {},
+          setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
@@ -1111,6 +1113,83 @@ describe("WorkspaceShell", () => {
     expect(setContextBudget).toHaveBeenCalledWith("measured", "medium");
   });
 
+  it("keeps the person's own instructions in Settings, and the ring's breakdown leads back there", async () => {
+    const setPersonalInstructions = vi.fn<CoreApi["setPersonalInstructions"]>(
+      async () => {},
+    );
+    const dispatch = vi.fn();
+    const task: WorkspaceTask = {
+      id: "task-1",
+      title: "Reports",
+      updatedLabel: "now",
+      messages: [],
+      phase: { kind: "interrupted" },
+      contextUsage: {
+        model: "wide",
+        totalTokens: 10_000,
+        measured: true,
+        parts: {
+          instructions: 1_000,
+          tools: 1_000,
+          summary: 0,
+          conversation: 8_000,
+          toolResults: 0,
+        },
+      },
+      standingInstructions: [
+        {
+          source: "personal",
+          text: "Always answer in French.",
+          bytes: 24,
+          truncated: false,
+        },
+      ],
+    };
+    const { rerender } = render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          tasks: [task],
+          selectedTaskId: "task-1",
+        })}
+        dispatch={dispatch}
+        commands={{ ...stubCommands, setPersonalInstructions }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit in Settings" }));
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "surfaceOpened",
+      surface: "settings",
+    });
+
+    rerender(
+      <WorkspaceShell
+        state={{
+          ...createWorkspaceState({
+            connection: "ready",
+            runtime: { tasks: "available", capabilities: "available" },
+            surface: "settings",
+          }),
+          personalInstructions: "Always answer in French.",
+        }}
+        dispatch={dispatch}
+        commands={{ ...stubCommands, setPersonalInstructions }}
+      />,
+    );
+    const field = screen.getByRole("textbox", { name: "Your instructions" });
+    expect(field).toHaveValue("Always answer in French.");
+    fireEvent.change(field, { target: { value: "Answer in German." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save instructions" }));
+
+    await waitFor(() =>
+      expect(setPersonalInstructions).toHaveBeenCalledWith("Answer in German."),
+    );
+  });
+
   it("makes a budget chosen before the first message the default, and fixes it on the conversation that message starts", async () => {
     const createTask = vi.fn<CoreApi["createTask"]>(async () => "task-new");
     const setContextBudget = vi.fn<CoreApi["setContextBudget"]>(async () => {});
@@ -1253,6 +1332,7 @@ describe("WorkspaceShell", () => {
           openAttachment: async () => {},
           setContextBudget: async () => {},
           setDefaultContextBudget: async () => {},
+          setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
           resolveApproval: async () => {},
@@ -1883,6 +1963,7 @@ describe("WorkspaceShell", () => {
           openAttachment: async () => {},
           setContextBudget: async () => {},
           setDefaultContextBudget: async () => {},
+          setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
           resolveApproval,

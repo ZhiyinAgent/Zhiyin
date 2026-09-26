@@ -37,6 +37,25 @@
   line-height: 1.55;
 }
 
+.user-input--folder-instructions {
+  min-height: 0;
+}
+
+.folder-instructions__text {
+  max-height: 240px;
+  margin: 0 16px 16px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .work-budget__actions {
   justify-content: space-between;
   border-top: 1px solid var(--zy-line);

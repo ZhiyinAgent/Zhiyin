@@ -632,6 +632,80 @@ describe("FileSessions workspace persistence", () => {
     }
   });
 
+  it("keeps the person's own instructions and their folder choices across a restart, and rejects malformed ones", async () => {
+    const root = await temporaryRoot();
+    const folderInstructionChoices = [
+      { root: "/work/reports", hash: "a".repeat(64), use: true },
+      { root: "/work/archive", hash: "b".repeat(64), use: false },
+    ];
+    const standingInstructions = [
+      {
+        source: "folder" as const,
+        path: "AGENTS.md",
+        text: "Invoices live in /finance.",
+        bytes: 26,
+        truncated: false,
+      },
+    ];
+    await new FileSessions(root).saveWorkspace({
+      ...snapshot,
+      personalInstructions: "Always answer in French.",
+      folderInstructionChoices,
+      tasks: [
+        {
+          ...snapshot.tasks[0]!,
+          standingInstructions,
+          phase: {
+            kind: "input",
+            steps: [],
+            prompt: {
+              id: "question-1",
+              kind: "folderInstructions",
+              title: "Use these folder instructions?",
+              path: "AGENTS.md",
+              text: "Invoices live in /finance.",
+              truncated: false,
+            },
+          },
+        },
+      ],
+    });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      {
+        personalInstructions: "Always answer in French.",
+        folderInstructionChoices,
+        tasks: [
+          {
+            standingInstructions,
+            phase: {
+              prompt: { kind: "folderInstructions", path: "AGENTS.md" },
+            },
+          },
+        ],
+      },
+    );
+
+    for (const wrong of [
+      { personalInstructions: 42 },
+      { folderInstructionChoices: [{ root: "/work", hash: "a", use: "yes" }] },
+      { folderInstructionChoices: "all" },
+      {
+        tasks: [
+          {
+            ...snapshot.tasks[0],
+            standingInstructions: [{ source: "web", text: "x", bytes: 1 }],
+          },
+        ],
+      },
+    ]) {
+      const planted = await temporaryRoot();
+      await plantHistory(planted, { ...snapshot, ...wrong });
+      await expect(
+        new FileSessions(planted).loadWorkspace(),
+      ).rejects.toBeInstanceOf(SessionStoreError);
+    }
+  });
   it("rejects a budget Zhiyin does not offer", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {

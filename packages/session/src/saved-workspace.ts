@@ -11,6 +11,10 @@ import {
   validContextUsage,
 } from "./saved-context.js";
 import { isRecord, optionalText, validSequence } from "./saved-values.js";
+import {
+  validFolderInstructionsRequest,
+  validStandingInstructions,
+} from "./saved-instructions.js";
 
 export function isFolder(value: unknown): boolean {
   return (
@@ -161,6 +165,7 @@ export function isWorkspaceTask(task: unknown): boolean {
       (Array.isArray(task.condensings) &&
         task.condensings.every(validCondensing))) &&
     validContextUsage(task.contextUsage) &&
+    validStandingInstructions(task.standingInstructions) &&
     validPhase(task.phase) &&
     (task.actions === undefined ||
       (Array.isArray(task.actions) &&
@@ -423,6 +428,7 @@ function validUserInputRequest(value: unknown): boolean {
 function validPendingUserInputRequest(value: unknown): boolean {
   return (
     validUserInputRequest(value) ||
+    validFolderInstructionsRequest(value) ||
     (isRecord(value) &&
       value.kind === "workBudget" &&
       typeof value.title === "string" &&

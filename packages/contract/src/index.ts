@@ -49,6 +49,18 @@ export type * from "./messages.js";
 export type * from "./models.js";
 export type * from "./plan.js";
 import type { TaskPlanItem } from "./plan.js";
+export type * from "./user-input.js";
+import type {
+  PendingUserInputRequest,
+  UserInputRequest,
+  UserInputResponse,
+} from "./user-input.js";
+export * from "./instructions.js";
+import type {
+  FolderInstructions,
+  FolderInstructionsChoice,
+  StandingInstruction,
+} from "./instructions.js";
 import type {
   ApiKeySaveOutcome,
   ModelCatalog,
@@ -163,64 +175,6 @@ export type ApprovalRequest = {
       readonly reason?: string;
     }[];
   };
-};
-
-export type ClarificationOption = {
-  readonly id: string;
-  readonly label: string;
-  readonly description?: string;
-};
-
-export type ClarificationQuestion = {
-  readonly id: string;
-  readonly prompt: string;
-  readonly options?: readonly ClarificationOption[];
-  readonly allowText?: boolean;
-};
-
-export type QuizAnswer = { readonly id: string; readonly label: string };
-
-export type QuizQuestion = {
-  readonly id: string;
-  readonly prompt: string;
-  readonly answers: readonly QuizAnswer[];
-  readonly selection: "single" | "multiple";
-  readonly correctAnswerIds: readonly string[];
-  readonly explanation: string;
-};
-
-export type UserInputRequest =
-  | {
-      readonly kind: "clarification";
-      readonly title: string;
-      readonly questions: readonly ClarificationQuestion[];
-    }
-  | {
-      readonly kind: "quiz";
-      readonly title: string;
-      readonly questions: readonly QuizQuestion[];
-    };
-
-export type WorkBudgetRequest = {
-  readonly kind: "workBudget";
-  readonly title: string;
-  readonly completedRounds: number;
-  /** Why the work may be going nowhere, when Zhiyin saw it repeat itself. */
-  readonly reason?: string;
-};
-
-export type PendingUserInputRequest = (UserInputRequest | WorkBudgetRequest) & {
-  readonly id: string;
-};
-
-export type UserInputAnswer = {
-  readonly questionId: string;
-  readonly answerIds?: readonly string[];
-  readonly text?: string;
-};
-
-export type UserInputResponse = {
-  readonly answers: readonly UserInputAnswer[];
 };
 
 export type TaskInteraction = {
@@ -392,6 +346,8 @@ export type WorkspaceTask = TaskContext & {
   readonly actions?: readonly TaskAction[];
   /** Optional so task history saved before explicit task plans existed can load. */
   readonly plan?: readonly TaskPlanItem[];
+  /** The standing instructions the model was last sent, by source. ADR 0054. */
+  readonly standingInstructions?: readonly StandingInstruction[];
   /** Optional so task history saved before produced files were recorded can load. */
   readonly artifacts?: readonly TaskArtifact[];
   /** Optional so task history saved before specialist execution can load. */
@@ -736,6 +692,10 @@ export type WorkspaceSnapshot = {
   readonly historyRecovery?: HistoryRecovery;
   /** The budget a conversation without its own choice is kept under. */
   readonly contextBudget?: ContextBudgetChoice;
+  /** What the person asks of every conversation, set in Settings. ADR 0054. */
+  readonly personalInstructions?: string;
+  /** Whether to use each folder's AGENTS.md, by the content they saw. */
+  readonly folderInstructionChoices?: readonly FolderInstructionsChoice[];
   readonly preferences?: {
     readonly onboarded: boolean;
     readonly interests: readonly string[];
@@ -1155,6 +1115,7 @@ export interface CoreApi {
 
   /** The budget every conversation without its own choice follows. */
   setDefaultContextBudget(budget: ContextBudgetChoice): Promise<void>;
+  setPersonalInstructions(text: string): Promise<void>;
 
   /** Condenses now, or before the running turn's next request. */
   condenseNow(taskId: string): Promise<void>;
@@ -1438,6 +1399,8 @@ export interface WorkspaceContext {
    * without either feature reaching for the other.
    */
   workspaceRoot(): string | undefined;
+  /** The folder's AGENTS.md, when it has one. ADR 0054. */
+  folderInstructions?(): Promise<FolderInstructions | undefined>;
 }
 
 /** IPC channel names. Shared so the two sides cannot disagree about them. */
@@ -1458,6 +1421,7 @@ export const CHANNEL = {
   keepPaste: "zhiyin:keep-paste",
   setContextBudget: "zhiyin:set-context-budget",
   setDefaultContextBudget: "zhiyin:set-default-context-budget",
+  setPersonalInstructions: "zhiyin:set-personal-instructions",
   condenseNow: "zhiyin:condense-now",
   openAttachment: "zhiyin:open-attachment",
   previewRewind: "zhiyin:preview-rewind",

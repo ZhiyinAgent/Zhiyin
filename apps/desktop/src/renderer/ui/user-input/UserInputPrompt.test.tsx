@@ -92,7 +92,54 @@ const workBudget: PendingUserInputRequest = {
   completedRounds: 24,
 };
 
+const folderInstructions: PendingUserInputRequest = {
+  id: "folder-1",
+  kind: "folderInstructions",
+  title: "Use this folder's instructions?",
+  path: "AGENTS.md",
+  text: "Invoices live in /finance.",
+  truncated: true,
+};
+
 describe("UserInputPrompt", () => {
+  it("shows a folder's instructions in full before they are used, and sends the choice", () => {
+    const onSubmit = vi.fn(async () => {});
+    render(
+      <UserInputPrompt
+        prompt={folderInstructions}
+        onSubmit={onSubmit}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Invoices live in /finance.")).toBeVisible();
+    expect(screen.getByText(/AGENTS\.md/)).toBeVisible();
+    expect(screen.getByText(/shortened/i)).toBeVisible();
+    expect(screen.getByText(/never grant permission/i)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Use them" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      answers: [{ questionId: "folder-instructions", answerIds: ["use"] }],
+    });
+  });
+
+  it("lets the person ignore a folder's instructions", () => {
+    const onSubmit = vi.fn(async () => {});
+    render(
+      <UserInputPrompt
+        prompt={folderInstructions}
+        onSubmit={onSubmit}
+        onCancel={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ignore them" }));
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      answers: [{ questionId: "folder-instructions", answerIds: ["ignore"] }],
+    });
+  });
+
   it("offers an explicit continue or pause choice at a work checkpoint", () => {
     const onSubmit = vi.fn(async () => {});
     render(

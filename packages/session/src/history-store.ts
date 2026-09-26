@@ -94,6 +94,12 @@ function settingsOf(
     ...(workspace.contextBudget
       ? { contextBudget: workspace.contextBudget }
       : {}),
+    ...(workspace.personalInstructions !== undefined
+      ? { personalInstructions: workspace.personalInstructions }
+      : {}),
+    ...(workspace.folderInstructionChoices
+      ? { folderInstructionChoices: workspace.folderInstructionChoices }
+      : {}),
     ...(workspace.workspace ? { workspace: workspace.workspace } : {}),
     ...(workspace.recentWorkspaces
       ? { recentWorkspaces: workspace.recentWorkspaces }

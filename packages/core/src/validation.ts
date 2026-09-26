@@ -305,6 +305,14 @@ export function validateCommand(
     case CHANNEL.setDefaultContextBudget:
       valid = args.length === 1 && budget(args[0]);
       break;
+    case CHANNEL.setPersonalInstructions:
+      // Empty clears them. Longer than the 16 KB sent, so the person is told
+      // it was shortened rather than refused; far past it is not an edit.
+      valid =
+        args.length === 1 &&
+        typeof args[0] === "string" &&
+        args[0].length <= 64_000;
+      break;
     case CHANNEL.condenseNow:
       valid = args.length === 1 && text(args[0]);
       break;

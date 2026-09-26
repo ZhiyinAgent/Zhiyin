@@ -13,6 +13,7 @@ import { QuietFailures } from "./quiet-failures.js";
 import { LoopGuard } from "./loop-guard.js";
 import { PlanProgress } from "./plan-progress.js";
 import { PlanJudge } from "./plan-judge.js";
+import { StandingInstructions } from "./standing-instructions.js";
 import {
   fitPictures,
   pictureCaption,
@@ -65,6 +66,7 @@ export class TurnLoop {
   readonly #pendingHandoffs: PendingHandoffs;
   readonly #round: ModelRound;
   readonly #context: ContextGuard;
+  readonly #instructions: StandingInstructions;
   readonly #plan: PlanProgress;
   /** How long each conversation's last request was, to mark where the next repeats it. */
   readonly #lastRequestLength = new Map<string, number>();
@@ -85,6 +87,7 @@ export class TurnLoop {
     this.#deps = deps;
     this.#records = parts.records;
     this.#waits = parts.waits;
+    this.#instructions = new StandingInstructions(deps, parts);
     this.#toolCalls = parts.toolCalls;
     this.#specialists = parts.specialists;
     this.#pluginActivation = parts.pluginActivation;
@@ -158,6 +161,10 @@ export class TurnLoop {
 
       const quiet = new QuietFailures();
       const guard = new LoopGuard();
+      const standing = await this.#instructions.gather(
+        taskId,
+        controller.signal,
+      );
       this.#plan.begin(taskId, () => availableTools, controller.signal);
 
       let reportOnly = false;
@@ -166,6 +173,7 @@ export class TurnLoop {
       let refused = false;
       while (true) {
         await this.#plan.remind(taskId, history);
+        await standing.send(history);
         const runs = specialistRunsText(
           this.#records.task(taskId).specialistRuns ?? [],
         );
@@ -277,27 +285,11 @@ export class TurnLoop {
           });
         }
         if (roundText.trim()) assistantParts.push(roundText);
-        if (reportOnly && calls.length > 0) {
-          const assistantText = assistantParts.join("\n\n");
-          const task = this.#records.task(taskId);
-          await this.#records.replaceTask({
-            ...task,
-            phase: assistantText.trim()
-              ? {
-                  kind: "completed",
-                  outcome: {
-                    title: "Work paused",
-                    summary: assistantText,
-                  },
-                }
-              : {
-                  kind: "interrupted",
-                  reason:
-                    "Work paused, but the model did not return the requested progress report.",
-                },
-          });
-          return;
-        }
+        if (reportOnly && calls.length > 0)
+          return this.#records.finishPausedReport(
+            taskId,
+            assistantParts.join("\n\n"),
+          );
         if (calls.length === 0) {
           const assistantText = assistantParts.join("\n\n");
           if (!incomplete && !reportOnly)

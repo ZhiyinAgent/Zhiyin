@@ -43,6 +43,23 @@ export function isSavedSettings(
   )
     return false;
   if (!validContextBudget(value.contextBudget)) return false;
+  if (
+    value.personalInstructions !== undefined &&
+    typeof value.personalInstructions !== "string"
+  )
+    return false;
+  if (
+    value.folderInstructionChoices !== undefined &&
+    (!Array.isArray(value.folderInstructionChoices) ||
+      !value.folderInstructionChoices.every(
+        (choice) =>
+          isRecord(choice) &&
+          typeof choice.root === "string" &&
+          typeof choice.hash === "string" &&
+          typeof choice.use === "boolean",
+      ))
+  )
+    return false;
   if (value.workspace !== undefined && !isFolder(value.workspace)) return false;
   if (
     value.recentWorkspaces !== undefined &&

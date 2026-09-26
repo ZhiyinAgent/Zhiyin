@@ -46,6 +46,7 @@ export type CoreWorkspace = Pick<
   | "renameTask"
   | "setContextBudget"
   | "setDefaultContextBudget"
+  | "choices"
   | "deleteTask"
   | "kept"
   | "previewRewind"
@@ -158,6 +159,8 @@ export class Core {
         workspace.setContextBudget(taskId, budget),
       setDefaultContextBudget: (budget) =>
         workspace.setDefaultContextBudget(budget),
+      setPersonalInstructions: (text) =>
+        workspace.choices.setPersonalInstructions(text),
       condenseNow: (taskId) => turns.condenseNow(taskId),
       openAttachment: async (taskId, id) =>
         openPath(await workspace.kept.attachmentPath(taskId, id)),

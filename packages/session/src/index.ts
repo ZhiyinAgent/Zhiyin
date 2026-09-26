@@ -64,6 +64,8 @@ export type SavedWorkspace = Pick<
   WorkspaceSnapshot,
   | "preferences"
   | "contextBudget"
+  | "personalInstructions"
+  | "folderInstructionChoices"
   | "workspace"
   | "recentWorkspaces"
   | "tasks"

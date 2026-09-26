@@ -17,6 +17,7 @@ export function useContextBudget(
     CoreApi,
     "setContextBudget" | "setDefaultContextBudget" | "condenseNow"
   >,
+  onEditInstructions: () => void,
 ) {
   const [chosen, setChosen] = useState<ContextBudgetChoice>();
   const budget =
@@ -30,6 +31,10 @@ export function useContextBudget(
         : {}),
       model: state.provider,
       budget,
+      ...(selectedTask?.standingInstructions
+        ? { instructions: selectedTask.standingInstructions }
+        : {}),
+      onEditInstructions,
       onChoose: (choice: ContextBudgetChoice) => {
         if (selectedTask)
           void commands.setContextBudget(selectedTask.id, choice);

@@ -507,6 +507,19 @@ rendered.
   verified" and a judge that "Couldn't judge" are told apart, each with the
   judge's reason: `tells a verdict of not verified apart from a judge that
   could not answer`. ADR 0053.
+- Standing instructions (ADR 0054). Settings holds the person's own, with a
+  byte counter that says when only the first 16 KB will be sent: `shows what
+  is saved, and saves an edit`, `can clear them`, `counts the size and says
+  when only the first 16 KB will be sent`, and `says when the save failed and
+  keeps the edit`. A folder's `AGENTS.md` is shown in full before it is used,
+  with Use / Ignore: `shows a folder's instructions in full before they are
+  used, and sends the choice` and `lets the person ignore a folder's
+  instructions`. The ring's "What's using space" lists each source with its
+  size, whether it was shortened, the exact text and where to edit it: `lists
+  each standing instruction by source, with its size, whether it was
+  shortened, the exact text, and where to edit it`; and the shell connects the
+  two: `keeps the person's own instructions in Settings, and the ring's
+  breakdown leads back there`.
 - The work-budget question says what was repeated when Zhiyin saw the work go
   in circles. Named test: `says why the work may be going nowhere when Zhiyin
   saw it repeat itself`.

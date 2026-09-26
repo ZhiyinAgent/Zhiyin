@@ -94,6 +94,8 @@ export type WorkspaceTask = {
   /** The size of the last request the loop sent. */
   contextUsage?: CoreWorkspaceTask["contextUsage"];
   condensings?: NonNullable<CoreWorkspaceTask["condensings"]>;
+  /** The standing instructions its last turn sent, by source. */
+  standingInstructions?: CoreWorkspaceTask["standingInstructions"];
   /** The last message the model now knows only from a summary. */
   condensedThrough?: string;
   id: string;
@@ -121,6 +123,8 @@ export type WorkspaceState = {
   preferences?: CoreWorkspaceSnapshot["preferences"];
   /** The budget a conversation without its own choice follows. */
   contextBudget?: CoreWorkspaceSnapshot["contextBudget"];
+  /** What the person asks of every conversation, set in Settings. */
+  personalInstructions?: CoreWorkspaceSnapshot["personalInstructions"];
   workspace?: CoreWorkspaceSnapshot["workspace"];
   recentWorkspaces: NonNullable<CoreWorkspaceSnapshot["recentWorkspaces"]>;
   issues?: readonly string[];
@@ -303,6 +307,9 @@ function taskFromCore(task: CoreWorkspaceTask): WorkspaceTask {
     ...(task.contextBudget ? { contextBudget: task.contextBudget } : {}),
     ...(task.contextUsage ? { contextUsage: task.contextUsage } : {}),
     ...(task.condensings ? { condensings: task.condensings } : {}),
+    ...(task.standingInstructions
+      ? { standingInstructions: task.standingInstructions }
+      : {}),
     ...(task.compaction
       ? { condensedThrough: task.compaction.throughMessageId }
       : {}),
@@ -340,6 +347,7 @@ export function workspaceReducer(
         historyRecovery: action.snapshot.historyRecovery,
         preferences: action.snapshot.preferences,
         contextBudget: action.snapshot.contextBudget,
+        personalInstructions: action.snapshot.personalInstructions,
         workspace: action.snapshot.workspace,
         recentWorkspaces: action.snapshot.recentWorkspaces ?? [],
         issues: action.snapshot.issues ?? [],

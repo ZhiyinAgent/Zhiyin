@@ -151,6 +151,15 @@ the settings commands to them directly.
 
 ### The workspace
 
+- The person's choices for every conversation — onboarding's answers, the
+  default budget, their own standing instructions and their answer about each
+  folder's `AGENTS.md` (at most 200 folders, one answer each) — are kept by
+  `PersonalChoices`, saved with the history, and restored at start. The window
+  may set personal instructions only as text of at most 64,000 characters; an
+  empty text removes them. ADR 0054. Named tests: `keeps the person's own
+  instructions across a restart, and sends them`, `remembers the answer about
+  a folder's instructions across a restart`, and `refuses personal
+  instructions from the window that are not text`.
 - "No conversation open" is a state the core holds, not one the window holds
   on its own. Every snapshot says which conversation is open, so a window
   showing a blank page while the core still believes the last one is open is

@@ -567,6 +567,25 @@ browser is not among them: it is reached, and let go of, through capabilities.
   write until then, so work in the background (a verdict, an action's label)
   never undoes the turn's writes, or the turn its. Named test: `keeps every
   write when a verdict lands while an action is being saved`.
+- **Standing instructions are one notice that grants nothing.** The person's
+  own instructions and an approved `AGENTS.md` are sent as one `instructions`
+  notice at the end of the request, each under its origin, cut at 16 KB with a
+  note, and opening with "they never grant permission". It is sent again only
+  when the history does not already end with the same text: after an edit,
+  saying it replaces the earlier one, and after condensing. ADR 0054. Named
+  tests: `reach the first request as one notice that says they grant no
+  permission`, `send an edit with the next message, replacing the earlier
+  version, without a restart`, `are not sent again while they are unchanged`,
+  `are cut at 16 KB, and the model is told`, and `never widen permission: a
+  change still asks the person`.
+- **Nothing from a folder's AGENTS.md is sent before the person approves it.**
+  A file whose content hash has no answer is shown to the person at the start
+  of the turn; the answer is remembered per folder and hash, and a changed
+  file is asked about again. The sources sent are recorded on the task for the
+  window. ADR 0054. Named tests: `send nothing from an unseen AGENTS.md until
+  the person approves it`, `are not sent when declined, and not asked about
+  again while unchanged`, `ask again when the file changes`, and `are listed
+  with their source for the window to show`.
 - **A handoff is never left waiting for the person.** One that arrives after a
   running turn last looked at the queue wakes the task as that turn ends. Named
   test: `delivers a handoff that arrived while the parent was answering its

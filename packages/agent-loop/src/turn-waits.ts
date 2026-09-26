@@ -1,4 +1,6 @@
 import type {
+  FolderInstructions,
+  FolderInstructionsRequest,
   ToolCallInspection,
   ToolInvocationResult,
   UserInputRequest,
@@ -13,6 +15,7 @@ import type { TurnRecords } from "./turn-records.js";
 import type { AssembledToolCall, PresentedAction } from "./turn-shared.js";
 
 const workBudgetQuestionId = "work-budget";
+const folderInstructionsQuestionId = "folder-instructions";
 
 /**
  * What a turn waits on from the person: an approval, an answer, or a choice at
@@ -178,7 +181,7 @@ export class TurnWaits {
 
   async waitForUserInput(
     taskId: string,
-    request: UserInputRequest | WorkBudgetRequest,
+    request: UserInputRequest | WorkBudgetRequest | FolderInstructionsRequest,
     complete: (response: UserInputResponse) => Promise<ToolInvocationResult>,
     signal: AbortSignal,
   ): Promise<
@@ -250,6 +253,50 @@ export class TurnWaits {
       completedRounds,
       ...(reason ? { reason } : {}),
     };
+    return this.#choose(
+      taskId,
+      request,
+      workBudgetQuestionId,
+      ["continue", "pause"],
+      "Choose Continue or Pause.",
+      signal,
+    );
+  }
+
+  /**
+   * Asks whether a folder's AGENTS.md may guide the work, showing its text.
+   * Nothing of it reaches the model before the answer. ADR 0054.
+   */
+  waitForFolderInstructions(
+    taskId: string,
+    folder: FolderInstructions,
+    signal: AbortSignal,
+  ): Promise<"use" | "ignore" | "cancelled"> {
+    return this.#choose(
+      taskId,
+      {
+        kind: "folderInstructions",
+        title: "Use these folder instructions?",
+        path: folder.path,
+        text: folder.text,
+        truncated: folder.truncated,
+      },
+      folderInstructionsQuestionId,
+      ["use", "ignore"],
+      "Choose Use or Ignore.",
+      signal,
+    );
+  }
+
+  /** One question with a fixed set of answers, and the one chosen. */
+  async #choose<Choice extends string>(
+    taskId: string,
+    request: WorkBudgetRequest | FolderInstructionsRequest,
+    questionId: string,
+    choices: readonly Choice[],
+    refusal: string,
+    signal: AbortSignal,
+  ): Promise<Choice | "cancelled"> {
     const outcome = await this.waitForUserInput(
       taskId,
       request,
@@ -258,23 +305,18 @@ export class TurnWaits {
         const decision = answer?.answerIds?.[0];
         if (
           response.answers.length !== 1 ||
-          answer?.questionId !== workBudgetQuestionId ||
+          answer?.questionId !== questionId ||
           answer.answerIds?.length !== 1 ||
           answer.text !== undefined ||
-          (decision !== "continue" && decision !== "pause")
+          !choices.includes(decision as Choice)
         )
-          return {
-            ok: false,
-            reason: "Choose Continue or Pause.",
-          };
+          return { ok: false, reason: refusal };
         return { ok: true, value: { decision } };
       },
       signal,
     );
     if (outcome.kind === "cancelled") return "cancelled";
-    return outcome.response.answers[0]?.answerIds?.[0] === "continue"
-      ? "continue"
-      : "pause";
+    return outcome.response.answers[0]!.answerIds![0] as Choice;
   }
 
   /** The prompt still showing, given the label written for it. */

@@ -1,0 +1,51 @@
+.personal-instructions {
+  display: grid;
+  gap: 10px;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.personal-instructions h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.personal-instructions__hint {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.personal-instructions textarea {
+  width: 100%;
+  min-height: 140px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.personal-instructions__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.personal-instructions__foot .button {
+  margin-left: auto;
+}
+
+.personal-instructions__over {
+  color: var(--zy-amber);
+}

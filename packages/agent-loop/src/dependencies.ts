@@ -77,6 +77,18 @@ export interface TurnHost {
   lowerWindow(contextWindow: number, refusedTokens: number): void;
   /** The budget a conversation without its own choice is kept under. */
   defaultContextBudget(): ContextBudgetChoice;
+  /** What the person asks of every conversation, when they have said. */
+  personalInstructions(): string | undefined;
+  /**
+   * Whether the person chose to use a folder's instructions with this hash:
+   * nothing when they have not been asked.
+   */
+  folderInstructionsChoice(root: string, hash: string): boolean | undefined;
+  rememberFolderInstructions(
+    root: string,
+    hash: string,
+    use: boolean,
+  ): Promise<void>;
   enterFolderOf(taskId: string): Promise<void>;
   watchBrowser(taskId: string): void;
   refreshConnections(): Promise<void>;

@@ -42,6 +42,8 @@ export const noticeKinds = [
   "loop",
   /** What the judge found missing from an item claimed done. */
   "gaps",
+  /** The person's standing instructions, sent again when they change. */
+  "instructions",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

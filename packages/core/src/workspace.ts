@@ -46,6 +46,7 @@ import type { Sessions } from "@zhiyin/session";
 import type { UsageTelemetry } from "@zhiyin/usage";
 import { BrowserFeed } from "./browser-feed.js";
 import { ModelSettings } from "./model-settings.js";
+import { PersonalChoices } from "./personal-choices.js";
 import * as startup from "./startup.js";
 import {
   requiredTask,
@@ -101,8 +102,6 @@ export class Workspace {
   #tasks: WorkspaceTask[] = [];
   readonly #conversations: ConversationList;
   #selectedTaskId: string | null = null;
-  #preferences: WorkspaceSnapshot["preferences"];
-  #contextBudget: WorkspaceSnapshot["contextBudget"];
   #workspaceSelection: WorkspaceSnapshot["workspace"];
   #recentWorkspaces: NonNullable<WorkspaceSnapshot["recentWorkspaces"]> = [];
   #issues: string[] = [];
@@ -117,6 +116,8 @@ export class Workspace {
   #usage: UsageState = startup.initialUsage;
   /** The key, the models on offer and the model chosen. */
   readonly settings: ModelSettings;
+  /** Onboarding, the default budget, standing instructions (ADR 0054). */
+  readonly choices = new PersonalChoices(() => this.#choicesChanged());
   readonly #persistence: WorkspacePersistence;
   readonly #rewinds: WorkspaceRewinds;
   readonly #pluginLifecycle: WorkspacePlugins;
@@ -173,7 +174,7 @@ export class Workspace {
       historyAvailable: () => this.#historyAvailable,
       capabilitiesAvailable: () => this.#capabilitiesAvailable,
       ...this.settings.forTurns(),
-      defaultContextBudget: () => this.#contextBudget ?? "medium",
+      ...this.choices.forTurns(),
       enterFolderOf: (taskId) => this.#enterFolderOf(taskId),
       watchBrowser: (taskId) => this.#browser.watch(taskId),
       refreshConnections: () => this.#refreshMcpServers(),
@@ -201,8 +202,7 @@ export class Workspace {
     this.#tasks = restored.tasks;
     this.#conversations.replace(restored.conversations);
     this.#selectedTaskId = restored.selectedTaskId;
-    this.#preferences = restored.preferences;
-    this.#contextBudget = restored.contextBudget;
+    this.choices.restore(restored);
     this.#workspaceSelection = restored.workspace;
     this.#recentWorkspaces = restored.recentWorkspaces;
     this.#issues = restored.issues;
@@ -255,8 +255,7 @@ export class Workspace {
         tasks: this.#historyAvailable ? "available" : "unavailable",
         capabilities: this.#capabilitiesAvailable ? "available" : "unavailable",
       },
-      ...(this.#preferences ? { preferences: this.#preferences } : {}),
-      ...(this.#contextBudget ? { contextBudget: this.#contextBudget } : {}),
+      ...this.choices.snapshot(),
       ...(this.#workspaceSelection
         ? { workspace: this.#workspaceSelection }
         : {}),
@@ -378,8 +377,10 @@ export class Workspace {
     await this.#replaceTask({ ...task, contextBudget: budget });
   }
 
-  async setDefaultContextBudget(budget: ContextBudgetChoice): Promise<void> {
-    this.#contextBudget = budget;
+  setDefaultContextBudget = (budget: ContextBudgetChoice) =>
+    this.choices.setDefaultContextBudget(budget);
+
+  async #choicesChanged(): Promise<void> {
     await this.#persistence.save();
     this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
   }
@@ -652,8 +653,8 @@ export class Workspace {
     await startup.configureProfile({
       capabilities: this.#deps.capabilities,
       interests,
-      preferences: () => this.#preferences,
-      setPreferences: (preferences) => (this.#preferences = preferences),
+      preferences: () => this.choices.preferences,
+      setPreferences: (preferences) => (this.choices.preferences = preferences),
       persist: () => this.#persistence.save(),
       refreshPlugins: () => this.#refreshPlugins(),
     });

@@ -87,6 +87,14 @@ nothing about permission and renders nothing itself.
 
 ## Invariants
 
+- **A folder's instructions are read from its root only, with a hash of their
+  content.** `folderInstructions()` reads `AGENTS.md` at the selected folder's
+  root, cut at 16 KB between characters, and returns its full size and a
+  sha256 the person's approval is kept against. No folder, or no file there,
+  is nothing. ADR 0054. Named tests: `reads AGENTS.md at the folder's root,
+  with a hash of its content`, `gives a changed file a different hash`, `cuts
+  the text at 16 KB between characters and says so`, and `finds nothing in a
+  folder without one, in a subfolder, or with no folder`.
 - **A folder change that fails is a change that did not happen.** The boundary
   moves only once the new folder has been resolved and confirmed to be a
   folder; until then the tools keep working in the folder the person is still

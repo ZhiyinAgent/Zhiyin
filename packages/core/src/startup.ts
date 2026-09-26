@@ -117,6 +117,8 @@ export type StartupState = {
   readonly selectedTaskId: string | null;
   readonly preferences: WorkspaceSnapshot["preferences"];
   readonly contextBudget: WorkspaceSnapshot["contextBudget"];
+  readonly personalInstructions: WorkspaceSnapshot["personalInstructions"];
+  readonly folderInstructionChoices: WorkspaceSnapshot["folderInstructionChoices"];
   readonly workspace: WorkspaceSnapshot["workspace"];
   readonly recentWorkspaces: NonNullable<WorkspaceSnapshot["recentWorkspaces"]>;
   readonly plugins: PluginState[];
@@ -228,6 +230,8 @@ export async function loadStartup(
     selectedTaskId,
     preferences,
     contextBudget: restored?.contextBudget,
+    personalInstructions: restored?.personalInstructions,
+    folderInstructionChoices: restored?.folderInstructionChoices,
     workspace,
     recentWorkspaces,
     plugins,

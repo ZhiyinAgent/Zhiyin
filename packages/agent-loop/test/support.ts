@@ -210,6 +210,31 @@ export class TestHost implements TurnHost {
     return this.contextBudget;
   }
 
+  /** What the person has set in Settings, as a test sets it. */
+  personal: string | undefined;
+  readonly #folderChoices = new Map<string, boolean>();
+
+  personalInstructions(): string | undefined {
+    return this.personal;
+  }
+
+  folderInstructionsChoice(root: string, hash: string): boolean | undefined {
+    return this.#folderChoices.get(`${root}\u0000${hash}`);
+  }
+
+  async rememberFolderInstructions(
+    root: string,
+    hash: string,
+    use: boolean,
+  ): Promise<void> {
+    this.#folderChoices.set(`${root}\u0000${hash}`, use);
+  }
+
+  /** As if the person had already approved this file in this folder. */
+  approveFolder(root: string, hash: string): void {
+    this.#folderChoices.set(`${root}\u0000${hash}`, true);
+  }
+
   async enterFolderOf(taskId: string): Promise<void> {
     this.enteredFolders.push(taskId);
   }

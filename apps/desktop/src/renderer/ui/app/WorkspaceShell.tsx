@@ -53,6 +53,7 @@ type WorkspaceShellProps = {
     | "keepPaste"
     | "setContextBudget"
     | "setDefaultContextBudget"
+    | "setPersonalInstructions"
     | "condenseNow"
     | "openAttachment"
     | "interruptTask"
@@ -170,7 +171,9 @@ export function WorkspaceShell({
     (selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
   );
   const context = selectedTask?.context;
-  const budget = useContextBudget(state, selectedTask, commands);
+  const budget = useContextBudget(state, selectedTask, commands, () =>
+    openNavigationSurface("settings"),
+  );
   const isRunning =
     selectedTask?.phase.kind === "working" ||
     selectedTask?.phase.kind === "browser" ||

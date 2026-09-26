@@ -41,6 +41,7 @@ function fakeCore(version: string): CoreApi & {
     keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
     setContextBudget: async () => {},
     setDefaultContextBudget: async () => {},
+    setPersonalInstructions: async () => {},
     condenseNow: async () => {},
     openAttachment: async () => {},
     previewRewind: async () => {

@@ -35,6 +35,7 @@ export type DemoAction =
   | { type: "taskDeleted"; taskId: string }
   | { type: "contextBudgetChosen"; taskId: string; budget: ContextBudgetChoice }
   | { type: "defaultContextBudgetChosen"; budget: ContextBudgetChoice }
+  | { type: "personalInstructionsSaved"; text: string }
   | { type: "messageSubmitted"; taskId: string; message: string }
   | { type: "approvalRequested"; taskId: string; prompt: ApprovalRequest }
   | { type: "approvalResolved"; taskId: string; allowed: boolean }
@@ -106,6 +107,8 @@ export function demoReducer(
       };
     case "defaultContextBudgetChosen":
       return { ...state, contextBudget: action.budget };
+    case "personalInstructionsSaved":
+      return { ...state, personalInstructions: action.text };
     // Which conversation is left open once one is deleted is a question about
     // the state, so it is answered here rather than by whoever asked.
     case "taskDeleted": {

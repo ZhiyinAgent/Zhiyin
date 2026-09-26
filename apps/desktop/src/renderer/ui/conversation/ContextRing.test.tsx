@@ -39,6 +39,64 @@ function ring(props: Partial<Parameters<typeof ContextRing>[0]> = {}) {
 }
 
 describe("the context ring", () => {
+  it("lists each standing instruction by source, with its size, whether it was shortened, the exact text, and where to edit it", () => {
+    const onEditInstructions = vi.fn();
+    ring({
+      usage: usage(131_000),
+      onEditInstructions,
+      instructions: [
+        {
+          source: "personal",
+          text: "Always answer in French.",
+          bytes: 24,
+          truncated: false,
+        },
+        {
+          source: "folder",
+          path: "AGENTS.md",
+          text: "Invoices live in /finance.",
+          bytes: 20_480,
+          truncated: true,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
+    const breakdown = screen.getByRole("dialog", {
+      name: "What's using space",
+    });
+    const personal = within(breakdown).getByRole("group", {
+      name: "Your instructions",
+    });
+    const folder = within(breakdown).getByRole("group", {
+      name: "AGENTS.md in the folder",
+    });
+
+    expect(personal).toHaveTextContent("Always answer in French.");
+    expect(personal).toHaveTextContent("24 bytes");
+    expect(personal).not.toHaveTextContent(/shortened/i);
+    expect(folder).toHaveTextContent("Invoices live in /finance.");
+    expect(folder).toHaveTextContent("20 KB");
+    expect(folder).toHaveTextContent(/shortened to the first 16 KB/i);
+    expect(folder).toHaveTextContent(/edit AGENTS\.md in the folder/i);
+    fireEvent.click(
+      within(personal).getByRole("button", { name: "Edit in Settings" }),
+    );
+    expect(onEditInstructions).toHaveBeenCalled();
+  });
+
+  it("shows no instructions section when there are none", () => {
+    ring({ usage: usage(131_000) });
+
+    fireEvent.click(screen.getByRole("button", { name: /Context/ }));
+    fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
+
+    expect(
+      screen.queryByRole("group", { name: "Your instructions" }),
+    ).toBeNull();
+  });
+
   it("fills as the next request nears the budget, and the breakdown says in plain words what uses it, explained on hover or focus", () => {
     ring({ usage: usage(131_000) });
 

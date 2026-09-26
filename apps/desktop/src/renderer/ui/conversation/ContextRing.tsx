@@ -17,8 +17,10 @@ import {
   type ContextBudgetChoice,
   type ContextUsage,
   type ModelWindow,
+  type StandingInstruction,
 } from "@zhiyin/contract";
 import { Dialog, Icon } from "../shared/index.js";
+import { InstructionSources } from "./InstructionSources.js";
 import styles from "./conversation.module.css";
 
 const names: Record<ContextBudgetChoice, string> = {
@@ -38,6 +40,8 @@ export function ContextRing({
   budget,
   onChoose,
   onCondense,
+  instructions,
+  onEditInstructions,
   disabled,
 }: {
   /** The last request the loop sent; absent before the first. */
@@ -51,6 +55,10 @@ export function ContextRing({
   onChoose: (budget: ContextBudgetChoice) => void;
   /** Condenses the conversation; absent before there is one. */
   onCondense?: () => Promise<void>;
+  /** The standing instructions the last turn sent, by source. */
+  instructions?: readonly StandingInstruction[];
+  /** Opens Settings where the person's own instructions are written. */
+  onEditInstructions?: () => void;
   disabled: boolean;
 }) {
   const panelId = useId();
@@ -321,6 +329,19 @@ export function ContextRing({
               ))}
             </tbody>
           </table>
+          {instructions && instructions.length > 0 && (
+            <InstructionSources
+              sources={instructions}
+              {...(onEditInstructions
+                ? {
+                    onEdit: () => {
+                      setBreakdown(false);
+                      onEditInstructions();
+                    },
+                  }
+                : {})}
+            />
+          )}
           {model.refusedTokens !== undefined && (
             <p className={styles["context-ring__lowered"]}>
               Limit lowered after the provider refused a request of{" "}

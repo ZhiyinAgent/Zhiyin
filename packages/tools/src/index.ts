@@ -7,6 +7,7 @@
  */
 
 import type {
+  FolderInstructions,
   ShellAvailability,
   ToolCallInspection,
   ToolInvocationResult,
@@ -57,6 +58,7 @@ import { renderHistogram } from "./render-histogram.js";
 import { renderBoxPlot } from "./render-box-plot.js";
 import { askUser, renderQuiz } from "./user-input.js";
 import { keptAddress, type ConversationItems } from "./conversation-items.js";
+import { readFolderInstructions } from "./folder-instructions.js";
 export type { ConversationItems, FileRead } from "./conversation-items.js";
 
 /** Typed data, never a rendered string and never a magic sentinel value. */
@@ -330,6 +332,13 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
 
   workspaceRoot(): string | undefined {
     return this.#available ? this.#root : undefined;
+  }
+
+  /** The folder's AGENTS.md, when it has one. ADR 0054. */
+  folderInstructions(): Promise<FolderInstructions | undefined> {
+    return this.#available
+      ? readFolderInstructions(this.#root)
+      : Promise.resolve(undefined);
   }
 
   describeWorkspace(): Promise<WorkspaceDescription> {
