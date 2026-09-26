@@ -16,9 +16,10 @@ assumption).
 
 It also owns a bounded task-guidance sequence: create a short plan with
 observable criteria, name in the background an action that did not say what it
-is for, and evaluate each criterion at the end of the turn against bounded
-evidence. The working model sees the plan, reports its progress on it and says
-in each tool call what the call is for and which item it serves (ADR 0052).
+is for, and judge the criteria from this turn's calls when the working model
+claims items done and once at the end of the turn (ADR 0053). The working model
+sees the plan, reports its progress on it and says in each tool call what the
+call is for and which item it serves (ADR 0052).
 ADR 0008 limits this output to guidance;
 it cannot affect permission or execution. That work reaches two named model
 dependencies rather than one — presentation and judgement — so a composition can
@@ -164,8 +165,8 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - A task plan starts with one to four ordered items from the planner; the
   working model may add criteria up to eight. Every item includes an
   observable criterion, the judge's verdict (`status`), and apart from it the
-  working model's `progress`. Evaluation sees one criterion and bounded
-  relevant evidence, not the full transcript.
+  working model's `progress`. The judge sees the items it is asked about and
+  this turn's calls, not the full transcript, and can read the workspace.
 
 ## Invariants
 
@@ -519,6 +520,53 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `does not count different calls as a loop`, `starts counting again after a
   change to the workspace`, `sends at most two notices in a turn`, and `gives
   the work-budget question the reason when a loop notice fired`.
+- **The judge runs when there is something to judge, once for all of it.** A
+  claim of done sends the claimed items to one request behind the turn,
+  showing them as being checked meanwhile; the end of the turn waits for it,
+  then judges every item still open in one request. No judge request follows an
+  action, and a cancelled item is never judged. An item a request leaves out is
+  asked about once on its own. ADR 0053. Named tests: `makes no judge request
+  between 20 calls and exactly one at the end`, `judges a claim of done while
+  the worker carries on`, `stores four verdicts from one request for four
+  pending items`, and `asks once more, on its own, about an item the answer
+  left out`.
+- **The judge is given this turn's calls whole, or names them.** Its request
+  carries the person's request, each criterion, the worker's progress and
+  citations labelled as the worker's claim, and the calls: cited first, then
+  those linked to the items, then the final answer, then the rest, within 15%
+  of the budget target. A call is shown whole or left out and named with
+  `open_call`, never cut from the middle. Earlier turns' actions are not
+  evidence. Named tests: `verifies an item whose only proof is the 10th of 20
+  actions`, `gives the person's request, and the claim as the worker's, not as
+  evidence`, `names what did not fit rather than cutting it from the middle`,
+  and `shows the judge what this turn's calls returned, and not an earlier
+  turn's`.
+- **The judge checks for itself and cannot change anything.** It is offered the
+  built-in `read_file`, `list_directory` and `search_files` (and `read_image`
+  when the model accepts pictures) and `open_call`, for up to five rounds. Each
+  call must inspect as read access and be allowed without asking; anything
+  else is refused to it and never put to the person. Its reads are not actions
+  of the conversation. Named tests: `opens a file with read_file to verify what
+  the results alone do not show`, `is offered no tool that changes anything,
+  and cannot run one`, and `opens a call the prompt left out with open_call`.
+- **A verdict is one of three things, and says why.** `verified` keeps the
+  calls of the turn it relied on; `not-verified` keeps what is missing; a
+  failed request or an answer still unreadable after one more ask is
+  `couldnt-judge` with its reason, never either verdict. An id answered twice
+  counts as unanswered. Named tests: `reads one verdict per id asked about, and
+  none for an id given twice`, `reports a failed judge request as couldn't
+  judge, with its reason`, `reports an answer it cannot read, twice, as
+  couldn't judge`, `keeps the calls a verified verdict relied on`, and `names
+  each of the judge's verdicts with its reason`.
+- **A gap goes back to the model once.** A not-verified verdict on a claim is
+  sent before the next request as a `gaps` notice naming what is missing, at
+  most once per item a turn. Named test: `puts exactly one gaps notice in the
+  request after a not-verified verdict`.
+- **A write still being saved is what the next read builds on.** The app
+  commits a write only once it is saved; `TurnRecords` keeps each task's latest
+  write until then, so work in the background (a verdict, an action's label)
+  never undoes the turn's writes, or the turn its. Named test: `keeps every
+  write when a verdict lands while an action is being saved`.
 - **A handoff is never left waiting for the person.** One that arrives after a
   running turn last looked at the queue wakes the task as that turn ends. Named
   test: `delivers a handoff that arrived while the parent was answering its
@@ -555,11 +603,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `shows an action that ran and answered as reported, not failed`, `still shows
   an action that could not run at all as failed`, and `shows an action that
   succeeded as completed` guard the three outcomes.
-- Every auxiliary request - the plan, an action's name, a criterion check -
+- Every auxiliary request - the plan, an action's name, the judge's review -
   asks for the least thinking the model will do and carries enough room
   that the answer survives whatever thinking happens anyway. Both are set where
   the request is sent rather than at each call site, so one added later inherits
-  them. A model that will not be told how much to think is asked again without
+  them; the judge sends its own, with 800 tokens and 150 more per item, as
+  `stores four verdicts from one request for four pending items` checks. A model that will not be told how much to think is asked again without
   the setting instead of going unanswered. The named tests `asks for the least
   thinking the model will do`, `leaves room for an answer after the thinking`,
   `tells the model to keep its thinking short and answer`, and `is asked again
@@ -602,22 +651,21 @@ browser is not among them: it is reached, and let go of, through capabilities.
   criterion is satisfied`, and `asks the conversation's own model to condense
   it, and neither auxiliary model` guard the split.
 - A generated answer is never discarded for its length where the answer is what
-  matters. A criterion verdict and a plan item survive a long explanation,
+  matters. A verdict's reason and a plan item survive a long explanation,
   shortened to fit; only copy whose length means the request was misread falls
   back instead. Each schema declares the limit its parser enforces, so a model
   is never failed against a limit it was not told. The named tests `records a
   satisfied verdict even when the model explains it at length`, `keeps a plan
   whose criterion runs past the display limit`, and `tells the model the same
   length limit the answer is held to` guard this.
-- The assessment that closes a turn is shown what each action returned, not
-  only that it ran. A criterion resting on a tool's output can therefore be
-  met by that output. The named test `shows the final assessment what each
-  action actually returned` guards it.
-- A negative assessment at the end of one conversational turn is not a failed
-  plan item: the person may still be supplying details or the task may continue
-  in another turn. Positive evidence marks an item verified; otherwise its
-  prior open state and evidence remain intact. The named test `keeps unmet plan
-  work open when a turn asks for more information` guards this distinction.
+- The judge is shown what each call of the turn returned, not only that it
+  ran. A criterion resting on a tool's output can therefore be met by that
+  output. The named test `shows the judge what this turn's calls returned, and
+  not an earlier turn's` guards it.
+- A negative verdict at the end of one conversational turn does not close the
+  item: it reads "not verified" with what is missing, and the next turn may
+  still do the work and be judged again. The named test `keeps unmet plan work
+  open when a turn asks for more information` guards this.
 - A conversation condensed by the loop is renamed by the same request that
   condensed it, never a second one, and a manual title is neither asked for nor
   replaced. The named tests `names a condensed conversation from the condensing

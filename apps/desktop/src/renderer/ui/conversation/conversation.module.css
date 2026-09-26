@@ -145,6 +145,11 @@
   color: var(--zy-accent);
 }
 
+.task-plan__item--couldnt-judge .task-plan__marker {
+  border-style: dashed;
+  color: var(--zy-muted);
+}
+
 .task-plan__content {
   min-width: 0;
 }

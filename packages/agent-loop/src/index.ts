@@ -85,7 +85,6 @@ export class AgentLoop {
     this.#context = new ContextGuard(deps, this.#records);
     this.#turnLoop = new TurnLoop(deps, {
       records: this.#records,
-      auxiliary: this.#auxiliary,
       waits: this.#waits,
       toolCalls: this.#toolCalls,
       specialists: this.#specialists,

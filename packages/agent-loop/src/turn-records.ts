@@ -26,6 +26,14 @@ export class TurnRecords {
   readonly #storeGuard: (task: WorkspaceTask) => () => boolean;
   readonly #progressCheckpoints = new Map<string, number>();
   readonly #progressEmits = new Map<string, number>();
+  /**
+   * Each task's latest write while it is still being saved. The app commits a
+   * write only once it is saved, so a read in between used to return the task
+   * from before it. Work in the background (a judge's verdict, an action's
+   * label) then built on that, and whichever save finished last undid the
+   * other. ADR 0053.
+   */
+  readonly #unsaved = new Map<string, WorkspaceTask>();
 
   constructor(
     deps: AgentLoopDependencies,
@@ -505,7 +513,7 @@ export class TurnRecords {
   task(taskId: string): WorkspaceTask {
     const task = this.#deps.host.find(taskId);
     if (!task) throw new Error("The task does not exist.");
-    return task;
+    return this.#unsaved.get(taskId) ?? task;
   }
 
   /**
@@ -521,11 +529,16 @@ export class TurnRecords {
   ): Promise<void> {
     const commit = this.#storeGuard(task);
     if (!commit()) return;
-    await this.#deps.host.store(task, {
-      persist,
-      commit,
-      announce: () => emit && commit(),
-    });
+    this.#unsaved.set(task.id, task);
+    try {
+      await this.#deps.host.store(task, {
+        persist,
+        commit,
+        announce: () => emit && commit(),
+      });
+    } finally {
+      if (this.#unsaved.get(task.id) === task) this.#unsaved.delete(task.id);
+    }
   }
 
   async interrupt(taskId: string, reason?: string): Promise<void> {

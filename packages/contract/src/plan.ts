@@ -1,7 +1,7 @@
 /**
  * The plan a turn is judged on. Two voices write to each item and are kept
  * apart: the working model's progress, which is its claim, and the verdict,
- * which only the judge sets. ADR 0052.
+ * which only the judge sets. ADRs 0052 and 0053.
  */
 
 /** Where the working model says an item stands. */
@@ -23,10 +23,23 @@ export type TaskPlanItem = {
   readonly id: string;
   readonly title: string;
   readonly criterion: string;
-  /** The judge's side. `active` is kept for plans saved before `progress`. */
+  /**
+   * The judge's side. `needs-attention` is "not verified": the judge found
+   * something missing. `couldnt-judge` is the judge failing to answer, never
+   * shown as either verdict. `active` is kept for plans saved before
+   * `progress`.
+   */
   readonly status:
-    "pending" | "active" | "checking" | "verified" | "needs-attention";
+    | "pending"
+    | "active"
+    | "checking"
+    | "verified"
+    | "needs-attention"
+    | "couldnt-judge";
+  /** The judge's reason for its verdict, or why it could not give one. */
   readonly verification?: string;
+  /** The calls of the turn a verified verdict relied on. */
+  readonly verdictEvidence?: readonly string[];
   /** The working model's side, absent until it reports on the item. */
   readonly progress?: PlanProgress;
   /** Why an item was cancelled, in the working model's words. */

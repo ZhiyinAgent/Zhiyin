@@ -94,6 +94,43 @@ describe("TaskPlan", () => {
     expect(within(plan).getByText("Added by the assistant")).toBeVisible();
     expect(within(plan).getByText("1/3 assessed as done")).toBeVisible();
   });
+
+  it("tells a verdict of not verified apart from a judge that could not answer", () => {
+    render(
+      <TaskPlan
+        items={[
+          {
+            id: "plan-1",
+            title: "Check the totals",
+            criterion: "The totals match the CSV.",
+            status: "needs-attention",
+            progress: "done",
+            verification: "No call compared the totals with the CSV.",
+          },
+          {
+            id: "plan-2",
+            title: "Write the summary",
+            criterion: "summary.md names every report.",
+            status: "couldnt-judge",
+            verification: "The review request failed: network unreachable.",
+          },
+        ]}
+      />,
+    );
+
+    const plan = screen.getByRole("region", { name: "Task plan" });
+    expect(
+      within(plan).getByText("Done (the assistant says) · Not verified"),
+    ).toBeVisible();
+    expect(
+      within(plan).getByText("No call compared the totals with the CSV."),
+    ).toBeVisible();
+    expect(within(plan).getByText("Couldn't judge")).toBeVisible();
+    expect(
+      within(plan).getByText("The review request failed: network unreachable."),
+    ).toBeVisible();
+    expect(within(plan).getByText("0/2 assessed as done")).toBeVisible();
+  });
 });
 
 describe("WorkTrace", () => {

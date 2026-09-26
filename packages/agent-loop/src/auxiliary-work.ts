@@ -1,21 +1,14 @@
 import type {
-  TaskPlanItem,
   ToolCallInspection,
   WorkspaceDescription,
 } from "@zhiyin/contract";
 import type { ModelClient, ModelRequest } from "@zhiyin/model-client";
-import {
-  actionLabelFrom,
-  criterionEvaluationFrom,
-  planFrom,
-} from "./task-guidance.js";
+import { actionLabelFrom, planFrom } from "./task-guidance.js";
 import {
   recordActionPresentationTool,
   recordConversationTitleTool,
-  recordCriterionEvaluationTool,
   recordPlanTool,
 } from "./auxiliary-tools.js";
-import { evidenceText } from "./evidence.js";
 import { actionContextLines } from "./guidance-context.js";
 import { conversationTitleFrom } from "./conversation-context.js";
 import type { AgentLoopDependencies } from "./index.js";
@@ -204,91 +197,6 @@ export class AuxiliaryWork {
     return response ? actionLabelFrom(response) : undefined;
   }
 
-  async evaluateRemainingCriteria(
-    taskId: string,
-    assistantText: string,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const pending = (this.#records.task(taskId).plan ?? []).filter(
-      (item) => item.status !== "verified" && item.progress !== "cancelled",
-    );
-    for (const item of pending) {
-      if (signal.aborted) return;
-      await this.#updatePlanItem(taskId, item.id, (current) => ({
-        ...current,
-        status: "checking",
-      }));
-      const task = this.#records.task(taskId);
-      const response = await this.askJudgement(
-        {
-          messages: [
-            { role: "system", content: auxiliarySystemMessage },
-            {
-              role: "user",
-              content: [
-                "Decide whether this single criterion is satisfied by the final response and what each action returned.",
-                "Use only the supplied evidence. An attempted action is not proof of its result.",
-                'Return {"satisfied":true or false,"summary":"..."}.',
-                `Criterion: ${item.criterion}`,
-                `Final response: ${this.#boundedEvidence(assistantText)}`,
-                `Actions: ${this.#boundedEvidence(
-                  (task.actions ?? []).map(
-                    ({
-                      action,
-                      description,
-                      target,
-                      status,
-                      reason,
-                      evidence,
-                    }) => ({
-                      action,
-                      description,
-                      target,
-                      status,
-                      reason,
-                      /*
-                       * What the action returned, not merely that it ran. This
-                       * list carried no results once, while the instruction
-                       * above still told the model an attempt proves nothing —
-                       * so any criterion resting on a tool's output was refused
-                       * for want of evidence that was never sent. Bounded per
-                       * action first, so one long result cannot crowd the rest
-                       * out of the whole-list bound below.
-                       */
-                      ...(evidence
-                        ? { returned: evidenceText(evidence, 600) }
-                        : {}),
-                    }),
-                  ),
-                )}`,
-              ].join("\n"),
-            },
-          ],
-          maximumOutputTokens: 140,
-          tools: [recordCriterionEvaluationTool],
-          signal,
-        },
-        signal,
-      );
-      if (signal.aborted) return;
-      const evaluation = response
-        ? criterionEvaluationFrom(response)
-        : undefined;
-      await this.#updatePlanItem(taskId, item.id, (current) =>
-        evaluation?.satisfied
-          ? {
-              ...current,
-              status: "verified",
-              verification: evaluation.summary,
-            }
-          : {
-              ...current,
-              status: item.status,
-            },
-      );
-    }
-  }
-
   /** Presentation: plans, labels, and the copy shown around an action. */
   async askGuidance(
     request: ModelRequest,
@@ -415,22 +323,5 @@ export class AuxiliaryWork {
       };
     }
     return { text, toolArguments, ...(finishReason ? { finishReason } : {}) };
-  }
-
-  #boundedEvidence(value: unknown): string {
-    return evidenceText(value, 4000);
-  }
-
-  async #updatePlanItem(
-    taskId: string,
-    itemId: string,
-    update: (item: TaskPlanItem) => TaskPlanItem,
-  ): Promise<void> {
-    const task = this.#records.task(taskId);
-    if (!task.plan?.some((item) => item.id === itemId)) return;
-    await this.#records.replaceTask({
-      ...task,
-      plan: task.plan.map((item) => (item.id === itemId ? update(item) : item)),
-    });
   }
 }

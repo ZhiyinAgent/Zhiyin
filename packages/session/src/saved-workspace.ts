@@ -258,9 +258,17 @@ function validPlanItem(item: unknown): boolean {
     typeof item.title === "string" &&
     typeof item.criterion === "string" &&
     optionalText(item.verification) &&
-    ["pending", "active", "checking", "verified", "needs-attention"].includes(
-      String(item.status),
-    ) &&
+    [
+      "pending",
+      "active",
+      "checking",
+      "verified",
+      "needs-attention",
+      "couldnt-judge",
+    ].includes(String(item.status)) &&
+    (item.verdictEvidence === undefined ||
+      (Array.isArray(item.verdictEvidence) &&
+        item.verdictEvidence.every((id) => typeof id === "string"))) &&
     (item.progress === undefined ||
       ["pending", "in_progress", "done", "cancelled"].includes(
         String(item.progress),

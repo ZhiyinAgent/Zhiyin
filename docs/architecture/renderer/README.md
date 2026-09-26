@@ -503,7 +503,10 @@ rendered.
   item and the assessment are shown side by side in their own words, "Done
   (the assistant says) · Assessed as done", with a cancel reason and a mark on
   a criterion the assistant added: `shows what the assistant says beside the
-  assessment, and never one for the other`. ADR 0052.
+  assessment, and never one for the other`. ADR 0052. A verdict of "Not
+  verified" and a judge that "Couldn't judge" are told apart, each with the
+  judge's reason: `tells a verdict of not verified apart from a judge that
+  could not answer`. ADR 0053.
 - The work-budget question says what was repeated when Zhiyin saw the work go
   in circles. Named test: `says why the work may be going nowhere when Zhiyin
   saw it repeat itself`.

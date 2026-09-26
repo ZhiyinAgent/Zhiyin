@@ -16,7 +16,30 @@ import { loopFrom, stubDependencies, type TurnTestApp } from "./support.js";
 
 export const PLAN = "Create an ordered plan for this task.";
 export const LABEL = "Write the interface title and description";
-export const JUDGE = "Decide whether this single criterion is satisfied";
+export const REVIEW = "Review whether each plan criterion is met.";
+
+export type Verdict = {
+  readonly id: string;
+  readonly verdict: "verified" | "not-verified" | "couldnt-judge";
+  readonly reason: string;
+  readonly evidence?: readonly string[];
+};
+
+/** What the reviewer does in one request. */
+export type Review =
+  | { readonly calls: readonly Call[] }
+  | { readonly verdicts: readonly Verdict[] }
+  | { readonly text: string }
+  | { readonly fail: string };
+
+/** The plan item ids a review request names. */
+export function reviewedIds(request: ModelRequest): string[] {
+  const prompt = request.messages
+    .filter((message) => message.role === "user")
+    .map((message) => String(message.content))
+    .join("\n");
+  return [...prompt.matchAll(/^- (plan-\d+):/gm)].map((match) => match[1]!);
+}
 
 export type Call = {
   readonly name: string;
@@ -45,7 +68,7 @@ export type Fixture = {
   readonly loop: TurnTestApp;
   /** Every request the working model was sent, in order. */
   readonly requests: ModelRequest[];
-  /** Which model was asked what, in order: work, plan, label or judge. */
+  /** Which model was asked what, in order: work, plan, label or review. */
   readonly log: string[];
   /** The arguments each tool was inspected with. */
   readonly inspected: unknown[];
@@ -53,6 +76,10 @@ export type Fixture = {
   readonly labels: string[];
   /** Settles the labelling calls that were held back, in order. */
   readonly release: (() => void)[];
+  /** Every request the reviewer was sent, in order. */
+  readonly reviews: ModelRequest[];
+  /** Every tool run, by whom: `work:read_file` or `review:read_file`. */
+  readonly executed: string[];
 };
 
 export function withPlan(options: {
@@ -61,7 +88,19 @@ export function withPlan(options: {
   /** Hold every labelling answer until the test lets it go. */
   readonly holdLabels?: boolean;
   readonly label?: { readonly title: string; readonly description: string };
-  readonly judge?: (prompt: string) => unknown;
+  /**
+   * The reviewer's answer to its `number`th request. Without it, every item
+   * it is asked about is reported not verified.
+   */
+  readonly review?: (
+    request: ModelRequest,
+    number: number,
+  ) => Review | Promise<Review>;
+  /** File contents `read_file` answers with, by path. */
+  readonly files?: Readonly<Record<string, string>>;
+  /** What `list_directory` answers for a path, when not the default. */
+  readonly listing?: (path: string) => string;
+  readonly savesSlowly?: boolean;
   readonly workLimits?: WorkLimits;
   readonly restore?: readonly WorkspaceTask[];
 }): Fixture {
@@ -70,7 +109,14 @@ export function withPlan(options: {
   const inspected: unknown[] = [];
   const release: (() => void)[] = [];
   const labels: string[] = [];
+  const reviews: ModelRequest[] = [];
+  const executed: string[] = [];
   const base = stubDependencies(() => {});
+  /**
+   * Whether the reviewer asked last. A tool run between a review request and
+   * the next working request is the reviewer's.
+   */
+  let reviewing = false;
   const auxiliary = {
     send: async function* (request: ModelRequest): AsyncGenerator<ModelEvent> {
       const prompt = String(request.messages.at(-1)?.content ?? "");
@@ -94,17 +140,43 @@ export function withPlan(options: {
             },
           ),
         };
-      } else if (prompt.includes(JUDGE)) {
-        log.push("judge");
-        yield {
-          kind: "textDelta",
-          text: JSON.stringify(
-            options.judge?.(prompt) ?? {
-              satisfied: false,
-              summary: "Not yet.",
-            },
-          ),
-        };
+      } else if (
+        request.messages.some(
+          (message) =>
+            message.role === "user" && String(message.content).includes(REVIEW),
+        )
+      ) {
+        log.push("review");
+        reviews.push(request);
+        reviewing = true;
+        const answer: Review = options.review
+          ? await options.review(request, reviews.length)
+          : {
+              verdicts: reviewedIds(request).map((id) => ({
+                id,
+                verdict: "not-verified" as const,
+                reason: "Not yet.",
+              })),
+            };
+        if ("fail" in answer) throw new Error(answer.fail);
+        if ("text" in answer) yield { kind: "textDelta", text: answer.text };
+        else if ("verdicts" in answer)
+          yield {
+            kind: "toolCallDelta",
+            index: 0,
+            callId: `verdicts-${reviews.length}`,
+            name: "record_verdicts",
+            argumentsDelta: JSON.stringify({ items: answer.verdicts }),
+          };
+        else
+          for (const [index, call] of answer.calls.entries())
+            yield {
+              kind: "toolCallDelta",
+              index,
+              callId: call.id ?? `review-${reviews.length}-${index}`,
+              name: call.name,
+              argumentsDelta: JSON.stringify(call.args),
+            };
       } else log.push("other");
       yield { kind: "done" };
     },
@@ -115,6 +187,15 @@ export function withPlan(options: {
   ): Promise<ToolCallInspection> => {
     inspected.push(args);
     const path = (args as { path?: string }).path ?? "workspace root";
+    if (name === "read_file")
+      return {
+        ok: true,
+        action: "Read a workspace file",
+        target: path,
+        command: `read_file(${JSON.stringify(args)})`,
+        access: "read",
+        scope: "workspace",
+      };
     return name === "write_note"
       ? {
           ok: true,
@@ -140,6 +221,7 @@ export function withPlan(options: {
   };
   const loop = loopFrom({
     ...base,
+    ...(options.savesSlowly ? { savesSlowly: true } : {}),
     ...(options.workLimits ? { workLimits: options.workLimits } : {}),
     guidanceModel: auxiliary,
     judgementModel: auxiliary,
@@ -155,15 +237,30 @@ export function withPlan(options: {
           description: "Write a note.",
           inputSchema: objectSchema,
         },
+        {
+          name: "read_file",
+          description: "Read a file.",
+          inputSchema: objectSchema,
+        },
       ],
       inspect,
-      execute: async (name: string, args: unknown) => ({
-        ok: true as const,
-        value:
-          name === "write_note"
-            ? "Written."
-            : `Listed ${(args as { path?: string }).path ?? "the root"}: q1.pdf, q2.pdf`,
-      }),
+      execute: async (name: string, args: unknown) => {
+        const path = (args as { path?: string }).path ?? "the root";
+        executed.push(`${reviewing ? "review" : "work"}:${name}`);
+        if (name === "read_file") {
+          const text = options.files?.[path];
+          return text === undefined
+            ? { ok: false as const, reason: `${path} does not exist.` }
+            : { ok: true as const, value: text };
+        }
+        return {
+          ok: true as const,
+          value:
+            name === "write_note"
+              ? "Written."
+              : (options.listing?.(path) ?? `Listed ${path}: q1.pdf, q2.pdf`),
+        };
+      },
     } as never,
     permissions: {
       decide: async (request: { readonly name: string }) =>
@@ -178,6 +275,7 @@ export function withPlan(options: {
       ): AsyncGenerator<ModelEvent> {
         requests.push(request);
         log.push("work");
+        reviewing = false;
         const step = options.script(requests.length, request);
         if ("text" in step) yield { kind: "textDelta", text: step.text };
         else
@@ -194,7 +292,16 @@ export function withPlan(options: {
     },
   });
   if (options.restore) loop.restore(options.restore);
-  return { loop, requests, log, inspected, labels, release };
+  return {
+    loop,
+    requests,
+    log,
+    inspected,
+    labels,
+    release,
+    reviews,
+    executed,
+  };
 }
 
 /** The notices of one kind a request carries. */

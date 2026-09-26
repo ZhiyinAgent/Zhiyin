@@ -4,8 +4,15 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { planText } from "../src/plan-progress.js";
 import type { WorkspaceTask } from "@zhiyin/contract";
-import { notices, resultOf, withPlan, type Step } from "./plan-fixture.js";
+import {
+  notices,
+  resultOf,
+  reviewedIds,
+  withPlan,
+  type Step,
+} from "./plan-fixture.js";
 
 const listing = (id: string, path = "reports"): Step => ({
   calls: [{ name: "list_directory", args: { path }, id }],
@@ -98,6 +105,41 @@ describe("the plan the working model sees", () => {
     expect(
       fixture.requests.map((request) => notices(request, "plan").length),
     ).toEqual(Array(15).fill(1));
+  });
+});
+
+describe("the verdicts in the plan the model sees", () => {
+  it("names each of the judge's verdicts with its reason", () => {
+    const text = planText([
+      {
+        id: "plan-1",
+        title: "List the reports",
+        criterion: "The reports were listed.",
+        status: "verified",
+        verification: "The listing names q1.pdf.",
+      },
+      {
+        id: "plan-2",
+        title: "Check the totals",
+        criterion: "The totals match the CSV.",
+        status: "needs-attention",
+        verification: "No call compared the totals.",
+      },
+      {
+        id: "plan-3",
+        title: "Write the summary",
+        criterion: "summary.md names every report.",
+        status: "couldnt-judge",
+        verification: "The review request failed.",
+      },
+    ]);
+    expect(text).toContain("Verdict: verified: The listing names q1.pdf.");
+    expect(text).toContain(
+      "Verdict: not verified: No call compared the totals.",
+    );
+    expect(text).toContain(
+      "Verdict: could not be judged: The review request failed.",
+    );
   });
 });
 
@@ -271,7 +313,6 @@ describe("update_plan", () => {
               ],
             })
           : finish,
-      judge: () => ({ satisfied: false, summary: "Not compared." }),
     });
     const taskId = await fixture.loop.createTask();
 
@@ -282,7 +323,10 @@ describe("update_plan", () => {
       title: "Check the totals",
       addedBy: "assistant",
     });
-    expect(fixture.log.filter((entry) => entry === "judge")).toHaveLength(3);
+    // One review, for the planner's items and the one the model added.
+    expect(fixture.reviews.map(reviewedIds)).toEqual([
+      ["plan-1", "plan-2", "plan-3"],
+    ]);
   });
 
   it("holds the plan to eight items", async () => {
@@ -322,6 +366,6 @@ describe("update_plan", () => {
 
     await fixture.loop.start(taskId, "Summarise the reports");
 
-    expect(fixture.log.filter((entry) => entry === "judge")).toHaveLength(1);
+    expect(fixture.reviews.map(reviewedIds)).toEqual([["plan-1"]]);
   });
 });

@@ -57,6 +57,11 @@ export class TestHost implements TurnHost {
   history = true;
   capabilities = true;
   images = false;
+  /**
+   * Commit a write only after a save that takes a moment, as the core does.
+   * Off, a write lands at once, and two writers can never overlap.
+   */
+  savesSlowly = false;
   /** What the turn asked the app around it to do, in order. */
   readonly enteredFolders: string[] = [];
   readonly watchedBrowsers: string[] = [];
@@ -158,6 +163,8 @@ export class TestHost implements TurnHost {
     },
   ): Promise<void> {
     if (!this.tasks.some((item) => item.id === task.id)) return;
+    if (this.savesSlowly)
+      await new Promise((resolve) => setTimeout(resolve, 1));
     const updated = {
       ...settledWhenTurnEnded(task),
       updatedAt: this.#now().toISOString(),
@@ -259,6 +266,8 @@ export type LoopTestDependencies = Omit<
     /** The model's size as the catalogue lists it; unknown when absent. */
     readonly modelWindow?: ModelWindow & { readonly model: string };
     readonly defaultContextBudget?: ContextBudgetChoice;
+    /** See `TestHost.savesSlowly`. */
+    readonly savesSlowly?: boolean;
   };
 
 /** The loop as a test drives it, with the app around it answering beside. */
@@ -341,12 +350,14 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     acceptsImages,
     modelWindow,
     defaultContextBudget,
+    savesSlowly,
     ...rest
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
   host.images = acceptsImages === true;
   if (modelWindow) host.window = modelWindow;
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
+  host.savesSlowly = savesSlowly === true;
   const loop = new AgentLoop({
     ...rest,
     model: withOneChannel(rest.model),

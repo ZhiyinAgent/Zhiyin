@@ -872,7 +872,7 @@ describe("AgentLoop", () => {
           judgementRequests.push(request);
           yield {
             kind: "textDelta",
-            text: '{"satisfied":true,"summary":"package.json identifies Zhiyin and pnpm."}',
+            text: '{"items":[{"id":"plan-1","verdict":"verified","reason":"package.json identifies Zhiyin and pnpm."}]}',
           };
           yield { kind: "done" };
         },

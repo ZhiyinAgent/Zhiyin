@@ -55,6 +55,7 @@ describe("a notice from Zhiyin", () => {
       "cleared",
       "plan",
       "loop",
+      "gaps",
     ]);
   });
 });

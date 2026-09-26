@@ -124,9 +124,14 @@ describe("auxiliary model seams", () => {
         },
       }),
       judgementModel: recorder(judgement, {
-        "Decide whether this single criterion": {
-          satisfied: true,
-          summary: "The reply explains what it is.",
+        "Review whether each plan criterion is met.": {
+          items: [
+            {
+              id: "plan-1",
+              verdict: "verified",
+              reason: "The reply explains what it is.",
+            },
+          ],
         },
       }),
     });
@@ -135,10 +140,10 @@ describe("auxiliary model seams", () => {
     await loop.start(taskId, "Who are you and what can you do?");
 
     expect(promptsOf(judgement)).toContain(
-      "Decide whether this single criterion",
+      "Review whether each plan criterion is met.",
     );
     expect(promptsOf(guidance)).not.toContain(
-      "Decide whether this single criterion",
+      "Review whether each plan criterion is met.",
     );
     expect(loop.snapshot().tasks[0]?.plan?.[0]?.status).toBe("verified");
   });

@@ -12,6 +12,7 @@ import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "./quiet-failures.js";
 import { LoopGuard } from "./loop-guard.js";
 import { PlanProgress } from "./plan-progress.js";
+import { PlanJudge } from "./plan-judge.js";
 import {
   fitPictures,
   pictureCaption,
@@ -24,7 +25,6 @@ import {
 } from "./conversation-context.js";
 import { harnessNotice, toolOutput } from "./notices.js";
 import type { ModelHistory, SentPicture } from "./model-history.js";
-import { AuxiliaryWork } from "./auxiliary-work.js";
 import { ModelRound } from "./model-round.js";
 import { RoundResults, resultLimits } from "./result-size.js";
 import type { ContextGuard } from "./context-guard.js";
@@ -57,7 +57,6 @@ import type { AgentLoopDependencies } from "./dependencies.js";
 export class TurnLoop {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
-  readonly #auxiliary: AuxiliaryWork;
   readonly #waits: TurnWaits;
   readonly #toolCalls: ToolCalls;
   readonly #specialists: SpecialistExecution;
@@ -74,7 +73,6 @@ export class TurnLoop {
     deps: AgentLoopDependencies,
     parts: {
       readonly records: TurnRecords;
-      readonly auxiliary: AuxiliaryWork;
       readonly waits: TurnWaits;
       readonly toolCalls: ToolCalls;
       readonly specialists: SpecialistExecution;
@@ -86,7 +84,6 @@ export class TurnLoop {
   ) {
     this.#deps = deps;
     this.#records = parts.records;
-    this.#auxiliary = parts.auxiliary;
     this.#waits = parts.waits;
     this.#toolCalls = parts.toolCalls;
     this.#specialists = parts.specialists;
@@ -95,7 +92,12 @@ export class TurnLoop {
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#round = new ModelRound(deps, parts.records);
     this.#context = parts.context;
-    this.#plan = new PlanProgress(parts.records);
+    this.#plan = new PlanProgress(
+      parts.records,
+      new PlanJudge(deps, parts.records, (id) =>
+        parts.context.targetTokens(id),
+      ),
+    );
   }
 
   async run(
@@ -156,7 +158,7 @@ export class TurnLoop {
 
       const quiet = new QuietFailures();
       const guard = new LoopGuard();
-      this.#plan.begin(taskId, () => availableTools);
+      this.#plan.begin(taskId, () => availableTools, controller.signal);
 
       let reportOnly = false;
       let delegatedChildren = options?.initialDelegatedChildren ?? 0;
@@ -299,11 +301,7 @@ export class TurnLoop {
         if (calls.length === 0) {
           const assistantText = assistantParts.join("\n\n");
           if (!incomplete && !reportOnly)
-            await this.#auxiliary.evaluateRemainingCriteria(
-              taskId,
-              assistantText,
-              controller.signal,
-            );
+            await this.#plan.settle(taskId, assistantText);
           controller.signal.throwIfAborted();
           const task = this.#records.task(taskId);
           const backgroundSpecialistIds = (task.specialistRuns ?? [])
@@ -432,12 +430,14 @@ export class TurnLoop {
               ledger,
             });
             delegatedChildren = delegation.delegatedChildren;
+            const handedBack = JSON.stringify({
+              ...delegation.result,
+              ...note,
+            });
+            this.#plan.answered(taskId, call.callId, handedBack);
             await history.result(
               call,
-              toolOutput(
-                call.name,
-                JSON.stringify({ ...delegation.result, ...note }),
-              ),
+              toolOutput(call.name, handedBack),
               false,
             );
             if (controller.signal.aborted) {
@@ -516,12 +516,11 @@ export class TurnLoop {
             ...(shown ? { picturesNotSent: shown } : {}),
             ...note,
           };
+          const sent = await sizes.fit(JSON.stringify(answered), answered);
+          this.#plan.answered(taskId, call.callId, sent);
           await history.result(
             call,
-            toolOutput(
-              call.name,
-              await sizes.fit(JSON.stringify(answered), answered),
-            ),
+            toolOutput(call.name, sent),
             Boolean(outcome.quiet),
           );
           if (fitted.pictures.length && this.#deps.host.acceptsImages())

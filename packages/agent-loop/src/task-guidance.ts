@@ -19,13 +19,11 @@ export const guidanceTextLimits = {
   title: 72,
   description: 220,
   criterion: 240,
-  summary: 220,
 } as const;
 
 const maximumTitleLength = guidanceTextLimits.title;
 const maximumDescriptionLength = guidanceTextLimits.description;
 const maximumCriterionLength = guidanceTextLimits.criterion;
-const maximumSummaryLength = guidanceTextLimits.summary;
 
 function recordFrom(value: string): Record<string, unknown> | undefined {
   try {
@@ -147,21 +145,4 @@ export function factsLabel(action: string, target: string): ActionLabel {
     title: specificTitle(action, target),
     description: specificDescription(action, target),
   };
-}
-
-/**
- * The verdict on one criterion.
- *
- * The verdict is the answer and the summary is the reason for it, so the
- * summary is shortened to fit rather than allowed to take the verdict down
- * with it. Only a missing or non-boolean `satisfied` means no answer arrived.
- */
-export function criterionEvaluationFrom(
-  value: string,
-): { readonly satisfied: boolean; readonly summary: string } | undefined {
-  const record = recordFrom(value);
-  const summary = clampedText(record?.["summary"], maximumSummaryLength);
-  return typeof record?.["satisfied"] === "boolean" && summary
-    ? { satisfied: record["satisfied"], summary }
-    : undefined;
 }

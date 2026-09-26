@@ -5,7 +5,9 @@
  * verdict; neither is the working model, so it cannot mark its own work. What
  * it can do is see the plan it will be judged on, say where each item stands,
  * add a criterion it discovers, and cite the calls that show an item done.
- * That progress is its claim, kept apart from the verdict.
+ * That progress is its claim, kept apart from the verdict. A claim of done
+ * sends the items to the judge, and what it finds missing comes back as a
+ * `gaps` notice (ADR 0053).
  *
  * The plan reaches it as a notice: in the first request of each turn, and
  * again when ten rounds pass with items open and no update. Both are worked out
@@ -25,7 +27,9 @@ import type { ModelHistory } from "./model-history.js";
 import type { TurnRecords } from "./turn-records.js";
 import type { CallInput } from "./call-input.js";
 import type { AssembledToolCall } from "./turn-shared.js";
+import type { PlanJudge } from "./plan-judge.js";
 import {
+  linkedItem,
   selfDescription,
   unlinked,
   type SelfDescription,
@@ -99,9 +103,10 @@ const progressWords: Record<Progress, string> = {
 };
 
 function verdictWords(item: TaskPlanItem): string {
-  if (item.status === "verified")
-    return `verified${item.verification ? `: ${item.verification}` : ""}`;
-  if (item.status === "needs-attention") return "not verified";
+  const reason = item.verification ? `: ${item.verification}` : "";
+  if (item.status === "verified") return `verified${reason}`;
+  if (item.status === "needs-attention") return `not verified${reason}`;
+  if (item.status === "couldnt-judge") return `could not be judged${reason}`;
   if (item.status === "checking") return "being checked";
   return "not yet checked";
 }
@@ -270,24 +275,28 @@ export function updatedPlan(
 /** The plan's side of a turn: the notices it sends and the updates it takes. */
 export class PlanProgress {
   readonly #records: TurnRecords;
-  /** The calls made so far in each conversation's running turn. */
-  readonly #calls = new Map<string, Set<string>>();
+  readonly #judge: PlanJudge;
   /** Conversations whose running turn has not sent its first request yet. */
   readonly #starting = new Set<string>();
   /** The tools each running turn offers. */
   readonly #tools = new Map<string, () => readonly ToolSpec[]>();
 
-  constructor(records: TurnRecords) {
+  constructor(records: TurnRecords, judge: PlanJudge) {
     this.#records = records;
+    this.#judge = judge;
   }
 
   /**
    * A turn begins: no call of it has run, and its first request is next.
    * `tools` answers with the tools on offer, which activating a plugin changes.
    */
-  begin(taskId: string, tools: () => readonly ToolSpec[]): void {
+  begin(
+    taskId: string,
+    tools: () => readonly ToolSpec[],
+    signal: AbortSignal,
+  ): void {
     this.#tools.set(taskId, tools);
-    this.#calls.set(taskId, new Set());
+    this.#judge.begin(taskId, signal);
     this.#starting.add(taskId);
   }
 
@@ -309,14 +318,32 @@ export class PlanProgress {
     const tools = this.#tools.get(taskId)?.() ?? [];
     const tool = tools.find((item) => item.name === call.name);
     const { args, said } = selfDescription(input.arguments, tool);
+    const plan = this.#records.task(taskId).plan ?? [];
     const note = {
       ...(input.note ? { note: input.note } : {}),
-      ...unlinked(this.#records.task(taskId).plan ?? [], said),
+      ...unlinked(plan, said),
     };
     if (call.name === updatePlanToolName)
       return { args, said, note, answered: await this.update(taskId, args) };
-    this.#calls.get(taskId)?.add(call.callId);
+    const planItem = linkedItem(plan, said);
+    this.#judge.called(taskId, {
+      callId: call.callId,
+      tool: call.name,
+      args,
+      ...(planItem ? { planItem } : {}),
+      ...(said.purpose ? { purpose: said.purpose } : {}),
+    });
     return { args, said, note };
+  }
+
+  /** What a call answered, as the working model was sent it. */
+  answered(taskId: string, callId: string, result: string): void {
+    this.#judge.answered(taskId, callId, result);
+  }
+
+  /** The end of the turn: every item still open is judged. */
+  settle(taskId: string, finalAnswer: string): Promise<void> {
+    return this.#judge.settle(taskId, finalAnswer);
   }
 
   /**
@@ -324,6 +351,7 @@ export class PlanProgress {
    * ten rounds have passed with items open and no update.
    */
   async remind(taskId: string, history: ModelHistory): Promise<void> {
+    await this.#judge.tell(taskId, history);
     const first = this.#starting.delete(taskId);
     const plan = this.#records.task(taskId).plan ?? [];
     if (!plan.length) return;
@@ -354,7 +382,7 @@ export class PlanProgress {
     const outcome = updatedPlan(
       task.plan ?? [],
       value,
-      this.#calls.get(taskId) ?? new Set(),
+      this.#judge.callIds(taskId),
     );
     if ("problem" in outcome)
       return refusal(
@@ -363,6 +391,20 @@ export class PlanProgress {
         "Correct the update and send it again. Nothing in the plan changed.",
       );
     await this.#records.replaceTask({ ...task, plan: outcome.plan });
+    // Claimed now: newly done, or done again citing different calls.
+    const claimed = outcome.plan.filter((item, index) => {
+      const before = (task.plan ?? [])[index];
+      return (
+        item.progress === "done" &&
+        item.status !== "verified" &&
+        (before?.progress !== "done" ||
+          JSON.stringify(before.evidence) !== JSON.stringify(item.evidence))
+      );
+    });
+    await this.#judge.claimed(
+      taskId,
+      claimed.map((item) => item.id),
+    );
     return { ok: true, value: planText(outcome.plan) };
   }
 }

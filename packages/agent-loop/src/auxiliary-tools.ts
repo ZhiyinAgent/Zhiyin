@@ -94,25 +94,6 @@ export const recordActionPresentationTool: ModelTool = {
   },
 };
 
-/** Consumed by `criterionEvaluationFrom`. */
-export const recordCriterionEvaluationTool: ModelTool = {
-  name: "record_criterion_evaluation",
-  description: "Record whether one plan criterion is satisfied.",
-  inputSchema: {
-    type: "object",
-    properties: {
-      satisfied: { type: "boolean" },
-      summary: {
-        type: "string",
-        maxLength: guidanceTextLimits.summary,
-        description: "One or two sentences on what the evidence shows.",
-      },
-    },
-    required: ["satisfied", "summary"],
-    additionalProperties: false,
-  },
-};
-
 /**
  * Consumed by `repairDecisionFrom`.
  *

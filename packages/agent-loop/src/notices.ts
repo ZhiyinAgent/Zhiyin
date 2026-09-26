@@ -40,6 +40,8 @@ export const noticeKinds = [
   "plan",
   /** The model has repeated the same action, and should change approach. */
   "loop",
+  /** What the judge found missing from an item claimed done. */
+  "gaps",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

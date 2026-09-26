@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  actionLabelFrom,
-  criterionEvaluationFrom,
-  factsLabel,
-  planFrom,
-} from "../src/task-guidance.js";
+import { actionLabelFrom, factsLabel, planFrom } from "../src/task-guidance.js";
 
 describe("task guidance", () => {
   it("accepts a small ordered plan with observable criteria", () => {
@@ -59,14 +54,5 @@ describe("task guidance", () => {
       description:
         "Review the workspace root before choosing the next relevant file.",
     });
-  });
-
-  it("leaves a criterion unresolved when evaluation output is invalid", () => {
-    expect(
-      criterionEvaluationFrom(
-        '{"satisfied":true,"summary":"package.json names Zhiyin."}',
-      ),
-    ).toEqual({ satisfied: true, summary: "package.json names Zhiyin." });
-    expect(criterionEvaluationFrom("invalid")).toBeUndefined();
   });
 });

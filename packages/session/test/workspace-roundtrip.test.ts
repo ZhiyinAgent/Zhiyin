@@ -582,6 +582,56 @@ describe("FileSessions workspace persistence", () => {
     }
   });
 
+  it("keeps each of the judge's three verdicts and the calls one relied on", async () => {
+    const plan = [
+      {
+        id: "plan-1",
+        title: "List the reports",
+        criterion: "The reports folder was listed.",
+        status: "verified" as const,
+        verification: "The listing names q1.pdf.",
+        verdictEvidence: ["call-1"],
+      },
+      {
+        id: "plan-2",
+        title: "Check the totals",
+        criterion: "The totals match the CSV.",
+        status: "needs-attention" as const,
+        verification: "No call compared the totals with the CSV.",
+      },
+      {
+        id: "plan-3",
+        title: "Write the summary",
+        criterion: "summary.md names every report.",
+        status: "couldnt-judge" as const,
+        verification: "The provider is unreachable.",
+      },
+    ];
+    const kept = await temporaryRoot();
+    await new FileSessions(kept).saveWorkspace({
+      ...snapshot,
+      tasks: [{ ...snapshot.tasks[0]!, plan }],
+    });
+    await expect(new FileSessions(kept).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ plan }] },
+    );
+
+    for (const wrong of [
+      { ...plan[0], status: "judged" },
+      { ...plan[0], verdictEvidence: "call-1" },
+      { ...plan[0], verdictEvidence: [1] },
+    ]) {
+      const root = await temporaryRoot();
+      await plantHistory(root, {
+        ...snapshot,
+        tasks: [{ ...snapshot.tasks[0], plan: [wrong] }],
+      });
+      await expect(
+        new FileSessions(root).loadWorkspace(),
+      ).rejects.toBeInstanceOf(SessionStoreError);
+    }
+  });
+
   it("rejects a budget Zhiyin does not offer", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {

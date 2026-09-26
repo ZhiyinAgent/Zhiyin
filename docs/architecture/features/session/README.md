@@ -287,6 +287,11 @@ sequencing.
   other value is refused. ADR 0052. Named test: `keeps the working model's
   progress on a plan apart from its verdict, and rejects progress it cannot
   have`.
+- The judge's verdict is one of verified, needs-attention (not verified) and
+  couldnt-judge, each with its reason, and a verified one keeps the call ids
+  it relied on as a list of text. Any other status or shape is refused. ADR
+  0053. Named test: `keeps each of the judge's three verdicts and the calls one
+  relied on`.
 - A model-context checkpoint maps to an exact durable message and only to
   existing action evidence. The round-trip fixture and named test `rejects a
   compaction checkpoint that cannot map back to durable history` guard the

@@ -12,7 +12,8 @@ const progressLabel: Record<NonNullable<TaskPlanItem["progress"]>, string> = {
 const verdictLabel: Partial<Record<TaskPlanItem["status"], string>> = {
   checking: "Checking",
   verified: "Assessed as done",
-  "needs-attention": "Unresolved",
+  "needs-attention": "Not verified",
+  "couldnt-judge": "Couldn't judge",
 };
 
 /**

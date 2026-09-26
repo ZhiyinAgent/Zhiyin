@@ -5,7 +5,8 @@
  * Every test here was written against an observed failure: a plan whose items
  * all read "Unresolved" after a turn that went fine. Two separate causes, both
  * on this side rather than the model's — an answer discarded for its length,
- * and a judge asked about evidence it was never given.
+ * and a judge asked about evidence it was never given. The judge's own tests
+ * are in `plan-judge.test.ts` (ADR 0053).
  */
 
 import { describe, expect, it } from "vitest";
@@ -14,8 +15,12 @@ import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
 import { stubDependencies, loopFrom } from "./support.js";
 
 const PLAN = "Create an ordered plan for this task.";
-const FINAL_ASSESSMENT =
-  "Decide whether this single criterion is satisfied by the final response";
+const FINAL_ASSESSMENT = "Review whether each plan criterion is met.";
+
+/** The judge's answer: one verdict for the first plan item. */
+const verdict = (value: "verified" | "not-verified", reason: string) => ({
+  items: [{ id: "plan-1", verdict: value, reason }],
+});
 
 function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
   return {
@@ -76,11 +81,12 @@ describe("plan assessment", () => {
       ...deps,
       ...auxiliaryFor({
         [PLAN]: onePlanItem,
-        [FINAL_ASSESSMENT]: {
-          satisfied: true,
-          summary:
-            "The reply names Zhiyin, describes the desktop assistant role, and lists the kinds of work it can carry out, which is what the criterion asks a reviewer to be able to observe in the final response without consulting anything else.",
-        },
+        [FINAL_ASSESSMENT]: verdict(
+          "verified",
+          "The reply names Zhiyin, describes the desktop assistant role, and lists the kinds of work it can carry out, which is what the criterion asks a reviewer to be able to observe in the final response without consulting anything else. ".repeat(
+            3,
+          ),
+        ),
       }),
     });
     const taskId = await loop.createTask();
@@ -131,13 +137,21 @@ describe("plan assessment", () => {
     const assessment = requests.find((request) =>
       request.messages.at(-1)?.content.includes(FINAL_ASSESSMENT),
     );
-    const schema = assessment?.tools?.[0]?.inputSchema as {
-      properties?: { summary?: { maxLength?: number } };
+    const schema = assessment?.tools?.find(
+      (tool) => tool.name === "record_verdicts",
+    )?.inputSchema as {
+      properties?: {
+        items?: {
+          items?: { properties?: { reason?: { maxLength?: number } } };
+        };
+      };
     };
-    expect(schema?.properties?.summary?.maxLength).toBeGreaterThan(0);
+    expect(
+      schema?.properties?.items?.items?.properties?.reason?.maxLength,
+    ).toBeGreaterThan(0);
   });
 
-  it("shows the final assessment what each action actually returned", async () => {
+  it("shows the judge what this turn's calls returned, and not an earlier turn's", async () => {
     const previous = settledTask({
       actions: [
         {
@@ -145,7 +159,7 @@ describe("plan assessment", () => {
           action: "Read a workspace file",
           description: "Check the manifest for the project name.",
           target: "package.json",
-          evidence: "The manifest declares the name FOUND-IN-THE-EVIDENCE.",
+          evidence: "The manifest declares the name FROM-AN-EARLIER-TURN.",
           status: "completed",
           sequence: 0,
         },
@@ -156,10 +170,7 @@ describe("plan assessment", () => {
       ],
     });
     const requests: ModelRequest[] = [];
-    const deps = stubDependencies(() => {}, [
-      { kind: "textDelta", text: "The project is Zhiyin." },
-      { kind: "done" },
-    ]);
+    const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
       ...auxiliaryFor(
@@ -172,13 +183,52 @@ describe("plan assessment", () => {
               },
             ],
           },
-          [FINAL_ASSESSMENT]: {
-            satisfied: true,
-            summary: "The manifest name was read and quoted.",
-          },
+          [FINAL_ASSESSMENT]: verdict(
+            "verified",
+            "The manifest name was read and quoted.",
+          ),
         },
         requests,
       ),
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Reads." }),
+      },
+      tools: {
+        list: () => [
+          {
+            name: "read_file",
+            description: "Read a file.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect: async () => ({
+          ok: true as const,
+          action: "Read a workspace file",
+          target: "package.json",
+          command: 'read_file({"path":"package.json"})',
+          access: "read" as const,
+          scope: "workspace" as const,
+        }),
+        execute: async () => ({
+          ok: true as const,
+          value: "The manifest declares the name FOUND-IN-THE-EVIDENCE.",
+        }),
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          if (!request.messages.some((message) => message.role === "tool"))
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "c1",
+              name: "read_file",
+              argumentsDelta: '{"path":"package.json"}',
+            };
+          else yield { kind: "textDelta", text: "The project is Zhiyin." };
+          yield { kind: "done" };
+        },
+      },
     });
     loop.restore([previous]);
 
@@ -189,6 +239,9 @@ describe("plan assessment", () => {
     );
     expect(assessment?.messages.at(-1)?.content).toContain(
       "FOUND-IN-THE-EVIDENCE",
+    );
+    expect(assessment?.messages.at(-1)?.content).not.toContain(
+      "FROM-AN-EARLIER-TURN",
     );
   });
 
@@ -216,8 +269,11 @@ describe("plan assessment", () => {
           ],
         },
         [FINAL_ASSESSMENT]: {
-          satisfied: false,
-          summary: "The repository URL is still needed.",
+          items: ["plan-1", "plan-2"].map((id) => ({
+            id,
+            verdict: "not-verified",
+            reason: "The repository URL is still needed.",
+          })),
         },
       }),
     });
@@ -225,11 +281,15 @@ describe("plan assessment", () => {
 
     await loop.start(taskId, "Explain how my repository works.");
 
+    // Not verified, and saying why: never shown as done, never left silent.
     const plan = loop.snapshot().tasks[0]?.plan ?? [];
-    expect(plan.map((item) => item.status)).toEqual(["active", "pending"]);
+    expect(plan.map((item) => item.status)).toEqual([
+      "needs-attention",
+      "needs-attention",
+    ]);
     expect(plan.map((item) => item.verification)).toEqual([
-      undefined,
-      undefined,
+      "The repository URL is still needed.",
+      "The repository URL is still needed.",
     ]);
   });
 });
