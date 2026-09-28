@@ -25,6 +25,8 @@ import { detailsOf, facts, textDetail } from "./action-detail.js";
 import { fileKind } from "./file-content.js";
 import { keptAddress, type ConversationItems } from "./conversation-items.js";
 import { pageLines, readPage } from "./text-pages.js";
+import type { Page } from "./text-pages.js";
+import { fileDigest } from "./file-read-state.js";
 import { parsePageRange, readPdfText, renderPdfPages } from "./read-pdf.js";
 import {
   describeBytes,
@@ -213,6 +215,7 @@ async function pagedResult(
   signal?: AbortSignal,
   notice?: string,
   size?: number,
+  onPage?: (page: Page) => Promise<void>,
 ): Promise<ToolInvocationResult> {
   const start = input.startLine ?? 1;
   const page = await readPage(
@@ -227,6 +230,7 @@ async function pagedResult(
       ok: false,
       reason: `${target} has ${page.totalLines.toLocaleString("en-US")} lines, so there is no line ${start}.`,
     };
+  await onPage?.(page);
   const whole = start === 1 && page.last >= page.totalLines;
   return {
     ok: true,
@@ -265,13 +269,6 @@ async function changedNotice(
   if (!items || !conversationId) return "";
   const previous = await items
     .lastRead(conversationId, target)
-    .catch(() => undefined);
-  await items
-    .noteRead(conversationId, target, {
-      modifiedMs: file.mtimeMs,
-      size: file.size,
-      readAt: new Date().toISOString(),
-    })
     .catch(() => undefined);
   return previous &&
     (previous.modifiedMs !== file.mtimeMs || previous.size !== file.size)
@@ -420,13 +417,50 @@ export async function runReadTextFile(
           : `${inspected.target} is not a text file${kind.named ? ` — it is ${kind.named}` : ""}. Reading it as text would produce nothing meaningful.`,
       };
     }
+    const beforeDigest =
+      context.items && context.conversationId
+        ? await fileDigest(realTarget).catch(() => undefined)
+        : undefined;
     return pagedResult(
       inspected.target,
       realTarget,
       input,
       signal,
-      await changedNotice(inspected.target, file, context),
+      await changedNotice(realTarget, file, context),
       file.size,
+      async (page) => {
+        const { items, conversationId } = context;
+        if (!items || !conversationId || !beforeDigest) return;
+        try {
+          const digest = await fileDigest(realTarget);
+          const after = await stat(realTarget);
+          if (
+            digest !== beforeDigest ||
+            after.mtimeMs !== file.mtimeMs ||
+            after.size !== file.size
+          )
+            return;
+          const previous = await items.lastRead(conversationId, realTarget);
+          const ranges =
+            previous?.digest === digest &&
+            previous.totalLines === page.totalLines
+              ? [...(previous.ranges ?? [])]
+              : [];
+          if (!page.cutLines && page.last >= page.first)
+            ranges.push({ first: page.first, last: page.last });
+          await items.noteRead(conversationId, realTarget, {
+            modifiedMs: after.mtimeMs,
+            size: after.size,
+            readAt: new Date().toISOString(),
+            digest,
+            ranges,
+            totalLines: page.totalLines,
+            ...(page.totalLines === 0 ? { whole: true } : {}),
+          });
+        } catch {
+          // Reading still succeeds. An unrecorded read grants no write access.
+        }
+      },
     );
   } catch (error) {
     if (errorCode(error) === "ENOENT") {

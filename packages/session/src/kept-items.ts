@@ -127,6 +127,13 @@ export type FileRead = {
   readonly modifiedMs: number;
   readonly size: number;
   readonly readAt: string;
+  readonly digest?: string;
+  readonly ranges?: readonly {
+    readonly first: number;
+    readonly last: number;
+  }[];
+  readonly totalLines?: number;
+  readonly whole?: boolean;
 };
 
 /** Lines as a reader numbers them: a final line needs no line break. */

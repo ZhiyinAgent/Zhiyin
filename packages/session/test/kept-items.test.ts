@@ -273,4 +273,20 @@ describe("when a file was last read", () => {
       await new FileSessions(root).lastRead("task-2", "notes.md"),
     ).toBeUndefined();
   });
+
+  it("keeps the digest and shown ranges for an interrupted conversation", async () => {
+    const root = await temporaryRoot();
+    const read = {
+      modifiedMs: 1_700_000_000_000,
+      size: 42,
+      readAt: "2026-09-23T10:00:00.000Z",
+      digest: "abc123",
+      ranges: [{ first: 1, last: 20 }],
+      totalLines: 40,
+    };
+    await new FileSessions(root).noteRead("task-1", "C:/work/notes.md", read);
+    expect(
+      await new FileSessions(root).lastRead("task-1", "C:/work/notes.md"),
+    ).toEqual(read);
+  });
 });

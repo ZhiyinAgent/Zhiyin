@@ -87,6 +87,17 @@ nothing about permission and renders nothing itself.
 
 ## Invariants
 
+- **An existing file is changed only from bytes this conversation saw.** A
+  complete replacement requires a complete read; an exact edit requires the
+  lines it replaces. The stored digest of the canonical file is checked again
+  before approval and execution. A changed file is refused with a read-again
+  result, and an unrecorded read grants nothing. A successful full-file write
+  can be revised without another read. Named regressions: `must have been read
+  in this conversation before a replacement is approved`, `refuses an edit
+  after someone changes the file following the read`, `allows a partial
+  multi_edit only where the model saw the replaced lines`, and `allows the
+  model to revise a complete file it just created`.
+
 - **A folder's instructions are read from its root only, with a hash of their
   content.** `folderInstructions()` reads `AGENTS.md` at the selected folder's
   root, cut at 16 KB between characters, and returns its full size and a

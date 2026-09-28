@@ -41,6 +41,11 @@ import {
   type DecodedText,
 } from "./text-match.js";
 import { writeFileAtomically } from "./write-file.js";
+import {
+  requireSeenFile,
+  type FileSpan,
+  type ReadStateContext,
+} from "./file-read-state.js";
 
 const maximumFiles = 20;
 const maximumReplacements = 50;
@@ -123,6 +128,7 @@ type ResolvedFile = {
   readonly decoded: DecodedText;
   readonly text: string;
   readonly replacements: number;
+  readonly spans?: readonly FileSpan[];
 };
 
 type PlannedEdit = {
@@ -242,6 +248,46 @@ function withoutLineNumbers(
   };
 }
 
+/** The original lines each proposed replacement could touch. */
+function replacementSpans(
+  edit: FileEdit,
+  original: string,
+): readonly FileSpan[] | undefined {
+  const spans: FileSpan[] = [];
+  for (const replacement of edit.replacements) {
+    let pattern = replacement.find;
+    let match = findText(original, pattern);
+    if (match.kind === "none") {
+      const copied = withoutLineNumbers(replacement);
+      if (copied) {
+        pattern = copied.find;
+        match = findText(original, pattern);
+      }
+    }
+    if (match.kind === "exact") {
+      const offsets = replacement.replaceAll
+        ? match.offsets
+        : match.offsets.slice(0, 1);
+      for (const offset of offsets) {
+        const first = original.slice(0, offset).split("\n").length;
+        const last = first + pattern.split("\n").length - 1;
+        spans.push({ first, last });
+      }
+    } else if (match.kind === "flexible") {
+      const lines = replacement.replaceAll
+        ? match.lines
+        : match.lines.slice(0, 1);
+      for (const line of lines)
+        spans.push({ first: line + 1, last: line + match.lineCount });
+    } else {
+      // A later replacement may target text made by an earlier one. Require
+      // a complete read when the original target cannot be established.
+      return undefined;
+    }
+  }
+  return spans;
+}
+
 /**
  * Applies one file's replacements in order, each to the text the previous one
  * produced. Nothing here touches the disk: the caller decides whether the whole
@@ -326,6 +372,7 @@ async function planMultiEdit(
   root: string,
   args: unknown,
   signal?: AbortSignal,
+  context: ReadStateContext = {},
 ): Promise<PlannedEdit | Refusal> {
   const input = editArguments(args);
   if (!input) {
@@ -408,6 +455,9 @@ async function planMultiEdit(
       );
     }
     const decoded = decodeText(raw);
+    const spans = replacementSpans(edit, decoded.text);
+    const unseen = await requireSeenFile(absolute, edit.path, context, spans);
+    if (unseen) return unseen;
     const applied = applyReplacements(edit, decoded.text);
     if ("ok" in applied) return applied;
     files.push({
@@ -416,6 +466,7 @@ async function planMultiEdit(
       decoded,
       text: applied.text,
       replacements: edit.replacements.length,
+      ...(spans ? { spans } : {}),
     });
   }
 
@@ -449,8 +500,9 @@ async function planMultiEdit(
 export async function inspectMultiEdit(
   root: string,
   args: unknown,
+  context: ReadStateContext = {},
 ): Promise<ToolCallInspection> {
-  const planned = await planMultiEdit(root, args);
+  const planned = await planMultiEdit(root, args, undefined, context);
   return "inspection" in planned ? planned.inspection : planned;
 }
 
@@ -458,10 +510,11 @@ export async function runMultiEdit(
   root: string,
   args: unknown,
   signal?: AbortSignal,
+  context: ReadStateContext = {},
 ): Promise<ToolInvocationResult> {
   // Resolved again rather than carried over from inspection: the file may have
   // changed while the request waited, and this is what decides that it did.
-  const planned = await planMultiEdit(root, args, signal);
+  const planned = await planMultiEdit(root, args, signal, context);
   if (!("inspection" in planned)) return planned;
 
   const produced: ProducedFile[] = [];
@@ -469,6 +522,17 @@ export async function runMultiEdit(
     const encoded = encodeText(file.decoded, file.text);
     try {
       signal?.throwIfAborted();
+      const unseen = await requireSeenFile(
+        file.absolute,
+        file.path,
+        context,
+        file.spans,
+      );
+      if (unseen)
+        return {
+          ok: false,
+          reason: `${unseen.reason} ${produced.length ? `Earlier files changed: ${produced.map((item) => item.path).join(", ")}.` : "No file was changed."}`,
+        };
       await writeFileAtomically(file.absolute, encoded, signal);
     } catch (error) {
       const changed = produced.map((item) => item.path);

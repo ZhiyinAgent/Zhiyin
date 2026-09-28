@@ -411,7 +411,8 @@ export class ComposedCapabilities implements Capabilities {
         },
       };
     }
-    if (owner === "built-in") return this.#members.tools.inspect(name, args);
+    if (owner === "built-in")
+      return this.#members.tools.inspect(name, args, conversationId);
     return this.#members.mcp.inspect(
       name,
       args,

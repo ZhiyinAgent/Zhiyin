@@ -29,6 +29,8 @@ export type Page = {
   readonly first: number;
   readonly last: number;
   readonly totalLines: number;
+  /** A shortened line is not a complete read of that line. */
+  readonly cutLines: boolean;
 };
 
 function cut(line: string): string {
@@ -50,6 +52,7 @@ export async function readPage(
   let bytes = 0;
   let full = false;
   let total = 0;
+  let cutLines = false;
   const lines = createInterface({
     input: createReadStream(path, {
       encoding: "utf8",
@@ -69,6 +72,7 @@ export async function readPage(
     }
     numbered.push(entry);
     plain.push(shown);
+    if (shown !== line) cutLines = true;
     bytes += cost;
     if (numbered.length >= lineCount) full = true;
   }
@@ -83,5 +87,6 @@ export async function readPage(
     first: startLine,
     last,
     totalLines: total,
+    cutLines,
   };
 }

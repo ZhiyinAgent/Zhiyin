@@ -11,6 +11,16 @@ export type FileRead = {
   readonly modifiedMs: number;
   readonly size: number;
   readonly readAt: string;
+  /** The bytes the model's read was taken from. Missing on older records. */
+  readonly digest?: string;
+  /** Line ranges actually shown to the model, excluding any shortened line. */
+  readonly ranges?: readonly {
+    readonly first: number;
+    readonly last: number;
+  }[];
+  readonly totalLines?: number;
+  /** The model supplied the complete bytes of this successful write. */
+  readonly whole?: boolean;
 };
 
 export interface ConversationItems {

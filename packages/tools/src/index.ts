@@ -77,7 +77,11 @@ export type { CommandContainer, CommandContainment } from "./run-command.js";
  */
 export interface ToolRegistry {
   list(): readonly ToolSpec[];
-  inspect(name: string, args: unknown): Promise<ToolCallInspection>;
+  inspect(
+    name: string,
+    args: unknown,
+    conversationId?: string,
+  ): Promise<ToolCallInspection>;
   execute(
     name: string,
     args: unknown,
@@ -100,7 +104,10 @@ type ToolDefinition = {
   readonly spec: ToolSpec;
   /** Only offered when the model can be shown a picture. */
   readonly requiresVision?: boolean;
-  readonly inspect: (args: unknown) => Promise<ToolCallInspection>;
+  readonly inspect: (
+    args: unknown,
+    conversationId?: string,
+  ) => Promise<ToolCallInspection>;
   readonly execute: (
     args: unknown,
     signal?: AbortSignal,
@@ -234,8 +241,16 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
         {
           spec: writeFileSpec,
           requiresWorkspace: true,
-          inspect: (args) => inspectWriteTextFile(this.#root, args),
-          execute: (args, signal) => runWriteTextFile(this.#root, args, signal),
+          inspect: (args, conversationId) =>
+            inspectWriteTextFile(this.#root, args, {
+              items: this.#items,
+              conversationId,
+            }),
+          execute: (args, signal, conversationId) =>
+            runWriteTextFile(this.#root, args, signal, {
+              items: this.#items,
+              conversationId,
+            }),
         },
       ],
       [
@@ -243,8 +258,16 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
         {
           spec: multiEditSpec,
           requiresWorkspace: true,
-          inspect: (args) => inspectMultiEdit(this.#root, args),
-          execute: (args, signal) => runMultiEdit(this.#root, args, signal),
+          inspect: (args, conversationId) =>
+            inspectMultiEdit(this.#root, args, {
+              items: this.#items,
+              conversationId,
+            }),
+          execute: (args, signal, conversationId) =>
+            runMultiEdit(this.#root, args, signal, {
+              items: this.#items,
+              conversationId,
+            }),
         },
       ],
       [
@@ -351,14 +374,18 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
     return describeWorkspaceRoot(this.#root);
   }
 
-  async inspect(name: string, args: unknown): Promise<ToolCallInspection> {
+  async inspect(
+    name: string,
+    args: unknown,
+    conversationId?: string,
+  ): Promise<ToolCallInspection> {
     const definition = this.#definitions.get(name);
     if (definition && needsWorkspace(definition, args) && !this.#available)
       return { ok: false, reason: "Choose a folder before using files." };
     if (definition?.requiresShell && !this.#shell)
       return { ok: false, reason: `The tool “${name}” is not available.` };
     return definition
-      ? definition.inspect(args)
+      ? definition.inspect(args, conversationId)
       : { ok: false, reason: `The tool “${name}” is not available.` };
   }
 

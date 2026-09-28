@@ -18,6 +18,11 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  fileDigest,
+  requireSeenFile,
+  type ReadStateContext,
+} from "./file-read-state.js";
 import type {
   ToolCallInspection,
   ToolInvocationResult,
@@ -165,6 +170,7 @@ type PlannedWrite = {
 async function planWrite(
   root: string,
   args: unknown,
+  context: ReadStateContext = {},
 ): Promise<PlannedWrite | Extract<ToolCallInspection, { readonly ok: false }>> {
   const input = writeArguments(args);
   if (!input) {
@@ -198,6 +204,16 @@ async function planWrite(
 
   const command = describeCommand(writeFileSpec.name, input);
   if (target.kind === "file") {
+    const canonical = await realpath(resolve(root, input.path)).catch(
+      () => undefined,
+    );
+    if (!canonical)
+      return {
+        ok: false,
+        reason: `${input.path} could not be checked before writing.`,
+      };
+    const unseen = await requireSeenFile(canonical, input.path, context);
+    if (unseen) return unseen;
     return {
       input,
       change: "updated",
@@ -249,8 +265,9 @@ async function planWrite(
 export async function inspectWriteTextFile(
   root: string,
   args: unknown,
+  context: ReadStateContext = {},
 ): Promise<ToolCallInspection> {
-  const planned = await planWrite(root, args);
+  const planned = await planWrite(root, args, context);
   return "inspection" in planned ? planned.inspection : planned;
 }
 
@@ -301,8 +318,9 @@ export async function runWriteTextFile(
   root: string,
   args: unknown,
   signal?: AbortSignal,
+  context: ReadStateContext = {},
 ): Promise<ToolInvocationResult> {
-  const planned = await planWrite(root, args);
+  const planned = await planWrite(root, args, context);
   if (!("inspection" in planned)) return planned;
   const { input, change, contents } = planned;
 
@@ -317,8 +335,26 @@ export async function runWriteTextFile(
     }
     signal?.throwIfAborted();
     await mkdir(dirname(target), { recursive: true });
+    if (change === "updated") {
+      const unseen = await requireSeenFile(target, input.path, context);
+      if (unseen) return unseen;
+    }
     await writeFileAtomically(target, contents, signal);
     const bytes = Buffer.byteLength(contents, "utf8");
+    if (context.items && context.conversationId) {
+      try {
+        const file = await stat(target);
+        await context.items.noteRead(context.conversationId, target, {
+          modifiedMs: file.mtimeMs,
+          size: file.size,
+          readAt: new Date().toISOString(),
+          digest: await fileDigest(target),
+          whole: true,
+        });
+      } catch {
+        // The write succeeded. An unrecorded write simply requires a re-read.
+      }
+    }
     return {
       ok: true,
       value: { path: input.path, bytes, change },
