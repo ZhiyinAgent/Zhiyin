@@ -12,6 +12,41 @@ import { ApprovalPrompt } from "./ApprovalPrompt.js";
 import { ActionHistory } from "./ActionHistory.js";
 
 describe("ApprovalPrompt", () => {
+  it("confirms a precise conversation scope while shell approvals stay once only", () => {
+    const onDecision = vi.fn();
+    const { rerender } = render(
+      <ApprovalPrompt
+        key="write"
+        title="Write report"
+        target="reports/one.md"
+        command="write_file(...)"
+        conversationRule={{ label: "Changes to files in reports/" }}
+        onDecision={onDecision}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    );
+    expect(screen.getByText("Changes to files in reports/")).toBeVisible();
+    expect(onDecision).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    );
+    expect(onDecision).toHaveBeenCalledWith("allow-conversation");
+
+    rerender(
+      <ApprovalPrompt
+        key="shell"
+        title="Run a shell command"
+        target="pwd"
+        command="bash(...)"
+        onDecision={onDecision}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Allow for this conversation" }),
+    ).toBeNull();
+  });
   it("shows a named action once without an empty input box and keeps its exact call inspectable", () => {
     const onDecision = vi.fn();
     render(
@@ -367,6 +402,31 @@ describe("ApprovalPrompt", () => {
 });
 
 describe("ActionHistory", () => {
+  it("shows how an action was allowed and opens its conversation permission", () => {
+    const onOpenPermission = vi.fn();
+    render(
+      <ActionHistory
+        actions={[
+          {
+            id: "edit-1",
+            action: "Edit report",
+            target: "reports/one.md",
+            status: "completed",
+            approval: {
+              by: "conversation-permission",
+              at: "2026-09-28T14:02:00.000Z",
+              permissionId: "permission-1",
+              label: "Changes to files in reports/",
+            },
+          },
+        ]}
+        onOpenPermission={onOpenPermission}
+      />,
+    );
+    expect(screen.getByText(/Covered by your permission from/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View permission" }));
+    expect(onOpenPermission).toHaveBeenCalledWith("permission-1");
+  });
   it("keeps running, completed, failed, and denied actions in human-readable history", () => {
     render(
       <ActionHistory

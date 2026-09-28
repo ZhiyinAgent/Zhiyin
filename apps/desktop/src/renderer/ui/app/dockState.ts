@@ -14,6 +14,9 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
     ...(prompt.invocation ? { invocation: prompt.invocation } : {}),
     ...(prompt.changes ? { changes: prompt.changes } : {}),
     ...(prompt.recovery ? { recovery: prompt.recovery } : {}),
+    ...(prompt.conversationRule
+      ? { conversationRule: prompt.conversationRule }
+      : {}),
   };
 }
 

@@ -78,7 +78,12 @@ export type CoreWorkspace = Pick<
 > & {
   readonly turns: Pick<
     WorkspaceTurns,
-    "start" | "cancel" | "condenseNow" | "resolveApproval" | "resolveUserInput"
+    | "start"
+    | "cancel"
+    | "condenseNow"
+    | "resolveApproval"
+    | "revokeConversationPermission"
+    | "resolveUserInput"
   >;
   readonly settings: Pick<
     ModelSettings,
@@ -171,6 +176,8 @@ export class Core {
       interruptTask: (taskId) => turns.cancel(taskId),
       resolveApproval: (taskId, requestId, decision, reason) =>
         turns.resolveApproval(taskId, requestId, decision, reason),
+      revokeConversationPermission: (taskId, permissionId) =>
+        turns.revokeConversationPermission(taskId, permissionId),
       resolveUserInput: (taskId, requestId, response) =>
         turns.resolveUserInput(taskId, requestId, response),
       setPluginEnabled: (id, enabled) =>

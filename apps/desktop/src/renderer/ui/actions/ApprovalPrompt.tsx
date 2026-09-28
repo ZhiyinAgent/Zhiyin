@@ -10,7 +10,7 @@ import { ToolCallView } from "./ToolCallView.js";
 import { Icon } from "../shared/index.js";
 import styles from "./actions.module.css";
 
-export type ApprovalDecision = "allow-once" | "deny";
+export type ApprovalDecision = "allow-once" | "allow-conversation" | "deny";
 
 type ApprovalPromptProps = {
   effect?: string;
@@ -24,6 +24,7 @@ type ApprovalPromptProps = {
   invocation?: ToolInvocation;
   changes?: readonly FileChange[];
   recovery?: ApprovalRequest["recovery"];
+  conversationRule?: ApprovalRequest["conversationRule"];
   /** Tighter spacing, for a conversation sharing the window with the browser. */
   compact?: boolean;
   onDecision: (
@@ -62,6 +63,7 @@ export function ApprovalPrompt({
   invocation,
   changes,
   recovery,
+  conversationRule,
   compact = false,
   onDecision,
 }: ApprovalPromptProps) {
@@ -71,6 +73,7 @@ export function ApprovalPrompt({
     useState<ApprovalDecision | null>(null);
   const [decisionError, setDecisionError] = useState<string>();
   const [denialReason, setDenialReason] = useState("");
+  const [confirmingScope, setConfirmingScope] = useState(false);
   const detailId = useId();
   const claimTipId = useId();
   const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
@@ -229,6 +232,17 @@ export function ApprovalPrompt({
             disabled={pendingDecision !== null}
           />
         </label>
+        {confirmingScope && conversationRule && (
+          <p className={styles["approval__scope-confirm"]}>
+            Allow for this conversation:{" "}
+            <strong>{conversationRule.label}</strong>
+            <span>
+              {" "}
+              Future matching actions will run without another prompt. You can
+              revoke this permission from the conversation menu.
+            </span>
+          </p>
+        )}
         <div className={styles.approval__footer}>
           <button
             className="text-button"
@@ -242,22 +256,57 @@ export function ApprovalPrompt({
             <Icon name="chevron" />
           </button>
           <div className={styles.approval__actions}>
-            <button
-              className="button button--quiet"
-              type="button"
-              disabled={pendingDecision !== null}
-              onClick={() => void decide("deny")}
-            >
-              {pendingDecision === "deny" ? "Denying…" : "Deny"}
-            </button>
-            <button
-              className="button button--accent"
-              type="button"
-              disabled={pendingDecision !== null}
-              onClick={() => void decide("allow-once")}
-            >
-              {pendingDecision === "allow-once" ? "Allowing…" : "Allow once"}
-            </button>
+            {confirmingScope && conversationRule ? (
+              <>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => setConfirmingScope(false)}
+                >
+                  Back
+                </button>
+                <button
+                  className="button button--accent"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => void decide("allow-conversation")}
+                >
+                  Allow for this conversation
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => void decide("deny")}
+                >
+                  {pendingDecision === "deny" ? "Denying…" : "Deny"}
+                </button>
+                {conversationRule && (
+                  <button
+                    className="button button--quiet"
+                    type="button"
+                    disabled={pendingDecision !== null}
+                    onClick={() => setConfirmingScope(true)}
+                  >
+                    Allow for this conversation
+                  </button>
+                )}
+                <button
+                  className="button button--accent"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => void decide("allow-once")}
+                >
+                  {pendingDecision === "allow-once"
+                    ? "Allowing…"
+                    : "Allow once"}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

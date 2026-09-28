@@ -1,5 +1,7 @@
 import type {
   ActionDetail,
+  ActionApproval,
+  ConversationPermission,
   ReasoningTrace,
   TaskAction,
   ToolCallInspection,
@@ -49,6 +51,33 @@ export class TurnRecords {
       ...task,
       specialistRuns: (task.specialistRuns ?? []).map((run) =>
         run.id === runId ? { ...run, handoffDelivered: true } : run,
+      ),
+    });
+  }
+
+  async grantConversationPermission(
+    taskId: string,
+    permission: ConversationPermission,
+  ): Promise<void> {
+    const task = this.task(taskId);
+    await this.replaceTask({
+      ...task,
+      conversationPermissions: [
+        ...(task.conversationPermissions ?? []),
+        permission,
+      ],
+    });
+  }
+
+  async revokeConversationPermission(
+    taskId: string,
+    permissionId: string,
+  ): Promise<void> {
+    const task = this.task(taskId);
+    await this.replaceTask({
+      ...task,
+      conversationPermissions: (task.conversationPermissions ?? []).filter(
+        (permission) => permission.id !== permissionId,
       ),
     });
   }
@@ -363,7 +392,7 @@ export class TurnRecords {
     status: TaskAction["status"],
     reason?: string,
     call?: AssembledToolCall,
-    policy?: string,
+    approval?: ActionApproval,
     specialistRunId?: string,
   ): Promise<void> {
     const task = this.task(taskId);
@@ -393,7 +422,7 @@ export class TurnRecords {
               ),
           }
         : {}),
-      ...(policy ? { policy } : {}),
+      ...(approval ? { approval } : {}),
       ...(presentation.planItemId
         ? { planItemId: presentation.planItemId }
         : {}),

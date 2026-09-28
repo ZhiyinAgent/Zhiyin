@@ -1,4 +1,5 @@
 import type {
+  ConversationPermission,
   ToolCallInspection,
   ToolInvocationResult,
   ToolOwner,
@@ -21,6 +22,7 @@ import type { TurnWaits } from "./turn-waits.js";
 import type { AssembledToolCall, PresentedAction } from "./turn-shared.js";
 import { linkedItem, type SelfDescription } from "./self-description.js";
 import { factsLabel } from "./task-guidance.js";
+import { approvalRecord, decideToolPermission } from "./tool-permission.js";
 
 /**
  * What a tool call produced, and whether the person was ever told about it. A
@@ -313,7 +315,11 @@ export class ToolCalls {
         "running",
         undefined,
         call,
-        "No approval: inert conversation view.",
+        {
+          by: "no-approval-needed",
+          at: this.#deps.now().toISOString(),
+          reason: "Inert conversation view.",
+        },
         specialistRunId,
       );
       let result: ToolInvocationResult;
@@ -395,39 +401,23 @@ export class ToolCalls {
         inspection.changes,
       );
 
-    const permission = await this.#deps.permissions.decide({
-      kind: "tool",
+    const checkedPermission = await decideToolPermission({
+      deps: this.#deps,
+      records: this.#records,
+      waits: this.#waits,
+      taskId,
       owner,
-      name: call.name,
-      arguments: args,
-      action: inspection.action,
-      target: inspection.target,
-      command: inspection.command,
-      // Forwarded exactly as the implementation declared them. The loop does
-      // not decide what an action does or where it reaches, and does not
-      // supply a default for either: an absent declaration must reach the
-      // engine absent, so the engine's conservative reading of silence holds.
-      ...(inspection.access ? { access: inspection.access } : {}),
-      ...(inspection.scope ? { scope: inspection.scope } : {}),
+      call,
+      args,
+      inspection,
+      presentation,
+      backup,
+      signal: controller.signal,
+      labelled,
     });
-    controller.signal.throwIfAborted();
-    let decision:
-      | "allow"
-      | "cancelled"
-      | { readonly kind: "deny"; readonly reason?: string };
-    if (permission.outcome === "ask") {
-      decision = await this.#waits.waitForApproval(
-        taskId,
-        inspection,
-        presentation,
-        backup,
-        controller.signal,
-        call,
-        labelled,
-      );
-    } else {
-      decision = permission.outcome === "deny" ? { kind: "deny" } : "allow";
-    }
+    const { permission, decision, candidate } = checkedPermission;
+    let appliedRule: ConversationPermission | undefined =
+      checkedPermission.appliedRule;
     if (decision === "cancelled") {
       if (backup) await this.#deps.rewind.discardBackup(actionId);
       return {
@@ -462,7 +452,11 @@ export class ToolCalls {
         userDenied ? "denied" : "blocked",
         reason,
         undefined,
-        undefined,
+        {
+          by: userDenied ? "you" : "blocked",
+          at: this.#deps.now().toISOString(),
+          reason,
+        },
         specialistRunId,
       );
       await this.#records.showWorking(
@@ -498,6 +492,20 @@ export class ToolCalls {
         );
       }
     }
+    if (decision === "allow-conversation" && candidate) {
+      appliedRule = {
+        ...candidate,
+        id: this.#deps.newApprovalId(),
+        at: this.#deps.now().toISOString(),
+      };
+      await this.#records.grantConversationPermission(taskId, appliedRule);
+    }
+    const approval = approvalRecord(
+      permission,
+      decision,
+      appliedRule,
+      this.#deps.now().toISOString(),
+    );
     this.#records.emitToolActivity(taskId, call, "approved");
     await this.#records.recordToolAction(
       taskId,
@@ -507,7 +515,7 @@ export class ToolCalls {
       "running",
       undefined,
       call,
-      permission.reason,
+      approval,
       specialistRunId,
     );
     await this.#records.showToolProgress(
@@ -624,7 +632,9 @@ export class ToolCalls {
       status,
       reason,
       undefined,
-      undefined,
+      status === "blocked"
+        ? { by: "blocked", at: this.#deps.now().toISOString(), reason }
+        : undefined,
       specialistRunId,
     );
     this.#records.emitToolActivity(

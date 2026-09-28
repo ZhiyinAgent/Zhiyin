@@ -37,6 +37,7 @@ export function timelinePieces(
   task: WorkspaceTask,
   commands: WorkspaceCommands,
   landing: RewindLanding,
+  onOpenPermission?: (permissionId: string) => void,
 ): TimelinePieces<TaskAction, TaskView, TaskInteraction, SpecialistRun> {
   const previewRewind = commands.previewRewind;
   const commitRewind = commands.commitRewind;
@@ -79,6 +80,7 @@ export function timelinePieces(
     actions: (actions: TaskAction[]) => (
       <ActionHistory
         actions={actions}
+        {...(onOpenPermission ? { onOpenPermission } : {})}
         {...(readPicture ? { readPicture } : {})}
       />
     ),
@@ -97,6 +99,7 @@ export function timelinePieces(
       <SpecialistRunHistory
         run={run}
         actions={task.actions ?? []}
+        {...(onOpenPermission ? { onOpenPermission } : {})}
         {...(readPicture ? { readPicture } : {})}
       />
     ),

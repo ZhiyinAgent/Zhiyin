@@ -80,59 +80,12 @@ import type {
 import type { ContextBudgetChoice, TaskContext } from "./context-budget.js";
 import type { ReasoningSelection } from "./reasoning.js";
 import type { PasteOutcome, TaskMessage } from "./messages.js";
-
-export type TaskAction = {
-  readonly id: string;
-  readonly action: string;
-  readonly description?: string;
-  readonly target: string;
-  readonly command?: string;
-  readonly toolName?: string;
-  readonly evidence?: string;
-  readonly policy?: string;
-  /** The child run that proposed this action, when there is one. */
-  readonly specialistRunId?: string;
-  /**
-   * The change this action proposed, kept after it ran. Reviewing a change
-   * before approving it and checking afterwards what was actually done are the
-   * same question asked twice, and the second one is the harder to answer from
-   * a summary.
-   */
-  readonly changes?: readonly FileChange[];
-  /** What it answered, in shapes an interface can draw. */
-  readonly details?: readonly ActionDetail[];
-  /**
-   * What the action would do, as the feature that owns it put it, and what
-   * Zhiyin said it was for. Both were shown when permission was asked; kept so
-   * that going back to the action later shows what was agreed to rather than a
-   * bare record of it having happened. `claim` is model-written and unverified
-   * wherever it appears, and is carried apart from everything established so
-   * that stays true here too.
-   */
-  readonly detail?: string;
-  readonly claim?: string;
-  /** The plan item the working model said this action serves. */
-  readonly planItemId?: string;
-  /** What was called and with what. Absent on records saved before it existed. */
-  readonly invocation?: ToolInvocation;
-  /** Optional so task history saved before ordered timeline entries can load. */
-  readonly sequence?: number;
-  readonly status:
-    | "running"
-    | "completed"
-    /**
-     * The action ran to completion and reported back, but did not establish
-     * success — a command that exited non-zero, for instance. Distinct from
-     * `failed`, which means the action could not be carried out at all.
-     * Shown as neither a success nor a failure, because it is neither.
-     */
-    | "reported"
-    | "failed"
-    | "denied"
-    | "blocked"
-    | "cancelled";
-  readonly reason?: string;
-};
+export type {
+  TaskAction,
+  ActionApproval,
+  ConversationPermission,
+} from "./task-action.js";
+import type { TaskAction, ConversationPermission } from "./task-action.js";
 
 /**
  * Exactly what one file would look like before and after an action, as the
@@ -187,6 +140,8 @@ export type ApprovalRequest = {
       readonly reason?: string;
     }[];
   };
+  /** A precise conversation permission the person may choose to grant. */
+  readonly conversationRule?: { readonly label: string };
 };
 
 /**
@@ -342,6 +297,7 @@ export type WorkspaceTask = TaskContext & {
   readonly workspace?: { readonly path: string; readonly name: string };
   /** Optional only so task history saved before action records existed can load. */
   readonly actions?: readonly TaskAction[];
+  readonly conversationPermissions?: readonly ConversationPermission[];
   /** Optional so task history saved before explicit task plans existed can load. */
   readonly plan?: readonly TaskPlanItem[];
   /** The standing instructions the model was last sent, by source. ADR 0054. */
@@ -1109,8 +1065,14 @@ export interface CoreApi {
   resolveApproval(
     taskId: string,
     requestId: string,
-    decision: "allow" | "deny",
+    decision: "allow" | "allow-conversation" | "deny",
     reason?: string,
+  ): Promise<void>;
+
+  /** Remove a permission previously granted for this conversation. */
+  revokeConversationPermission(
+    taskId: string,
+    permissionId: string,
   ): Promise<void>;
 
   /** Resolve the exact structured question request currently blocking a task. */
@@ -1400,6 +1362,7 @@ export const CHANNEL = {
   commitRewind: "zhiyin:commit-rewind",
   interruptTask: "zhiyin:interrupt-task",
   resolveApproval: "zhiyin:resolve-approval",
+  revokeConversationPermission: "zhiyin:revoke-conversation-permission",
   resolveUserInput: "zhiyin:resolve-user-input",
   setPluginEnabled: "zhiyin:set-plugin-enabled",
   setComponentEnabled: "zhiyin:set-component-enabled",

@@ -963,6 +963,14 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - A restart never leaves a permission card whose in-memory continuation no
   longer exists. The named test `restores an unfinished permission request as
   interrupted instead of leaving a dead prompt` guards recovery.
+- A person may grant a conversation permission only for an inspected file edit
+  inside one canonical folder or one connector tool identity. Every file in a
+  multi-edit must match; a different folder, changed connector schema,
+  deletion, shell call, or new conversation asks again. A grant is saved on
+  the task, shown on each covered action, and can be revoked from that
+  conversation's menu. Named tests: `covers later edits in one folder, then
+  asks after revocation and in another conversation` and `checks every edit
+  target, connector version, and excluded deletion`.
 
 ## Testing notes
 

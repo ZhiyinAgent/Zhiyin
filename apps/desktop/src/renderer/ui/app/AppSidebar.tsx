@@ -23,7 +23,7 @@ type TaskMenu = {
 function taskMenuPosition(menu: TaskMenu) {
   const gap = 4;
   const viewportGap = 8;
-  const height = menu.mode === "menu" ? 76 : 112;
+  const height = 112;
   const width = Math.max(
     160,
     Math.min(menu.anchor.width - 14, window.innerWidth - viewportGap * 2),
@@ -56,6 +56,7 @@ type AppSidebarProps = {
   onOpenSettings?: () => void;
   onRenameTask?: (id: string, title: string) => void | Promise<void>;
   onDeleteTask?: (id: string) => void | Promise<void>;
+  onTaskPermissions?: (id: string) => void;
   now?: () => Date;
 };
 
@@ -96,6 +97,7 @@ export function AppSidebar({
   onOpenSettings,
   onRenameTask,
   onDeleteTask,
+  onTaskPermissions,
   now = currentTime,
 }: AppSidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -258,6 +260,16 @@ export function AppSidebar({
                   onClick={() => startRename(task)}
                 >
                   Rename
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setTaskMenu(null);
+                    onTaskPermissions?.(task.id);
+                  }}
+                >
+                  Permissions
                 </button>
                 <button
                   className={styles["task-context-menu__danger"]}

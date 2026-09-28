@@ -42,6 +42,7 @@ export type ApprovalRequest = {
   /** Before and after for every file the action would change, when known. */
   changes?: readonly CoreFileChange[];
   recovery?: import("@zhiyin/contract").ApprovalRequest["recovery"];
+  conversationRule?: import("@zhiyin/contract").ApprovalRequest["conversationRule"];
 };
 
 export type TaskOutcome = {
@@ -106,6 +107,9 @@ export type WorkspaceTask = {
   updatedLabel: string;
   messages: TaskMessage[];
   actions?: TaskAction[];
+  conversationPermissions?: NonNullable<
+    CoreWorkspaceTask["conversationPermissions"]
+  >;
   plan?: TaskPlanItem[];
   artifacts?: TaskArtifact[];
   specialistRuns?: SpecialistRun[];
@@ -318,6 +322,7 @@ function taskFromCore(task: CoreWorkspaceTask): WorkspaceTask {
     updatedLabel: task.updatedLabel,
     messages: task.messages.map((message) => ({ ...message })),
     actions: (task.actions ?? []).map((action) => ({ ...action })),
+    conversationPermissions: task.conversationPermissions ?? [],
     plan: (task.plan ?? []).map((item) => ({ ...item })),
     artifacts: (task.artifacts ?? []).map((item) => ({ ...item })),
     specialistRuns: (task.specialistRuns ?? []).map((run) => ({ ...run })),

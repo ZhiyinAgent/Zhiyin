@@ -144,6 +144,11 @@ export class PluginActivation {
       "running",
       undefined,
       options.call,
+      {
+        by: "no-approval-needed",
+        at: this.#deps.now().toISOString(),
+        reason: "Activating a plugin in this conversation.",
+      },
     );
     const activatedPlugins = [...options.activatedPlugins, resolved.id];
     const task = this.#records.task(options.taskId);

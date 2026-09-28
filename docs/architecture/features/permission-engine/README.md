@@ -32,9 +32,11 @@ nothing else in the app makes that call independently.
   owner is built-in and the implementation declared both that it only reads and
   that it stays inside the selected workspace. File changes, shell execution,
   reads that reach outside the workspace, skill loading, and all MCP tools
-  require an explicit decision. A remote tool cannot inherit built-in authority
-  by choosing the same name or by annotating itself read-only. Remembered rules
-  and hard-block policy are not implemented.
+  require an explicit decision from this engine. A remote tool cannot inherit
+  built-in authority by choosing the same name or annotating itself read-only.
+  The agent loop may satisfy an `ask` with a conversation permission the person
+  previously granted; the engine's `deny` always takes precedence. Hard-block
+  policy is not implemented.
 
 ## Invariants
 
@@ -73,7 +75,7 @@ nothing else in the app makes that call independently.
 - Whether any shell command can ever be automatic. Nothing in a command string
   bounds what it reaches, so the current answer is no, and the typed read tools
   exist so that looking around does not have to go through the shell.
-- Hard blocks, remembered rules, command parsing, redirection scope checks, and
+- Hard blocks, project-wide remembered rules, command parsing, redirection scope checks, and
   ambiguity-driven denial are deferred with command classification. The current
   production policy returns only `allow` or `ask`.
 

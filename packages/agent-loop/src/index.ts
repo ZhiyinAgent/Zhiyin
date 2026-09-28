@@ -366,6 +366,13 @@ export class AgentLoop {
     return this.#waits.resolveApproval(...args);
   }
 
+  revokeConversationPermission(
+    taskId: string,
+    permissionId: string,
+  ): Promise<void> {
+    return this.#records.revokeConversationPermission(taskId, permissionId);
+  }
+
   resolveUserInput(
     ...args: Parameters<TurnWaits["resolveUserInput"]>
   ): ReturnType<TurnWaits["resolveUserInput"]> {

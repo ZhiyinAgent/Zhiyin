@@ -27,9 +27,11 @@ const statusPresentation: Record<
 export function ActionHistory({
   actions,
   readPicture,
+  onOpenPermission,
 }: {
   actions: readonly TaskAction[];
   readPicture?: NonNullable<CoreApi["readPicture"]>;
+  onOpenPermission?: (permissionId: string) => void;
 }) {
   const [inspecting, setInspecting] = useState<string>();
   const open = actions.find((action) => action.id === inspecting);
@@ -75,6 +77,30 @@ export function ActionHistory({
                 <span className={styles["action-history__target"]}>
                   {action.target}
                 </span>
+                {action.approval && (
+                  <span className={styles["action-history__approval"]}>
+                    {action.status === "denied"
+                      ? `You declined ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                      : action.approval.by === "conversation-permission"
+                        ? `Covered by your permission from ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${action.approval.label ?? "this action"}`
+                        : action.approval.by === "no-approval-needed"
+                          ? `No approval needed: ${action.approval.reason ?? "allowed by the app"}`
+                          : action.approval.by === "blocked"
+                            ? `Blocked: ${action.approval.reason ?? "not permitted"}`
+                            : `Approved ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
+                    {action.approval.permissionId && onOpenPermission && (
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() =>
+                          onOpenPermission(action.approval!.permissionId!)
+                        }
+                      >
+                        View permission
+                      </button>
+                    )}
+                  </span>
+                )}
                 {action.reason && (
                   <span className={styles["action-history__reason"]}>
                     {action.reason}

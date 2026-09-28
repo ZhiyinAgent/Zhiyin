@@ -29,6 +29,7 @@ import { BrowserNotice, BrowserWorkspace } from "../browser/index.js";
 import { RestartNotice } from "./RestartNotice.js";
 import { SessionHeader } from "./SessionHeader.js";
 import { WorkspaceViewTabs } from "./WorkspaceViewTabs.js";
+import { useConversationPermissions } from "./useConversationPermissions.js";
 import { UserInputPrompt } from "../user-input/index.js";
 import type {
   WorkspaceAction,
@@ -58,6 +59,7 @@ type WorkspaceShellProps = {
     | "openAttachment"
     | "interruptTask"
     | "resolveApproval"
+    | "revokeConversationPermission"
     | "resolveUserInput"
     | "setPluginEnabled"
     | "installPlugin"
@@ -128,6 +130,10 @@ export function WorkspaceShell({
     dispatch({ type: "commandErrorShown", message });
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const permissions = useConversationPermissions(
+    state.tasks,
+    commands.revokeConversationPermission,
+  );
   const workspaceViewId = useId();
   const [viewChoice, setViewChoice] = useState<{
     taskId: string | null;
@@ -231,10 +237,15 @@ export function WorkspaceShell({
   });
 
   const pieces = (task: WorkspaceTask) =>
-    timelinePieces(task, commands, {
-      say: setCommandError,
-      restoreDraft: setComposerDraft,
-    });
+    timelinePieces(
+      task,
+      commands,
+      {
+        say: setCommandError,
+        restoreDraft: setComposerDraft,
+      },
+      () => permissions.open(task.id),
+    );
 
   if (state.connection === "loading") return <WorkspaceSkeleton />;
   // Before anything else: saved conversations that will not open are a
@@ -349,6 +360,7 @@ export function WorkspaceShell({
         onNewTask={startNewTask}
         onRenameTask={(id, title) => commands.renameTask(id, title)}
         onDeleteTask={(id) => commands.deleteTask(id)}
+        onTaskPermissions={permissions.open}
         onOpenUsage={() => openNavigationSurface("usage")}
         onOpenEvidence={() => openNavigationSurface("evidence")}
         onOpenSettings={() => openNavigationSurface("settings")}
@@ -529,6 +541,7 @@ export function WorkspaceShell({
                   {selectedTask?.phase.kind === "approval" && (
                     <div className={styles["composer-dock__decision"]}>
                       <ApprovalPrompt
+                        key={selectedTask.phase.prompt.id}
                         {...approvalPromptDetails(selectedTask.phase.prompt)}
                         compact={browserView}
                         onDecision={async (decision, reason) => {
@@ -540,7 +553,11 @@ export function WorkspaceShell({
                           await commands.resolveApproval(
                             selectedTask.id,
                             prompt.id,
-                            decision === "allow-once" ? "allow" : "deny",
+                            decision === "allow-once"
+                              ? "allow"
+                              : decision === "allow-conversation"
+                                ? "allow-conversation"
+                                : "deny",
                             ...(decision === "deny" && reason?.trim()
                               ? [reason.trim()]
                               : []),
@@ -624,6 +641,7 @@ export function WorkspaceShell({
           )}
         </>
       )}
+      {permissions.panel}
     </div>
   );
 }

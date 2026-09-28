@@ -22,10 +22,12 @@ export function SpecialistRunHistory({
   run,
   actions,
   readPicture,
+  onOpenPermission,
 }: {
   run: SpecialistRun;
   actions: readonly TaskAction[];
   readPicture?: NonNullable<CoreApi["readPicture"]>;
+  onOpenPermission?: (permissionId: string) => void;
 }) {
   const presentation = statusPresentation[run.status];
   const ownActions = actions
@@ -106,6 +108,7 @@ export function SpecialistRunHistory({
         )}
       <ActionHistory
         actions={ownActions}
+        {...(onOpenPermission ? { onOpenPermission } : {})}
         {...(readPicture ? { readPicture } : {})}
       />
     </details>

@@ -334,7 +334,7 @@ describe("AppSidebar", () => {
 
     expect(screen.getByRole("menu")).toHaveStyle({
       position: "fixed",
-      top: "630px",
+      top: "594px",
     });
   });
 

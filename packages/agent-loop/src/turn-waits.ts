@@ -13,11 +13,13 @@ import type { FileBackup } from "@zhiyin/rewind";
 import type { AgentLoopDependencies } from "./index.js";
 import type { TurnRecords } from "./turn-records.js";
 import type { AssembledToolCall, PresentedAction } from "./turn-shared.js";
+import type { PermissionScope } from "./conversation-permissions.js";
 
 const workBudgetQuestionId = "work-budget";
 const folderInstructionsQuestionId = "folder-instructions";
 export type ApprovalAnswer =
   | "allow"
+  | "allow-conversation"
   | "cancelled"
   | {
       readonly kind: "deny";
@@ -36,6 +38,7 @@ export class TurnWaits {
     string,
     {
       readonly taskId: string;
+      readonly conversationRule?: PermissionScope;
       readonly settle: (decision: ApprovalAnswer) => void;
     }
   >();
@@ -70,10 +73,14 @@ export class TurnWaits {
   async resolveApproval(
     taskId: string,
     requestId: string,
-    decision: "allow" | "deny",
+    decision: "allow" | "allow-conversation" | "deny",
     reason?: string,
   ): Promise<void> {
-    if (decision !== "allow" && decision !== "deny")
+    if (
+      decision !== "allow" &&
+      decision !== "allow-conversation" &&
+      decision !== "deny"
+    )
       throw new VisibleError("Choose Allow or Deny.");
     const pending = this.#pendingApprovals.get(
       this.#approvalKey(taskId, requestId),
@@ -81,13 +88,17 @@ export class TurnWaits {
     if (!pending || pending.taskId !== taskId) {
       throw new Error("That permission request is no longer active.");
     }
+    if (decision === "allow-conversation" && !pending.conversationRule)
+      throw new VisibleError(
+        "This action cannot be allowed for the conversation.",
+      );
     pending.settle(
       decision === "deny"
         ? {
             kind: "deny",
             ...(reason?.trim() ? { reason: reason.trim() } : {}),
           }
-        : "allow",
+        : decision,
     );
   }
 
@@ -130,6 +141,7 @@ export class TurnWaits {
     labelled?: Promise<
       { readonly title: string; readonly description: string } | undefined
     >,
+    conversationRule?: PermissionScope,
   ): Promise<ApprovalAnswer> {
     return this.#withPromptSlot(taskId, async () => {
       const task = this.#records.task(taskId);
@@ -144,6 +156,7 @@ export class TurnWaits {
         const cancel = () => settle("cancelled");
         this.#pendingApprovals.set(this.#approvalKey(taskId, approvalId), {
           taskId,
+          ...(conversationRule ? { conversationRule } : {}),
           settle,
         });
         signal.addEventListener("abort", cancel, { once: true });
@@ -180,6 +193,9 @@ export class TurnWaits {
               : {}),
             ...(inspection.changes ? { changes: inspection.changes } : {}),
             ...(backup ? { recovery: { files: backup.files } } : {}),
+            ...(conversationRule
+              ? { conversationRule: { label: conversationRule.label } }
+              : {}),
           },
         },
       });

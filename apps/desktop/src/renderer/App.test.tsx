@@ -50,6 +50,7 @@ function fakeCore(version: string): CoreApi & {
     commitRewind: async () => ({ files: [] }),
     interruptTask: async () => {},
     resolveApproval: async () => {},
+    revokeConversationPermission: async () => {},
     resolveUserInput: async () => {},
     setComponentEnabled: async () => {},
     componentContent: async () => undefined,

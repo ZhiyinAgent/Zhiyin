@@ -327,8 +327,13 @@ export function validateCommand(
         (args.length === 3 || args.length === 4) &&
         text(args[0]) &&
         text(args[1]) &&
-        (args[2] === "allow" || args[2] === "deny") &&
+        (args[2] === "allow" ||
+          args[2] === "allow-conversation" ||
+          args[2] === "deny") &&
         (args.length === 3 || (args[2] === "deny" && text(args[3], 2_000)));
+      break;
+    case CHANNEL.revokeConversationPermission:
+      valid = args.length === 2 && text(args[0]) && text(args[1]);
       break;
     case CHANNEL.resolveUserInput:
       valid =

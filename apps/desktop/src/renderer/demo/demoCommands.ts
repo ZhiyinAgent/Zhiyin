@@ -58,6 +58,7 @@ export function demoCommands(
         taskId,
         allowed: decision === "allow",
       }),
+    revokeConversationPermission: async () => {},
     resolveUserInput: async () => {
       throw notInTheDemo("run a task");
     },
