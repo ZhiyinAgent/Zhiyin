@@ -48,6 +48,7 @@ export function settledAfterRestart(task: WorkspaceTask): WorkspaceTask {
           status: "interrupted" as const,
           finishedAt: new Date().toISOString(),
           reason: "The app closed before this specialist completed.",
+          handoffDelivered: false,
         }
       : run,
   );

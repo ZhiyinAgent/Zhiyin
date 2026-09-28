@@ -607,6 +607,7 @@ export class ToolCalls {
     description: string,
     reason: string,
     specialistRunId?: string,
+    status: "failed" | "blocked" = "failed",
   ): Promise<void> {
     const inspection = {
       ok: true as const,
@@ -620,16 +621,21 @@ export class ToolCalls {
       this.#records.nextActionId(taskId),
       inspection,
       presentation,
-      "failed",
+      status,
       reason,
       undefined,
       undefined,
       specialistRunId,
     );
-    this.#records.emitToolActivity(taskId, call, "failed", {
-      ok: false,
-      reason,
-    });
+    this.#records.emitToolActivity(
+      taskId,
+      call,
+      status === "blocked" ? "denied" : "failed",
+      {
+        ok: false,
+        reason,
+      },
+    );
   }
 
   #inspectTool(

@@ -19,6 +19,7 @@ export type WorkspaceTurns = Pick<
   | "anyRunning"
   | "accepts"
   | "settleAfterRestart"
+  | "wakeSaved"
   | "settleEndedTurn"
 >;
 

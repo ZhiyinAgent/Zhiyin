@@ -1,6 +1,7 @@
 import type {
   SpecialistDefinition,
   SpecialistHandoff,
+  TaskAction,
   ToolOwner,
   ToolSpec,
   WorkspaceDescription,
@@ -24,7 +25,7 @@ import {
 import type { WorkLedger } from "./work-limits.js";
 import { RoundResults } from "./result-size.js";
 import { toolOutput } from "./notices.js";
-import { skippedAfterDecline } from "./refusals.js";
+import { refusal, skippedAfterDecline } from "./refusals.js";
 
 /**
  * How many specialists one turn can delegate to. A shared renewable ledger
@@ -166,11 +167,53 @@ export type DelegationAck =
   | { readonly ok: false; readonly reason: string };
 
 /** What a settled run is reported back to the model as, once delivered. */
-export function handoffMessage(result: SpecialistExecutionResult): string {
+function handoffHeader(result: SpecialistExecutionResult): string {
   const { name, id } = result.specialist;
   return result.ok
-    ? `Specialist "${name}" (${id}) finished in the background. Handoff: ${JSON.stringify(result.handoff)}`
-    : `Specialist "${name}" (${id}) stopped before finishing: ${result.reason}`;
+    ? `Specialist "${name}" (${id}) finished in the background. Run: ${result.runId}. Handoff: ${JSON.stringify(result.handoff)}`
+    : `Specialist "${name}" (${id}) stopped before finishing. Run: ${result.runId}. Reason: ${result.reason}`;
+}
+
+function handoffTimeline(actions: readonly TaskAction[]) {
+  return actions.map((action) => ({
+    actionId: action.id,
+    call: action.toolName ?? action.action,
+    target: action.target,
+    outcome: action.status,
+    summary:
+      action.reason ?? action.description ?? action.detail ?? action.status,
+    details: `Recorded action ${action.id}`,
+  }));
+}
+
+export function completeHandoffMessage(
+  result: SpecialistExecutionResult,
+  actions: readonly TaskAction[],
+): string {
+  const timeline = handoffTimeline(actions);
+  return `${handoffHeader(result)}\nTool timeline (${timeline.length} calls, in order; recorded details are in the conversation):\n${timeline.map((line) => JSON.stringify(line)).join("\n")}`;
+}
+
+export function handoffMessage(
+  result: SpecialistExecutionResult,
+  actions: readonly TaskAction[],
+  savedOutput?: string,
+): string {
+  const full = completeHandoffMessage(result, actions);
+  if (full.length <= 12_000) return full;
+  const header = handoffHeader(result);
+  const timeline = handoffTimeline(actions);
+  const shown = timeline.slice(0, 10).map((line) => ({
+    ...line,
+    call: line.call.slice(0, 120),
+    target: line.target.slice(0, 120),
+    summary: line.summary.slice(0, 120),
+  }));
+  const omitted = timeline.length - shown.length;
+  const excerpt = `${header.slice(0, 7_000)}${header.length > 7_000 ? "… [report continues in the saved output]" : ""}\nTool timeline: ${timeline.length} calls; first ${shown.length}:\n${shown.map((line) => JSON.stringify(line)).join("\n")}\n${omitted} calls omitted from this notice.`;
+  return savedOutput
+    ? `${excerpt}\nRead the complete report and timeline with read_file({"path":"${savedOutput}"}); its numbered pages show the rest.`
+    : `${excerpt}\nThe complete report and timeline remain in the specialist card, but the model could not retain a readable copy. Treat this handoff as incomplete.`;
 }
 
 export class SpecialistExecution {
@@ -244,11 +287,26 @@ export class SpecialistExecution {
           options.specialist.instructions,
           `Your exact delegated task is: ${options.request.task}`,
           "Work only on that task. Use ordinary tools when evidence is needed; every tool remains subject to the parent's permission policy.",
+          ...(options.specialist.access === "read"
+            ? [
+                "This role can only read. Report any needed changes to the parent.",
+              ]
+            : []),
           "Finish by calling finish_specialist once with a concise structured handoff. Do not address the user directly.",
         ].join("\n"),
       },
     ];
-    const tools = [...options.tools, finishSpecialistTool];
+    const tools = [
+      ...options.tools.filter(
+        (tool) =>
+          (!options.specialist.tools ||
+            options.specialist.tools.includes(tool.name)) &&
+          (options.specialist.access !== "read" ||
+            (options.ownerOf(tool.name) === "built-in" &&
+              tool.access === "read")),
+      ),
+      finishSpecialistTool,
+    ];
     const quiet = new QuietFailures();
 
     try {
@@ -345,6 +403,32 @@ export class SpecialistExecution {
                 call.name,
                 JSON.stringify(skippedAfterDecline()),
               ),
+            });
+            continue;
+          }
+          if (!tools.some((tool) => tool.name === call.name)) {
+            const reason =
+              options.specialist.access === "read"
+                ? "This specialist can only read."
+                : "This specialist is not allowed to use this tool.";
+            const result = refusal(
+              "permission",
+              reason,
+              "Use a tool allowed for this specialist or report the limitation.",
+            );
+            await this.#toolCalls.recordFailedProposal(
+              options.taskId,
+              call,
+              "The specialist requested a tool outside its role.",
+              reason,
+              runId,
+              "blocked",
+            );
+            messages.push({
+              role: "tool",
+              toolCallId: call.callId,
+              name: call.name,
+              content: toolOutput(call.name, JSON.stringify(result)),
             });
             continue;
           }
@@ -557,6 +641,7 @@ export class SpecialistExecution {
           ? {
               ...run,
               ...finish,
+              handoffDelivered: false,
               finishedAt: this.#deps.now().toISOString(),
             }
           : run,

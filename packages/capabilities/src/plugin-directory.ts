@@ -166,6 +166,8 @@ export function activeSpecialists(
         name: specialist.name,
         description: specialist.description,
         instructions: specialist.instructions,
+        ...(specialist.access ? { access: specialist.access } : {}),
+        ...(specialist.tools ? { tools: specialist.tools } : {}),
         provenance: { source: "plugin" as const, pluginId: view.manifest.name },
       })),
   );
@@ -230,6 +232,8 @@ export function authoredContentsOf(
       name: specialist.name,
       description: specialist.description,
       instructions: specialist.instructions,
+      ...(specialist.access ? { access: specialist.access } : {}),
+      ...(specialist.tools ? { tools: specialist.tools } : {}),
     })),
     mcpServers: view.mcpServers.map((server) => ({
       id: localId(id, server.id),

@@ -34,6 +34,7 @@ type DirectoryListing = {
 };
 
 export const listDirectorySpec: ToolSpec = {
+  access: "read",
   name: "list_directory",
   description:
     "List files and folders. A workspace-relative path lists inside the current workspace. An absolute path may list a folder elsewhere on this computer, which the person is asked about first. Use this before guessing file paths.",

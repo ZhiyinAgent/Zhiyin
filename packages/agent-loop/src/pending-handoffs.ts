@@ -15,12 +15,12 @@ export class PendingHandoffs {
     this.#byTask.set(taskId, queued);
   }
 
-  /** Everything queued for this task, removed in the same call. */
   /** Whether a handoff is queued for the task. */
   waiting(taskId: string): boolean {
     return this.#byTask.has(taskId);
   }
 
+  /** Everything queued for this task, removed in the same call. */
   drain(taskId: string): readonly SpecialistExecutionResult[] {
     const queued = this.#byTask.get(taskId);
     if (!queued) return [];

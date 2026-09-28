@@ -43,6 +43,16 @@ export class TurnRecords {
     this.#storeGuard = storeGuard;
   }
 
+  async markHandoffDelivered(taskId: string, runId: string): Promise<void> {
+    const task = this.task(taskId);
+    await this.replaceTask({
+      ...task,
+      specialistRuns: (task.specialistRuns ?? []).map((run) =>
+        run.id === runId ? { ...run, handoffDelivered: true } : run,
+      ),
+    });
+  }
+
   /** Drops the timing a finished turn kept for coalescing its progress. */
   forgetProgress(taskId: string): void {
     this.#progressCheckpoints.delete(taskId);

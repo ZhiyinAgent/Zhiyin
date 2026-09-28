@@ -241,7 +241,7 @@ const OVERSIZED_PACKAGE_FILES = {
   // feature work may not raise one.
   "packages/mcp/src/index.ts": 1204,
   "packages/model-client/src/index.ts": 639,
-  "packages/contract/src/index.ts": 888,
+  "packages/contract/src/index.ts": 871,
   "packages/recovery/src/index.ts": 640,
 };
 

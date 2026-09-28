@@ -1,6 +1,6 @@
 /** A delegated specialist's own run, drawn with the main history's own components. */
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { SpecialistRun, TaskAction } from "@zhiyin/contract";
 import { SpecialistRunHistory } from "./SpecialistRunHistory.js";
@@ -30,13 +30,13 @@ describe("SpecialistRunHistory", () => {
       depth: 1,
       status: "running",
       startedAt: "2026-09-17T00:00:00.000Z",
-      actionIds: ["action-1"],
+      actionIds: [],
     };
     render(
       <SpecialistRunHistory
         run={run}
         actions={[
-          ownAction,
+          { ...ownAction, specialistRunId: "specialist-1" },
           { ...ownAction, id: "action-2", target: "unrelated.ts" },
         ]}
       />,
@@ -45,6 +45,12 @@ describe("SpecialistRunHistory", () => {
     expect(screen.getByText("Reviewer", { exact: false })).toBeInTheDocument();
     expect(screen.getByText("Review the proposed change.")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
+    const card = screen.getByRole("region", { name: "Reviewer specialist" });
+    expect(card).not.toHaveAttribute("open");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reviewer specialist details" }),
+    );
+    expect(card).toHaveAttribute("open");
     // Only the specialist's own action is nested here, not the unrelated one.
     expect(screen.getByText("Read file")).toBeInTheDocument();
     expect(screen.queryByText("unrelated.ts")).toBeNull();

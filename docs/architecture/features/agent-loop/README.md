@@ -806,8 +806,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   failure is delivered later, as a `handoff` notice, to whichever turn is live
   when it settles: the same turn's next round if it is still going, or a
   fresh turn automatically woken for the task if it already ended. Delivery
-  is queued per task and drained exactly once, so several specialists
-  settling close together are each delivered and never duplicated. Named
+  is queued per task, and the saved run retains an undelivered marker until
+  its notice is in model history. A startup wake redelivers an unfinished
+  notice after a restart; a failed batch keeps every remaining handoff. Named
   test: `runs a specialist through the parent's tools and permission
   boundary, without blocking the parent`.
 - **A turn may end with specialists still running, and the task is woken when
@@ -864,6 +865,18 @@ browser is not among them: it is reached, and let go of, through capabilities.
   Named tests: `attributes interleaved parent and specialist actions to their
   actual owner` and `restores unfinished specialist
   work as interrupted`.
+- **A handoff includes the child's report and ordered tool outcomes.** Each
+  line names the call, target, outcome, brief recorded summary, and action id;
+  denied and failed attempts remain visible. A long notice gives the total and
+  an output reference for the complete report and timeline. The saved run and
+  stamped actions also reconstruct the card after restart. Named tests:
+  `gives the parent ordered outcomes and a page reference for a long timeline`
+  and `delivers a finished handoff from saved history after a simulated restart`.
+- **Read specialists cannot call change tools.** Their offered list contains
+  only app-owned tools marked for reading, optionally narrowed by the role's
+  allowlist. A call outside it is blocked before inspection or approval, even
+  if the model proposes it anyway. Named test: `refuses a read specialist's
+  write before permission is requested`.
 - An action approved but not yet dispatched does not run once the turn is
   stopped, and one already dispatched to a remote server is recorded as
   uncertain rather than cancelled, because what happened at the other end is not

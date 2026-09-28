@@ -54,6 +54,12 @@ export type { TaskInteraction } from "./interaction.js";
 import type { TaskInteraction } from "./interaction.js";
 export type { TaskOutcome } from "./task-outcome.js";
 import type { TaskOutcome } from "./task-outcome.js";
+export type {
+  SpecialistDefinition,
+  SpecialistHandoff,
+  SpecialistRun,
+} from "./specialist-run.js";
+import type { SpecialistRun } from "./specialist-run.js";
 import type {
   PendingUserInputRequest,
   UserInputRequest,
@@ -445,37 +451,6 @@ export type BrowserIntent =
       readonly deltaY: number;
     };
 
-/** An executable specialist definition with the plugin that supplied it. */
-export type SpecialistDefinition = {
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly instructions: string;
-  readonly provenance: { readonly source: "plugin"; readonly pluginId: string };
-};
-
-export type SpecialistHandoff = {
-  readonly summary: string;
-  readonly findings: readonly string[];
-  readonly recommendations: readonly string[];
-  readonly limitations: readonly string[];
-};
-
-/** One durable child run attached to the task that owns its authority. */
-export type SpecialistRun = {
-  readonly id: string;
-  readonly parentRunId?: string;
-  readonly specialist: SpecialistDefinition;
-  readonly task: string;
-  readonly depth: number;
-  readonly status: "running" | "completed" | "failed" | "interrupted";
-  readonly startedAt: string;
-  readonly finishedAt?: string;
-  readonly actionIds: readonly string[];
-  readonly handoff?: SpecialistHandoff;
-  readonly reason?: string;
-};
-
 export type PluginComponentStatus =
   "ready" | "off" | "setup-required" | "failed" | "unavailable";
 
@@ -592,6 +567,8 @@ export type AuthoredSpecialistDraft = {
   readonly name: string;
   readonly description: string;
   readonly instructions: string;
+  readonly access?: "read" | "change";
+  readonly tools?: readonly string[];
 };
 
 export type AuthoredMcpServerDraft = {
@@ -1338,6 +1315,8 @@ export interface ToolSpec {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Readonly<Record<string, unknown>>;
+  /** Trusted only for app-owned tools when limiting read-only specialists. */
+  readonly access?: "read" | "change";
 }
 
 /**

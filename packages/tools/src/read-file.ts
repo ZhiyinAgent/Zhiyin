@@ -44,6 +44,7 @@ const maximumPdfBytes = 2 * 1024 * 1024;
 const sampleBytes = 4096;
 
 export const readFileSpec: ToolSpec = {
+  access: "read",
   name: "read_file",
   description:
     "Read one text file, or the text of one PDF. A workspace-relative path reads a file in the current workspace; an absolute path may read a file elsewhere on this computer, which the person is asked about first. `output://<id>` reads a tool's saved output and `attachment://<id>` a text the person pasted, as named in this conversation. Lines come numbered, a page at a time: when more remains, the answer ends by saying which startLine to ask for next. A long PDF is read a stretch of pages at a time. Images are not read here — use read_image.",

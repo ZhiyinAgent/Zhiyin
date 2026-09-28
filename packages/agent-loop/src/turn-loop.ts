@@ -33,14 +33,14 @@ import { advertisedTools, openTaskHistory } from "./request-plan.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
   delegateSpecialistToolName,
-  handoffMessage,
   SpecialistExecution,
 } from "./specialist-execution.js";
+import { deliverPendingHandoffs } from "./specialist-handoff-delivery.js";
 import { activatePluginTool, PluginActivation } from "./plugin-activation.js";
 import { PendingHandoffs } from "./pending-handoffs.js";
 import { TurnRecords } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
-import { skippedAfterDecline } from "./refusals.js";
+import { answerDeclinedCall } from "./declined-call.js";
 import { TurnOwnership } from "./turn-ownership.js";
 import {
   answerableCalls,
@@ -184,8 +184,13 @@ export class TurnLoop {
             harnessNotice("specialists", runs)
         )
           await history.notice("specialists", runs);
-        for (const settled of this.#pendingHandoffs.drain(taskId))
-          await history.notice("handoff", handoffMessage(settled));
+        await deliverPendingHandoffs(
+          taskId,
+          this.#pendingHandoffs,
+          this.#records,
+          this.#deps.sessions,
+          history,
+        );
         const plan = {
           fixed: fixedMessages,
           tools: reportOnly ? [] : currentAdvertisedTools(),
@@ -385,10 +390,7 @@ export class TurnLoop {
         let declinedInBatch = false;
         for (const call of answerable) {
           if (declinedInBatch) {
-            const result = skippedAfterDecline();
-            const sent = JSON.stringify(result);
-            this.#plan.answered(taskId, call.callId, sent);
-            await history.result(call, toolOutput(call.name, sent), false);
+            await answerDeclinedCall(taskId, call, this.#plan, history);
             continue;
           }
           const quietRetriesLeft =

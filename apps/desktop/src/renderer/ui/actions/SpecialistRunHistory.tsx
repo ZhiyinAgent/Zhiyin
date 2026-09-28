@@ -28,18 +28,25 @@ export function SpecialistRunHistory({
   readPicture?: NonNullable<CoreApi["readPicture"]>;
 }) {
   const presentation = statusPresentation[run.status];
-  const ownActions = actions.filter(
-    (action) =>
-      action.specialistRunId === run.id || run.actionIds.includes(action.id),
-  );
+  const ownActions = actions
+    .filter(
+      (action) =>
+        action.specialistRunId === run.id || run.actionIds.includes(action.id),
+    )
+    .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 
   return (
-    <section
+    <details
       className={styles["specialist-run"]}
       role="region"
       aria-label={`${run.specialist.name} specialist`}
     >
-      <div className={styles["specialist-run__header"]}>
+      <summary
+        className={styles["specialist-run__header"]}
+        role="button"
+        tabIndex={0}
+        aria-label={`${run.specialist.name} specialist details`}
+      >
         <span className={styles["specialist-run__marker"]} aria-hidden="true">
           <Icon name="users" />
         </span>
@@ -53,7 +60,11 @@ export function SpecialistRunHistory({
           <Icon name={presentation.icon} />
           {presentation.label}
         </span>
-      </div>
+        <span className={styles["specialist-run__count"]}>
+          {ownActions.length} {ownActions.length === 1 ? "call" : "calls"}
+        </span>
+        <Icon name="chevron" />
+      </summary>
       {run.status === "completed" && run.handoff && (
         <div className={styles["specialist-run__handoff"]}>
           <p>{run.handoff.summary}</p>
@@ -97,6 +108,6 @@ export function SpecialistRunHistory({
         actions={ownActions}
         {...(readPicture ? { readPicture } : {})}
       />
-    </section>
+    </details>
   );
 }

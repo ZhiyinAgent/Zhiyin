@@ -16,6 +16,65 @@ import {
 } from "./support.js";
 
 describe("waking a task after a background specialist settles", () => {
+  it("delivers a finished handoff from saved history after a simulated restart", async () => {
+    const base = stubDependencies(() => {});
+    const requests: ModelRequest[] = [];
+    const loop = loopFrom({
+      ...base,
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          requests.push(request);
+          yield { kind: "textDelta", text: "I received the review." };
+          yield { kind: "done" };
+        },
+      },
+    });
+    await loop.createTask();
+    const task = loop.snapshot().tasks[0]!;
+    const restored = {
+      ...task,
+      specialistRuns: [
+        {
+          id: "saved-review",
+          specialist: {
+            id: "engineering/reviewer",
+            name: "Reviewer",
+            description: "Reviews work.",
+            instructions: "Review evidence.",
+            provenance: { source: "plugin" as const, pluginId: "engineering" },
+          },
+          task: "Review the change",
+          depth: 1,
+          status: "completed" as const,
+          startedAt: "2026-01-01T00:00:00.000Z",
+          finishedAt: "2026-01-01T00:01:00.000Z",
+          actionIds: [],
+          handoff: {
+            summary: "All clear.",
+            findings: [],
+            recommendations: [],
+            limitations: [],
+          },
+          handoffDelivered: false,
+        },
+      ],
+    };
+    loop.restore([restored]);
+
+    loop.wakeSaved([restored]);
+    await until(
+      () =>
+        loop.snapshot().tasks[0]?.specialistRuns?.[0]?.handoffDelivered ===
+        true,
+    );
+
+    expect(JSON.stringify(requests[0]?.messages)).toContain("All clear.");
+    expect(JSON.stringify(requests[0]?.messages)).toContain(
+      "Tool timeline (0 calls",
+    );
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
+  });
   it("marks the turn completed with the specialist still running, then wakes with its handoff", async () => {
     const base = stubDependencies(() => {});
     let releaseSpecialist!: () => void;

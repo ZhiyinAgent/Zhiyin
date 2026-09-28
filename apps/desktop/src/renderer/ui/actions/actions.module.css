@@ -284,6 +284,34 @@
   display: flex;
   align-items: flex-start;
   gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.specialist-run__header::-webkit-details-marker {
+  display: none;
+}
+
+.specialist-run__header:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 4px;
+}
+
+.specialist-run__header > svg:last-child {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+  transition: transform 150ms ease;
+}
+
+.specialist-run[open] .specialist-run__header > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.specialist-run__count {
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .specialist-run__marker {

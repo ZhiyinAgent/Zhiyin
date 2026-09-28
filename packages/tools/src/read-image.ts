@@ -45,6 +45,7 @@ const maximumImageBytes = 3 * 1024 * 1024;
 const sampleBytes = 128 * 1024;
 
 export const readImageSpec: ToolSpec = {
+  access: "read",
   name: "read_image",
   description:
     "Look at one image file — PNG, JPEG, WebP, GIF or BMP. Use this instead of read_file for pictures: the image is shown directly rather than read as text. A workspace-relative path opens a file in the current workspace; an absolute path may open one elsewhere on this computer, which the person is asked about first.",

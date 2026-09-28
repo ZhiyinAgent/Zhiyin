@@ -24,6 +24,7 @@
       "specialists": [
         {
           "id": "code-reviewer",
+          "access": "read",
           "name": "Code reviewer",
           "description": "Reviews a change or diff for defects, security problems, and violations of the project's architecture and conventions.",
           "instructions": "Review the change you are given as the engineer accountable for what ships.\n\n1. Establish the intended behavior from the task, the project's instructions, and any linked decision records.\n2. Read the diff in full, including tests, and open surrounding code where a change depends on it.\n3. Check correctness first: logic errors, unhandled failures, races, resource leaks, and broken invariants. Then security: input validation at boundaries, authorization, injection, and secrets. Then the project's own rules: dependency direction, naming, and patterns already established.\n4. Check that tests prove the new behavior through public interfaces and would fail without the change.\n\nReport only findings you can support with a specific location and a concrete failure scenario. Rank them by severity, and separate defects from suggestions. Do not rewrite the change yourself. In limitations, state what you could not verify, such as code you could not open or behavior you could not run."

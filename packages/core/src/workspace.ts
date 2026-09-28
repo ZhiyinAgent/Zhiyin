@@ -56,6 +56,7 @@ import {
 export type { WorkspaceTurns } from "./workspace-tasks.js";
 import { WorkspacePersistence } from "./workspace-persistence.js";
 import { recordUsage } from "./workspace-usage.js";
+
 import { forTheWindow } from "./window-events.js";
 import {
   clearEvidence as clearStoredEvidence,
@@ -69,6 +70,9 @@ import { closeInTurn } from "./closing.js";
 import * as produced from "./produced-files.js";
 import { ConversationList } from "./conversation-list.js";
 import { KeptItems } from "./kept-items.js";
+
+const modelSettingsIssue =
+  "The model's settings could not be read. Open Settings to check them.";
 
 export type WorkspaceDependencies = {
   readonly onboarding?: boolean;
@@ -226,15 +230,12 @@ export class Workspace {
         this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
       },
     );
+    void this.#connectionsReady.then(() => this.turns.wakeSaved(this.#tasks));
     // Provider settings look the model up in the provider's catalogue, so like
     // connections they arrive when they arrive.
     void this.settings
       .refresh()
-      .catch(() =>
-        this.#reportIssue(
-          "The model's settings could not be read. Open Settings to check them.",
-        ),
-      );
+      .catch(() => this.#reportIssue(modelSettingsIssue));
   }
 
   /**

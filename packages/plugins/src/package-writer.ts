@@ -73,6 +73,8 @@ async function writeManifest(
                 name: specialist.name,
                 description: specialist.description,
                 instructions: specialist.instructions,
+                ...(specialist.access ? { access: specialist.access } : {}),
+                ...(specialist.tools ? { tools: specialist.tools } : {}),
               })),
             },
           }

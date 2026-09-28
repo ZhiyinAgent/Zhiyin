@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ToolCallInspection } from "@zhiyin/contract";
+import type { TaskAction, ToolCallInspection } from "@zhiyin/contract";
+import {
+  completeHandoffMessage,
+  handoffMessage,
+} from "../src/specialist-execution.js";
 import {
   loopFrom,
   pluginOffering,
@@ -9,6 +13,151 @@ import {
 } from "./support.js";
 
 describe("specialist child execution", () => {
+  it("refuses a read specialist's write before permission is requested", async () => {
+    const base = stubDependencies(() => {});
+    const permission = vi.fn(async () => ({
+      outcome: "ask" as const,
+      reason: "Approval required.",
+    }));
+    const inspect = vi.fn(async (): Promise<ToolCallInspection> => ({
+      ok: true,
+      action: "Write a file",
+      target: "report.md",
+      command: "write_file(report.md)",
+      access: "change",
+      scope: "workspace",
+    }));
+    const childRequests: string[] = [];
+    let childRound = 0;
+    const loop = loopFrom({
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Read-only review.",
+              instructions: "Review.",
+              access: "read",
+            },
+          ],
+        }),
+      ]),
+      tools: {
+        list: () => [
+          {
+            name: "write_file",
+            description: "Write.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect,
+        execute: vi.fn(async () => ({ ok: true as const })),
+      },
+      permissions: { decide: permission },
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Reviewer specialist")) {
+            childRequests.push(text);
+            childRound += 1;
+            yield childRound === 1
+              ? {
+                  kind: "toolCallDelta" as const,
+                  index: 0,
+                  callId: "write-1",
+                  name: "write_file",
+                  argumentsDelta: '{"path":"report.md","text":"bad"}',
+                }
+              : {
+                  kind: "toolCallDelta" as const,
+                  index: 0,
+                  callId: "finish-1",
+                  name: "finish_specialist",
+                  argumentsDelta: JSON.stringify({
+                    summary: "Could only read.",
+                    findings: [],
+                    recommendations: [],
+                    limitations: [],
+                  }),
+                };
+          } else if (!text.includes("Read-only review task")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Read-only review task",
+              }),
+            };
+          } else
+            yield { kind: "textDelta" as const, text: "Review delegated." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    const taskId = await loop.createTask(["engineering"]);
+    await loop.start(taskId, "Review this safely");
+    await until(
+      () =>
+        loop.snapshot().tasks[0]?.specialistRuns?.[0]?.status === "completed",
+    ).catch(() => {
+      throw new Error(JSON.stringify(loop.snapshot().tasks[0]?.specialistRuns));
+    });
+
+    expect(permission).not.toHaveBeenCalled();
+    expect(inspect).not.toHaveBeenCalled();
+    expect(childRequests[1]).toContain("This specialist can only read.");
+    expect(loop.snapshot().tasks[0]?.actions).toEqual([
+      expect.objectContaining({
+        status: "blocked",
+        specialistRunId: expect.any(String),
+      }),
+    ]);
+  });
+  it("gives the parent ordered outcomes and a page reference for a long timeline", () => {
+    const specialist = {
+      id: "engineering/reviewer",
+      name: "Reviewer",
+      description: "Reviews changes.",
+      instructions: "Read evidence.",
+      provenance: { source: "plugin" as const, pluginId: "engineering" },
+    };
+    const result = {
+      ok: true as const,
+      runId: "review-1",
+      specialist,
+      handoff: {
+        summary: "Reviewed.",
+        findings: [],
+        recommendations: [],
+        limitations: [],
+      },
+    };
+    const actions: TaskAction[] = Array.from({ length: 130 }, (_, index) => ({
+      id: `action-${index}`,
+      action: "Read evidence",
+      toolName: "read_file",
+      target: `src/long-evidence-${index}.ts`,
+      status: index === 1 ? "denied" : index === 2 ? "failed" : "completed",
+      sequence: index + 1,
+      specialistRunId: "review-1",
+    }));
+    const full = completeHandoffMessage(result, actions);
+    const notice = handoffMessage(result, actions, "output://saved-trace");
+
+    expect(full).toContain('"actionId":"action-129"');
+    expect(full).toContain('"outcome":"denied"');
+    expect(full).toContain('"outcome":"failed"');
+    expect(notice).toContain("120 calls omitted");
+    expect(notice).toContain('read_file({"path":"output://saved-trace"})');
+    expect(notice).not.toContain('"actionId":"action-129"');
+  });
   it("attributes interleaved parent and specialist actions to their actual owner", async () => {
     const execute = vi.fn(async () => ({
       ok: true as const,
@@ -158,8 +307,9 @@ describe("specialist child execution", () => {
     expect(execute).toHaveBeenCalledTimes(2);
     const actions = loop.snapshot().tasks[0]?.actions ?? [];
     expect(actions).toHaveLength(2);
-    expect(actions.filter((action) => action.specialistRunId === "specialist-1"))
-      .toHaveLength(1);
+    expect(
+      actions.filter((action) => action.specialistRunId === "specialist-1"),
+    ).toHaveLength(1);
     expect(actions.filter((action) => !action.specialistRunId)).toHaveLength(1);
     expect(loop.snapshot().tasks[0]?.specialistRuns).toEqual([
       expect.objectContaining({
@@ -171,7 +321,10 @@ describe("specialist child execution", () => {
         task: "Review the proposed change.",
         depth: 1,
         status: "completed",
-        actionIds: [actions.find((action) => action.specialistRunId === "specialist-1")?.id],
+        actionIds: [
+          actions.find((action) => action.specialistRunId === "specialist-1")
+            ?.id,
+        ],
         handoff: {
           summary: "The change is covered.",
           findings: ["A regression test exercises the behavior."],

@@ -637,6 +637,8 @@ export function pluginOffering(options: {
     name: string;
     description: string;
     instructions: string;
+    access?: "read" | "change";
+    tools?: readonly string[];
   }[];
   readonly connectors?: readonly { id: string; url: string }[];
   readonly enabled?: boolean;

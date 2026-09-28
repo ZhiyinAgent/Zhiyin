@@ -54,6 +54,7 @@ const skippedFolders = [
 const skipped = new Set(skippedFolders);
 
 export const searchFilesSpec: ToolSpec = {
+  access: "read",
   name: "search_files",
   description:
     "Find which text files in the current workspace contain a piece of text. Matching is literal and ignores letter case. Generated folders such as .git and node_modules are not searched.",

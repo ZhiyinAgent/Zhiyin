@@ -126,6 +126,26 @@ function specialistsFrom(
     throw new InvalidPluginError("Zhiyin specialists must be an array.");
   return value.map((candidate, index) => {
     const specialist = record(candidate, `Specialist ${index + 1}`);
+    const access = specialist["access"];
+    if (access !== undefined && access !== "read" && access !== "change")
+      throw new InvalidPluginError(
+        `Specialist ${index + 1} access must be read or change.`,
+      );
+    const tools = specialist["tools"];
+    if (
+      tools !== undefined &&
+      (!Array.isArray(tools) ||
+        tools.length > 50 ||
+        !tools.every(
+          (name) =>
+            typeof name === "string" &&
+            name.trim().length > 0 &&
+            name.length <= 128,
+        ))
+    )
+      throw new InvalidPluginError(
+        `Specialist ${index + 1} tools must be a list of at most 50 tool names.`,
+      );
     return {
       id: `${pluginName}/${localId(specialist["id"], `Specialist ${index + 1} id`)}`,
       name: text(specialist["name"], `Specialist ${index + 1} name`),
@@ -137,6 +157,8 @@ function specialistsFrom(
         specialist["instructions"],
         `Specialist ${index + 1} instructions`,
       ),
+      ...(access ? { access } : {}),
+      ...(tools ? { tools: tools as string[] } : {}),
     };
   });
 }

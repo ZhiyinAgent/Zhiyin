@@ -274,6 +274,42 @@ export class AgentLoop {
     return settledAfterRestart(task);
   }
 
+  /** Rebuilds pending handoffs from saved runs after the workspace loads. */
+  wakeSaved(tasks: readonly WorkspaceTask[]): void {
+    for (const task of tasks) {
+      for (const run of task.specialistRuns ?? []) {
+        if (run.handoffDelivered !== false || run.status === "running")
+          continue;
+        if (
+          task.modelHistory?.some(
+            (entry) =>
+              entry.kind === "notice" &&
+              entry.content.includes(`Run: ${run.id}.`),
+          )
+        )
+          continue;
+        this.#pendingHandoffs.push(
+          task.id,
+          run.handoff
+            ? {
+                ok: true,
+                runId: run.id,
+                specialist: run.specialist,
+                handoff: run.handoff,
+              }
+            : {
+                ok: false,
+                runId: run.id,
+                specialist: run.specialist,
+                reason:
+                  run.reason ?? "The specialist stopped before finishing.",
+              },
+        );
+      }
+      this.#wakeIfQueued(task.id);
+    }
+  }
+
   /** How a conversation's reasoning is settled once its turn has ended. */
   settleEndedTurn(task: WorkspaceTask): WorkspaceTask {
     return settledWhenTurnEnded(task);

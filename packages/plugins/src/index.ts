@@ -48,6 +48,8 @@ export type PluginSpecialist = {
   readonly name: string;
   readonly description: string;
   readonly instructions: string;
+  readonly access?: "read" | "change";
+  readonly tools?: readonly string[];
 };
 
 export type PluginMcpServer = {
@@ -245,6 +247,25 @@ export function validatePluginPackage(plugin: PluginPackage): void {
       specialist.instructions,
       `Specialist “${specialist.id}” instructions`,
     );
+    if (
+      specialist.access &&
+      specialist.access !== "read" &&
+      specialist.access !== "change"
+    )
+      throw new InvalidPluginError(
+        `Specialist “${specialist.id}” access must be read or change.`,
+      );
+    if (
+      specialist.tools &&
+      (specialist.tools.length > 50 ||
+        specialist.tools.some(
+          (name) =>
+            typeof name !== "string" || !name.trim() || name.length > 128,
+        ))
+    )
+      throw new InvalidPluginError(
+        `Specialist “${specialist.id}” tools must be at most 50 names.`,
+      );
   }
   for (const server of plugin.mcpServers) {
     claim(server.id, "MCP server");

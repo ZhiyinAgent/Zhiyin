@@ -45,6 +45,9 @@ tools and conversation resources are not package contents.
 - `loadPluginDirectory()` reads the portable fixed paths — `plugin.json`,
   `skills/`, `mcp.json` — and refuses unsafe paths, symbolic links,
   unsupported components, or partial packages before returning anything.
+- Specialist declarations may specify `access: "read" | "change"` and a tool
+  name allowlist. Missing access means `change` for existing packages; the
+  agent loop enforces a read role before tool inspection and approval.
 - `loadBuiltInPlugins(directory)` reads the shipped catalog: `catalog.json`
   names the packages and their order.
 - `FilePluginStore` keeps installed copies, staged updates, rollback versions,

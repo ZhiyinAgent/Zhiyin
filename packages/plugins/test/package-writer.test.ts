@@ -70,6 +70,8 @@ describe("writePluginDirectory", () => {
           name: "Route planner",
           description: "Plans routes around weather.",
           instructions: "Avoid storms. Prefer scenic routes when clear.",
+          access: "read",
+          tools: ["read_file"],
         },
       ],
       mcpServers: [
@@ -101,6 +103,8 @@ describe("writePluginDirectory", () => {
         name: "Route planner",
         description: "Plans routes around weather.",
         instructions: "Avoid storms. Prefer scenic routes when clear.",
+        access: "read",
+        tools: ["read_file"],
       },
     ]);
     expect(plugin.mcpServers).toMatchObject([
