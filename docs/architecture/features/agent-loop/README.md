@@ -858,8 +858,11 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - **A specialist handoff is durable and attributable.** Running child work is
   stored on the owning task with its definition provenance; a restart settles
   it as interrupted, and completion returns a structured handoff to the parent.
-  Named tests: `runs a specialist through the parent's tools and permission
-  boundary, without blocking the parent` and `restores unfinished specialist
+  Each child action carries its specialist run id when recorded. A run's action
+  list is built from that stamp in call order, so concurrent parent and sibling
+  actions cannot be credited to it; the card also uses the stamp while it runs.
+  Named tests: `attributes interleaved parent and specialist actions to their
+  actual owner` and `restores unfinished specialist
   work as interrupted`.
 - An action approved but not yet dispatched does not run once the turn is
   stopped, and one already dispatched to a remote server is recorded as

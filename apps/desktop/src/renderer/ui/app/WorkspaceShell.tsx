@@ -167,9 +167,12 @@ export function WorkspaceShell({
     state.tasks.find((task) => task.id === state.selectedTaskId) ?? null;
   // A specialist's own actions are drawn nested under its run in the
   // timeline, not a second time in the main action-history list.
-  const specialistOwnedActionIds = new Set(
-    (selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
-  );
+  const specialistOwnedActionIds = new Set([
+    ...(selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
+    ...(selectedTask?.actions ?? [])
+      .filter((action) => action.specialistRunId)
+      .map((action) => action.id),
+  ]);
   const context = selectedTask?.context;
   const budget = useContextBudget(state, selectedTask, commands, () =>
     openNavigationSurface("settings"),

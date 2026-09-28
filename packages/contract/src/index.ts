@@ -52,6 +52,8 @@ import type { TaskPlanItem } from "./plan.js";
 export type * from "./user-input.js";
 export type { TaskInteraction } from "./interaction.js";
 import type { TaskInteraction } from "./interaction.js";
+export type { TaskOutcome } from "./task-outcome.js";
+import type { TaskOutcome } from "./task-outcome.js";
 import type {
   PendingUserInputRequest,
   UserInputRequest,
@@ -82,6 +84,8 @@ export type TaskAction = {
   readonly toolName?: string;
   readonly evidence?: string;
   readonly policy?: string;
+  /** The child run that proposed this action, when there is one. */
+  readonly specialistRunId?: string;
   /**
    * The change this action proposed, kept after it ran. Reviewing a change
    * before approving it and checking afterwards what was actually done are the
@@ -227,12 +231,6 @@ export type PluginSourceOutcome =
   | { readonly status: "applied" }
   | { readonly status: "cancelled" }
   | { readonly status: "failed"; readonly reason: string };
-
-export type TaskOutcome = {
-  readonly title: string;
-  readonly summary: string;
-  readonly file?: string;
-};
 
 export type RewindPreview = {
   readonly id: string;

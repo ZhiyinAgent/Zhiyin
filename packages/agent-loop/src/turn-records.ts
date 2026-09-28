@@ -354,12 +354,14 @@ export class TurnRecords {
     reason?: string,
     call?: AssembledToolCall,
     policy?: string,
+    specialistRunId?: string,
   ): Promise<void> {
     const task = this.task(taskId);
     const actions = task.actions ?? [];
     const existing = actions.find((item) => item.id === id);
     const action: TaskAction = {
       id,
+      ...(specialistRunId ? { specialistRunId } : {}),
       action: presentation.title,
       ...(presentation.description
         ? { description: presentation.description }

@@ -28,8 +28,9 @@ export function SpecialistRunHistory({
   readPicture?: NonNullable<CoreApi["readPicture"]>;
 }) {
   const presentation = statusPresentation[run.status];
-  const ownActions = actions.filter((action) =>
-    run.actionIds.includes(action.id),
+  const ownActions = actions.filter(
+    (action) =>
+      action.specialistRunId === run.id || run.actionIds.includes(action.id),
   );
 
   return (

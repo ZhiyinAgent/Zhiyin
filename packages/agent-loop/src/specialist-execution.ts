@@ -219,11 +219,11 @@ export class SpecialistExecution {
     const runId = options.runId;
     const childTurnId = `${options.taskId}:specialist:${runId}`;
     const controller = this.#ownership.start(childTurnId, options.parentTurnId);
-    const beforeActions = new Set(
-      (this.#records.task(options.taskId).actions ?? []).map(
-        (action) => action.id,
-      ),
-    );
+    const ownActionIds = () =>
+      (this.#records.task(options.taskId).actions ?? [])
+        .filter((action) => action.specialistRunId === runId)
+        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
+        .map((action) => action.id);
     await this.#storeRun(options.taskId, {
       id: runId,
       ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
@@ -302,9 +302,7 @@ export class SpecialistExecution {
             throw new Error(
               "The specialist returned an invalid structured handoff.",
             );
-          const actionIds = (this.#records.task(options.taskId).actions ?? [])
-            .filter((action) => !beforeActions.has(action.id))
-            .map((action) => action.id);
+          const actionIds = ownActionIds();
           await this.#finishRun(options.taskId, runId, {
             status: "completed",
             handoff: result,
@@ -358,6 +356,7 @@ export class SpecialistExecution {
             round,
             quietRetriesLeft,
             controller.signal,
+            runId,
           );
           rewriteCallArguments(messages, call);
           const outcome = input.ok
@@ -369,6 +368,8 @@ export class SpecialistExecution {
                 controller,
                 quietRetriesLeft,
                 round,
+                {},
+                runId,
               )
             : { result: input.result, quiet: input.quiet };
           if ("denied" in outcome && outcome.denied) declinedInBatch = true;
@@ -407,9 +408,7 @@ export class SpecialistExecution {
         // background makes that gap load-bearing, so it stops itself cleanly
         // instead of consuming the shared ledger unsupervised.
         if (options.ledger.reached(this.#deps.now()).length > 0) {
-          const actionIds = (this.#records.task(options.taskId).actions ?? [])
-            .filter((action) => !beforeActions.has(action.id))
-            .map((action) => action.id);
+          const actionIds = ownActionIds();
           await this.#finishRun(options.taskId, runId, {
             status: "interrupted",
             reason:
@@ -432,9 +431,7 @@ export class SpecialistExecution {
         : error instanceof Error
           ? error.message
           : "The specialist failed before returning a handoff.";
-      const actionIds = (this.#records.task(options.taskId).actions ?? [])
-        .filter((action) => !beforeActions.has(action.id))
-        .map((action) => action.id);
+      const actionIds = ownActionIds();
       await this.#finishRun(options.taskId, runId, {
         status: controller.signal.aborted ? "interrupted" : "failed",
         reason,

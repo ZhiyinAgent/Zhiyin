@@ -100,12 +100,13 @@ export class ToolCalls {
       repair: this.#repair,
       audit: (taskId, toolName, kind, reason, extra) =>
         this.#audit(taskId, toolName, kind, reason, extra),
-      fail: (taskId, call, reason) =>
+      fail: (taskId, call, reason, _signal, specialistRunId) =>
         this.recordFailedProposal(
           taskId,
           call,
           "The requested action used invalid input.",
           reason,
+          specialistRunId,
         ),
     });
   }
@@ -120,8 +121,16 @@ export class ToolCalls {
     round: RoundEvidence,
     quietRetriesLeft: number,
     signal: AbortSignal,
+    specialistRunId?: string,
   ): Promise<CallInput> {
-    return this.#inputs.read(taskId, call, round, quietRetriesLeft, signal);
+    return this.#inputs.read(
+      taskId,
+      call,
+      round,
+      quietRetriesLeft,
+      signal,
+      specialistRunId,
+    );
   }
 
   async runToolCall(
@@ -133,6 +142,7 @@ export class ToolCalls {
     quietRetriesLeft: number,
     round: RoundEvidence,
     said: SelfDescription = {},
+    specialistRunId?: string,
   ): Promise<ToolCallOutcome> {
     if (!owner) {
       const result = refusal(
@@ -145,6 +155,7 @@ export class ToolCalls {
         call,
         "Zhiyin requested a capability that is not connected.",
         result.reason,
+        specialistRunId,
       );
       return { result };
     }
@@ -196,6 +207,7 @@ export class ToolCalls {
         call,
         "The requested action could not be inspected.",
         result.reason,
+        specialistRunId,
       );
       return { result };
     }
@@ -302,6 +314,7 @@ export class ToolCalls {
         undefined,
         call,
         "No approval: inert conversation view.",
+        specialistRunId,
       );
       let result: ToolInvocationResult;
       try {
@@ -448,6 +461,9 @@ export class ToolCalls {
         presentation,
         userDenied ? "denied" : "blocked",
         reason,
+        undefined,
+        undefined,
+        specialistRunId,
       );
       await this.#records.showWorking(
         taskId,
@@ -492,6 +508,7 @@ export class ToolCalls {
       undefined,
       call,
       permission.reason,
+      specialistRunId,
     );
     await this.#records.showToolProgress(
       taskId,
@@ -589,6 +606,7 @@ export class ToolCalls {
     call: AssembledToolCall,
     description: string,
     reason: string,
+    specialistRunId?: string,
   ): Promise<void> {
     const inspection = {
       ok: true as const,
@@ -604,6 +622,9 @@ export class ToolCalls {
       presentation,
       "failed",
       reason,
+      undefined,
+      undefined,
+      specialistRunId,
     );
     this.#records.emitToolActivity(taskId, call, "failed", {
       ok: false,

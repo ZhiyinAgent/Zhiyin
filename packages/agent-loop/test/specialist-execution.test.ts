@@ -9,7 +9,7 @@ import {
 } from "./support.js";
 
 describe("specialist child execution", () => {
-  it("runs a specialist through the parent's tools and permission boundary, without blocking the parent", async () => {
+  it("attributes interleaved parent and specialist actions to their actual owner", async () => {
     const execute = vi.fn(async () => ({
       ok: true as const,
       value: "The file has a regression test.",
@@ -119,6 +119,17 @@ describe("specialist child execution", () => {
           }
           // The parent's own round right after delegating: the ack it gets
           // back is a "started" receipt, never the handoff itself.
+          if (!text.includes("parent-read")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "parent-read",
+              name: "read_file",
+              argumentsDelta: JSON.stringify({ path: "src/parent.ts" }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
           if (!text.includes("finished in the background")) {
             expect(text).toContain("started");
             expect(text).not.toContain("The change is covered.");
@@ -144,7 +155,12 @@ describe("specialist child execution", () => {
           .outcome?.summary === "Review complete.",
     );
 
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledTimes(2);
+    const actions = loop.snapshot().tasks[0]?.actions ?? [];
+    expect(actions).toHaveLength(2);
+    expect(actions.filter((action) => action.specialistRunId === "specialist-1"))
+      .toHaveLength(1);
+    expect(actions.filter((action) => !action.specialistRunId)).toHaveLength(1);
     expect(loop.snapshot().tasks[0]?.specialistRuns).toEqual([
       expect.objectContaining({
         id: "specialist-1",
@@ -155,7 +171,7 @@ describe("specialist child execution", () => {
         task: "Review the proposed change.",
         depth: 1,
         status: "completed",
-        actionIds: [expect.stringContaining("action-")],
+        actionIds: [actions.find((action) => action.specialistRunId === "specialist-1")?.id],
         handoff: {
           summary: "The change is covered.",
           findings: ["A regression test exercises the behavior."],

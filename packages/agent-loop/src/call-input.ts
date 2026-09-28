@@ -48,6 +48,7 @@ type RecordFailure = (
   call: AssembledToolCall,
   reason: string,
   signal: AbortSignal,
+  specialistRunId?: string,
 ) => Promise<void>;
 
 export class CallInputs {
@@ -71,6 +72,7 @@ export class CallInputs {
     round: RoundEvidence,
     quietRetriesLeft: number,
     signal: AbortSignal,
+    specialistRunId?: string,
   ): Promise<CallInput> {
     const raw = call.arguments;
     const input = readToolInput(raw);
@@ -125,7 +127,7 @@ export class CallInputs {
       });
       return { ok: false, result, quiet: true };
     }
-    await this.#fail(taskId, call, result.reason, signal);
+    await this.#fail(taskId, call, result.reason, signal, specialistRunId);
     return { ok: false, result, quiet: false };
   }
 }
