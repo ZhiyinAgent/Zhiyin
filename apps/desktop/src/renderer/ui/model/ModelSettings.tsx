@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   ModelCatalog,
   ModelCatalogEntry,
@@ -27,7 +27,6 @@ export function ModelSettings({
   onSelectModel,
   onSaveApiKey,
   onClearApiKey,
-  children,
 }: {
   settings: ProviderSettings;
   onClose: () => void;
@@ -36,8 +35,6 @@ export function ModelSettings({
   onSelectModel: (model: string, providers: readonly string[]) => Promise<void>;
   onSaveApiKey: (apiKey: string) => Promise<ApiKeySaveOutcome>;
   onClearApiKey: () => Promise<void>;
-  /** Further settings, drawn below the model's, in the same scrolling page. */
-  children?: ReactNode;
 }) {
   const keyMissing = settings.credential.status !== "configured";
   const savedProviders = settings.providers ?? [];
@@ -257,8 +254,6 @@ export function ModelSettings({
           keyMissing={keyMissing}
         />
       </div>
-
-      {children}
 
       {keyOpen && (
         <ApiKeyDialog

@@ -25,7 +25,7 @@ const closedBrowser: BrowserPanelState = {
 };
 
 export type WorkspaceSurface =
-  "thread" | "library" | "usage" | "evidence" | "settings";
+  "thread" | "library" | "usage" | "evidence" | "settings" | "instructions";
 
 export type ApprovalRequest = {
   effect?: string;
@@ -106,6 +106,7 @@ export type WorkspaceTask = {
   updatedAt?: string;
   updatedLabel: string;
   messages: TaskMessage[];
+  guidance?: CoreWorkspaceTask["guidance"];
   actions?: TaskAction[];
   conversationPermissions?: NonNullable<
     CoreWorkspaceTask["conversationPermissions"]
@@ -321,6 +322,7 @@ function taskFromCore(task: CoreWorkspaceTask): WorkspaceTask {
     ...(task.updatedAt ? { updatedAt: task.updatedAt } : {}),
     updatedLabel: task.updatedLabel,
     messages: task.messages.map((message) => ({ ...message })),
+    guidance: task.guidance?.map((item) => ({ ...item })),
     actions: (task.actions ?? []).map((action) => ({ ...action })),
     conversationPermissions: task.conversationPermissions ?? [],
     plan: (task.plan ?? []).map((item) => ({ ...item })),

@@ -1,4 +1,23 @@
 import type { ApprovalRequest, WorkspaceTask } from "./workspaceState.js";
+import type {
+  CoreApi,
+  MessageAttachment,
+  ReasoningSelection,
+} from "@zhiyin/contract";
+
+export async function sendComposerMessage(
+  send: CoreApi["sendMessage"],
+  taskId: string,
+  message: string,
+  reasoning: ReasoningSelection | undefined,
+  attachments: readonly MessageAttachment[] | undefined,
+  running: boolean,
+): Promise<void> {
+  const ids = attachments?.map((attachment) => attachment.id);
+  if (running) return send(taskId, message, reasoning, ids, "guidance");
+  if (ids?.length) return send(taskId, message, reasoning, ids);
+  return send(taskId, message, reasoning);
+}
 
 /** What the permission request shows, taken from the request the core sent. */
 export function approvalPromptDetails(prompt: ApprovalRequest) {
@@ -25,34 +44,35 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
  * or there is nothing connected to run a task at all.
  */
 export function composerLock(
-  task: WorkspaceTask | null,
+  _task: WorkspaceTask | null,
   tasksAvailable: boolean,
 ) {
-  if (task?.phase.kind === "approval")
-    return {
-      disabledReason: "Answer the permission request first",
-      disabledPlaceholder: "Waiting for your decision",
-    };
-  if (task?.phase.kind === "input") {
-    if (task.phase.prompt.kind === "quiz")
-      return {
-        disabledReason: "Answer the quiz first",
-        disabledPlaceholder: "Finish the quiz to keep chatting",
-      };
-    if (task.phase.prompt.kind === "workBudget")
-      return {
-        disabledReason: "Choose Continue or Pause above",
-        disabledPlaceholder: "Waiting for your choice",
-      };
-    return {
-      disabledReason: "Answer the questions first",
-      disabledPlaceholder: "Waiting for your answers",
-    };
-  }
   if (!tasksAvailable)
     return {
       disabledReason: "Task execution is not connected yet",
       disabledPlaceholder: "Composer unavailable",
     };
   return {};
+}
+
+/** Guidance not delivered before Stop or restart returns to the composer. */
+export function guidanceDraft(task: WorkspaceTask | null) {
+  const drafts = (task?.guidance ?? []).filter(
+    (item) => item.status === "draft",
+  );
+  if (!drafts.length) return undefined;
+  return {
+    id: drafts.map((item) => item.id).join(":"),
+    text: drafts.map((item) => item.text).join("\n\n"),
+    attachments: drafts.flatMap((item) => item.attachments ?? []),
+  };
+}
+
+export function taskIsRunning(task: WorkspaceTask | null): boolean {
+  return (
+    task !== null &&
+    ["working", "browser", "loading", "approval", "input"].includes(
+      task.phase.kind,
+    )
+  );
 }

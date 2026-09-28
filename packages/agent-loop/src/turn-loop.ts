@@ -42,6 +42,8 @@ import { TurnRecords } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
 import { answerDeclinedCall } from "./declined-call.js";
 import { TurnOwnership } from "./turn-ownership.js";
+import { deliverGuidance } from "./turn-guidance.js";
+import { completionPhase } from "./turn-completion.js";
 import {
   answerableCalls,
   describedWorkspace,
@@ -112,13 +114,7 @@ export class TurnLoop {
       readonly beforeGather?: (
         workspace: WorkspaceDescription,
       ) => Promise<void>;
-      /**
-       * How many specialists this task has already delegated to, carried
-       * forward across a wake so the width bound holds for the conceptual
-       * unit of work that started them — not reset just because a
-       * background specialist outlived the turn that requested it. A fresh
-       * turn a person starts leaves this unset, and gets the full bound.
-       */
+      /** Specialist count carried across a background wake. */
       readonly initialDelegatedChildren?: number;
     },
   ): Promise<void> {
@@ -191,6 +187,8 @@ export class TurnLoop {
           this.#deps.sessions,
           history,
         );
+        if (await deliverGuidance(taskId, this.#records, history))
+          guard.reset();
         const plan = {
           fixed: fixedMessages,
           tools: reportOnly ? [] : currentAdvertisedTools(),
@@ -258,12 +256,10 @@ export class TurnLoop {
           return;
         }
 
-        const stoppedWithoutOutput =
-          calls.length === 0 && !roundText.trim() && Boolean(roundReasoning);
         const incomplete =
           finishReason === "length" ||
           modelResponse?.complete === false ||
-          stoppedWithoutOutput;
+          (calls.length === 0 && !roundText.trim() && Boolean(roundReasoning));
 
         if (roundReasoning && assistantSequence !== undefined) {
           await this.#records.showAssistantProgress(
@@ -297,38 +293,31 @@ export class TurnLoop {
             assistantParts.join("\n\n"),
           );
         if (calls.length === 0) {
+          if (
+            this.#records
+              .task(taskId)
+              .guidance?.some((item) => item.status === "pending")
+          ) {
+            history = await this.#openHistory(taskId);
+          }
+          if (await deliverGuidance(taskId, this.#records, history)) {
+            guard.reset();
+            continue;
+          }
           const assistantText = assistantParts.join("\n\n");
           if (!incomplete && !reportOnly)
             await this.#plan.settle(taskId, assistantText);
           controller.signal.throwIfAborted();
           const task = this.#records.task(taskId);
-          const backgroundSpecialistIds = (task.specialistRuns ?? [])
-            .filter((run) => run.status === "running")
-            .map((run) => run.id);
-          // An answer that ran out of room is not an answer. Presenting it as
-          // complete would hand someone a document that stops mid-sentence
-          // and call it finished; what they need to know is that there is
-          // more to come and that asking again continues it.
           await this.#records.replaceTask({
             ...task,
-            phase: incomplete
-              ? {
-                  kind: "interrupted",
-                  reason:
-                    finishReason === "length"
-                      ? "The answer was cut off before it was finished. Ask again to carry on from here."
-                      : "The model stopped before returning an answer or action. Ask again to continue.",
-                }
-              : {
-                  kind: "completed",
-                  outcome: {
-                    title: reportOnly ? "Work paused" : "Response complete",
-                    summary: assistantText || "The model returned no text.",
-                  },
-                  ...(backgroundSpecialistIds.length
-                    ? { backgroundSpecialistIds }
-                    : {}),
-                },
+            phase: completionPhase(
+              task,
+              assistantText,
+              reportOnly,
+              incomplete,
+              finishReason === "length",
+            ),
           });
           return;
         }
@@ -575,6 +564,7 @@ export class TurnLoop {
       });
     } finally {
       if (this.#ownership.finish(taskId, controller)) {
+        await this.#records.releaseGuidance(taskId);
         this.#records.forgetProgress(taskId);
       }
     }

@@ -6,6 +6,53 @@
   border-top: 1px solid var(--zy-line);
 }
 
+.instructions-page {
+  display: grid;
+  gap: 26px;
+  height: 100%;
+  overflow: auto;
+  padding: 44px clamp(28px, 6vw, 96px) 64px;
+  color: var(--zy-text);
+}
+
+.instructions-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 860px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.instructions-page__head h1 {
+  margin: 6px 0 10px;
+  font-size: 28px;
+  letter-spacing: -0.02em;
+}
+
+.instructions-page__head p:last-child {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.instructions-page > .personal-instructions {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel);
+}
+
+.instructions-page > .personal-instructions h2 {
+  font-size: 16px;
+}
+
 .personal-instructions h2 {
   margin: 0;
   font-size: 15px;

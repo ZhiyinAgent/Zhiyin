@@ -644,23 +644,6 @@
   box-shadow: none;
 }
 
-/*
- * While a response is running, only the field is closed. Greying the whole
- * composer would say the Stop button is unavailable too, which is the one
- * control that must stay obviously live, so the dimming is confined to the
- * field's own text and the footer keeps its normal weight.
- *
- * The field is dimmed, never filled. A panel behind the text reads as a
- * second input nested inside the composer, which is a thing that does not
- * exist; the closed field is the same field, quieter.
- */
-.composer--running textarea:disabled {
-  color: var(--zy-faint);
-  cursor: default;
-  -webkit-text-fill-color: var(--zy-faint);
-  opacity: 1;
-}
-
 .composer--running {
   border-color: var(--zy-line);
 }

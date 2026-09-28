@@ -52,6 +52,14 @@ export class LoopGuard {
   /** The worst repetition seen, for the work-budget question. */
   #repeated: { readonly tool: string; count: number } | undefined;
 
+  reset(): void {
+    this.#seen.clear();
+    this.#noticed.clear();
+    this.#failures = undefined;
+    this.#pending = undefined;
+    this.#repeated = undefined;
+  }
+
   /**
    * One call's outcome. `changed` marks a workspace change that succeeded; a
    * quiet correction is the model fixing its input, and is not counted.

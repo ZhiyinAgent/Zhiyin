@@ -39,7 +39,12 @@ export type ModelHistoryEntry =
       readonly content: string;
     }
   /** Something Zhiyin told the model, as sent. */
-  | { readonly id: string; readonly kind: "notice"; readonly content: string }
+  | {
+      readonly id: string;
+      readonly kind: "notice";
+      readonly content: string;
+      readonly messageId?: string;
+    }
   /**
    * Pictures sent as themselves, named by where they are stored. Once let go,
    * the text says so and no pictures are left.

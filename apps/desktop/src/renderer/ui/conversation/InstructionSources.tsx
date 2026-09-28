@@ -55,7 +55,7 @@ export function InstructionSources({
                   className="button button--quiet"
                   onClick={onEdit}
                 >
-                  Edit in Settings
+                  Edit custom instructions
                 </button>
               )
             ) : (

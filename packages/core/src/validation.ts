@@ -275,10 +275,11 @@ export function validateCommand(
     // Words, pastes kept beforehand, or both; never nothing. The reasoning
     // choice may be left out before the pastes.
     case CHANNEL.sendMessage: {
-      const [taskId, message, reasoning, pastes = []] = args;
+      const [taskId, message, reasoning, pastes = [], delivery] = args;
       valid =
         args.length >= 2 &&
-        args.length <= 4 &&
+        args.length <= 5 &&
+        (delivery === undefined || delivery === "guidance") &&
         text(taskId) &&
         (reasoning === undefined || reasoningSelection(reasoning)) &&
         Array.isArray(pastes) &&

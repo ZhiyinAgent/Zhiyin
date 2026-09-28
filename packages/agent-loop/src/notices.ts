@@ -44,6 +44,8 @@ export const noticeKinds = [
   "gaps",
   /** The person's standing instructions, sent again when they change. */
   "instructions",
+  /** A person's message added while the current turn was working. */
+  "guidance",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

@@ -98,7 +98,7 @@ async function openSettings(
     .getByRole("button", { name: /app menu/i })
     .first()
     .click({ timeout: 10_000 });
-  await window.getByText("Settings").first().click({ timeout: 10_000 });
+  await window.getByText("Model").first().click({ timeout: 10_000 });
   await window
     .getByRole("region", { name: "Model", exact: true })
     .waitFor({ state: "visible", timeout: 10_000 });

@@ -98,6 +98,7 @@ export class AgentLoop {
     userInput: string,
     reasoning?: ReasoningSelection,
     attachments: readonly string[] = [],
+    delivery?: "guidance",
   ): Promise<void> {
     // A message sent while the conversation is being condensed goes out on
     // the condensed conversation.
@@ -105,10 +106,6 @@ export class AgentLoop {
     if (!this.#deps.host.historyAvailable())
       throw new VisibleError(
         "Saved history is unavailable. Retry after restoring access.",
-      );
-    if (this.#activeTurns.running(taskId))
-      throw new VisibleError(
-        "This task is already running. Stop it before starting another turn.",
       );
     if (this.#deps.rewind.restoring(taskId))
       throw new VisibleError(
@@ -118,6 +115,28 @@ export class AgentLoop {
     if (!message && !attachments.length) return;
     if (!this.#deps.host.find(taskId))
       throw new Error("The task does not exist.");
+
+    if (delivery === "guidance" || this.#activeTurns.running(taskId)) {
+      const owner = this.#activeTurns.controller(taskId);
+      const claimed = attachments.length
+        ? await this.#deps.sessions.claimDrafts(taskId, attachments)
+        : [];
+      if (claimed.length < attachments.length)
+        throw new VisibleError(
+          "The pasted text is no longer available. Paste it again.",
+        );
+      const guidanceId = this.#deps.newMessageId();
+      await this.#records.queueGuidance(taskId, {
+        id: guidanceId,
+        text: message,
+        ...(claimed.length ? { attachments: claimed } : {}),
+        status:
+          owner && this.#activeTurns.owns(taskId, owner) ? "pending" : "draft",
+      });
+      if (!owner || !this.#activeTurns.owns(taskId, owner))
+        await this.#records.releaseGuidance(taskId, guidanceId);
+      return;
+    }
 
     // Registered before the first await: everything between the
     // already-running check above and this point must stay synchronous, or two
@@ -129,20 +148,31 @@ export class AgentLoop {
     );
     // Pastes kept as drafts move into this conversation as it is sent. One
     // that is gone is not sent as though it were there.
-    const claimed = attachments.length
+    const existingDrafts =
+      this.#records
+        .task(taskId)
+        .guidance?.filter((item) => item.status === "draft") ?? [];
+    const retained = existingDrafts
+      .flatMap((item) => item.attachments ?? [])
+      .filter((item) => attachments.includes(item.id));
+    const freshIds = attachments.filter(
+      (id) => !retained.some((item) => item.id === id),
+    );
+    const fresh = freshIds.length
       ? await this.#deps.sessions
-          .claimDrafts(taskId, attachments)
+          .claimDrafts(taskId, freshIds)
           .catch((error: unknown) => {
             this.#activeTurns.finish(taskId, controller);
             throw error;
           })
       : [];
-    if (claimed.length < attachments.length) {
+    if (fresh.length < freshIds.length) {
       this.#activeTurns.finish(taskId, controller);
       throw new VisibleError(
         "The pasted text is no longer available. Paste it again.",
       );
     }
+    const claimed = [...retained, ...fresh];
 
     // A turn runs where its conversation lives, whatever the window last
     // displayed. A no-op when they already agree.
@@ -154,7 +184,12 @@ export class AgentLoop {
       attachments: claimed,
       ...(reasoning ? { reasoning } : {}),
     });
-    await this.#records.replaceTask(started.task);
+    await this.#records.replaceTask({
+      ...started.task,
+      guidance: (existing.guidance ?? []).filter(
+        (item) => item.status === "pending",
+      ),
+    });
 
     await this.#turnLoop.run(taskId, controller, ledger, {
       beforeGather: (workspace) =>
@@ -318,6 +353,7 @@ export class AgentLoop {
   async cancel(taskId: string): Promise<void> {
     this.#activeTurns.cancel(taskId);
     await this.#records.interrupt(taskId);
+    await this.#records.releaseGuidance(taskId);
     await this.#deps.capabilities.closeConversation(taskId);
   }
 

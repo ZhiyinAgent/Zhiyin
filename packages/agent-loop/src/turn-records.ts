@@ -10,7 +10,9 @@ import type {
   UserInputResponse,
   WorkStep,
   WorkspaceTask,
+  TaskGuidance,
 } from "@zhiyin/contract";
+import { settleGuidance } from "./turn-guidance.js";
 import { describeInvocation } from "./invocation.js";
 import { evidenceText } from "./evidence.js";
 import type { AgentLoopDependencies } from "./index.js";
@@ -43,6 +45,48 @@ export class TurnRecords {
   ) {
     this.#deps = deps;
     this.#storeGuard = storeGuard;
+  }
+
+  async queueGuidance(taskId: string, guidance: TaskGuidance): Promise<void> {
+    const task = this.task(taskId);
+    await this.replaceTask({
+      ...task,
+      guidance: [...(task.guidance ?? []), guidance],
+    });
+  }
+
+  async deliverGuidance(taskId: string, guidanceId: string): Promise<void> {
+    const task = this.task(taskId);
+    const guidance = task.guidance?.find((item) => item.id === guidanceId);
+    if (!guidance || guidance.status !== "pending") return;
+    if (
+      !(task.modelHistory ?? []).some(
+        (entry) => entry.kind === "notice" && entry.messageId === guidanceId,
+      )
+    )
+      throw new Error("Guidance was not recorded in model history.");
+    await this.replaceTask({
+      ...task,
+      guidance: (task.guidance ?? []).filter((item) => item.id !== guidanceId),
+      messages: [
+        ...task.messages,
+        {
+          id: guidance.id,
+          role: "user",
+          text: guidance.text,
+          ...(guidance.attachments?.length
+            ? { attachments: guidance.attachments }
+            : {}),
+          sequence: this.nextTimelineSequence(task),
+        },
+      ],
+    });
+  }
+
+  async releaseGuidance(taskId: string, onlyId?: string): Promise<void> {
+    const task = this.task(taskId);
+    const settled = settleGuidance(task, onlyId);
+    if (settled !== task) await this.replaceTask(settled);
   }
 
   async markHandoffDelivered(taskId: string, runId: string): Promise<void> {

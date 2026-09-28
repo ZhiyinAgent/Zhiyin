@@ -108,7 +108,7 @@ export class ModelHistory {
     const entries = [...(task.modelHistory ?? [])];
     const sent = new Set(
       entries.flatMap((entry) =>
-        isStoredMessage(entry) && entry.messageId ? [entry.messageId] : [],
+        "messageId" in entry && entry.messageId ? [entry.messageId] : [],
       ),
     );
     const unsent = task.messages.filter(
@@ -231,12 +231,17 @@ export class ModelHistory {
     await this.#save();
   }
 
-  async notice(kind: NoticeKind, text: string): Promise<void> {
+  async notice(
+    kind: NoticeKind,
+    text: string,
+    messageId?: string,
+  ): Promise<void> {
     const content = harnessNotice(kind, text);
     await this.#add({ role: "user", content }, (id) => ({
       id,
       kind: "notice",
       content,
+      ...(messageId ? { messageId } : {}),
     }));
   }
 

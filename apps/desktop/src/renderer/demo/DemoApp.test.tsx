@@ -31,13 +31,13 @@ describe("DemoApp", () => {
     expect(screen.queryByRole("region", { name: "Task plan" })).toBeNull();
   });
 
-  it("switches to a compact approval state and pauses the composer", () => {
+  it("switches to a compact approval state while keeping steering available", () => {
     render(<DemoApp initialScenario="approval" />);
 
     expect(
       screen.getByRole("region", { name: "Permission request" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
   });
 
   it("offers the browser workspace in the browser demo", () => {

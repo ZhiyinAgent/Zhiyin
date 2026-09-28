@@ -232,14 +232,22 @@ describe("Composer", () => {
     ).toBeInTheDocument();
   });
 
-  it("replaces Send with Stop while a response is running", () => {
+  it("shows guidance and Stop while a response is running", () => {
     const onStop = vi.fn();
     render(<Composer running onStop={onStop} />);
 
-    expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Send message" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Stop task" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Stop task" }));
     expect(onStop).toHaveBeenCalledOnce();
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Use the newer file" },
+    });
+    expect(screen.queryByRole("button", { name: "Stop task" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Add to current work" }),
+    ).toBeEnabled();
   });
 });
 

@@ -157,8 +157,8 @@ export class Core {
       selectNothing: () => workspace.selectNothing(),
       renameTask: (taskId, title) => workspace.renameTask(taskId, title),
       deleteTask: (taskId) => workspace.deleteTask(taskId),
-      sendMessage: (taskId, message, reasoning, attachments) =>
-        turns.start(taskId, message, reasoning, attachments),
+      sendMessage: (taskId, message, reasoning, attachments, delivery) =>
+        turns.start(taskId, message, reasoning, attachments, delivery),
       keepPaste: (text) => workspace.kept.keepPaste(text),
       setContextBudget: (taskId, budget) =>
         workspace.setContextBudget(taskId, budget),

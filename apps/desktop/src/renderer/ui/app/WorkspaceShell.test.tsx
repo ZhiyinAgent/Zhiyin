@@ -1162,10 +1162,12 @@ describe("WorkspaceShell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Context/ }));
     fireEvent.click(screen.getByRole("button", { name: "What's using space" }));
-    fireEvent.click(screen.getByRole("button", { name: "Edit in Settings" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit custom instructions" }),
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "surfaceOpened",
-      surface: "settings",
+      surface: "instructions",
     });
 
     rerender(
@@ -1174,7 +1176,7 @@ describe("WorkspaceShell", () => {
           ...createWorkspaceState({
             connection: "ready",
             runtime: { tasks: "available", capabilities: "available" },
-            surface: "settings",
+            surface: "instructions",
           }),
           personalInstructions: "Always answer in French.",
         }}
@@ -1841,6 +1843,7 @@ describe("WorkspaceShell", () => {
     const state = createWorkspaceState({
       connection: "ready",
       selectedTaskId: "running",
+      runtime: { tasks: "available", capabilities: "available" },
       tasks: [
         {
           id: "running",
@@ -1863,7 +1866,7 @@ describe("WorkspaceShell", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
     expect(screen.queryByRole("button", { name: "Send message" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Stop task" }));
     expect(interruptTask).toHaveBeenCalledWith("running");
@@ -2069,7 +2072,7 @@ describe("WorkspaceShell", () => {
     expect(resolveUserInput).toHaveBeenCalledWith("task-1", "input-7", {
       answers: [{ questionId: "audience", answerIds: ["team"] }],
     });
-    expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
   });
 
   it("returns the exact renewable work-budget choice to the core", () => {
@@ -2111,11 +2114,11 @@ describe("WorkspaceShell", () => {
     expect(resolveUserInput).toHaveBeenCalledWith("task-1", "budget-7", {
       answers: [{ questionId: "work-budget", answerIds: ["continue"] }],
     });
-    expect(screen.getByLabelText("Message Zhiyin")).toBeDisabled();
-    expect(screen.getByText("Choose Continue or Pause above")).toBeVisible();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Stop task" })).toBeEnabled();
   });
 
-  it("keeps a pending quiz in the conversation scroll surface and locks the composer", () => {
+  it("keeps a pending quiz visible while accepting guidance", () => {
     const state = createWorkspaceState({
       connection: "ready",
       runtime: { tasks: "available", capabilities: "available" },
@@ -2173,7 +2176,6 @@ describe("WorkspaceShell", () => {
     ).toBeVisible();
     const composer = screen.getByLabelText("Message Zhiyin");
     expect(composer).toBeVisible();
-    expect(composer).toBeDisabled();
-    expect(screen.getByText("Answer the quiz first")).toBeVisible();
+    expect(composer).toBeEnabled();
   });
 });

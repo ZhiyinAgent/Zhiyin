@@ -1,4 +1,13 @@
 import type { ReasoningTrace } from "./reasoning.js";
+import type { ReasoningSelection } from "./reasoning.js";
+
+export type SendMessage = (
+  taskId: string,
+  message: string,
+  reasoning?: ReasoningSelection,
+  attachments?: readonly string[],
+  delivery?: "guidance",
+) => Promise<void>;
 
 /**
  * A long text the person pasted, kept beside the conversation instead of in
@@ -25,4 +34,12 @@ export type TaskMessage = {
   readonly interactionId?: string;
   /** Optional so task history saved before ordered timeline entries can load. */
   readonly sequence?: number;
+};
+
+/** A message sent during a turn, waiting for a safe boundary or left as a draft. */
+export type TaskGuidance = {
+  readonly id: string;
+  readonly text: string;
+  readonly attachments?: readonly MessageAttachment[];
+  readonly status: "pending" | "draft";
 };

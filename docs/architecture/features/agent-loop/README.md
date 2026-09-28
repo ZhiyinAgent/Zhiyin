@@ -971,6 +971,15 @@ browser is not among them: it is reached, and let go of, through capabilities.
   conversation's menu. Named tests: `covers later edits in one folder, then
   asks after revocation and in another conversation` and `checks every edit
   target, connector version, and excluded deletion`.
+- Guidance sent while a turn owns a conversation is saved before it is
+  acknowledged. It is delivered in order after a complete tool batch or a
+  streamed answer, preserving the earlier result in model history. The model
+  is asked to acknowledge it and show the revised plan before dependent work.
+  Guidance that misses the turn or survives Stop and restart returns as a
+  draft and never launches a later turn on its own. Named tests: `delivers
+  guidance after a tool round and keeps final streaming open for a third
+  round`, `keeps late guidance as a draft without starting another turn`, and
+  `recovers pending guidance as a draft after restart`.
 
 ## Testing notes
 
@@ -981,7 +990,7 @@ folders or the browser feed is a test of the core and the loop together and
 lives with the core.
 
 `keeps cancellation terminal during final assessment` covers cancellation after
-generation. `rejects overlapping starts instead of replacing an active turn`
+generation. `persists overlapping input as guidance without replacing the turn`
 covers ownership of a task. `advertises enabled skills and sends earlier tool
 results with a follow-up` covers runtime discovery and a restored
 conversation's tool results.

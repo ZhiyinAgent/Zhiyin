@@ -187,7 +187,7 @@ describe("AgentLoop", () => {
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
   });
 
-  it("rejects overlapping starts instead of replacing an active turn", async () => {
+  it("persists overlapping input as guidance without replacing the turn", async () => {
     let release!: () => void;
     const waiting = new Promise<void>((resolve) => {
       release = resolve;
@@ -205,9 +205,8 @@ describe("AgentLoop", () => {
     });
     await loop.createTask();
     const first = loop.start("task-1", "First");
-    await expect(loop.start("task-1", "Second")).rejects.toThrow(
-      "already running",
-    );
+    await loop.start("task-1", "Second");
+    expect(loop.snapshot().tasks[0]?.guidance?.[0]?.text).toBe("Second");
     await loop.cancel("task-1");
     release();
     await first;
@@ -216,6 +215,7 @@ describe("AgentLoop", () => {
         .snapshot()
         .tasks[0]?.messages.filter((message) => message.role === "user"),
     ).toHaveLength(1);
+    expect(loop.snapshot().tasks[0]?.guidance?.[0]?.status).toBe("draft");
   });
   it("sends everything user-visible through the event stream it was given", () => {
     const seen: AppEvent[] = [];

@@ -54,6 +54,7 @@ type AppSidebarProps = {
   onOpenUsage?: () => void;
   onOpenEvidence?: () => void;
   onOpenSettings?: () => void;
+  onOpenInstructions?: () => void;
   onRenameTask?: (id: string, title: string) => void | Promise<void>;
   onDeleteTask?: (id: string) => void | Promise<void>;
   onTaskPermissions?: (id: string) => void;
@@ -95,6 +96,7 @@ export function AppSidebar({
   onOpenUsage,
   onOpenEvidence,
   onOpenSettings,
+  onOpenInstructions,
   onRenameTask,
   onDeleteTask,
   onTaskPermissions,
@@ -360,7 +362,18 @@ export function AppSidebar({
               }}
             >
               <Icon name="settings" />
-              <span>Settings</span>
+              <span>Model</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenInstructions?.();
+              }}
+            >
+              <Icon name="spark" />
+              <span>Custom instructions</span>
             </button>
           </div>
         )}

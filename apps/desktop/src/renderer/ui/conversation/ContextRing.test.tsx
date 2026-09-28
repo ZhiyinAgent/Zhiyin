@@ -81,7 +81,9 @@ describe("the context ring", () => {
     expect(folder).toHaveTextContent(/shortened to the first 16 KB/i);
     expect(folder).toHaveTextContent(/edit AGENTS\.md in the folder/i);
     fireEvent.click(
-      within(personal).getByRole("button", { name: "Edit in Settings" }),
+      within(personal).getByRole("button", {
+        name: "Edit custom instructions",
+      }),
     );
     expect(onEditInstructions).toHaveBeenCalled();
   });

@@ -53,16 +53,17 @@ describe("Composer", () => {
     expect(ring).toHaveAccessibleName("Context: 0% of the Medium budget");
   });
 
-  it("blocks typing while a response is in progress", () => {
+  it("accepts guidance while a response is in progress", () => {
     const onSubmit = vi.fn();
     render(<Composer running onSubmit={onSubmit} />);
 
     const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
-    expect(field).toBeDisabled();
-    expect(field).toHaveAttribute("placeholder", "Response in progress");
+    expect(field).toBeEnabled();
+    expect(field).toHaveAttribute("placeholder", "Add to current work");
 
+    fireEvent.change(field, { target: { value: "Use the newer file" } });
     fireEvent.keyDown(field, { key: "Enter" });
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledWith("Use the newer file");
   });
 
   it("keeps the settings and stop controls usable while a response is in progress", () => {

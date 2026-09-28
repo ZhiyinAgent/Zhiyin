@@ -189,6 +189,7 @@ describe("AppSidebar", () => {
     const onOpenSkills = vi.fn();
     const onOpenUsage = vi.fn();
     const onOpenSettings = vi.fn();
+    const onOpenInstructions = vi.fn();
     render(
       <AppSidebar
         selectedId="release"
@@ -197,6 +198,7 @@ describe("AppSidebar", () => {
         onOpenSkills={onOpenSkills}
         onOpenUsage={onOpenUsage}
         onOpenSettings={onOpenSettings}
+        onOpenInstructions={onOpenInstructions}
         tasks={[{ id: "release", title: "Prepare release notes", meta: "Now" }]}
       />,
     );
@@ -222,8 +224,13 @@ describe("AppSidebar", () => {
     expect(onOpenUsage).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Model" }));
     expect(onOpenSettings).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Custom instructions" }),
+    );
+    expect(onOpenInstructions).toHaveBeenCalledOnce();
   });
 
   it("closes the app menu, a conversation's menu and its delete question when the person clicks away, or the window loses focus", () => {

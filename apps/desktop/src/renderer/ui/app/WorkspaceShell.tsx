@@ -24,7 +24,13 @@ import { useAppShortcuts } from "./useAppShortcuts.js";
 import { useContextBudget } from "./useContextBudget.js";
 import { timelinePieces } from "./timelinePieces.js";
 import { WorkspaceSurfaces } from "./WorkspaceSurfaces.js";
-import { approvalPromptDetails, composerLock } from "./dockState.js";
+import {
+  approvalPromptDetails,
+  composerLock,
+  guidanceDraft,
+  sendComposerMessage,
+  taskIsRunning,
+} from "./dockState.js";
 import { BrowserNotice, BrowserWorkspace } from "../browser/index.js";
 import { RestartNotice } from "./RestartNotice.js";
 import { SessionHeader } from "./SessionHeader.js";
@@ -41,7 +47,6 @@ import styles from "./app.module.css";
 
 type WorkspaceShellProps = {
   state: WorkspaceState;
-  /** The window was reloaded after its page crashed. */
   restarted?: boolean;
   dispatch: (action: WorkspaceAction) => void;
   commands: Pick<
@@ -171,6 +176,7 @@ export function WorkspaceShell({
   useReadingPosition(conversationRef);
   const selectedTask =
     state.tasks.find((task) => task.id === state.selectedTaskId) ?? null;
+  const returnedGuidance = guidanceDraft(selectedTask);
   // A specialist's own actions are drawn nested under its run in the
   // timeline, not a second time in the main action-history list.
   const specialistOwnedActionIds = new Set([
@@ -179,24 +185,11 @@ export function WorkspaceShell({
       .filter((action) => action.specialistRunId)
       .map((action) => action.id),
   ]);
-  const context = selectedTask?.context;
   const budget = useContextBudget(state, selectedTask, commands, () =>
-    openNavigationSurface("settings"),
+    openNavigationSurface("instructions"),
   );
-  const isRunning =
-    selectedTask?.phase.kind === "working" ||
-    selectedTask?.phase.kind === "browser" ||
-    selectedTask?.phase.kind === "loading";
-  /**
-   * Changing folder is only safe when nothing is depending on the current
-   * one — not mid-turn, and not while a decision about an action scoped to it
-   * is still open.
-   */
-  const folderLocked =
-    isRunning ||
-    selectedTask?.phase.kind === "approval" ||
-    selectedTask?.phase.kind === "input" ||
-    state.runtime.tasks === "unavailable";
+  const isRunning = taskIsRunning(selectedTask);
+  const folderLocked = isRunning || state.runtime.tasks === "unavailable";
   const lastMessage = selectedTask?.messages.at(-1);
 
   useEffect(() => {
@@ -287,14 +280,14 @@ export function WorkspaceShell({
     let taskId = selectedTask?.id;
     if (!taskId) await budget.adopt((taskId = await commands.createTask()));
     setComposerDraft(undefined);
-    if (attachments?.length)
-      await commands.sendMessage(
-        taskId,
-        message,
-        reasoning,
-        attachments.map((attachment) => attachment.id),
-      );
-    else await commands.sendMessage(taskId, message, reasoning);
+    await sendComposerMessage(
+      commands.sendMessage,
+      taskId,
+      message,
+      reasoning,
+      attachments,
+      isRunning,
+    );
   }
 
   function openSurface(surface: WorkspaceState["surface"]) {
@@ -330,7 +323,7 @@ export function WorkspaceShell({
 
   return (
     <div
-      className={`${styles["app-shell"]}${context || state.browser.status !== "closed" ? "" : ` ${styles["app-shell--no-context"]}`}${state.browser.status !== "closed" ? ` ${styles["app-shell--browser"]}` : ""}${navigationOpen ? ` ${styles["app-shell--navigation-open"]}` : ""}`}
+      className={`${styles["app-shell"]}${selectedTask?.context || state.browser.status !== "closed" ? "" : ` ${styles["app-shell--no-context"]}`}${state.browser.status !== "closed" ? ` ${styles["app-shell--browser"]}` : ""}${navigationOpen ? ` ${styles["app-shell--navigation-open"]}` : ""}`}
       onKeyDown={(event) => {
         if (event.key === "Escape") setNavigationOpen(false);
       }}
@@ -364,6 +357,7 @@ export function WorkspaceShell({
         onOpenUsage={() => openNavigationSurface("usage")}
         onOpenEvidence={() => openNavigationSurface("evidence")}
         onOpenSettings={() => openNavigationSurface("settings")}
+        onOpenInstructions={() => openNavigationSurface("instructions")}
       />
 
       <WorkspaceSurfaces
@@ -598,7 +592,9 @@ export function WorkspaceShell({
                       {...(composerDraft &&
                       composerDraft.taskId === selectedTask?.id
                         ? { draft: composerDraft }
-                        : {})}
+                        : returnedGuidance
+                          ? { draft: returnedGuidance }
+                          : {})}
                       running={isRunning}
                       onStop={stopTask}
                       scope={
@@ -634,9 +630,9 @@ export function WorkspaceShell({
               </BrowserWorkspace>
             </main>
           </section>
-          {!hasBrowser && context && (
+          {!hasBrowser && selectedTask?.context && (
             <div className={styles["app-shell__context"]}>
-              <ContextShelf context={context} />
+              <ContextShelf context={selectedTask.context} />
             </div>
           )}
         </>

@@ -9,7 +9,7 @@ import { CapabilityLibrary } from "../capabilities/index.js";
 import { ModelSettings } from "../model/index.js";
 import { UsagePanel } from "../usage/index.js";
 import { EvidencePanel } from "../evidence/index.js";
-import { PersonalInstructions } from "../instructions/index.js";
+import { InstructionsSettings } from "../instructions/index.js";
 import type { WorkspaceState } from "./workspaceState.js";
 import styles from "./app.module.css";
 
@@ -120,12 +120,17 @@ export function WorkspaceSurfaces({
             }
             onSaveApiKey={(apiKey) => commands.saveProviderApiKey(apiKey)}
             onClearApiKey={() => commands.clearProviderApiKey()}
-          >
-            <PersonalInstructions
-              saved={state.personalInstructions ?? ""}
-              onSave={(text) => commands.setPersonalInstructions(text)}
-            />
-          </ModelSettings>
+          />
+        </div>
+      )}
+
+      {state.surface === "instructions" && (
+        <div className={styles["workspace-surface"]}>
+          <InstructionsSettings
+            saved={state.personalInstructions ?? ""}
+            onSave={(text) => commands.setPersonalInstructions(text)}
+            onClose={() => onOpenSurface("thread")}
+          />
         </div>
       )}
     </>

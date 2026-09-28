@@ -79,7 +79,8 @@ import type {
 } from "./models.js";
 import type { ContextBudgetChoice, TaskContext } from "./context-budget.js";
 import type { ReasoningSelection } from "./reasoning.js";
-import type { PasteOutcome, TaskMessage } from "./messages.js";
+import type { PasteOutcome, SendMessage, TaskMessage } from "./messages.js";
+import type { TaskGuidance } from "./messages.js";
 export type {
   TaskAction,
   ActionApproval,
@@ -281,6 +282,7 @@ export type WorkspaceTask = TaskContext & {
   readonly updatedAt?: string;
   readonly updatedLabel: string;
   readonly messages: readonly TaskMessage[];
+  readonly guidance?: readonly TaskGuidance[];
   /** Optional so history written before per-request diagnostics can load. */
   readonly modelResponses?: readonly ModelResponseRecord[];
   /**
@@ -1025,12 +1027,7 @@ export interface CoreApi {
    * Start a model turn for a task. Streaming progress arrives as events.
    * `attachments` names pastes `keepPaste` kept; a message may be only those.
    */
-  sendMessage(
-    taskId: string,
-    message: string,
-    reasoning?: ReasoningSelection,
-    attachments?: readonly string[],
-  ): Promise<void>;
+  sendMessage: SendMessage;
 
   /** Keeps a long paste as a draft attachment, so the composer never holds it. */
   keepPaste(text: string): Promise<PasteOutcome>;

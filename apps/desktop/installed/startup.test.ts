@@ -257,7 +257,7 @@ describe("the installed app on ordinary data", () => {
       credentialsUnavailable: true,
     });
     await window.getByRole("button", { name: "Open app menu" }).click();
-    await window.getByRole("menuitem", { name: "Settings" }).click();
+    await window.getByRole("menuitem", { name: "Model" }).click();
     await window.getByRole("button", { name: "OpenRouter API key" }).click();
 
     await shows(

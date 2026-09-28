@@ -137,7 +137,6 @@ export function Composer({
       (!typed && !kept.length) ||
       keeping ||
       disabledReason ||
-      running ||
       submitting.current
     )
       return;
@@ -182,10 +181,7 @@ export function Composer({
 
   return (
     /*
-     * Running and paused look different on purpose. Paused means the whole
-     * composer is unavailable, so the whole thing dims. Running means only
-     * the field is closed — settings and Stop stay live — so the dimming is
-     * confined to the field and the edge stays lit to say work is under way.
+     * A running turn accepts guidance while Stop stays available.
      */
     <form
       className={`${styles.composer}${disabledReason ? ` ${styles["composer--disabled"]}` : ""}${running ? ` ${styles["composer--running"]}` : ""}`}
@@ -198,13 +194,13 @@ export function Composer({
         aria-label="Message Zhiyin"
         placeholder={
           running
-            ? "Response in progress"
+            ? "Add to current work"
             : disabledReason
               ? disabledPlaceholder
               : "Ask anything. Start somewhere."
         }
         value={message}
-        disabled={Boolean(disabledReason) || running}
+        disabled={Boolean(disabledReason)}
         rows={1}
         onChange={(event) => setMessage(event.target.value)}
         onPaste={(event) => {
@@ -279,7 +275,7 @@ export function Composer({
           {context && <ContextRing {...context} disabled={sending} />}
           {disabledReason && <span>{disabledReason}</span>}
         </div>
-        {running ? (
+        {running && !message.trim() && !attachments.length ? (
           <button
             className={`${styles.composer__send} ${styles.composer__stop}`}
             type="button"
@@ -292,7 +288,7 @@ export function Composer({
           <button
             className={styles.composer__send}
             type="submit"
-            aria-label="Send message"
+            aria-label={running ? "Add to current work" : "Send message"}
             disabled={
               Boolean(disabledReason) ||
               keeping > 0 ||

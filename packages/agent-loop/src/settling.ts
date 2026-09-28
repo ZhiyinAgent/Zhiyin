@@ -7,6 +7,7 @@
  */
 
 import type { WorkspaceTask } from "@zhiyin/contract";
+import { settleGuidance } from "./turn-guidance.js";
 
 /** The phases a turn passes through while it is still going. */
 const unfinished = ["loading", "working", "approval", "input", "browser"];
@@ -29,6 +30,7 @@ const stoppedReasoning = (
  * caller can tell whether anything needed settling without comparing fields.
  */
 export function settledAfterRestart(task: WorkspaceTask): WorkspaceTask {
+  task = settleGuidance(task);
   const actions = (task.actions ?? []).map((action) =>
     action.status === "running"
       ? {
