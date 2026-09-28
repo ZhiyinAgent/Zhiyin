@@ -41,12 +41,22 @@ describe("privileged commands", () => {
       ["task", "call", "always"],
       ["task", "call", {}],
       ["task", "call", "allow", true],
+      ["task", "call", "allow", "unwanted reason"],
+      ["task", "call", "deny", "x".repeat(2_001)],
     ]) {
       expect(() => validateCommand(CHANNEL.resolveApproval, args)).toThrow();
     }
     expect(() => validateCommand("unknown", [])).toThrow();
     expect(() =>
       validateCommand(CHANNEL.resolveApproval, ["task", "call", "allow"]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.resolveApproval, [
+        "task",
+        "call",
+        "deny",
+        "Try another approach",
+      ]),
     ).not.toThrow();
   });
   it("bounds structured answers crossing from the renderer", () => {

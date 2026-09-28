@@ -61,18 +61,11 @@ export class AgentLoop {
     this.#records = new TurnRecords(deps, (task) => this.#storeGuard(task));
     this.#auxiliary = new AuxiliaryWork(deps, { records: this.#records });
     this.#waits = new TurnWaits(deps, { records: this.#records });
-    this.#toolCalls = new ToolCalls(
-      deps,
-      {
-        records: this.#records,
-        auxiliary: this.#auxiliary,
-        waits: this.#waits,
-      },
-      {
-        interruptIfCurrent: (taskId, controller, reason) =>
-          this.#interruptIfCurrent(taskId, controller, reason),
-      },
-    );
+    this.#toolCalls = new ToolCalls(deps, {
+      records: this.#records,
+      auxiliary: this.#auxiliary,
+      waits: this.#waits,
+    });
     this.#specialists = new SpecialistExecution(deps, {
       records: this.#records,
       toolCalls: this.#toolCalls,
@@ -329,16 +322,6 @@ export class AgentLoop {
   async shutdown(): Promise<void> {
     this.#activeTurns.cancelAll();
     this.#waits.cancelAll();
-  }
-
-  async #interruptIfCurrent(
-    taskId: string,
-    controller: AbortController,
-    reason?: string,
-  ): Promise<void> {
-    if (this.#activeTurns.owns(taskId, controller)) {
-      await this.#records.interrupt(taskId, reason);
-    }
   }
 
   resolveApproval(

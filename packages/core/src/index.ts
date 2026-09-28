@@ -169,8 +169,8 @@ export class Core {
       commitRewind: (taskId, rewindId, files) =>
         workspace.commitRewind(taskId, rewindId, files),
       interruptTask: (taskId) => turns.cancel(taskId),
-      resolveApproval: (taskId, requestId, decision) =>
-        turns.resolveApproval(taskId, requestId, decision),
+      resolveApproval: (taskId, requestId, decision, reason) =>
+        turns.resolveApproval(taskId, requestId, decision, reason),
       resolveUserInput: (taskId, requestId, response) =>
         turns.resolveUserInput(taskId, requestId, response),
       setPluginEnabled: (id, enabled) =>

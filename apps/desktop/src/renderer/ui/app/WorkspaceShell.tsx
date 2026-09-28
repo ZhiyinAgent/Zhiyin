@@ -528,7 +528,7 @@ export function WorkspaceShell({
                       <ApprovalPrompt
                         {...approvalPromptDetails(selectedTask.phase.prompt)}
                         compact={browserView}
-                        onDecision={async (decision) => {
+                        onDecision={async (decision, reason) => {
                           const prompt =
                             selectedTask.phase.kind === "approval"
                               ? selectedTask.phase.prompt
@@ -538,6 +538,9 @@ export function WorkspaceShell({
                             selectedTask.id,
                             prompt.id,
                             decision === "allow-once" ? "allow" : "deny",
+                            ...(decision === "deny" && reason?.trim()
+                              ? [reason.trim()]
+                              : []),
                           );
                         }}
                       />

@@ -16,6 +16,13 @@ import type { AssembledToolCall, PresentedAction } from "./turn-shared.js";
 
 const workBudgetQuestionId = "work-budget";
 const folderInstructionsQuestionId = "folder-instructions";
+export type ApprovalAnswer =
+  | "allow"
+  | "cancelled"
+  | {
+      readonly kind: "deny";
+      readonly reason?: string;
+    };
 
 /**
  * What a turn waits on from the person: an approval, an answer, or a choice at
@@ -29,7 +36,7 @@ export class TurnWaits {
     string,
     {
       readonly taskId: string;
-      readonly settle: (decision: "allow" | "deny" | "cancelled") => void;
+      readonly settle: (decision: ApprovalAnswer) => void;
     }
   >();
   readonly #pendingUserInputs = new Map<
@@ -64,6 +71,7 @@ export class TurnWaits {
     taskId: string,
     requestId: string,
     decision: "allow" | "deny",
+    reason?: string,
   ): Promise<void> {
     if (decision !== "allow" && decision !== "deny")
       throw new VisibleError("Choose Allow or Deny.");
@@ -73,7 +81,14 @@ export class TurnWaits {
     if (!pending || pending.taskId !== taskId) {
       throw new Error("That permission request is no longer active.");
     }
-    pending.settle(decision);
+    pending.settle(
+      decision === "deny"
+        ? {
+            kind: "deny",
+            ...(reason?.trim() ? { reason: reason.trim() } : {}),
+          }
+        : "allow",
+    );
   }
 
   async resolveUserInput(
@@ -115,29 +130,25 @@ export class TurnWaits {
     labelled?: Promise<
       { readonly title: string; readonly description: string } | undefined
     >,
-  ): Promise<"allow" | "deny" | "cancelled"> {
+  ): Promise<ApprovalAnswer> {
     return this.#withPromptSlot(taskId, async () => {
       const task = this.#records.task(taskId);
       const steps = this.#records.visibleSteps(taskId);
       const approvalId = this.#deps.newApprovalId();
-      const decision = new Promise<"allow" | "deny" | "cancelled">(
-        (resolve) => {
-          const settle = (choice: "allow" | "deny" | "cancelled") => {
-            signal.removeEventListener("abort", cancel);
-            this.#pendingApprovals.delete(
-              this.#approvalKey(taskId, approvalId),
-            );
-            resolve(choice);
-          };
-          const cancel = () => settle("cancelled");
-          this.#pendingApprovals.set(this.#approvalKey(taskId, approvalId), {
-            taskId,
-            settle,
-          });
-          signal.addEventListener("abort", cancel, { once: true });
-          if (signal.aborted) cancel();
-        },
-      );
+      const decision = new Promise<ApprovalAnswer>((resolve) => {
+        const settle = (choice: ApprovalAnswer) => {
+          signal.removeEventListener("abort", cancel);
+          this.#pendingApprovals.delete(this.#approvalKey(taskId, approvalId));
+          resolve(choice);
+        };
+        const cancel = () => settle("cancelled");
+        this.#pendingApprovals.set(this.#approvalKey(taskId, approvalId), {
+          taskId,
+          settle,
+        });
+        signal.addEventListener("abort", cancel, { once: true });
+        if (signal.aborted) cancel();
+      });
 
       await this.#records.replaceTask({
         ...task,

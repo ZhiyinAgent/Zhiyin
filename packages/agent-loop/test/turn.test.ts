@@ -668,7 +668,7 @@ describe("AgentLoop", () => {
       name: "write_sentinel",
       content: fenced(
         "write_sentinel",
-        '{"ok":false,"reason":"This write was blocked by policy."}',
+        '{"ok":false,"refusedBy":"permission","reason":"This write was blocked by policy.","next":"Choose an action permitted by the current policy."}',
       ),
     });
     expect(loop.snapshot().tasks[0]?.actions).toEqual([
@@ -967,14 +967,15 @@ describe("AgentLoop", () => {
     });
   });
 
-  it("stops the turn immediately when the user denies an asked permission", async () => {
-    let executed = false;
+  it("denying the second of three calls carries guidance forward and skips later calls", async () => {
+    const executed: string[] = [];
+    const requests: ModelRequest[] = [];
     let requestCount = 0;
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       permissions: {
-        decide: async () => ({
-          outcome: "ask",
+        decide: async (action) => ({
+          outcome: action.target === "second.json" ? "ask" : "allow",
           reason: "The current policy requires an explicit decision.",
         }),
       },
@@ -986,29 +987,35 @@ describe("AgentLoop", () => {
             inputSchema: { type: "object" },
           },
         ],
-        inspect: async () => ({
+        inspect: async (_name, args) => ({
           ok: true,
           action: "Read a workspace file",
-          target: "package.json",
-          command: 'read_file({"path":"package.json"})',
+          target: (args as { path: string }).path,
+          command: `read_file(${JSON.stringify(args)})`,
         }),
-        execute: async () => {
-          executed = true;
+        execute: async (_name, args) => {
+          executed.push((args as { path: string }).path);
           return { ok: true, value: { text: "notes" } };
         },
       },
       model: {
         ...stubDependencies(() => {}).model,
-        send: async function* () {
+        send: async function* (request) {
+          requests.push(request);
           requestCount += 1;
           if (requestCount === 1) {
-            yield {
-              kind: "toolCallDelta",
-              index: 0,
-              callId: "call-denied",
-              name: "read_file",
-              argumentsDelta: '{"path":"package.json"}',
-            };
+            for (const [index, path] of [
+              "first.json",
+              "second.json",
+              "third.json",
+            ].entries())
+              yield {
+                kind: "toolCallDelta" as const,
+                index,
+                callId: `call-${index}`,
+                name: "read_file",
+                argumentsDelta: JSON.stringify({ path }),
+              };
           } else {
             yield { kind: "textDelta", text: "I tried another approach." };
           }
@@ -1020,23 +1027,35 @@ describe("AgentLoop", () => {
 
     const running = loop.start(taskId, "Read the project metadata");
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "approval");
-    await loop.resolveApproval(taskId, currentApprovalId(loop, taskId), "deny");
+    await loop.resolveApproval(
+      taskId,
+      currentApprovalId(loop, taskId),
+      "deny",
+      "Read the public summary instead.",
+    );
     await running;
 
-    expect(executed).toBe(false);
-    expect(requestCount).toBe(1);
+    expect(executed).toEqual(["first.json"]);
+    expect(requestCount).toBe(2);
+    expect(JSON.stringify(requests[1]?.messages)).toContain(
+      "Read the public summary instead.",
+    );
+    expect(JSON.stringify(requests[1]?.messages)).toContain("refusedBy");
+    expect(JSON.stringify(requests[1]?.messages)).toContain("person");
+    expect(JSON.stringify(requests[1]?.messages)).not.toContain(
+      "blocked by policy",
+    );
+    expect(JSON.stringify(requests[1]?.messages)).toContain(
+      "Not run because the person declined an earlier action",
+    );
     expect(loop.snapshot().tasks[0]).toMatchObject({
       actions: [
         {
-          action: "Read package.json",
-          target: "package.json",
-          status: "denied",
+          status: "completed",
         },
+        { target: "second.json", status: "denied" },
       ],
-      phase: {
-        kind: "interrupted",
-        reason: "The action was denied. No further work ran.",
-      },
+      phase: { kind: "completed" },
     });
   });
 

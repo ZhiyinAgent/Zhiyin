@@ -112,6 +112,33 @@ describe("ApprovalPrompt", () => {
     expect(readingOrder).toEqual([...readingOrder].sort((a, b) => a - b));
   });
 
+  it("explains on hover and keyboard focus that the AI claim can deceive", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a shell command"
+        target="rm report.txt"
+        command="bash({})"
+        claim="Clean up a draft."
+        onDecision={() => undefined}
+      />,
+    );
+    const about = screen.getByRole("button", {
+      name: "About this AI explanation",
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseEnter(about);
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "deliberately misleading",
+    );
+    fireEvent.mouseLeave(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.focus(about);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    fireEvent.blur(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.getByText("Clean up a draft.")).toBeVisible();
+  });
+
   it("shows a long command whole rather than clipping what is consented to", () => {
     const command = `python3 -c "import pandas, numpy; print('pandas', pandas.__version__, '| numpy', numpy.__version__)" && echo done && ls -la && git status --short && git log --oneline -20`;
     render(
@@ -283,6 +310,29 @@ describe("ApprovalPrompt", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(onDecision).toHaveBeenCalledWith("deny");
+  });
+
+  it("sends optional denial guidance to the agent", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Run a shell command"
+        target="echo hello"
+        command="echo hello"
+        onDecision={onDecision}
+      />,
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Guidance if you deny (optional)" }),
+      {
+        target: { value: "Use the project script instead." },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onDecision).toHaveBeenCalledWith(
+      "deny",
+      "Use the project script instead.",
+    );
   });
 
   it("prevents duplicate decisions while the chosen response is pending", async () => {

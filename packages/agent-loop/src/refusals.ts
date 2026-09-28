@@ -45,3 +45,12 @@ export function correctableByModel(reason: string): Refusal {
     "Correct the call from what the tool said and send it again.",
   );
 }
+
+/** Later calls in a batch cannot run against assumptions denied by the person. */
+export function skippedAfterDecline(): Refusal {
+  return refusal(
+    "person",
+    "Not run because the person declined an earlier action in this batch.",
+    "Review the person's guidance before proposing further actions.",
+  );
+}

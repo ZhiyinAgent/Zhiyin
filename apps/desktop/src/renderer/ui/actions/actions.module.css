@@ -148,6 +148,57 @@
   text-transform: uppercase;
 }
 
+.approval__claim-about {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.approval__claim-about:hover,
+.approval__claim-about:focus-visible {
+  color: var(--zy-text);
+}
+
+.approval__claim-tip {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  transform: translate(-50%, calc(-100% - 10px));
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 10px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.approval__claim-tip::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--zy-line-strong);
+  border-bottom: 1px solid var(--zy-line-strong);
+  background: var(--zy-panel);
+  content: "";
+}
+
 .approval__details {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -1058,4 +1109,23 @@
 
 .approval__recovery li span {
   display: block;
+}
+.approval__denial-reason {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.approval__denial-reason textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.5rem;
+  resize: vertical;
+  color: inherit;
+  background: var(--zy-panel-raised);
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 0.4rem;
+  font: inherit;
 }

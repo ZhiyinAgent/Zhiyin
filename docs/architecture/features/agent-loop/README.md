@@ -744,10 +744,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   parent's own checkpoint reads. A specialist has no one to ask when the
   budget runs out, so it checks the same shared limit itself and stops
   cleanly rather than running unsupervised once its parent has moved on.
-- A denial chosen by the user is a Stop decision for the current turn. It is
-  recorded as denied, aborts the turn and owned resources, and is never returned
-  to the model as an invitation to try another action. The named test `stops the
-  turn immediately when the user denies an asked permission` guards this.
+- A denial chosen by the person returns a structured refusal with their optional
+  guidance to the model. Later calls in that model batch receive not-run results;
+  the turn continues so the model can adjust. Stop remains the way to end a turn.
+  The named test `denying the second of three calls carries guidance forward and
+  skips later calls` guards this. Policy refusals identify the permission engine
+  as the source and never attribute their wording to the person.
 - Unknown tools and execution failures are structured results the model can
   handle. The named tests `returns an unknown tool as a structured failure the
   model can recover from` and `returns tool execution failures to the model

@@ -324,10 +324,11 @@ export function validateCommand(
       break;
     case CHANNEL.resolveApproval:
       valid =
-        args.length === 3 &&
+        (args.length === 3 || args.length === 4) &&
         text(args[0]) &&
         text(args[1]) &&
-        (args[2] === "allow" || args[2] === "deny");
+        (args[2] === "allow" || args[2] === "deny") &&
+        (args.length === 3 || (args[2] === "deny" && text(args[3], 2_000)));
       break;
     case CHANNEL.resolveUserInput:
       valid =

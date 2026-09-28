@@ -50,6 +50,8 @@ export type * from "./models.js";
 export type * from "./plan.js";
 import type { TaskPlanItem } from "./plan.js";
 export type * from "./user-input.js";
+export type { TaskInteraction } from "./interaction.js";
+import type { TaskInteraction } from "./interaction.js";
 import type {
   PendingUserInputRequest,
   UserInputRequest,
@@ -175,14 +177,6 @@ export type ApprovalRequest = {
       readonly reason?: string;
     }[];
   };
-};
-
-export type TaskInteraction = {
-  readonly id: string;
-  readonly callId: string;
-  readonly request: UserInputRequest;
-  readonly response: UserInputResponse;
-  readonly sequence?: number;
 };
 
 /**
@@ -1141,6 +1135,7 @@ export interface CoreApi {
     taskId: string,
     requestId: string,
     decision: "allow" | "deny",
+    reason?: string,
   ): Promise<void>;
 
   /** Resolve the exact structured question request currently blocking a task. */

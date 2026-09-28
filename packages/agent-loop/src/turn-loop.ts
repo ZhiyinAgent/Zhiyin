@@ -40,6 +40,7 @@ import { activatePluginTool, PluginActivation } from "./plugin-activation.js";
 import { PendingHandoffs } from "./pending-handoffs.js";
 import { TurnRecords } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
+import { skippedAfterDecline } from "./refusals.js";
 import { TurnOwnership } from "./turn-ownership.js";
 import {
   answerableCalls,
@@ -381,7 +382,15 @@ export class TurnLoop {
           resultLimits(this.#context.targetTokens(taskId)),
         );
 
+        let declinedInBatch = false;
         for (const call of answerable) {
+          if (declinedInBatch) {
+            const result = skippedAfterDecline();
+            const sent = JSON.stringify(result);
+            this.#plan.answered(taskId, call.callId, sent);
+            await history.result(call, toolOutput(call.name, sent), false);
+            continue;
+          }
           const quietRetriesLeft =
             maximumQuietRetries - quiet.attempts(call.name);
           const input = await this.#toolCalls.readInput(
@@ -481,6 +490,7 @@ export class TurnLoop {
             round,
             said,
           );
+          if (outcome.denied) declinedInBatch = true;
           guard.observe(call.name, parsed, outcome);
           if (controller.signal.aborted) {
             await this.#interruptIfCurrent(taskId, controller);

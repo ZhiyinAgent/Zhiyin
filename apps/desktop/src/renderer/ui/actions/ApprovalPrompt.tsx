@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   ApprovalRequest,
   FileChange,
@@ -25,7 +26,10 @@ type ApprovalPromptProps = {
   recovery?: ApprovalRequest["recovery"];
   /** Tighter spacing, for a conversation sharing the window with the browser. */
   compact?: boolean;
-  onDecision: (decision: ApprovalDecision) => void | Promise<void>;
+  onDecision: (
+    decision: ApprovalDecision,
+    reason?: string,
+  ) => void | Promise<void>;
 };
 
 /**
@@ -66,7 +70,14 @@ export function ApprovalPrompt({
   const [pendingDecision, setPendingDecision] =
     useState<ApprovalDecision | null>(null);
   const [decisionError, setDecisionError] = useState<string>();
+  const [denialReason, setDenialReason] = useState("");
   const detailId = useId();
+  const claimTipId = useId();
+  const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
+  const showClaimTip = (target: HTMLElement) => {
+    const box = target.getBoundingClientRect();
+    setClaimTipAt({ x: box.left + box.width / 2, y: box.top });
+  };
   const actionAlreadyNamed = invocation?.name === title && !invocation.via;
 
   async function decide(decision: ApprovalDecision) {
@@ -74,7 +85,9 @@ export function ApprovalPrompt({
     setPendingDecision(decision);
     setDecisionError(undefined);
     try {
-      await onDecision(decision);
+      if (decision === "deny" && denialReason.trim())
+        await onDecision(decision, denialReason.trim());
+      else await onDecision(decision);
       setPendingDecision(null);
     } catch {
       setPendingDecision(null);
@@ -99,8 +112,36 @@ export function ApprovalPrompt({
           {detail && <p className={styles.approval__detail}>{detail}</p>}
           {claim && (
             <p className={styles.approval__claim}>
-              <span>Zhiyin says this is for</span>
+              <span>
+                Zhiyin says this is for
+                <button
+                  type="button"
+                  className={styles["approval__claim-about"]}
+                  aria-label="About this AI explanation"
+                  aria-describedby={claimTipAt ? claimTipId : undefined}
+                  onMouseEnter={(event) => showClaimTip(event.currentTarget)}
+                  onMouseLeave={() => setClaimTipAt(undefined)}
+                  onFocus={(event) => showClaimTip(event.currentTarget)}
+                  onBlur={() => setClaimTipAt(undefined)}
+                >
+                  <Icon name="info" />
+                </button>
+              </span>
               {claim}
+              {claimTipAt &&
+                createPortal(
+                  <span
+                    id={claimTipId}
+                    role="tooltip"
+                    className={styles["approval__claim-tip"]}
+                    style={{ left: claimTipAt.x, top: claimTipAt.y }}
+                  >
+                    This explanation was written by the AI. It can be wrong or
+                    deliberately misleading. Check what will run and what will
+                    change before you approve.
+                  </span>,
+                  document.body,
+                )}
             </p>
           )}
           {description && description !== claim && (
@@ -178,6 +219,16 @@ export function ApprovalPrompt({
             {decisionError}
           </p>
         )}
+        <label className={styles["approval__denial-reason"]}>
+          <span>Guidance if you deny (optional)</span>
+          <textarea
+            value={denialReason}
+            onChange={(event) => setDenialReason(event.target.value)}
+            placeholder="Tell the assistant what to do instead"
+            maxLength={2_000}
+            disabled={pendingDecision !== null}
+          />
+        </label>
         <div className={styles.approval__footer}>
           <button
             className="text-button"

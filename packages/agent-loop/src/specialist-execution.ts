@@ -24,6 +24,7 @@ import {
 import type { WorkLedger } from "./work-limits.js";
 import { RoundResults } from "./result-size.js";
 import { toolOutput } from "./notices.js";
+import { skippedAfterDecline } from "./refusals.js";
 
 /**
  * How many specialists one turn can delegate to. A shared renewable ledger
@@ -335,7 +336,20 @@ export class SpecialistExecution {
         const sizes = new RoundResults((kept) =>
           this.#deps.sessions.keep("output", options.taskId, { text: kept }),
         );
+        let declinedInBatch = false;
         for (const call of answerable) {
+          if (declinedInBatch) {
+            messages.push({
+              role: "tool",
+              toolCallId: call.callId,
+              name: call.name,
+              content: toolOutput(
+                call.name,
+                JSON.stringify(skippedAfterDecline()),
+              ),
+            });
+            continue;
+          }
           const quietRetriesLeft =
             maximumQuietRetries - quiet.attempts(call.name);
           const input = await this.#toolCalls.readInput(
@@ -357,6 +371,7 @@ export class SpecialistExecution {
                 round,
               )
             : { result: input.result, quiet: input.quiet };
+          if ("denied" in outcome && outcome.denied) declinedInBatch = true;
           controller.signal.throwIfAborted();
           rewriteCallArguments(messages, call);
           // What the tool answered for the model, without the person's copy

@@ -38,6 +38,8 @@ type ToolCallOutcome = {
   readonly actionId?: string;
   /** A change to the workspace that succeeded: progress, to the loop guard. */
   readonly changed?: boolean;
+  /** A person's denial stops the remaining calls in this model batch. */
+  readonly denied?: boolean;
 };
 
 /** Bounded so a refused edit's arguments cannot fill the audit record. */
@@ -73,13 +75,6 @@ export class ToolCalls {
   readonly #repair: ToolCallRepair;
   /** Reading what the model streamed as a call's input. */
   readonly #inputs: CallInputs;
-  readonly #turn: {
-    interruptIfCurrent(
-      taskId: string,
-      controller: AbortController,
-      reason?: string,
-    ): Promise<void>;
-  };
 
   constructor(
     deps: AgentLoopDependencies,
@@ -88,19 +83,11 @@ export class ToolCalls {
       readonly auxiliary: AuxiliaryWork;
       readonly waits: TurnWaits;
     },
-    turn: {
-      interruptIfCurrent(
-        taskId: string,
-        controller: AbortController,
-        reason?: string,
-      ): Promise<void>;
-    },
   ) {
     this.#deps = deps;
     this.#records = parts.records;
     this.#auxiliary = parts.auxiliary;
     this.#waits = parts.waits;
-    this.#turn = turn;
     this.#repair = new ToolCallRepair({
       records: parts.records,
       auxiliary: parts.auxiliary,
@@ -411,7 +398,10 @@ export class ToolCalls {
       ...(inspection.scope ? { scope: inspection.scope } : {}),
     });
     controller.signal.throwIfAborted();
-    let decision: "allow" | "deny" | "cancelled";
+    let decision:
+      | "allow"
+      | "cancelled"
+      | { readonly kind: "deny"; readonly reason?: string };
     if (permission.outcome === "ask") {
       decision = await this.#waits.waitForApproval(
         taskId,
@@ -423,7 +413,7 @@ export class ToolCalls {
         labelled,
       );
     } else {
-      decision = permission.outcome;
+      decision = permission.outcome === "deny" ? { kind: "deny" } : "allow";
     }
     if (decision === "cancelled") {
       if (backup) await this.#deps.rewind.discardBackup(actionId);
@@ -431,16 +421,25 @@ export class ToolCalls {
         result: { ok: false, reason: "The task was cancelled." },
       };
     }
-    if (decision === "deny") {
+    if (typeof decision === "object" && decision.kind === "deny") {
       if (backup) await this.#deps.rewind.discardBackup(actionId);
       const userDenied = permission.outcome === "ask";
       const reason = userDenied
-        ? "The action was denied. No further work ran."
+        ? decision.reason
+          ? `The person declined this action: ${decision.reason}`
+          : "The person declined this action."
         : permission.reason;
-      const result = {
-        ok: false as const,
-        reason,
-      };
+      const result = userDenied
+        ? refusal(
+            "person",
+            reason,
+            "Follow the person's guidance or choose another approach. Do not retry this action unchanged.",
+          )
+        : refusal(
+            "permission",
+            reason,
+            "Choose an action permitted by the current policy.",
+          );
       this.#records.emitToolActivity(taskId, call, "denied", result);
       await this.#records.recordToolAction(
         taskId,
@@ -450,17 +449,12 @@ export class ToolCalls {
         userDenied ? "denied" : "blocked",
         reason,
       );
-      if (userDenied) {
-        controller.abort();
-        await this.#turn.interruptIfCurrent(taskId, controller, reason);
-        return { result };
-      }
       await this.#records.showWorking(
         taskId,
         undefined,
         this.#records.visibleSteps(taskId),
       );
-      return { result };
+      return { result, denied: userDenied };
     }
 
     const currentInspection = await this.#inspectTool(
