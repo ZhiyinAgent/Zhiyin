@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PersonalInstructions } from "./PersonalInstructions.js";
+import { InstructionsSettings } from "./InstructionsSettings.js";
 
 function editor(saved = "", onSave = vi.fn(async () => {})) {
   render(<PersonalInstructions saved={saved} onSave={onSave} />);
@@ -12,6 +13,28 @@ function editor(saved = "", onSave = vi.fn(async () => {})) {
 }
 
 describe("the person's own instructions in Settings", () => {
+  it("keeps the editor and guidance together on the dedicated page", () => {
+    const onClose = vi.fn();
+    render(
+      <InstructionsSettings
+        saved="Reply in French."
+        onSave={async () => undefined}
+        onClose={onClose}
+      />,
+    );
+
+    const page = screen.getByRole("region", { name: "Custom instructions" });
+    expect(page).toContainElement(
+      screen.getByRole("textbox", { name: "Your instructions" }),
+    );
+    expect(screen.getByText("Make it specific")).toBeVisible();
+    expect(screen.getByText(/never approve an action for you/i)).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close custom instructions" }),
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("shows what is saved, and saves an edit", async () => {
     const { field, save, onSave } = editor("Always answer in French.");
 
@@ -23,7 +46,7 @@ describe("the person's own instructions in Settings", () => {
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith("Answer in German."),
     );
-    expect(screen.getByText(/never grant permission/i)).toBeVisible();
+    expect(screen.getByText(/edit these at any time/i)).toBeVisible();
   });
 
   it("can clear them", async () => {

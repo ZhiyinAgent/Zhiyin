@@ -92,6 +92,50 @@
   white-space: pre-wrap;
 }
 
+.approval__file-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  list-style: none;
+}
+
+.approval__file-list li {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 3px 10px;
+  align-items: baseline;
+  padding: 8px 10px;
+}
+
+.approval__file-list li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+.approval__file-list .approval__file-kind {
+  color: var(--zy-accent);
+  font: 600 11px/1.5 var(--zy-font-display);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.approval__file-list code {
+  max-height: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zy-text);
+}
+
+.approval__file-list small {
+  grid-column: 2;
+  color: var(--zy-muted);
+  font-size: 11px;
+}
+
 .approval__reason {
   max-width: 58ch;
   margin: 3px 0 0;
@@ -199,30 +243,6 @@
   content: "";
 }
 
-.approval__details {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
-  margin: 9px 0 1px;
-  padding: 8px 10px;
-  border-radius: 7px;
-  background: var(--zy-inset);
-  color: var(--zy-muted);
-  font-size: 12px;
-}
-
-.approval__details code {
-  max-height: 9em;
-  overflow-y: auto;
-  scrollbar-color: var(--zy-line-strong) transparent;
-  scrollbar-width: thin;
-  color: var(--zy-text-soft);
-  font: 10.5px/1.5 var(--zy-font-data);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
 .approval__actions {
   display: flex;
   flex-wrap: wrap;
@@ -241,7 +261,7 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   margin-top: auto;
   padding-top: 8px;
@@ -270,7 +290,6 @@
    themselves elsewhere give that up here: a long command is read by scrolling
    the request once rather than a scrollbar inside a scrollbar. */
 .approval .approval__target code,
-.approval .approval__details code,
 .approval .tool-call__value,
 .approval .json-block {
   max-height: none;
@@ -1160,6 +1179,19 @@
   gap: 0.35rem;
   margin-top: 0.75rem;
   font-size: 0.85rem;
+}
+
+.approval__deny-step {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  font-size: 12.5px;
+}
+
+.approval__deny-step > strong {
+  font-size: 13px;
 }
 
 .approval__denial-reason textarea {

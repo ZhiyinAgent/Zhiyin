@@ -58,6 +58,7 @@ describe("a notice from Zhiyin", () => {
       "gaps",
       "instructions",
       "guidance",
+      "recovery",
     ]);
   });
 });

@@ -22,14 +22,33 @@ export function InstructionsSettings({
           <p className="instrument-label">Workspace / Preferences</p>
           <h1>Custom instructions</h1>
           <p>
-            Set the default way Zhiyin should work with you. These instructions
-            are sent with each new message and remain separate from model
-            choice.
+            Set the preferences Zhiyin should remember when it works with you.
           </p>
         </div>
         <CloseButton label="Close custom instructions" onClick={onClose} />
       </header>
-      <PersonalInstructions saved={saved} onSave={onSave} />
+      <div className={styles["instructions-page__layout"]}>
+        <PersonalInstructions saved={saved} onSave={onSave} />
+        <aside className={styles["instructions-page__guide"]}>
+          <div>
+            <span className="instrument-label">Good starting points</span>
+            <h2>Make it specific</h2>
+            <ul>
+              <li>Which language should replies use?</li>
+              <li>How much detail is helpful?</li>
+              <li>Where should drafts or reports go?</li>
+            </ul>
+          </div>
+          <div>
+            <span className="instrument-label">How it works</span>
+            <p>
+              Saved instructions apply from your next message in every
+              conversation. They guide the answer, but never approve an action
+              for you.
+            </p>
+          </div>
+        </aside>
+      </div>
     </section>
   );
 }

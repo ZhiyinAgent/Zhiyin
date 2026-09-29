@@ -42,6 +42,21 @@ rendered.
 
 ## Invariants
 
+- **Permission asks show the decision, not the tool protocol.** File changes
+  are labeled as creations or edits inside What will change, including a new
+  parent folder when one is made; the difference is reviewable before allowing.
+  Raw syntax remains under Technical details in the resulting action card.
+  Denial guidance appears only after Deny is chosen and is sent with the
+  confirmed denial. Named tests: `labels a new file and its new folder inside
+  what will change`, `offers guidance only after Deny, while allowing a denial
+  without text`, and `reviews a file change as a difference rather than as the
+  call` (ADR 0057).
+- **Custom instructions are an editable preference, with their scope explained
+  beside the editor.** The page uses a compact responsive layout, makes the
+  save action reachable at the minimum window size, and says that instructions
+  never grant permission. Named tests: `keeps the editor and guidance together
+  on the dedicated page` and `keeps the custom instructions editor and save
+  button reachable at minimum size`.
 - **A refusal from the core reads as the core's own words.** Electron hands
   the window a command's error wrapped as "Error invoking remote method
   '<channel>': VisibleError: …"; the preload bridge takes that wrapping off,

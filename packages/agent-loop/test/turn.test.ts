@@ -3,7 +3,7 @@ import { access, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
-import type { ModelRequest } from "@zhiyin/model-client";
+import { ModelClientError, type ModelRequest } from "@zhiyin/model-client";
 import {
   currentApprovalId,
   pluginOffering,
@@ -435,6 +435,84 @@ describe("AgentLoop", () => {
     expect(loop.snapshot().tasks[0]?.phase).toEqual({
       kind: "failed",
       reason: "The model request failed. Try again.",
+    });
+  });
+
+  it("continues from a completed action after an upstream idle timeout", async () => {
+    const deps = stubDependencies(() => {});
+    const requests: ModelRequest[] = [];
+    let writes = 0;
+    const loop = loopFrom({
+      ...deps,
+      permissions: {
+        decide: async () => ({ outcome: "allow", reason: "Allowed." }),
+      },
+      tools: {
+        list: () => [
+          {
+            name: "write_file",
+            description: "Write a workspace file.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect: async () => ({
+          ok: true,
+          action: "Create a workspace file",
+          target: "plan.md",
+          command: 'write_file({"path":"plan.md"})',
+        }),
+        execute: async () => {
+          writes += 1;
+          return { ok: true, value: { path: "plan.md" } };
+        },
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request) {
+          requests.push(request);
+          if (requests.length === 1) {
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "create-plan",
+              name: "write_file",
+              argumentsDelta: '{"path":"plan.md"}',
+            };
+            yield { kind: "done" };
+          } else if (requests.length === 2) {
+            yield { kind: "textDelta", text: "The plan is saved. I will" };
+            throw new ModelClientError(
+              "networkFailure",
+              "Upstream idle timeout exceeded",
+            );
+          } else {
+            yield {
+              kind: "textDelta",
+              text: "The plan is saved. Here is the report.",
+            };
+            yield { kind: "done" };
+          }
+        },
+      },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Create a plan, then write a report");
+
+    expect(writes).toBe(1);
+    expect(requests).toHaveLength(3);
+    expect(requests[2]?.messages).toContainEqual(
+      expect.objectContaining({
+        role: "user",
+        content: expect.stringContaining('kind="recovery"'),
+      }),
+    );
+    expect(loop.snapshot().tasks[0]).toMatchObject({
+      phase: { kind: "completed" },
+      messages: [
+        { role: "user" },
+        { role: "assistant", text: "The plan is saved. Here is the report." },
+      ],
     });
   });
 

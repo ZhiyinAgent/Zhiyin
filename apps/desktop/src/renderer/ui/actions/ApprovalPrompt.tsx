@@ -43,13 +43,11 @@ type ApprovalPromptProps = {
  *      action, and never written by the model;
  *   3. what Zhiyin says this particular one is for — clearly attributed,
  *      because it is a claim and not evidence;
- *   4. the exact thing that will run, verbatim and in full — or, when the
- *      action is a file change whose effects the tool knows exactly, the
- *      difference itself, on request.
+ *   4. the exact command or structured inputs, or, for a file change, the
+ *      file and its proposed difference on request.
  *
- * The command is shown whole rather than clipped to one line. A command a
- * person cannot finish reading is a command they cannot consent to, and the
- * decision is the entire point of this component.
+ * Raw tool-call syntax belongs in the action's inspector after the decision.
+ * The command itself remains whole when a shell command is what will run.
  */
 export function ApprovalPrompt({
   effect,
@@ -59,7 +57,6 @@ export function ApprovalPrompt({
   title,
   target,
   description,
-  command,
   invocation,
   changes,
   recovery,
@@ -67,14 +64,13 @@ export function ApprovalPrompt({
   compact = false,
   onDecision,
 }: ApprovalPromptProps) {
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [denying, setDenying] = useState(false);
   const [pendingDecision, setPendingDecision] =
     useState<ApprovalDecision | null>(null);
   const [decisionError, setDecisionError] = useState<string>();
   const [denialReason, setDenialReason] = useState("");
   const [confirmingScope, setConfirmingScope] = useState(false);
-  const detailId = useId();
   const claimTipId = useId();
   const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
   const showClaimTip = (target: HTMLElement) => {
@@ -112,7 +108,9 @@ export function ApprovalPrompt({
           {effect && effect !== title && (
             <p className={styles.approval__effect}>{effect}</p>
           )}
-          {detail && <p className={styles.approval__detail}>{detail}</p>}
+          {detail && !changes?.length && (
+            <p className={styles.approval__detail}>{detail}</p>
+          )}
           {claim && (
             <p className={styles.approval__claim}>
               <span>
@@ -157,7 +155,24 @@ export function ApprovalPrompt({
               <p>This request sends these inputs to this connection.</p>
             </div>
           )}
-          {invocation && !changes?.length ? (
+          {changes?.length ? (
+            <div className={styles.approval__target}>
+              <span>What will change</span>
+              <ul className={styles["approval__file-list"]}>
+                {changes.map((change) => (
+                  <li key={change.path}>
+                    <span className={styles["approval__file-kind"]}>
+                      {change.change === "created" ? "New file" : "Edit file"}
+                    </span>
+                    <code>{change.path}</code>
+                    {change.createdFolder && (
+                      <small>Also creates folder {change.createdFolder}</small>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : invocation ? (
             (!actionAlreadyNamed || invocation.arguments.length > 0) && (
               <ToolCallView
                 invocation={invocation}
@@ -167,9 +182,7 @@ export function ApprovalPrompt({
             )
           ) : (
             <div className={styles.approval__target}>
-              <span>
-                {changes?.length ? "What will change" : "What will run"}
-              </span>
+              <span>What will run</span>
               <code>{target}</code>
             </div>
           )}
@@ -211,27 +224,27 @@ export function ApprovalPrompt({
             </div>
           )}
         </div>
-        {detailsOpen && (
-          <div className={styles.approval__details} id={detailId}>
-            <span>Exactly as sent</span>
-            <code>{command}</code>
-          </div>
-        )}
         {decisionError && (
           <p className={styles.approval__error} role="alert">
             {decisionError}
           </p>
         )}
-        <label className={styles["approval__denial-reason"]}>
-          <span>Guidance if you deny (optional)</span>
-          <textarea
-            value={denialReason}
-            onChange={(event) => setDenialReason(event.target.value)}
-            placeholder="Tell the assistant what to do instead"
-            maxLength={2_000}
-            disabled={pendingDecision !== null}
-          />
-        </label>
+        {denying && (
+          <div className={styles["approval__deny-step"]}>
+            <strong>Deny this action</strong>
+            <label className={styles["approval__denial-reason"]}>
+              <span>Tell Zhiyin what to do instead (optional)</span>
+              <textarea
+                autoFocus
+                value={denialReason}
+                onChange={(event) => setDenialReason(event.target.value)}
+                placeholder="You can leave this blank"
+                maxLength={2_000}
+                disabled={pendingDecision !== null}
+              />
+            </label>
+          </div>
+        )}
         {confirmingScope && conversationRule && (
           <p className={styles["approval__scope-confirm"]}>
             Allow for this conversation:{" "}
@@ -244,19 +257,27 @@ export function ApprovalPrompt({
           </p>
         )}
         <div className={styles.approval__footer}>
-          <button
-            className="text-button"
-            type="button"
-            aria-expanded={detailsOpen}
-            aria-controls={detailId}
-            disabled={pendingDecision !== null}
-            onClick={() => setDetailsOpen((open) => !open)}
-          >
-            {detailsOpen ? "Hide details" : "Show details"}
-            <Icon name="chevron" />
-          </button>
           <div className={styles.approval__actions}>
-            {confirmingScope && conversationRule ? (
+            {denying ? (
+              <>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => setDenying(false)}
+                >
+                  Back
+                </button>
+                <button
+                  className="button button--accent"
+                  type="button"
+                  disabled={pendingDecision !== null}
+                  onClick={() => void decide("deny")}
+                >
+                  {pendingDecision === "deny" ? "Denying…" : "Confirm denial"}
+                </button>
+              </>
+            ) : confirmingScope && conversationRule ? (
               <>
                 <button
                   className="button button--quiet"
@@ -281,9 +302,9 @@ export function ApprovalPrompt({
                   className="button button--quiet"
                   type="button"
                   disabled={pendingDecision !== null}
-                  onClick={() => void decide("deny")}
+                  onClick={() => setDenying(true)}
                 >
-                  {pendingDecision === "deny" ? "Denying…" : "Deny"}
+                  Deny
                 </button>
                 {conversationRule && (
                   <button

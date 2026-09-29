@@ -253,7 +253,14 @@ async function planWrite(
       target: input.path,
       access: "change",
       scope: "workspace",
-      changes: [describeChange(input.path, "created", input.text)],
+      changes: [
+        {
+          ...describeChange(input.path, "created", input.text),
+          ...(target.createsFolder
+            ? { createdFolder: target.createsFolder }
+            : {}),
+        },
+      ],
       detail: target.createsFolder
         ? `This creates a new file and the folder “${target.createsFolder}”. Nothing is replaced.`
         : "This creates a new file. Nothing is replaced.",

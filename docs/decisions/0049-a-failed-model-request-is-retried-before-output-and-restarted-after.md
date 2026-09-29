@@ -1,6 +1,6 @@
 # 0049. A failed model request is retried before output and restarted after
 
-Status: accepted
+Status: superseded by 0056
 
 ## Context
 

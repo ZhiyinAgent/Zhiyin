@@ -60,16 +60,21 @@ export function refusedAsTooLong(error: unknown): TokenLimitDetail | undefined {
 export const noLongerFits =
   "This conversation no longer fits the selected model, even after condensing it.";
 
-export function modelFailure(
-  error: unknown,
-):
-  | { readonly message: string; readonly code: ModelClientErrorCode }
+export function modelFailure(error: unknown):
+  | {
+      readonly message: string;
+      readonly code: ModelClientErrorCode;
+      readonly retryable?: boolean;
+    }
   | undefined {
   return error instanceof Error &&
     error.name === "ModelClientError" &&
     "code" in error &&
     typeof error.code === "string"
-    ? (error as Error & { readonly code: ModelClientErrorCode })
+    ? (error as Error & {
+        readonly code: ModelClientErrorCode;
+        readonly retryable?: boolean;
+      })
     : undefined;
 }
 

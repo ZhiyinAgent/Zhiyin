@@ -145,14 +145,16 @@ export function ActionInspector({
             />
           )}
 
-          {described && action.evidence && (
+          {described && (action.evidence || action.command) && (
             <details className={styles.inspector__raw}>
               <summary>Technical details</summary>
               {action.command && <pre>{action.command}</pre>}
-              <JsonBlock
-                text={action.evidence}
-                className={styles.inspector__json}
-              />
+              {action.evidence && (
+                <JsonBlock
+                  text={action.evidence}
+                  className={styles.inspector__json}
+                />
+              )}
             </details>
           )}
 

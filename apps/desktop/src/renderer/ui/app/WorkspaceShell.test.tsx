@@ -467,13 +467,14 @@ describe("WorkspaceShell", () => {
           commands={{ ...stubCommands, resolveApproval }}
         />,
       );
-      fireEvent.click(screen.getByRole("button", { name: "Show details" }));
       fireEvent.click(screen.getByRole("tab", { name: "Workspace" }));
       expect(
         screen.getAllByRole("region", { name: "Permission request" }),
       ).toHaveLength(1);
-      expect(screen.getByText("browser_snapshot({})")).toBeVisible();
+      expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: decision }));
+      if (decision === "Deny")
+        fireEvent.click(screen.getByRole("button", { name: "Confirm denial" }));
       await waitFor(() =>
         expect(resolveApproval).toHaveBeenCalledWith(
           "preview-task",

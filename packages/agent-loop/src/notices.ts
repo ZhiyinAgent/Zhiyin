@@ -46,6 +46,8 @@ export const noticeKinds = [
   "instructions",
   /** A person's message added while the current turn was working. */
   "guidance",
+  /** A provider interruption after completed tools; resume from their results. */
+  "recovery",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

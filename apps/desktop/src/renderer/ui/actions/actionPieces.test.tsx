@@ -47,7 +47,7 @@ describe("ApprovalPrompt", () => {
       screen.queryByRole("button", { name: "Allow for this conversation" }),
     ).toBeNull();
   });
-  it("shows a named action once without an empty input box and keeps its exact call inspectable", () => {
+  it("shows a named action once without an empty input box or raw call", () => {
     const onDecision = vi.fn();
     render(
       <ApprovalPrompt
@@ -62,8 +62,7 @@ describe("ApprovalPrompt", () => {
     expect(screen.getAllByText("Read page")).toHaveLength(1);
     expect(screen.queryByText("No inputs.")).toBeNull();
     expect(screen.queryByText("browser_snapshot({})")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
-    expect(screen.getByText("browser_snapshot({})")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
     expect(onDecision).toHaveBeenCalledWith("allow-once");
   });
@@ -86,12 +85,12 @@ describe("ApprovalPrompt", () => {
     expect(screen.getByText("https://example.com/a-page")).toBeVisible();
   });
 
-  it("keeps technical detail collapsed and returns an explicit decision", () => {
+  it("shows the command itself and returns an explicit decision", () => {
     const onDecision = vi.fn();
     render(
       <ApprovalPrompt
         title="Publish the release notes"
-        target="docs.zhiyin.app"
+        target="pnpm docs:publish --production"
         description="This sends the reviewed draft to the public documentation site."
         command="pnpm docs:publish --production"
         onDecision={onDecision}
@@ -100,10 +99,8 @@ describe("ApprovalPrompt", () => {
 
     expect(screen.getByText("Publish the release notes")).toBeInTheDocument();
     expect(screen.queryByText(/needs your approval/i)).toBeNull();
-    expect(screen.queryByText("pnpm docs:publish --production")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
     expect(screen.getByText("pnpm docs:publish --production")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
     expect(onDecision).toHaveBeenCalledWith("allow-once");
@@ -229,6 +226,10 @@ describe("ApprovalPrompt", () => {
       />,
     );
 
+    expect(screen.getByText("Edit file")).toBeVisible();
+    expect(
+      screen.queryByText("This replaces the current contents of brief.md."),
+    ).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Review this change/ }));
 
@@ -237,6 +238,35 @@ describe("ApprovalPrompt", () => {
     expect(within(review).getByText("New draft.")).toBeVisible();
     expect(within(review).getByText("+1")).toBeVisible();
     expect(within(review).getByText("−1")).toBeVisible();
+  });
+
+  it("labels a new file and its new folder inside what will change", () => {
+    render(
+      <ApprovalPrompt
+        title="Create a workspace file"
+        target="reports/2026/brief.md"
+        detail="This creates a new file and the folder reports/2026. Nothing is replaced."
+        command={'write_file({"path":"reports/2026/brief.md"})'}
+        changes={[
+          {
+            path: "reports/2026/brief.md",
+            change: "created",
+            createdFolder: "reports/2026",
+            after: "A report.",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByRole("region", { name: "Permission request" });
+    expect(within(prompt).getByText("What will change")).toBeVisible();
+    expect(within(prompt).getByText("New file")).toBeVisible();
+    expect(within(prompt).getByText("reports/2026/brief.md")).toBeVisible();
+    expect(
+      within(prompt).getByText("Also creates folder reports/2026"),
+    ).toBeVisible();
+    expect(within(prompt).queryByText(/Nothing is replaced/)).toBeNull();
   });
 
   it("states whether declared file changes are protected before approval", () => {
@@ -331,7 +361,7 @@ describe("ApprovalPrompt", () => {
     expect(screen.queryByRole("button", { name: /Review/ })).toBeNull();
   });
 
-  it("makes denying the action directly available", () => {
+  it("offers guidance only after Deny, while allowing a denial without text", () => {
     const onDecision = vi.fn();
     render(
       <ApprovalPrompt
@@ -343,7 +373,15 @@ describe("ApprovalPrompt", () => {
       />,
     );
 
+    expect(screen.queryByRole("textbox", { name: /Tell Zhiyin/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onDecision).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: /Tell Zhiyin/ })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onDecision).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: /Tell Zhiyin/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm denial" }));
     expect(onDecision).toHaveBeenCalledWith("deny");
   });
 
@@ -357,13 +395,14 @@ describe("ApprovalPrompt", () => {
         onDecision={onDecision}
       />,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     fireEvent.change(
-      screen.getByRole("textbox", { name: "Guidance if you deny (optional)" }),
+      screen.getByRole("textbox", { name: /Tell Zhiyin what to do instead/ }),
       {
         target: { value: "Use the project script instead." },
       },
     );
-    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm denial" }));
     expect(onDecision).toHaveBeenCalledWith(
       "deny",
       "Use the project script instead.",
@@ -517,9 +556,10 @@ describe("ActionHistory", () => {
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByText("Old draft.")).toBeVisible();
     expect(within(inspector).getByText("New draft.")).toBeVisible();
-    // The call is gone: the difference already says what happened, and the
-    // call said it again in the tool's own encoding.
-    expect(within(inspector).queryByText(/write_file/)).toBeNull();
+    // The change is primary; raw syntax is available only on request.
+    expect(within(inspector).getByText(/write_file/)).not.toBeVisible();
+    fireEvent.click(within(inspector).getByText("Technical details"));
+    expect(within(inspector).getByText(/write_file/)).toBeVisible();
   });
 
   it("draws what a tool reported in the shapes the tool named", () => {
@@ -599,7 +639,7 @@ describe("ActionHistory", () => {
     const inspector = screen.getByRole("dialog");
     expect(within(inspector).getByText("python3 not found")).toBeVisible();
     expect(within(inspector).getByText("Exit code")).toBeVisible();
-    expect(within(inspector).queryByText(/bash\(/)).toBeNull();
+    expect(within(inspector).getByText(/bash\(/)).not.toBeVisible();
     // And the target is not repeated above the command it duplicates.
     expect(within(inspector).getAllByText("command -v python3")).toHaveLength(
       1,
@@ -692,7 +732,7 @@ describe("ActionHistory", () => {
         "Inspect the available data before interpreting it.",
       ),
     ).toBeVisible();
-    expect(within(inspector).queryByText(/load_skill/)).toBeNull();
+    expect(within(inspector).getByText(/load_skill/)).not.toBeVisible();
   });
 
   it("closes the inspector with Escape", () => {

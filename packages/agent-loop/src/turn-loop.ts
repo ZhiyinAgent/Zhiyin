@@ -29,7 +29,11 @@ import type { ModelHistory, SentPicture } from "./model-history.js";
 import { ModelRound } from "./model-round.js";
 import { RoundResults, resultLimits } from "./result-size.js";
 import type { ContextGuard } from "./context-guard.js";
-import { advertisedTools, openTaskHistory } from "./request-plan.js";
+import {
+  advertisedTools,
+  modelRoundRequest,
+  openTaskHistory,
+} from "./request-plan.js";
 import { ToolCalls } from "./tool-calls.js";
 import {
   delegateSpecialistToolName,
@@ -45,10 +49,13 @@ import { TurnOwnership } from "./turn-ownership.js";
 import { deliverGuidance } from "./turn-guidance.js";
 import { completionPhase } from "./turn-completion.js";
 import {
+  recoverConnectionFailure,
+  turnFailureReason,
+} from "./turn-recovery.js";
+import {
   answerableCalls,
   describedWorkspace,
   maximumQuietRetries,
-  modelFailure,
   namelessCallFailure,
   noLongerFits,
   pauseReportInstruction,
@@ -168,6 +175,8 @@ export class TurnLoop {
       let delegatedChildren = options?.initialDelegatedChildren ?? 0;
       /** The provider refused this step as too long, and it was condensed. */
       let refused = false;
+      /** One fresh round may resume from completed tools after retry exhaustion. */
+      let connectionRecovery = 0;
       while (true) {
         await this.#plan.remind(taskId, history);
         await standing.send(history);
@@ -202,25 +211,35 @@ export class TurnLoop {
         );
         controller.signal.throwIfAborted();
         const messages = requestMessages();
-        const request = {
+        const request = modelRoundRequest(
+          this.#records.task(taskId),
           messages,
-          tools: plan.tools,
-          ...(this.#records.task(taskId).reasoning
-            ? { reasoning: this.#records.task(taskId).reasoning }
-            : {}),
-          session: taskId,
-          cacheAfter: this.#cacheAfter(
-            taskId,
-            fixedMessages.length,
-            messages.length,
-          ),
-        };
+          plan.tools,
+          fixedMessages.length,
+          this.#lastRequestLength,
+        );
         const shown = this.#records.task(taskId).messages.length;
+        let recovering = false;
         const answered = await this.#round
           .run(taskId, controller, ledger, request, () =>
             this.#ownsTurn(taskId, controller),
           )
-          .catch((error: unknown) => {
+          .catch(async (error: unknown) => {
+            if (
+              await recoverConnectionFailure({
+                error,
+                taskId,
+                messagesBeforeRound: shown,
+                previousRecoveries: connectionRecovery,
+                records: this.#records,
+                history,
+                ledger,
+              })
+            ) {
+              connectionRecovery += 1;
+              recovering = true;
+              return undefined;
+            }
             // Recovered once per step, and only before any of an answer showed.
             const said = refusedAsTooLong(error);
             if (!said || this.#records.task(taskId).messages.length !== shown)
@@ -230,7 +249,7 @@ export class TurnLoop {
             return undefined;
           });
         if (!answered) {
-          refused = true;
+          if (!recovering) refused = true;
           continue;
         }
         refused = false;
@@ -555,11 +574,7 @@ export class TurnLoop {
         ...task,
         phase: {
           kind: "failed",
-          reason:
-            modelFailure(error)?.message ??
-            (error instanceof VisibleError
-              ? error.message
-              : "The model request failed. Try again."),
+          reason: turnFailureReason(error, ledger.completedToolRounds()),
         },
       });
     } finally {
@@ -586,24 +601,6 @@ export class TurnLoop {
 
   #openHistory(taskId: string): Promise<ModelHistory> {
     return openTaskHistory(this.#deps, this.#records, taskId);
-  }
-
-  /**
-   * Where a later request is expected to repeat this one: after the fixed
-   * start, after the previous request, and after the newest message.
-   */
-  #cacheAfter(taskId: string, fixed: number, length: number): number[] {
-    const previous = this.#lastRequestLength.get(taskId);
-    this.#lastRequestLength.set(taskId, length);
-    return [
-      ...new Set([
-        fixed - 1,
-        ...(previous === undefined ? [] : [previous - 1]),
-        length - 1,
-      ]),
-    ]
-      .filter((index) => index >= 0 && index < length)
-      .sort((left, right) => left - right);
   }
 
   /**

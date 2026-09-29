@@ -87,30 +87,8 @@ export type {
   ConversationPermission,
 } from "./task-action.js";
 import type { TaskAction, ConversationPermission } from "./task-action.js";
-
-/**
- * Exactly what one file would look like before and after an action, as the
- * implementation that would carry it out reports it.
- *
- * Shown instead of the call's arguments, because a person cannot review a
- * change by reading `write_file({"path":...,"text":"..."})`. What they
- * need is the difference, and only the tool knows both sides of it: the
- * proposed text comes from the model, the existing text from the disk.
- *
- * Bounded on purpose. A change too large to show says so rather than arriving
- * as megabytes of text nobody will read; `omitted` names why, and its presence
- * means the approval is being given without a full picture.
- */
-export type FileChange = {
-  readonly path: string;
-  readonly change: "created" | "updated";
-  /** Absent when the file does not exist yet. */
-  readonly before?: string;
-  /** Absent when the change is too large to carry. */
-  readonly after?: string;
-  /** Why the contents are not here, when they are not. */
-  readonly omitted?: string;
-};
+import type { FileChange } from "./file-change.js";
+export type { FileChange } from "./file-change.js";
 
 export type ApprovalRequest = {
   readonly id: string;

@@ -46,15 +46,14 @@ export function PersonalInstructions({
     >
       <h2 id={`${hintId}-title`}>Your instructions</h2>
       <p id={hintId} className={styles["personal-instructions__hint"]}>
-        How you want Zhiyin to work, in every conversation: the language to
-        answer in, where things live, what to leave alone. They apply from your
-        next message. They guide style and approach, and never grant permission:
-        every action is still checked as usual.
+        Describe your preferred language, format and working habits. You can
+        edit these at any time.
       </p>
       <textarea
         aria-label="Your instructions"
         aria-describedby={hintId}
-        rows={8}
+        rows={7}
+        placeholder="For example: Reply in French. Keep explanations concise. Ask before changing the structure of a report."
         value={text}
         disabled={saving}
         onChange={(event) => setDraft(event.target.value)}

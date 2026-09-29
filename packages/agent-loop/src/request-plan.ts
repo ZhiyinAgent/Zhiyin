@@ -5,7 +5,12 @@
  * turns repeats the start the provider cached for the turn before it.
  */
 
-import { VisibleError, type ToolSpec } from "@zhiyin/contract";
+import {
+  VisibleError,
+  type ToolSpec,
+  type WorkspaceTask,
+} from "@zhiyin/contract";
+import type { ModelMessage } from "@zhiyin/model-client";
 import { describedWorkspace } from "./turn-shared.js";
 import { fixedModelMessages } from "./conversation-context.js";
 import { delegateSpecialistTool } from "./specialist-execution.js";
@@ -16,6 +21,48 @@ import { updatePlanTool } from "./plan-progress.js";
 import type { ContextGuard, RequestPlan } from "./context-guard.js";
 import type { TurnRecords } from "./turn-records.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
+
+/** The places the next request can reuse unchanged from this one. */
+export function cacheBoundaries(
+  previousLengths: Map<string, number>,
+  taskId: string,
+  fixed: number,
+  length: number,
+): number[] {
+  const previous = previousLengths.get(taskId);
+  previousLengths.set(taskId, length);
+  return [
+    ...new Set([
+      fixed - 1,
+      ...(previous === undefined ? [] : [previous - 1]),
+      length - 1,
+    ]),
+  ]
+    .filter((index) => index >= 0 && index < length)
+    .sort((left, right) => left - right);
+}
+
+/** One round's request, with the unchanged start marked for provider caching. */
+export function modelRoundRequest(
+  task: WorkspaceTask,
+  messages: readonly ModelMessage[],
+  tools: readonly ToolSpec[],
+  fixedMessageCount: number,
+  previousLengths: Map<string, number>,
+) {
+  return {
+    messages,
+    tools,
+    ...(task.reasoning ? { reasoning: task.reasoning } : {}),
+    session: task.id,
+    cacheAfter: cacheBoundaries(
+      previousLengths,
+      task.id,
+      fixedMessageCount,
+      messages.length,
+    ),
+  };
+}
 
 /**
  * The tools a request offers: the gathered ones, each able to say what a call

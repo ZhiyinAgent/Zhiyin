@@ -327,6 +327,14 @@ browser is not among them: it is reached, and let go of, through capabilities.
   started again for a content-policy stop`, `is released at once when the round
   ends`, and `stops waiting the moment the person stops the turn`.
 
+- **A connection failure after completed tools resumes from their recorded
+  results once.** When the client's request retries are exhausted, the turn
+  withdraws that round's partial answer and sends one new request with a
+  `recovery` notice. Completed tools are not invoked again by the loop. If the
+  connection fails again, the turn stops with a plain explanation that the
+  completed actions are saved. Named test: `continues from a completed action
+  after an upstream idle timeout`.
+
 - **An answer that ran out of room is not called finished.** A turn whose
   response stopped at the output ceiling ends interrupted, saying so, rather
   than completed with a document that stops mid-sentence. Named test: `is not

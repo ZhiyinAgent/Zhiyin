@@ -105,6 +105,20 @@ async function openSettings(
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
+async function openInstructions(
+  window: Awaited<ReturnType<typeof launch>>["window"],
+) {
+  await window.getByRole("button", { name: "Open navigation" }).click();
+  await window
+    .getByRole("button", { name: /app menu/i })
+    .first()
+    .click();
+  await window.getByRole("menuitem", { name: "Custom instructions" }).click();
+  await window
+    .getByRole("region", { name: "Custom instructions" })
+    .waitFor({ state: "visible" });
+}
+
 describe("the app at its minimum supported window", () => {
   it("puts everything on the top row on the same centre line", async () => {
     const { window } = await atMinimumSize();
@@ -227,6 +241,40 @@ describe("the app at its minimum supported window", () => {
     );
 
     expect(escaping).toEqual([]);
+  });
+
+  it("keeps the custom instructions editor and save button reachable at minimum size", async () => {
+    const { window } = await atMinimumSize();
+    await openInstructions(window);
+
+    const editor = window.getByRole("textbox", { name: "Your instructions" });
+    await editor.fill("Reply in French.");
+    await window
+      .getByRole("button", { name: "Save instructions" })
+      .scrollIntoViewIfNeeded();
+    const bounds = await window.evaluate(() => {
+      const field = document.querySelector<HTMLElement>(
+        'textarea[aria-label="Your instructions"]',
+      );
+      const save = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent?.includes("Save instructions"),
+      );
+      if (!field || !save) return null;
+      const input = field.getBoundingClientRect();
+      const action = save.getBoundingClientRect();
+      return {
+        inputInside: input.left >= 0 && input.right <= window.innerWidth,
+        saveInside: action.left >= 0 && action.right <= window.innerWidth,
+        saveVisible:
+          action.top >= -1 && action.bottom <= window.innerHeight + 1,
+      };
+    });
+
+    expect(bounds).toEqual({
+      inputInside: true,
+      saveInside: true,
+      saveVisible: true,
+    });
   });
 
   it("puts the app's name beside the button that opened the drawer, not under it", async () => {
