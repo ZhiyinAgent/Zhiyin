@@ -331,6 +331,34 @@ describe("FileSessions workspace persistence", () => {
       SessionStoreError,
     );
   });
+  it("restores a retry deadline and rejects one that cannot drive a countdown", async () => {
+    const root = await temporaryRoot();
+    const phase = {
+      kind: "working" as const,
+      steps: [],
+      note: "The model is busy. Trying again",
+      retry: { readyAt: "2026-09-29T10:00:08.000Z", count: "2 of 5" },
+    };
+    await new FileSessions(root).saveWorkspace({
+      ...snapshot,
+      tasks: [{ ...snapshot.tasks[0]!, phase }],
+    });
+    expect(
+      (await new FileSessions(root).loadWorkspace())?.tasks[0]?.phase,
+    ).toEqual(phase);
+    await plantHistory(root, {
+      ...snapshot,
+      tasks: [
+        {
+          ...snapshot.tasks[0],
+          phase: { ...phase, retry: { readyAt: "later" } },
+        },
+      ],
+    });
+    await expect(new FileSessions(root).loadWorkspace()).rejects.toBeInstanceOf(
+      SessionStoreError,
+    );
+  });
   it("rejects malformed specialist provenance and handoff state", async () => {
     const root = await temporaryRoot();
     await plantHistory(root, {

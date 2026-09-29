@@ -288,11 +288,17 @@ rendered.
   browser: `shows task activity and lets the user stop work from the browser
   workspace`.
 
-- Live reasoning opens in a bounded scrolling region and remains inspectable
-  after interruption. It shares the answer's mark rather than adding another
-  working indicator. Named tests: `shows arriving reasoning and keeps an
-  interrupted trace inspectable` and `shows one live reasoning mark and passes
-  the selected effort to the core`.
+- Raw reasoning and reasoning-only assistant messages stay out of the
+  conversation. Working status, actions, and answer text remain in chronological
+  order; the selected effort still reaches the core. Named tests: `keeps
+  reasoning-only continuations out of the conversation while work stays visible`
+  and `keeps raw reasoning out of view and passes the selected effort to the core`
+  (ADR 0058).
+- A provider retry shows its remaining whole seconds from a saved deadline,
+  updates while waiting, and stops claiming a positive wait after the deadline.
+  A stream restart and a silent retry show their respective attempt counts.
+  Named test: `counts down the provider retry from its saved deadline`
+  (ADR 0059).
 - The composer submits the selected reasoning setting, offers only supported
   efforts, explains mandatory reasoning, and locks controls during a turn.
   Named tests: `sends the chosen reasoning setting with the message` and
@@ -697,6 +703,13 @@ rendered.
   guards its command boundary. The named test `prevents
   duplicate decisions while the chosen response is pending` guards immediate
   feedback and duplicate-click suppression.
+- Completed actions keep repeated-use permission provenance in a small
+  keyboard-focusable information badge. The conversation permissions menu shows
+  readable active scopes and Revokes without timestamps or a list of every
+  covered action. Named tests: `keeps repeated permission provenance in a small
+  badge`, `shows active scopes without action history or timestamps and revokes
+  one`, and `gives an older connector grant a readable title and closes with
+  Escape` (ADR 0058).
 - Clarifying questions use native mutually exclusive choices and bounded text,
   remain visually distinct from permission, and submit one complete response.
   Selecting a choice adds its state without replacing the option-card layout.

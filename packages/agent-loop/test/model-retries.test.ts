@@ -154,7 +154,7 @@ describe("a model request refused before it streamed", () => {
     ]);
   });
 
-  it("says the model is busy while it waits, and which attempt is next", async () => {
+  it("publishes the provider retry deadline and which attempt is next", async () => {
     const { loop, announced } = setUp(async function* () {
       yield {
         kind: "retrying",
@@ -175,7 +175,10 @@ describe("a model request refused before it streamed", () => {
       announced().some(
         (entry) =>
           entry.phase.kind === "working" &&
-          /busy.*8 s.*2 of 5/.test(entry.phase.note ?? ""),
+          entry.phase.note === "The model is busy. Trying again" &&
+          entry.phase.retry?.count === "2 of 5" &&
+          Math.abs(Date.parse(entry.phase.retry.readyAt) - Date.now() - 8_000) <
+            1_000,
       ),
     ).toBe(true);
   });
@@ -243,7 +246,9 @@ describe("a stream that fails after its text was shown", () => {
       announced().some(
         (entry) =>
           entry.phase.kind === "working" &&
-          /again \(1 of 3\)/.test(entry.phase.note ?? "") &&
+          entry.phase.note ===
+            "The answer was interrupted. Starting it again" &&
+          entry.phase.retry?.count === "1 of 3" &&
           !entry.messages.some((message) => message.text === "Partial"),
       ),
     ).toBe(true);

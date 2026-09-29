@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ConversationPermission } from "@zhiyin/contract";
 import {
   ApprovalPrompt,
   ActionHistory,
@@ -14,13 +15,13 @@ import {
   WorkspacePicker,
   AppSidebar,
   SessionHeader,
+  ConversationPermissions,
   createWorkspaceState,
 } from "../ui/app/index.js";
 import {
   Composer,
   ConversationSkeleton,
   ConversationTimeline,
-  ReasoningTrace,
   ContextShelf,
   MarkdownMessage,
   OutcomeCard,
@@ -115,12 +116,63 @@ function ComponentEditorExample() {
   );
 }
 
+function ConversationPermissionsExample() {
+  const [open, setOpen] = useState(false);
+  const [permissions, setPermissions] = useState<ConversationPermission[]>([
+    {
+      id: "permission-demo",
+      kind: "connector-tool",
+      toolName: "mcp__research__tavily__tavily_search",
+      label: "mcp__research__tavily__tavily_search, this version",
+      at: "2026-09-29T19:00:00.000Z",
+      identity: JSON.stringify({
+        server: { id: "research/tavily", name: "Tavily" },
+        schema: {},
+      }),
+    },
+    {
+      id: "permission-folder",
+      kind: "file-folder",
+      toolName: "write_file",
+      label: "Changes to files in reports/",
+      at: "2026-09-29T19:00:00.000Z",
+      workspaceRoot: "C:/workspace",
+      folder: "C:/workspace/reports",
+    },
+  ]);
+  return (
+    <>
+      <button className="button button--quiet" onClick={() => setOpen(true)}>
+        Open permissions
+      </button>
+      {open && (
+        <ConversationPermissions
+          task={{
+            id: "catalog-permissions",
+            title: "Prepare a research report",
+            updatedLabel: "Now",
+            messages: [],
+            phase: { kind: "draft" },
+            conversationPermissions: permissions,
+          }}
+          onClose={() => setOpen(false)}
+          onRevoke={async (id) =>
+            setPermissions((current) =>
+              current.filter((item) => item.id !== id),
+            )
+          }
+        />
+      )}
+    </>
+  );
+}
+
 export const componentCatalog: ComponentCatalogEntry[] = [
   {
     id: "conversation-timeline",
     title: "Conversation timeline",
     description:
-      "The main conversation surface, including message ordering, reasoning, work, and the completed outcome.",
+      "The main conversation surface, including message ordering, work, and the completed outcome.",
     render: () => (
       <ConversationTimeline
         task={{
@@ -145,6 +197,36 @@ export const componentCatalog: ComponentCatalogEntry[] = [
               title: "Release note prepared",
               summary: "The draft was written and checked.",
               file: "release-notes.md",
+            },
+          },
+        }}
+        pieces={{
+          actions: () => null,
+          view: () => null,
+          interaction: () => null,
+        }}
+      />
+    ),
+  },
+  {
+    id: "provider-retry",
+    title: "Provider retry",
+    description:
+      "A transient provider failure shows a live wait before reconnecting.",
+    render: () => (
+      <ConversationTimeline
+        task={{
+          id: "catalog-retry",
+          messages: [
+            { id: "retry-user", role: "user", text: "Check the sources." },
+          ],
+          phase: {
+            kind: "working",
+            steps: [],
+            note: "The model could not be reached. Trying again",
+            retry: {
+              readyAt: new Date(Date.now() + 30_000).toISOString(),
+              count: "2 of 5",
             },
           },
         }}
@@ -188,19 +270,6 @@ export const componentCatalog: ComponentCatalogEntry[] = [
           keptAt: "C:/Users/sam/AppData/Roaming/Zhiyin/history.damaged.json",
         }}
         onChoose={async () => undefined}
-      />
-    ),
-  },
-  {
-    id: "reasoning-trace",
-    title: "Reasoning trace",
-    description: "Live reasoning stays readable before the answer arrives.",
-    render: () => (
-      <ReasoningTrace
-        trace={{
-          text: "I’m comparing the sources and checking their dates before drawing a conclusion.",
-          status: "streaming",
-        }}
       />
     ),
   },
@@ -915,6 +984,13 @@ export const componentCatalog: ComponentCatalogEntry[] = [
     ),
   },
   {
+    id: "conversation-permissions",
+    title: "Conversation permissions",
+    description:
+      "Active grants have readable scopes and a direct revoke control.",
+    render: () => <ConversationPermissionsExample />,
+  },
+  {
     id: "action-history",
     title: "Action history",
     description:
@@ -928,6 +1004,18 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             data: sampleBrowserFrame,
           })}
           actions={[
+            {
+              id: "research",
+              action: "Tavily · Search",
+              description: "Check a source for the latest figures.",
+              target: "Tavily",
+              status: "completed",
+              approval: {
+                by: "conversation-permission",
+                at: "2026-09-29T19:00:00.000Z",
+                permissionId: "permission-demo",
+              },
+            },
             {
               id: "scan",
               action: "Scan the source tree",
@@ -1020,6 +1108,7 @@ export const componentCatalog: ComponentCatalogEntry[] = [
             {
               id: "remote",
               action: "Use Tavily: tavily_search",
+              toolName: "mcp__research__tavily__tavily_search",
               description: "An external tool that describes nothing.",
               target: "Tavily",
               status: "completed",

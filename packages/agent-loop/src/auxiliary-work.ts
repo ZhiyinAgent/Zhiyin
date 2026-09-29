@@ -86,6 +86,7 @@ export class AuxiliaryWork {
                * the plan should never have existed.
                */
               "Return no items when the request is answered by the reply itself and needs no work in the workspace: a question about Zhiyin, a definition, an opinion, a greeting, or a rewrite of text already supplied. A plan describes work a reviewer could watch happen.",
+              "For broad research or document requests, apply the clarification rule: if the intended audience, scope, source preference, or deliverable format could materially change the result and is not clear from the request, do not plan research or writing yet. Return no items so the main assistant can ask the person with ask_user before substantial work begins.",
               "Otherwise use one to four concrete work items. Do not include model calls, response preparation, or other internal mechanics.",
               "Each criterion must describe evidence a reviewer can observe. Keep titles and criteria plain and specific.",
               "Use the workspace inventory below. Do not refer vaguely to supplied material or available context.",

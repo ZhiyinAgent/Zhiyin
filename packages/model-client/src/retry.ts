@@ -31,7 +31,6 @@ const longestOwnWaitMs = 30_000;
 /** How the waiting is done. Replaced in tests, so no test waits for real. */
 export type RetryOptions = {
   readonly wait?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  readonly now?: () => number;
   /** A number in [0, 1), spreading waits so retries do not arrive together. */
   readonly random?: () => number;
 };
@@ -124,9 +123,8 @@ export async function* withRetries(
   options: RetryOptions = {},
 ): AsyncIterable<ModelEvent> {
   const wait = options.wait ?? abortableWait;
-  const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
-  const started = now();
+  let waitedMs = 0;
   const retries: ModelRetryRecord[] = [];
   let silent = 0;
   let restarts = 0;
@@ -147,7 +145,7 @@ export async function* withRetries(
         : silent < maximumAttempts - 1;
       if (!failure || !allowed || request.signal?.aborted) throw error;
       const pause = delayMs(failure, silent + restarts, random);
-      if (now() - started + pause > maximumTotalWaitMs) throw error;
+      if (waitedMs + pause > maximumTotalWaitMs) throw error;
       const repeat = {
         delayMs: pause,
         reason: failure.code,
@@ -171,12 +169,13 @@ export async function* withRetries(
         retries.push({ failure: failure.code, delayMs: pause, kind: "silent" });
         yield {
           kind: "retrying",
-          attempt: silent + restarts + 1,
+          attempt: silent + 1,
           maximumAttempts,
           ...repeat,
         };
       }
       await wait(pause, request.signal);
+      waitedMs += pause;
     }
   }
 }

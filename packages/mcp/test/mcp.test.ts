@@ -197,7 +197,7 @@ describe("ManagedMcpServers", () => {
     });
     expect(
       await servers.inspect("mcp__remote__browser_navigate", {}),
-    ).toMatchObject({ action: "Use Remote: browser_navigate" });
+    ).toMatchObject({ action: "Remote · Browser navigate" });
     const result = await servers.execute("mcp__remote__browser_navigate", {});
     expect(result).not.toHaveProperty("details");
     await servers.shutdownAll();
@@ -738,7 +738,7 @@ describe("ManagedMcpServers", () => {
     });
     expect(await servers.inspect(tool!.name, { city: "Paris" })).toMatchObject({
       ok: true,
-      action: "Use Local weather: weather",
+      action: "Local weather",
       target: "Local weather",
     });
     expect(await servers.execute(tool!.name, { city: "Paris" })).toEqual({

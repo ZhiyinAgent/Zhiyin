@@ -315,10 +315,10 @@ describe("AgentLoop renewable work budget", () => {
     let requestNumber = 0;
     const loop = loopFrom({
       ...base,
-      // A 6,800-token Medium budget, crossed about two thirds of the way in.
+      // A 7,225-token Medium budget, crossed about two thirds of the way in.
       modelWindow: {
         model: "small",
-        contextWindow: 8_000,
+        contextWindow: 8_500,
         maximumOutputTokens: 100,
       },
       tools: workTool(execute),

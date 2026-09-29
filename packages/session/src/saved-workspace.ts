@@ -10,19 +10,18 @@ import {
   validContextBudget,
   validContextUsage,
 } from "./saved-context.js";
-import { isRecord, optionalText, validSequence } from "./saved-values.js";
+import {
+  isRecord,
+  isFolder,
+  optionalText,
+  validRetryDeadline,
+  validSequence,
+} from "./saved-values.js";
+export { isFolder } from "./saved-values.js";
 import {
   validFolderInstructionsRequest,
   validStandingInstructions,
 } from "./saved-instructions.js";
-
-export function isFolder(value: unknown): boolean {
-  return (
-    isRecord(value) &&
-    typeof value.path === "string" &&
-    typeof value.name === "string"
-  );
-}
 
 function validReasoningSelection(value: unknown): boolean {
   if (value === undefined) return true;
@@ -615,6 +614,8 @@ function validPhase(value: unknown): boolean {
             ),
         )
       )
+        return false;
+      if (value.kind === "working" && !validRetryDeadline(value.retry))
         return false;
       const prompt = value.prompt;
       if (value.kind === "input")

@@ -291,9 +291,10 @@ browser is not among them: it is reached, and let go of, through capabilities.
   picture was produced and not sent rather than referring to nothing. Named
   tests: `reaches a model that can be shown one, as a picture`, `is never sent
   to a model that cannot be shown one`.
-- Reasoning arrives on the assistant's timeline before its answer, remains
+- Reasoning arrives in the assistant record before its answer, remains
   separate from answer and future model prose, and uses the conversation's chosen
-  effort on main-model requests. Named test: `shows reasoning before an answer
+  effort on main-model requests. The renderer omits the raw trace under ADR 0058.
+  Named test: `shows reasoning before an answer
   and retains it separately from future model context`.
 - **A round that is still being composed says so.** A tool call arrives as a run
   of argument fragments, and a model writing several chart specifications with
@@ -326,6 +327,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   up after three restarts, keeping what the last attempt showed`, `is not
   started again for a content-policy stop`, `is released at once when the round
   ends`, and `stops waiting the moment the person stops the turn`.
+  A retry publishes its deadline separately from its note so the renderer can
+  show a live countdown under ADR 0059. Named test: `publishes the provider retry
+  deadline and which attempt is next`.
 
 - **A connection failure after completed tools resumes from their recorded
   results once.** When the client's request retries are exhausted, the turn
@@ -714,7 +718,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
   exposing causes` guards that boundary.
 - A model response that ends after reasoning but before an answer or action is
   interrupted, never completed, even when the transport sent its final
-  sentinel. Partial reasoning stays visible and terminal provider evidence is
+  sentinel. Partial reasoning stays stored and terminal provider evidence is
   stored on the conversation. The named tests `interrupts a reasoning-only
   response and retains its terminal evidence` and `reproduces the saved
   reasoning-only stream through the real parser` guard the sequencing and real
@@ -975,7 +979,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
   inside one canonical folder or one connector tool identity. Every file in a
   multi-edit must match; a different folder, changed connector schema,
   deletion, shell call, or new conversation asks again. A grant is saved on
-  the task, shown on each covered action, and can be revoked from that
+  the task, indicated by a compact badge on each covered action, and can be revoked from that
   conversation's menu. Named tests: `covers later edits in one folder, then
   asks after revocation and in another conversation` and `checks every edit
   target, connector version, and excluded deletion`.

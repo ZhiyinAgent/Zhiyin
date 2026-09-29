@@ -1,4 +1,5 @@
 export { ConnectionRecovery } from "./ConnectionRecovery.js";
+export { ConversationPermissions } from "./ConversationPermissions.js";
 export { WorkspaceShell, type WorkspaceCommands } from "./WorkspaceShell.js";
 export { WorkspacePicker } from "./WorkspacePicker.js";
 export { AppSidebar } from "./AppSidebar.js";

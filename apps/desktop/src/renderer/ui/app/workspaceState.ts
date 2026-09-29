@@ -61,7 +61,12 @@ export type SpecialistRun = CoreSpecialistRun;
 export type TaskPhase =
   | { kind: "draft" }
   | { kind: "loading" }
-  | { kind: "working"; steps: WorkStep[]; note?: string }
+  | {
+      kind: "working";
+      steps: WorkStep[];
+      note?: string;
+      retry?: { readyAt: string; count?: string };
+    }
   | { kind: "approval"; steps: WorkStep[]; prompt: ApprovalRequest }
   | {
       kind: "input";

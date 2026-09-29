@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CoreApi, TaskAction } from "@zhiyin/contract";
 import { ActionInspector } from "./ActionInspector.js";
+import { actionTitle } from "./actionTitle.js";
 import { Icon } from "../shared/index.js";
 import styles from "./actions.module.css";
 
@@ -47,6 +48,13 @@ export function ActionHistory({
       <ul>
         {actions.map((action) => {
           const presentation = statusPresentation[action.status];
+          const title = actionTitle(action);
+          const inspectable = Boolean(
+            action.command ||
+            action.evidence ||
+            action.changes?.length ||
+            action.details?.length,
+          );
           return (
             <li
               className={`${styles["action-history__item"]} ${styles[`action-history__item--${action.status}`]}`}
@@ -62,11 +70,45 @@ export function ActionHistory({
               </span>
               <span className={styles["action-history__content"]}>
                 <span className={styles["action-history__summary"]}>
-                  <strong>{action.action}</strong>
+                  <strong>{title}</strong>
+                  {action.approval?.by === "conversation-permission" &&
+                    (onOpenPermission && action.approval.permissionId ? (
+                      <button
+                        className={styles["action-history__permission"]}
+                        type="button"
+                        aria-label="Allowed for this conversation. Open permissions"
+                        data-tooltip="Allowed for this conversation"
+                        onClick={() =>
+                          onOpenPermission(action.approval!.permissionId!)
+                        }
+                      >
+                        <Icon name="info" />
+                      </button>
+                    ) : (
+                      <span
+                        className={styles["action-history__permission"]}
+                        role="img"
+                        aria-label="Allowed for this conversation"
+                        data-tooltip="Allowed for this conversation"
+                        tabIndex={0}
+                      >
+                        <Icon name="info" />
+                      </span>
+                    ))}
                   {action.status !== "completed" && (
                     <span className={styles["action-history__status"]}>
                       {presentation.label}
                     </span>
+                  )}
+                  {inspectable && (
+                    <button
+                      className={`text-button ${styles["action-history__inspect"]}`}
+                      type="button"
+                      aria-label="Inspect action"
+                      onClick={() => setInspecting(action.id)}
+                    >
+                      Details
+                    </button>
                   )}
                 </span>
                 {action.description && (
@@ -74,49 +116,18 @@ export function ActionHistory({
                     {action.description}
                   </span>
                 )}
-                <span className={styles["action-history__target"]}>
-                  {action.target}
-                </span>
-                {action.approval && (
-                  <span className={styles["action-history__approval"]}>
-                    {action.status === "denied"
-                      ? `You declined ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                      : action.approval.by === "conversation-permission"
-                        ? `Covered by your permission from ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}: ${action.approval.label ?? "this action"}`
-                        : action.approval.by === "no-approval-needed"
-                          ? `No approval needed: ${action.approval.reason ?? "allowed by the app"}`
-                          : action.approval.by === "blocked"
-                            ? `Blocked: ${action.approval.reason ?? "not permitted"}`
-                            : `Approved ${new Date(action.approval.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}
-                    {action.approval.permissionId && onOpenPermission && (
-                      <button
-                        className="text-button"
-                        type="button"
-                        onClick={() =>
-                          onOpenPermission(action.approval!.permissionId!)
-                        }
-                      >
-                        View permission
-                      </button>
-                    )}
-                  </span>
-                )}
+                {action.target &&
+                  !title
+                    .toLocaleLowerCase()
+                    .includes(action.target.toLocaleLowerCase()) && (
+                    <span className={styles["action-history__target"]}>
+                      {action.target}
+                    </span>
+                  )}
                 {action.reason && (
                   <span className={styles["action-history__reason"]}>
                     {action.reason}
                   </span>
-                )}
-                {(action.command ||
-                  action.evidence ||
-                  action.changes?.length ||
-                  action.details?.length) && (
-                  <button
-                    className={`text-button ${styles["action-history__inspect"]}`}
-                    type="button"
-                    onClick={() => setInspecting(action.id)}
-                  >
-                    Inspect action
-                  </button>
                 )}
               </span>
             </li>

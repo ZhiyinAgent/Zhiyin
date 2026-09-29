@@ -556,7 +556,7 @@ describe("what changes the start of a request, on purpose", () => {
           else
             yield {
               kind: "textDelta" as const,
-              text: ++answers === 1 ? "padding ".repeat(2_025) : "Answered.",
+              text: ++answers === 1 ? "padding ".repeat(1_800) : "Answered.",
             };
           yield { kind: "done" as const };
         },

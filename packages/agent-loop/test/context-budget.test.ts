@@ -199,12 +199,11 @@ describe("older tool results", () => {
         () => ({ ok: true, value: { text: sized(800) } }),
         working(9, 3, requests),
         {
-          // A 14,875-token Medium budget: each answer is held to 743 tokens
-          // and a round to 2,231, so six rounds cross it while only the first
-          // is older than the five protected ones.
+          // A 17,000-token Medium budget: six rounds cross it while only the
+          // first is older than the five protected ones.
           modelWindow: {
             model: "small",
-            contextWindow: 17_500,
+            contextWindow: 20_000,
             maximumOutputTokens: 100,
           },
         },
@@ -615,7 +614,7 @@ describe("the worst case a budget must hold", () => {
       // what the loop's own instructions take.
       const read = {
         name: "read",
-        description: sized(target * 0.15 - 1_550, "definition "),
+        description: sized(target * 0.15 - 1_830, "definition "),
         inputSchema: { type: "object" },
       };
       // A history just under the budget once the rest is added, in rounds.

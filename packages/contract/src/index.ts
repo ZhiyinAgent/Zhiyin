@@ -198,12 +198,12 @@ export type RewindCommitResult = {
 };
 
 export type TaskPhase =
-  | { readonly kind: "draft" }
-  | { readonly kind: "loading" }
+  | { readonly kind: "draft" | "loading" }
   | {
       readonly kind: "working";
       readonly steps: readonly WorkStep[];
       readonly note?: string;
+      readonly retry?: { readonly readyAt: string; readonly count?: string };
     }
   | {
       readonly kind: "approval";

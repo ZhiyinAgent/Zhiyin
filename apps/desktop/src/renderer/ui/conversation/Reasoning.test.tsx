@@ -1,50 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ReasoningTrace } from "./ReasoningTrace.js";
 import { Composer } from "./Composer.js";
 
 describe("reasoning presentation", () => {
-  it("shows arriving reasoning and keeps an interrupted trace inspectable", () => {
-    const { rerender } = render(
-      <ReasoningTrace
-        trace={{ text: "Compare sources.", status: "streaming" }}
-      />,
-    );
-    expect(screen.getByText("Thinking")).toBeVisible();
-    expect(screen.getByText("Compare sources.")).toBeVisible();
-    rerender(
-      <ReasoningTrace
-        trace={{ text: "Compare sources. Check dates.", status: "interrupted" }}
-      />,
-    );
-    expect(screen.getByText("Thinking interrupted")).toBeVisible();
-    expect(
-      screen.getByText("Compare sources. Check dates."),
-    ).toBeInTheDocument();
-  });
-
-  /**
-   * A model can reason and return nothing readable for it — the trace withheld,
-   * encrypted, or summarised away. What must not appear then is an affordance
-   * with nothing behind it: no "Thinking" that never resolves, and no panel to
-   * open onto an empty pane. The absence is the understandable outcome, and it
-   * is the one asserted here.
-   */
-  it("draws nothing at all when a trace has no readable text", () => {
-    const { container, rerender } = render(
-      <ReasoningTrace trace={{ text: "", status: "streaming" }} />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText("Thinking")).toBeNull();
-
-    rerender(<ReasoningTrace trace={{ text: "", status: "complete" }} />);
-
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText("Thought process")).toBeNull();
-    expect(screen.queryByLabelText("Reasoning trace")).toBeNull();
-  });
-
   it("sends the chosen reasoning setting with the message", async () => {
     const submit = vi.fn();
     render(

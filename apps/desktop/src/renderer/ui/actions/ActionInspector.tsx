@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from "react";
 import type { ActionDetail, CoreApi, TaskAction } from "@zhiyin/contract";
 import { ChangeReview } from "./ChangeReview.js";
+import { actionTitle } from "./actionTitle.js";
 import { ToolCallView } from "./ToolCallView.js";
 import { JsonBlock } from "./JsonBlock.js";
 import { ResultImage } from "./ResultImage.js";
@@ -71,7 +72,7 @@ export function ActionInspector({
         ref={dialog}
       >
         <header className={styles["diff-modal__header"]}>
-          <h2 id={titleId}>{action.action}</h2>
+          <h2 id={titleId}>{actionTitle(action)}</h2>
           <button
             className="button button--quiet"
             type="button"

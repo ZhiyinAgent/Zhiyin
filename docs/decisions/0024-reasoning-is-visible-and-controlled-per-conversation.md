@@ -1,6 +1,6 @@
 # 0024. Reasoning is visible and controlled per conversation
 
-Status: accepted; control presentation superseded by 0025
+Status: accepted; control presentation superseded by 0025; trace presentation superseded by 0058
 
 ## Context
 

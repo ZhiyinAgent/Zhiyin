@@ -77,6 +77,7 @@ describe("conversation permissions", () => {
       connector,
       root,
     );
+    expect(connectorScope?.label).toBe("Mail · Send");
     expect(
       await matchingPermission(
         [

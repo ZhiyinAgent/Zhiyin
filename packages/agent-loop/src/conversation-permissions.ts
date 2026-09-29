@@ -16,6 +16,19 @@ import type {
 type Inspection = Extract<ToolCallInspection, { readonly ok: true }>;
 export type PermissionScope = Omit<ConversationPermission, "id" | "at">;
 
+function connectorLabel(name: string, inspection: Inspection): string {
+  const connection = inspection.target.trim() || "Connected tool";
+  const tool = inspection.invocation?.name ?? name.split("__").at(-1) ?? name;
+  const words = tool.replace(/[_-]+/g, " ").trim();
+  const withoutConnection = words
+    .toLowerCase()
+    .startsWith(`${connection.toLowerCase()} `)
+    ? words.slice(connection.length + 1)
+    : words;
+  const operation = withoutConnection || "Tool";
+  return `${connection} · ${operation[0]!.toUpperCase()}${operation.slice(1)}`;
+}
+
 function inside(folder: string, path: string): boolean {
   const part = relative(folder, path);
   return part !== ".." && !part.startsWith(`..${sep}`) && !isAbsolute(part);
@@ -72,7 +85,7 @@ export async function offeredPermission(
   if (owner === "mcp" && inspection.identity)
     return {
       kind: "connector-tool",
-      label: `${name}, this version`,
+      label: connectorLabel(name, inspection),
       toolName: name,
       identity: inspection.identity,
     };

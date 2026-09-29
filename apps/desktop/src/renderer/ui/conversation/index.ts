@@ -1,5 +1,4 @@
 export { Composer } from "./Composer.js";
-export { ReasoningTrace } from "./ReasoningTrace.js";
 export { ContextShelf } from "./ContextShelf.js";
 export { MarkdownMessage } from "./MarkdownMessage.js";
 export { OutcomeCard } from "./OutcomeCard.js";

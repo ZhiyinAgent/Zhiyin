@@ -485,7 +485,7 @@ describe("WorkspaceShell", () => {
     },
   );
 
-  it("shows one live reasoning mark and passes the selected effort to the core", async () => {
+  it("keeps raw reasoning out of view and passes the selected effort to the core", async () => {
     const task: WorkspaceTask = {
       id: "reasoning",
       title: "Research",
@@ -526,8 +526,8 @@ describe("WorkspaceShell", () => {
       />,
     );
     expect(screen.getAllByLabelText("Zhiyin response")).toHaveLength(1);
-    expect(screen.getByText("Comparing sources.")).toBeVisible();
-    expect(screen.queryByText("Working")).not.toBeInTheDocument();
+    expect(screen.queryByText("Comparing sources.")).not.toBeInTheDocument();
+    expect(screen.getByText("Working")).toBeVisible();
     rerender(
       <WorkspaceShell
         state={{
@@ -553,6 +553,7 @@ describe("WorkspaceShell", () => {
         commands={{ ...stubCommands, sendMessage: send }}
       />,
     );
+    expect(screen.queryByText("Comparing sources.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Reasoning settings"));
     fireEvent.change(screen.getByLabelText("Reasoning effort"), {
       target: { value: "0" },

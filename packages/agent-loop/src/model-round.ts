@@ -138,18 +138,22 @@ export class ModelRound {
       })) {
         if (!owns()) break;
         if (event.kind === "restarting") {
-          const shown =
-            reveal.revealed.text.length + reveal.revealed.reasoning.length;
+          const shown = reveal.revealed.text.length;
+          const recorded = shown + reveal.revealed.reasoning.length;
           await reveal.discard();
           this.#account(ledger, request, attempt);
           withdrawn.push(shown);
-          if (shown)
+          if (recorded)
             await this.#records.withdrawAssistantMessage(taskId, assistantId);
           await this.#note(
             taskId,
             shown
-              ? `The answer was interrupted. Starting it again (${event.restart} of ${event.maximumRestarts})…`
-              : waitingNote(event.reason, event.delayMs),
+              ? "The answer was interrupted. Starting it again"
+              : waitingNote(event.reason),
+            {
+              readyAt: new Date(Date.now() + event.delayMs).toISOString(),
+              count: `${event.restart} of ${event.maximumRestarts}`,
+            },
           );
           noting = true;
           attempt = new Attempt();
@@ -157,14 +161,10 @@ export class ModelRound {
           continue;
         }
         if (event.kind === "retrying") {
-          await this.#note(
-            taskId,
-            waitingNote(
-              event.reason,
-              event.delayMs,
-              `${event.attempt} of ${event.maximumAttempts}`,
-            ),
-          );
+          await this.#note(taskId, waitingNote(event.reason), {
+            readyAt: new Date(Date.now() + event.delayMs).toISOString(),
+            count: `${event.attempt} of ${event.maximumAttempts}`,
+          });
           noting = true;
           continue;
         }
@@ -271,11 +271,16 @@ export class ModelRound {
     );
   }
 
-  async #note(taskId: string, note: string | undefined) {
+  async #note(
+    taskId: string,
+    note: string | undefined,
+    retry?: { readonly readyAt: string; readonly count?: string },
+  ) {
     await this.#records.showWorking(
       taskId,
       note,
       this.#records.visibleSteps(taskId),
+      retry,
     );
   }
 }
@@ -299,12 +304,10 @@ function shownAtRestarts(
   });
 }
 
-function waitingNote(reason: string, delayMs: number, count?: string): string {
+function waitingNote(reason: string): string {
   const who =
     reason === "rateLimited" || reason === "modelUnavailable"
       ? "The model is busy"
       : "The model could not be reached";
-  const seconds = Math.ceil(delayMs / 1_000);
-  const when = seconds > 0 ? ` in ${seconds} s` : "";
-  return `${who}. Trying again${when}${count ? ` (${count})` : ""}…`;
+  return `${who}. Trying again`;
 }

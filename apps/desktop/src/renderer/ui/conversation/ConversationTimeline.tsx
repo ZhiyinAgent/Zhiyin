@@ -1,4 +1,4 @@
-import { Fragment, useId, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useState, type ReactNode } from "react";
 import type {
   MessageAttachment,
   ReasoningTrace as Trace,
@@ -10,7 +10,6 @@ import { CondensingCard } from "./CondensingCard.js";
 import { ConversationSkeleton } from "./ConversationSkeleton.js";
 import { OutcomeCard } from "./OutcomeCard.js";
 import { PastedText } from "./PastedText.js";
-import { ReasoningTrace } from "./ReasoningTrace.js";
 import { StreamingMarkdown } from "./StreamingMarkdown.js";
 import { TaskPlan } from "./TaskPlan.js";
 import { WorkTrace, type WorkStep } from "./WorkTrace.js";
@@ -38,6 +37,7 @@ export type TimelinePhase =
       readonly kind: "working" | "browser";
       readonly steps: WorkStep[];
       readonly note?: string;
+      readonly retry?: { readonly readyAt: string; readonly count?: string };
     }
   | {
       readonly kind: "completed";
@@ -180,6 +180,33 @@ function AgentTurn({
   );
 }
 
+function RetryCountdown({
+  note,
+  readyAt,
+  count,
+}: {
+  note: string;
+  readyAt: string;
+  count?: string;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [readyAt]);
+  const seconds = Math.max(0, Math.ceil((Date.parse(readyAt) - now) / 1_000));
+  return (
+    <div className={styles["activity-note"]} role="status">
+      <Icon name="clock" />
+      <span>
+        {note}
+        <span aria-live="off">{seconds > 0 ? ` in ${seconds} s` : ""}</span>
+        {count ? ` (${count})` : ""}…
+      </span>
+    </div>
+  );
+}
+
 type TimelineBlock<Action, View, Interaction, SpecialistRun> =
   | { kind: "message"; message: TimelineMessage }
   | { kind: "actions"; actions: Action[] }
@@ -213,9 +240,7 @@ function timelineBlocks<
       .filter(
         (entry) =>
           !entry.message.interactionId &&
-          (entry.message.role !== "assistant" ||
-            entry.message.text.trim() ||
-            entry.message.reasoning?.text.trim()),
+          (entry.message.role !== "assistant" || entry.message.text.trim()),
       ),
     ...actions.map((action, index) => ({
       kind: "action" as const,
@@ -352,9 +377,7 @@ export function ConversationTimeline<
       (block) =>
         block.kind === "message" &&
         block.message.role === "assistant" &&
-        Boolean(
-          block.message.text.trim() || block.message.reasoning?.text.trim(),
-        ),
+        Boolean(block.message.text.trim()),
     );
   /**
    * The one message still being written: the last thing in the timeline, from
@@ -384,6 +407,7 @@ export function ConversationTimeline<
     !hasPlan &&
     (task.actions?.length ?? 0) === 0 &&
     fallbackPhase !== undefined &&
+    !fallbackPhase.retry &&
     (fallbackPhase.steps.length > 0 || Boolean(fallbackPhase.note));
   /**
    * What the turn is composing, when nothing else is drawing it.
@@ -396,7 +420,10 @@ export function ConversationTimeline<
    * note shown.
    */
   const composingNote =
-    task.phase.kind === "working" && task.phase.note && !showFallbackActivity
+    task.phase.kind === "working" &&
+    task.phase.note &&
+    !task.phase.retry &&
+    !showFallbackActivity
       ? task.phase.note
       : undefined;
   const busy =
@@ -440,9 +467,6 @@ export function ConversationTimeline<
             )
           ) : (
             <AgentTurn compact={compact}>
-              {block.message.reasoning && (
-                <ReasoningTrace trace={block.message.reasoning} />
-              )}
               {block.message.text.trim() && (
                 <StreamingMarkdown
                   text={block.message.text}
@@ -510,6 +534,16 @@ export function ConversationTimeline<
             <Icon name="code" />
             <span>{composingNote}</span>
           </div>
+        </AgentTurn>
+      )}
+
+      {task.phase.kind === "working" && task.phase.retry && task.phase.note && (
+        <AgentTurn status compact={compact}>
+          <RetryCountdown
+            key={task.phase.retry.readyAt}
+            note={task.phase.note}
+            {...task.phase.retry}
+          />
         </AgentTurn>
       )}
 

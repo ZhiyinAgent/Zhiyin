@@ -174,6 +174,9 @@ sequencing.
   validated before reaching the renderer. Named tests: `restores reasoning and
   the conversation's selected effort` and `rejects malformed reasoning records
   without losing the saved file`.
+- A working phase's provider retry deadline survives a renderer reload and is
+  validated before it can drive a countdown. Named test: `restores a retry
+  deadline and rejects one that cannot drive a countdown`.
 - Persisted effort validation uses the contract's closed effort universe.
 - Per-request model evidence survives restart, including the request id,
   resolved model, serving provider, finish reason, terminal signal, whether

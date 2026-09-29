@@ -1198,8 +1198,8 @@
 }
 
 .conversation-permissions {
-  width: min(600px, 100%);
-  max-height: min(75vh, 700px);
+  width: min(480px, 100%);
+  max-height: min(80vh, 700px);
   overflow: auto;
   padding: 24px;
   border: 1px solid var(--zy-line);
@@ -1219,15 +1219,60 @@
   font-size: 18px;
 }
 
+.conversation-permissions__task {
+  margin: 4px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.conversation-permissions:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 3px;
+}
+
 .conversation-permissions > ul {
   display: grid;
-  gap: 14px;
+  gap: 0;
   padding: 0;
   list-style: none;
 }
 
 .conversation-permissions > ul > li {
-  padding: 12px;
-  border: 1px solid var(--zy-line);
-  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.conversation-permissions > ul > li > div {
+  min-width: 0;
+}
+
+.conversation-permissions > ul > li strong {
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.conversation-permissions > ul > li p {
+  margin: 4px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.conversation-permissions > ul > li button {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 420px) {
+  .conversation-permissions__overlay {
+    padding: 12px;
+  }
+
+  .conversation-permissions {
+    padding: 18px;
+  }
 }

@@ -9,7 +9,6 @@ import {
   StreamableHTTPClientTransport,
   UnauthorizedError,
 } from "@modelcontextprotocol/client";
-import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -24,7 +23,9 @@ import type {
   ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
+import { actionTitle, routedName } from "./action-title.js";
 import { supportedResult } from "./result-validation.js";
+export { routedName } from "./action-title.js";
 
 const UNAUTHORIZED =
   "This server refused the access token. Save a current token to sign in again.";
@@ -292,28 +293,6 @@ function asArguments(value: unknown): Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Readonly<Record<string, unknown>>)
     : {};
-}
-
-/** Tool names every supported model API accepts. */
-const modelToolName = /^[a-zA-Z0-9_-]{1,64}$/;
-
-/**
- * The name a model calls a connection's tool by. A package connector's id
- * carries its plugin (`plugin/server`), and a slash is not allowed in a tool
- * name, so the plugin and server are joined with `__`. A name that would
- * still be refused falls back to a short digest of both parts.
- */
-export function routedName(serverId: string, toolName: string): string {
-  const readable = `mcp__${serverId.replaceAll("/", "__")}__${toolName}`;
-  if (modelToolName.test(readable)) return readable;
-  const digest = createHash("sha256")
-    .update(`${serverId}\0${toolName}`)
-    .digest("hex")
-    .slice(0, 12);
-  return `mcp_${digest}_${toolName.replace(/[^a-zA-Z0-9_-]/g, "_")}`.slice(
-    0,
-    64,
-  );
 }
 
 /**
@@ -925,7 +904,7 @@ export class ManagedMcpServers implements McpServers {
     if (presentation && !presentation.ok) return presentation;
     return {
       ok: true,
-      action: `Use ${route.server.name}: ${route.tool.name}`,
+      action: actionTitle(route.server.name, route.tool.name),
       target: route.server.name,
       destination: route.server.url,
       // Laid out from the tool's own schema, so a connection added tomorrow is

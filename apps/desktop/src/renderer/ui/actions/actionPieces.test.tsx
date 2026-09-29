@@ -441,7 +441,7 @@ describe("ApprovalPrompt", () => {
 });
 
 describe("ActionHistory", () => {
-  it("shows how an action was allowed and opens its conversation permission", () => {
+  it("keeps repeated permission provenance in a small badge", () => {
     const onOpenPermission = vi.fn();
     render(
       <ActionHistory
@@ -462,8 +462,13 @@ describe("ActionHistory", () => {
         onOpenPermission={onOpenPermission}
       />,
     );
-    expect(screen.getByText(/Covered by your permission from/)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "View permission" }));
+    expect(screen.queryByText(/Covered by your permission from/)).toBeNull();
+    expect(screen.queryByText(/Changes to files in reports/)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Allowed for this conversation. Open permissions",
+      }),
+    );
     expect(onOpenPermission).toHaveBeenCalledWith("permission-1");
   });
   it("keeps running, completed, failed, and denied actions in human-readable history", () => {
@@ -770,6 +775,7 @@ describe("ActionHistory", () => {
           {
             id: "remote",
             action: "Use Tavily: tavily_search",
+            toolName: "mcp__tavily__tavily_search",
             target: "Tavily",
             status: "completed",
             command:
@@ -788,8 +794,14 @@ describe("ActionHistory", () => {
       />,
     );
 
+    expect(screen.getByText("Tavily · Search")).toBeVisible();
+    expect(screen.queryByText("Use Tavily: tavily_search")).toBeNull();
+
     fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
     const inspector = screen.getByRole("dialog");
+    expect(
+      within(inspector).getByRole("heading", { name: "Tavily · Search" }),
+    ).toBeVisible();
 
     // The arguments are readable in the open, not folded away inside a
     // heading that says they are what the tool returned.

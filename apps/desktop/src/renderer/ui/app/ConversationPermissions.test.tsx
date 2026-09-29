@@ -4,7 +4,7 @@ import { ConversationPermissions } from "./ConversationPermissions.js";
 import type { WorkspaceTask } from "./workspaceState.js";
 
 describe("conversation permissions panel", () => {
-  it("lists each covered action and revokes the selected rule", async () => {
+  it("shows active scopes without action history or timestamps and revokes one", async () => {
     const onRevoke = vi.fn(async () => {});
     const task: WorkspaceTask = {
       id: "task-1",
@@ -45,8 +45,74 @@ describe("conversation permissions panel", () => {
         onRevoke={onRevoke}
       />,
     );
-    expect(screen.getByText("Edit report · reports/one.md")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    expect(screen.getByText("Changes to files in reports/")).toBeVisible();
+    expect(screen.queryByText(/Edit report/)).toBeNull();
+    expect(screen.queryByText(/Given 9\/28\/2026/)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Revoke Changes to files in reports/",
+      }),
+    );
     await waitFor(() => expect(onRevoke).toHaveBeenCalledWith("permission-1"));
+  });
+
+  it("gives an older connector grant a readable title and closes with Escape", () => {
+    const onClose = vi.fn();
+    render(
+      <ConversationPermissions
+        task={{
+          id: "task-2",
+          title: "Research",
+          updatedLabel: "Now",
+          messages: [],
+          phase: { kind: "draft" },
+          conversationPermissions: [
+            {
+              id: "permission-2",
+              kind: "connector-tool",
+              toolName: "mcp__research__tavily__tavily_search",
+              label: "mcp__research__tavily__tavily_search, this version",
+              at: "2026-09-28T14:02:00.000Z",
+              identity: JSON.stringify({
+                server: { id: "research/tavily", name: "Tavily" },
+                schema: {},
+              }),
+            },
+          ],
+        }}
+        onClose={onClose}
+        onRevoke={async () => {}}
+      />,
+    );
+    expect(screen.getByText("Tavily · Search")).toBeVisible();
+    expect(screen.queryByText(/mcp__research/)).toBeNull();
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+    expect(
+      screen.getByRole("button", { name: "Revoke Tavily · Search" }),
+    ).toHaveFocus();
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("has a clear empty state after every permission is revoked", () => {
+    render(
+      <ConversationPermissions
+        task={{
+          id: "empty",
+          title: "Empty conversation",
+          updatedLabel: "Now",
+          messages: [],
+          phase: { kind: "draft" },
+          conversationPermissions: [],
+        }}
+        onClose={() => {}}
+        onRevoke={async () => {}}
+      />,
+    );
+    expect(
+      screen.getByText("No active permissions for this conversation."),
+    ).toBeVisible();
   });
 });

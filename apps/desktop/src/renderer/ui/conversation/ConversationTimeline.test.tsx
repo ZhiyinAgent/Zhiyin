@@ -1,5 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import {
   ConversationTimeline,
   type TimelineMessage,
@@ -36,6 +36,108 @@ const pieces = {
 };
 
 describe("ConversationTimeline", () => {
+  it("counts down the provider retry from its saved deadline", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-29T10:00:00.000Z"));
+      render(
+        <ConversationTimeline
+          task={{
+            ...conversation,
+            messages: [conversation.messages[0]!],
+            actions: [],
+            views: [],
+            phase: {
+              kind: "working",
+              steps: [],
+              note: "The model is busy. Trying again",
+              retry: { readyAt: "2026-09-29T10:00:08.000Z", count: "2 of 5" },
+            },
+          }}
+          pieces={pieces}
+        />,
+      );
+      expect(screen.getByRole("status")).toHaveTextContent("in 8 s (2 of 5)");
+      act(() => vi.advanceTimersByTime(3_000));
+      expect(screen.getByRole("status")).toHaveTextContent("in 5 s (2 of 5)");
+      act(() => vi.advanceTimersByTime(5_000));
+      expect(screen.getByRole("status")).not.toHaveTextContent("in 5 s");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Trying again (2 of 5)",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps reasoning-only continuations out of the conversation while work stays visible", () => {
+    const { container } = render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            conversation.messages[0]!,
+            {
+              id: "thinking-1",
+              role: "assistant",
+              text: "",
+              sequence: 1,
+              reasoning: { text: "Search first.", status: "complete" },
+            },
+            {
+              id: "thinking-2",
+              role: "assistant",
+              text: "",
+              sequence: 2,
+              reasoning: { text: "Check another source.", status: "streaming" },
+            },
+          ],
+          actions: [{ id: "a1", sequence: 1.5 }],
+          views: [],
+          phase: { kind: "working", steps: [] },
+        }}
+        pieces={pieces}
+      />,
+    );
+    expect(screen.queryByText("Search first.")).toBeNull();
+    expect(screen.queryByText("Check another source.")).toBeNull();
+    expect(screen.queryByText("Thought process")).toBeNull();
+    expect(
+      container.querySelectorAll("[aria-label='Zhiyin response']"),
+    ).toHaveLength(1);
+    expect(screen.getByRole("status")).toHaveTextContent("Working");
+    expect(screen.getByText("actions a1")).toBeVisible();
+  });
+
+  it("shows the interrupted outcome without a raw reasoning row", () => {
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            conversation.messages[0]!,
+            {
+              id: "interrupted-reasoning",
+              role: "assistant",
+              text: "",
+              reasoning: {
+                text: "Partial model notes.",
+                status: "interrupted",
+              },
+            },
+          ],
+          actions: [],
+          views: [],
+          phase: { kind: "interrupted", reason: "Stopped by the person." },
+        }}
+        pieces={pieces}
+      />,
+    );
+    expect(screen.getByText("Task stopped")).toBeVisible();
+    expect(screen.getByText("Stopped by the person.")).toBeVisible();
+    expect(screen.queryByText("Partial model notes.")).toBeNull();
+  });
+
   it("draws each entry through the piece the app passes in, in the order it happened", () => {
     const { container } = render(
       <ConversationTimeline task={conversation} pieces={pieces} />,

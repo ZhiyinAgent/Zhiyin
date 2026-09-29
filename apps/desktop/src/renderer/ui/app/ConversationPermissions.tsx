@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { WorkspaceTask } from "./workspaceState.js";
+import { permissionTitle } from "./permissionTitle.js";
 import styles from "./app.module.css";
 
 export function ConversationPermissions({
@@ -13,53 +14,89 @@ export function ConversationPermissions({
 }) {
   const [pending, setPending] = useState<string>();
   const [error, setError] = useState<string>();
+  const dialog = useRef<HTMLElement>(null);
+  const titleId = useId();
   const permissions = task.conversationPermissions ?? [];
+
+  useEffect(() => {
+    const returnTo = document.activeElement;
+    dialog.current?.focus();
+    return () => {
+      if (returnTo instanceof HTMLElement) returnTo.focus();
+    };
+  }, []);
+
   return (
-    <div className={styles["conversation-permissions__overlay"]}>
+    <div
+      className={styles["conversation-permissions__overlay"]}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <section
+        ref={dialog}
         className={styles["conversation-permissions"]}
         role="dialog"
         aria-modal="true"
-        aria-label={`Permissions for ${task.title}`}
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            onClose();
+            return;
+          }
+          if (event.key !== "Tab") return;
+          const buttons = [
+            ...dialog.current!.querySelectorAll<HTMLButtonElement>(
+              "button:not(:disabled)",
+            ),
+          ];
+          const first = buttons[0];
+          const last = buttons.at(-1);
+          if (
+            event.shiftKey &&
+            (document.activeElement === first ||
+              document.activeElement === dialog.current)
+          ) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first?.focus();
+          }
+        }}
       >
         <header>
           <div>
-            <p className="eyebrow">Conversation permissions</p>
-            <h2>{task.title}</h2>
+            <h2 id={titleId}>Permissions</h2>
+            <p className={styles["conversation-permissions__task"]}>
+              {task.title}
+            </p>
           </div>
           <button className="text-button" type="button" onClick={onClose}>
             Close
           </button>
         </header>
         {permissions.length === 0 ? (
-          <p>No ongoing permissions for this conversation.</p>
+          <p>No active permissions for this conversation.</p>
         ) : (
           <ul>
             {permissions.map((permission) => {
-              const actions = (task.actions ?? []).filter(
-                (action) => action.approval?.permissionId === permission.id,
-              );
               return (
                 <li key={permission.id}>
-                  <strong>{permission.label}</strong>
-                  <p>
-                    Given {new Date(permission.at).toLocaleString()} ·{" "}
-                    {actions.length}{" "}
-                    {actions.length === 1 ? "action" : "actions"}
-                  </p>
-                  {actions.length > 0 && (
-                    <ul>
-                      {actions.map((action) => (
-                        <li key={action.id}>
-                          {action.action} · {action.target}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  <div>
+                    <strong>{permissionTitle(permission)}</strong>
+                    <p>
+                      {permission.kind === "connector-tool"
+                        ? "May use this tool version again in this conversation."
+                        : "May edit files in this folder again in this conversation."}
+                    </p>
+                  </div>
                   <button
-                    className="button button--quiet"
+                    className="text-button"
                     type="button"
                     disabled={pending !== undefined}
+                    aria-label={`Revoke ${permissionTitle(permission)}`}
                     onClick={async () => {
                       setPending(permission.id);
                       setError(undefined);

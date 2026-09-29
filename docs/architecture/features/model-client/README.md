@@ -230,7 +230,9 @@ one trust boundary.
 - **A retryable failure is sent again while nothing was passed on, and only a
   restartable request is repeated after.** Silent retries follow the provider's
   Retry-After (up to a minute) or a jittered doubling wait, stop after 5
-  attempts or 120 s of waiting, and never outlast Stop. Once events went out, a
+  attempts or 120 s of scheduled retry waits, and never outlast Stop. Time
+  spent generating, including a large streamed tool request, does not spend
+  that wait allowance. Once events went out, a
   repeat would hand the caller a second copy, so it happens only for a request
   marked `restartable`, at most 3 times, each announced by a `restarting`
   event. Failed attempts are recorded on the response that arrives. ADR 0049.
@@ -242,7 +244,8 @@ one trust boundary.
   again`, `stops waiting at once when the request is cancelled`, `is not sent
   again, because the caller already has part of it`, `is started again when the
   caller can take back what it received`, and `is started again at most three
-  times`.
+  times`, and `restarts a long streamed tool call without counting generation
+  time as retry waiting`.
 - **A failure is classified from the provider's typed error first.**
   OpenRouter tags failures with an `error_type`; the status alone cannot tell
   a context overflow from a bad tool schema (both 400) or a moderation block

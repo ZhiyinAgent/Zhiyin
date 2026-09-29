@@ -1023,7 +1023,9 @@ describe("AgentLoop", () => {
     expect(JSON.stringify(guidanceRequests)).not.toContain("read_file");
     expect(modelRequests[0]?.messages[0]).toMatchObject({
       role: "system",
-      content: expect.stringContaining("Explain the purpose"),
+      content: expect.stringContaining(
+        "Before a tool action, briefly explain its purpose",
+      ),
     });
     expect(loop.snapshot().tasks[0]).toMatchObject({
       actions: [

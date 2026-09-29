@@ -240,11 +240,17 @@ export class TurnRecords {
     taskId: string,
     note: string | undefined,
     steps: readonly WorkStep[],
+    retry?: { readonly readyAt: string; readonly count?: string },
   ): Promise<void> {
     const task = this.task(taskId);
     await this.replaceTask({
       ...task,
-      phase: { kind: "working", ...(note ? { note } : {}), steps },
+      phase: {
+        kind: "working",
+        ...(note ? { note } : {}),
+        steps,
+        ...(retry ? { retry } : {}),
+      },
     });
   }
 

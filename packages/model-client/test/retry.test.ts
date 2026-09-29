@@ -65,12 +65,11 @@ function inTurn(...responses: (ModelFetchResponse | Error)[]) {
   return fetcher;
 }
 
-/** A clock that only moves when the client waits, and remembers each wait. */
+/** Records scheduled waits and can simulate a long generation between chunks. */
 function pausedClock() {
   const clock = {
     at: 0,
     waits: [] as number[],
-    now: () => clock.at,
     wait: async (ms: number) => {
       clock.waits.push(ms);
       clock.at += ms;
@@ -84,7 +83,7 @@ function clientWith(fetcher: ModelFetch, clock = pausedClock(), random = 1) {
     apiKey: async () => apiKey,
     fetcher,
     model: "z-ai/glm-5.3-flash",
-    retry: { wait: clock.wait, now: clock.now, random: () => random },
+    retry: { wait: clock.wait, random: () => random },
   });
 }
 
@@ -250,6 +249,79 @@ function partThenRateLimited(): ModelFetchResponse {
 }
 
 describe("a model request that fails after something was passed on", () => {
+  it("keeps the next attempt within its stated maximum after a restart", async () => {
+    const events = await collect(
+      clientWith(
+        inTurn(partThenRateLimited(), refused(429), answering("Complete")),
+      ).send({ ...hello, restartable: true }),
+    );
+    expect(events.find((event) => event.kind === "retrying")).toMatchObject({
+      attempt: 2,
+      maximumAttempts: 5,
+    });
+  });
+
+  it("restarts a long streamed tool call without counting generation time as retry waiting", async () => {
+    const clock = pausedClock();
+    const fetcher = inTurn(
+      {
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        body: (async function* () {
+          const encoder = new TextEncoder();
+          yield encoder.encode(
+            `data: ${JSON.stringify({
+              choices: [
+                {
+                  index: 0,
+                  delta: {
+                    tool_calls: [
+                      {
+                        index: 0,
+                        id: "write-large-file",
+                        function: {
+                          name: "write_file",
+                          arguments: '{"path":"large.md","content":"',
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            })}\n\n`,
+          );
+          clock.at += 180_000;
+          yield encoder.encode(
+            `data: ${JSON.stringify({
+              error: {
+                code: 504,
+                message: "Upstream idle timeout exceeded",
+                metadata: { error_type: "timeout" },
+              },
+            })}\n\n`,
+          );
+        })(),
+      },
+      answering("Complete"),
+    );
+
+    const events = await collect(
+      clientWith(fetcher, clock).send({ ...hello, restartable: true }),
+    );
+
+    expect(fetcher.requests).toBe(2);
+    expect(clock.waits).toEqual([1_000]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        kind: "restarting",
+        restart: 1,
+        reason: "networkFailure",
+      }),
+    );
+    expect(events).toContainEqual({ kind: "textDelta", text: "Complete" });
+  });
+
   it("is not sent again, because the caller already has part of it", async () => {
     const fetcher = inTurn(partThenRateLimited(), answering("never reached"));
 
