@@ -242,8 +242,7 @@ describe("AgentLoop artifacts", () => {
       kind: "approval",
       prompt: {
         effect: "Overwrite an existing workspace file",
-        detail:
-          "This replaces the current contents of brief.md (18 bytes). It cannot be undone.",
+        detail: "This replaces the current contents of brief.md (18 bytes).",
       },
     });
 

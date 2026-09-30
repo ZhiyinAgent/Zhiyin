@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evidenceText } from "../src/evidence.js";
+import { evidenceText } from "../src/context/evidence.js";
 
 describe("execution evidence", () => {
   it("excludes credential fields and bearer values while preserving ordinary evidence", () => {

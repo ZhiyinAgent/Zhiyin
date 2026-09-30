@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { describeInvocation, readableToolName } from "../src/invocation.js";
+import {
+  describeInvocation,
+  readableToolName,
+} from "../src/tools/invocation.js";
 
 describe("describing a tool call", () => {
   it("lays out each argument separately instead of one encoded string", () => {

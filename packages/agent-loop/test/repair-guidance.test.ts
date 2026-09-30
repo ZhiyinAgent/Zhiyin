@@ -6,7 +6,7 @@ import {
   repairDecisionFrom,
   repairLimits,
   repairPrompt,
-} from "../src/repair-guidance.js";
+} from "../src/tools/repair-guidance.js";
 
 function base() {
   return {

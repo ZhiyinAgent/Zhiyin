@@ -15,7 +15,10 @@
 
 import { createRequire } from "node:module";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
-import type { BrowserLauncher, InteractiveBrowser } from "./index.js";
+import type {
+  BrowserLauncher,
+  InteractiveBrowser,
+} from "./interactive-browser.js";
 import type {
   ActionDetail,
   ToolCallInspection,

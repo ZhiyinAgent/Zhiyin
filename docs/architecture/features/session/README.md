@@ -277,24 +277,19 @@ sequencing.
   `persists a submitted quiz as one ordered conversation result` and `rejects a
   damaged stored interaction before it reaches the renderer` guard both sides.
 - A pending renewable work-budget checkpoint retains its core-owned request id
-  and bounded round count in storage. The named test `persists the exact
-  renewable work-budget prompt` guards the format; the agent loop remains
+  and where the work stood: rounds, the limits reached (at least one), elapsed
+  time, cost when reported, and the allowance. The named tests `persists the
+  exact renewable work-budget prompt` and `keeps where the work stood when it
+  stopped to check in, and rejects a checkpoint it cannot have` guard the
+  format; the agent loop remains
   responsible for restoring an unfinished turn as interrupted. Why it was
   asked, when Zhiyin saw the work repeat itself, is kept as text or not at
   all: `keeps why the work-budget question was asked, and rejects a reason that
   is not text`.
-- A plan item keeps the working model's progress apart from the judge's
-  verdict: progress is one of pending, in progress, done or cancelled, with a
-  cancel reason, cited calls each with what they show, steps, and a mark on a
-  criterion the assistant added; an action keeps the plan item it served. Any
-  other value is refused. ADR 0052. Named test: `keeps the working model's
-  progress on a plan apart from its verdict, and rejects progress it cannot
-  have`.
-- The judge's verdict is one of verified, needs-attention (not verified) and
-  couldnt-judge, each with its reason, and a verified one keeps the call ids
-  it relied on as a list of text. Any other status or shape is refused. ADR
-  0053. Named test: `keeps each of the judge's three verdicts and the calls one
-  relied on`.
+- A plan item is the working model's: an id, a title and one of pending, in
+  progress, done or skipped. Any other status is refused. ADR 0063. Named
+  test: `keeps the working model's plan and where each item stands, and
+  rejects a status it cannot have`.
 - The person's own instructions and their answer about each folder's
   instructions are kept with the settings; a task keeps the sources its last
   turn sent, and a pending folder question survives a restart. Malformed ones

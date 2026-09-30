@@ -12,7 +12,5 @@
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "@zhiyin/contract": "workspace:*"
-  }
+  "dependencies": {}
 }

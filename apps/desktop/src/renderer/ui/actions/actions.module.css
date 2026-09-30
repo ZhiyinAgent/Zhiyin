@@ -2,41 +2,66 @@
    anything written :global() is one of the shared basics. */
 
 .approval {
-  display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 12px;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
   width: min(780px, 100%);
   min-height: 0;
-  padding: 11px 12px;
-  border: 1px solid var(--zy-accent-line);
+  padding: 14px 16px 12px;
+  border: 1px solid var(--zy-line-strong);
   border-radius: var(--zy-radius-md);
   background: var(--zy-panel-raised);
   box-shadow: var(--zy-shadow-pop);
 }
 
 .approval h3 {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   color: var(--zy-text);
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.012em;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
-.approval__icon {
-  align-self: start;
+/* One line saying what this is: the kind of action, then the action. */
+.approval__head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.approval__kind {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
-  background: var(--zy-accent-soft);
-  color: var(--zy-accent);
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
 }
 
-.approval__icon svg {
-  width: 18px;
-  height: 18px;
+.approval__kind svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* The exact text that will run, shown whole. It wraps rather than clipping:
+   a command a person cannot finish reading is one they cannot consent to. */
+.approval__command {
+  display: block;
+  padding: 8px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font: 12px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .approval__content {
@@ -51,110 +76,138 @@
 }
 
 .approval__summary {
+  display: grid;
   flex: 0 0 auto;
-}
-
-.approval__summary {
-  display: grid;
-  gap: 3px;
-}
-
-/* The exact text that will run, shown whole. It wraps rather than clipping:
-   a command a person cannot finish reading is one they cannot consent to.
-   Long output scrolls inside the block instead of stretching the prompt. */
-.approval__target {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  margin-top: 9px;
-}
-
-.approval__target span {
-  color: var(--zy-faint);
-  font-family: var(--zy-font-instrument);
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.approval__target code {
-  max-height: 8.4em;
-  overflow-y: auto;
-  scrollbar-color: var(--zy-line-strong) transparent;
-  scrollbar-width: thin;
-  padding: 8px 10px;
-  border: 1px solid var(--zy-line);
-  border-radius: 8px;
-  background: var(--zy-panel-soft);
-  color: var(--zy-text-soft);
-  font: 11.5px/1.5 var(--zy-font-data);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
+  gap: 8px;
+  margin-top: 6px;
+  /* Everything under the title starts where the title does. */
+  padding-left: 36px;
 }
 
 .approval__file-list {
   display: grid;
-  gap: 0;
   margin: 0;
   padding: 0;
   border: 1px solid var(--zy-line);
   border-radius: 8px;
   background: var(--zy-panel-soft);
   list-style: none;
-}
-
-.approval__file-list li {
-  display: grid;
-  grid-template-columns: 68px minmax(0, 1fr);
-  gap: 3px 10px;
-  align-items: baseline;
-  padding: 8px 10px;
+  overflow: hidden;
 }
 
 .approval__file-list li + li {
   border-top: 1px solid var(--zy-line);
 }
 
-.approval__file-list .approval__file-kind {
-  color: var(--zy-accent);
-  font: 600 11px/1.5 var(--zy-font-display);
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.approval__file-list code {
-  max-height: none;
-  padding: 0;
+/* One file as a person would name it: what it is called, where it lives,
+   and how much of it changes. The whole row opens its review. */
+.approval__file {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
   border: 0;
-  background: none;
-  color: var(--zy-text);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.approval__file-list small {
-  grid-column: 2;
+.approval__file:hover:not(:disabled) {
+  background: var(--zy-wash-faint);
+}
+
+.approval__file:disabled {
+  cursor: default;
+}
+
+.approval__file-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.approval__file-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.approval__file-text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.approval__file-name {
+  color: var(--zy-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.approval__file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
   color: var(--zy-muted);
-  font-size: 11px;
+  font-size: 12px;
+}
+
+.approval__file-meta > span + span::before {
+  margin-right: 6px;
+  content: "·";
+}
+
+.approval__file-counts {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  font: 12px var(--zy-font-data);
+}
+
+.approval__file-added {
+  color: var(--zy-green);
+}
+
+.approval__file-removed {
+  color: var(--zy-danger);
+}
+
+.approval__file-open {
+  display: grid;
+  flex: 0 0 auto;
+  color: var(--zy-muted);
+}
+
+.approval__file-open svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
 }
 
 .approval__reason {
-  max-width: 58ch;
-  margin: 3px 0 0;
+  max-width: 62ch;
+  margin: 0;
   color: var(--zy-text-soft);
   font-size: 13.5px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-/* What the action will actually change, next to the reason it was requested. */
+/* What the action can do, as the app knows it: above anything the model says. */
 .approval__detail {
-  max-width: 58ch;
-  margin: 6px 0 0;
-  padding: 8px 10px;
-  border-left: 2px solid var(--zy-accent);
-  border-radius: 0 6px 6px 0;
-  background: var(--zy-panel-soft);
-  color: var(--zy-text);
+  max-width: 62ch;
+  margin: 0;
+  color: var(--zy-muted);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 /* Remote schema copy is useful context, but its source is named once for the
@@ -177,33 +230,32 @@
 }
 
 .approval__claim {
-  max-width: 58ch;
-  margin: 6px 0 0;
+  max-width: 62ch;
+  margin: 0;
   color: var(--zy-text-soft);
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 13.5px;
+  line-height: 1.5;
 }
 
 .approval__claim span {
-  display: block;
+  display: inline-flex;
+  align-items: center;
   color: var(--zy-muted);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 
 .approval__claim-about {
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
-  margin-left: 4px;
-  padding: 3px;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 2px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   color: var(--zy-muted);
-  vertical-align: middle;
   cursor: pointer;
 }
 
@@ -249,10 +301,31 @@
   gap: 3px;
 }
 
+/* The rule being granted, set apart and wrapped whole: it is what the person
+   is agreeing to, so it is never cut or pushed out of the card. */
 .approval__scope-confirm {
-  margin: 8px 0 0;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 10px 0 0 36px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+}
+
+.approval__scope-confirm p {
+  margin: 0;
+  color: var(--zy-muted);
   font-size: 12.5px;
   line-height: 1.45;
+}
+
+.approval__scope-confirm strong {
+  color: var(--zy-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .approval__footer {
@@ -264,7 +337,7 @@
   justify-content: flex-end;
   gap: 12px;
   margin-top: auto;
-  padding-top: 8px;
+  padding-top: 12px;
   background: var(--zy-panel-raised);
 }
 
@@ -281,98 +354,124 @@
 }
 
 .approval--compact {
-  padding: 12px;
-  gap: 10px;
+  padding: 12px 14px 10px;
 }
 
 /* One scroll region per decision. A request scrolls inside itself when it is
    taller than the room it is given, so the blocks within it that would bound
    themselves elsewhere give that up here: a long command is read by scrolling
    the request once rather than a scrollbar inside a scrollbar. */
-.approval .approval__target code,
+.approval .approval__command,
 .approval .tool-call__value,
 .approval .json-block {
   max-height: none;
   overflow: visible;
 }
 
-/* One delegated specialist's own run: the same card language as an approval
-   request, with its own actions nested through the unmodified action-history
-   list below. */
+/* One delegated specialist's run, as a short card: who, how it stands, what it
+   is doing now or what it found, and its task on one line. The task in full,
+   the report and every call are in the modal opened from it. */
 .specialist-run {
-  padding: 14px 16px;
-  border: 1px solid var(--zy-line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  /* The one-line task must clip, not widen the card past its lane. */
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-accent-soft);
   border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+}
+
+/* A finished run is history: it steps back so running work stands out. */
+.specialist-run--settled {
+  border-color: var(--zy-line);
   background: var(--zy-panel-soft);
 }
 
-.specialist-run__header {
+.specialist-run__head {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  cursor: pointer;
-  list-style: none;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
-.specialist-run__header::-webkit-details-marker {
-  display: none;
-}
-
-.specialist-run__header:focus-visible {
-  outline: 2px solid var(--zy-accent);
-  outline-offset: 4px;
-}
-
-.specialist-run__header > svg:last-child {
-  width: 14px;
-  height: 14px;
-  color: var(--zy-muted);
-  transition: transform 150ms ease;
-}
-
-.specialist-run[open] .specialist-run__header > svg:last-child {
-  transform: rotate(180deg);
-}
-
-.specialist-run__count {
-  color: var(--zy-muted);
-  font-size: 12px;
+.specialist-run__head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .specialist-run__marker {
   display: grid;
+  flex: 0 0 auto;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 1px solid var(--zy-line);
-  border-radius: 8px;
+  border-radius: 7px;
   color: var(--zy-muted);
 }
 
 .specialist-run__marker svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
-.specialist-run__content {
-  flex: 1;
-  min-width: 0;
+.specialist-run__now {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
-.specialist-run__content h3 {
-  margin: 2px 0 0;
-  color: var(--zy-text);
-  font-size: 14.5px;
-  font-weight: 600;
+.specialist-run__now--stopped {
+  color: var(--zy-danger);
+}
+
+/* A delegated task is often a page of instructions; the modal has it whole. */
+.specialist-run__task {
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
   line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.specialist-run__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.specialist-run__open {
+  flex: 0 0 auto;
 }
 
 .specialist-run__status {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   color: var(--zy-muted);
   font-family: var(--zy-font-instrument);
   font-size: 11px;
@@ -383,6 +482,27 @@
 .specialist-run__status svg {
   width: 12px;
   height: 12px;
+}
+
+.specialist-run__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zy-accent-fill);
+  box-shadow: 0 0 0 3px var(--zy-accent-soft);
+  animation: specialist-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes specialist-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .specialist-run__pulse {
+    animation: none;
+  }
 }
 
 .specialist-run__status--running {
@@ -398,35 +518,152 @@
   color: var(--zy-danger);
 }
 
-.specialist-run__handoff {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--zy-line);
+/* The report is prose to read: a measure a line can be followed across, and
+   each finding apart from the next. */
+/* One gutter for the header, the tabs and both panels, and one height, so
+   switching tabs moves nothing but the content. */
+.diff-modal.specialist-modal {
+  width: min(720px, 100%);
+  height: min(760px, 100%);
+}
+
+.specialist-modal__panel {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 20px;
+  overflow: auto;
+}
+
+.specialist-modal__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.specialist-modal__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.specialist-modal__tabs button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-sm);
+  background: none;
+  color: var(--zy-muted);
+  font: 13px/1.3 var(--zy-font-body);
+  cursor: pointer;
+}
+
+.specialist-modal__tabs button:hover {
+  color: var(--zy-text);
+}
+
+.specialist-modal__tabs button[aria-selected="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.specialist-modal__tabs button span {
+  color: var(--zy-muted);
+  font: 11.5px/1 var(--zy-font-data);
+}
+
+.specialist-report {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   color: var(--zy-text-soft);
+  font-size: 14.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.specialist-report > p {
+  margin: 0;
+}
+
+.specialist-report__task {
+  padding: 10px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-wash-faint);
+  color: var(--zy-muted);
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
-.specialist-run__handoff p {
-  margin: 0 0 4px;
+.specialist-report__task summary {
+  color: var(--zy-text-soft);
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.specialist-run__handoff ul {
-  margin: 0 0 10px;
-  padding-left: 18px;
+.specialist-report__task p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.specialist-report__part {
+  margin-top: 10px;
+}
+
+.specialist-report__part h3 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-text);
+  font: 600 15px/1.3 var(--zy-font-display);
+}
+
+.specialist-report__part h3 span {
+  color: var(--zy-muted);
+  font: 12px/1 var(--zy-font-data);
+}
+
+.specialist-report__part ol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-left: 26px;
+}
+
+.specialist-report__part li {
+  padding-left: 4px;
+}
+
+.specialist-report__part li::marker {
+  color: var(--zy-muted);
+  font: 12px var(--zy-font-data);
+}
+
+.specialist-report__part strong {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.specialist-report__empty {
+  margin: 0;
+  padding: 24px 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .specialist-run__reason {
-  margin: 10px 0 0;
-  padding-top: 10px;
-  border-top: 1px solid var(--zy-line);
+  margin: 0;
   color: var(--zy-danger);
   font-size: 13px;
   line-height: 1.45;
-}
-
-.specialist-run .action-history {
-  margin-top: 4px;
 }
 
 .action-history {
@@ -609,10 +846,18 @@
 }
 
 .action-history__reason {
+  display: -webkit-box;
   margin-top: 2px;
   color: var(--zy-muted);
   font-size: 12.5px;
   line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  /* A compiler can report thousands of lines; the row says it failed and the
+     start of why, and Details holds the rest. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 
 /* What was called, and with what. Every context uses this whole card; only its
@@ -965,12 +1210,6 @@
   font-size: 11px;
 }
 
-.approval__review {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .diff-modal__scrim {
     backdrop-filter: none;
@@ -1063,7 +1302,7 @@
 }
 
 .approval__summary > .tool-call {
-  margin-top: 9px;
+  margin: 0;
 }
 
 /* Small enough to sit inside a record of what happened, and openable at the
@@ -1143,6 +1382,12 @@
   color: var(--zy-text-soft);
 }
 
+.inspector__reason {
+  max-height: 12em;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
 .inspector__claim span {
   display: block;
   margin-bottom: 2px;
@@ -1153,26 +1398,19 @@
 }
 
 .approval__effect {
-  margin: 7px 0 0;
-  font-weight: 600;
+  margin: 0;
+  color: var(--zy-text-soft);
   font-size: 13px;
+  font-weight: 500;
 }
 
 .approval__destination {
-  margin-top: 12px;
-  display: grid;
-  gap: 8px;
+  margin: 0;
+  color: var(--zy-muted);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
 
-.approval__destination > span,
-.approval__destination p {
-  color: var(--zy-muted);
-  margin: 0;
-}
-
-.approval__destination pre,
 .inspector__raw pre,
 .inspector__block pre {
   max-height: 200px;
@@ -1199,12 +1437,11 @@
 }
 
 .approval__recovery {
-  margin-top: 12px;
   padding: 10px 12px;
   border: 1px solid var(--zy-line);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--zy-muted);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 
 .approval__recovery p,

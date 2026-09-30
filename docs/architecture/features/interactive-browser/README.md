@@ -157,6 +157,12 @@ with no browser present and the browser is exercisable with no session.
   navigation and every takeover action is followed by a capture. Named tests:
   `has a frame after opening, without waiting for the page to repaint` and
   `draws a fresh frame after a person acts on the page`.
+- **Both frame sources send the same picture.** A streamed frame and a
+  captured one have the same pixel size and report the page's current size,
+  including after the agent resizes the page. When they differed, the panel
+  alternated between two scales on every action and the page visibly jumped,
+  and clicks were mapped against the size the browser opened at. Named test:
+  `sends every frame at one size, the page's own, after the agent resizes it`.
 - **A browser that goes away is reported, not discovered.** Losing the page or
   the connection withdraws the automation context immediately and says so.
   Named test: `says the browser is gone when it closes on its own`.

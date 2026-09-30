@@ -1,22 +1,18 @@
+import { useState } from "react";
 import type { CoreApi, SpecialistRun, TaskAction } from "@zhiyin/contract";
-import { ActionHistory } from "./ActionHistory.js";
+import {
+  SpecialistRunModal,
+  statusPresentation,
+} from "./SpecialistRunModal.js";
 import { Icon } from "../shared/index.js";
 import styles from "./actions.module.css";
 
-const statusPresentation: Record<
-  SpecialistRun["status"],
-  { readonly label: string; readonly icon: "clock" | "check" | "x" | "square" }
-> = {
-  running: { label: "Running", icon: "clock" },
-  completed: { label: "Completed", icon: "check" },
-  failed: { label: "Failed", icon: "x" },
-  interrupted: { label: "Stopped", icon: "square" },
-};
-
 /**
- * One delegated specialist's own run, drawn with the same production
- * components as the main task's history: a `WorkTrace`-shaped header for the
- * run itself, then its own actions through the unmodified `ActionHistory`.
+ * One delegated specialist's own run: a short card in the conversation, and
+ * everything else — the task in full, the report, and each call it made,
+ * through the unmodified `ActionHistory` — in a modal opened from it. A
+ * specialist can make dozens of calls and write pages; none of that belongs in
+ * the flow of the conversation.
  */
 export function SpecialistRunHistory({
   run,
@@ -29,6 +25,7 @@ export function SpecialistRunHistory({
   readPicture?: NonNullable<CoreApi["readPicture"]>;
   onOpenPermission?: (permissionId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const presentation = statusPresentation[run.status];
   const ownActions = actions
     .filter(
@@ -37,80 +34,77 @@ export function SpecialistRunHistory({
     )
     .sort((left, right) => (left.sequence ?? 0) - (right.sequence ?? 0));
 
+  const now =
+    run.status === "running"
+      ? (ownActions.at(-1)?.action ?? "Starting")
+      : run.status === "completed"
+        ? firstLine(run.handoff?.summary)
+        : firstLine(run.reason);
+
   return (
-    <details
-      className={styles["specialist-run"]}
-      role="region"
+    <section
+      className={`${styles["specialist-run"]}${run.status === "running" ? "" : ` ${styles["specialist-run--settled"]}`}`}
       aria-label={`${run.specialist.name} specialist`}
     >
-      <summary
-        className={styles["specialist-run__header"]}
-        role="button"
-        tabIndex={0}
-        aria-label={`${run.specialist.name} specialist details`}
-      >
+      <header className={styles["specialist-run__head"]}>
         <span className={styles["specialist-run__marker"]} aria-hidden="true">
           <Icon name="users" />
         </span>
-        <div className={styles["specialist-run__content"]}>
-          <p className="eyebrow">Specialist: {run.specialist.name}</p>
-          <h3>{run.task}</h3>
-        </div>
+        <h3>{run.specialist.name}</h3>
         <span
           className={`${styles["specialist-run__status"]} ${styles[`specialist-run__status--${run.status}`]}`}
         >
-          <Icon name={presentation.icon} />
+          {run.status === "running" ? (
+            <span
+              className={styles["specialist-run__pulse"]}
+              aria-hidden="true"
+            />
+          ) : (
+            <Icon name={presentation.icon} />
+          )}
           {presentation.label}
         </span>
-        <span className={styles["specialist-run__count"]}>
+      </header>
+      {now && (
+        <p
+          className={`${styles["specialist-run__now"]}${run.status === "failed" || run.status === "interrupted" ? ` ${styles["specialist-run__now--stopped"]}` : ""}`}
+        >
+          {now}
+        </p>
+      )}
+      <p className={styles["specialist-run__task"]} title={run.task}>
+        {run.task}
+      </p>
+      <footer className={styles["specialist-run__meta"]}>
+        <span>
           {ownActions.length} {ownActions.length === 1 ? "call" : "calls"}
         </span>
-        <Icon name="chevron" />
-      </summary>
-      {run.status === "completed" && run.handoff && (
-        <div className={styles["specialist-run__handoff"]}>
-          <p>{run.handoff.summary}</p>
-          {run.handoff.findings.length > 0 && (
-            <>
-              <p className="eyebrow">Findings</p>
-              <ul>
-                {run.handoff.findings.map((finding) => (
-                  <li key={finding}>{finding}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {run.handoff.recommendations.length > 0 && (
-            <>
-              <p className="eyebrow">Recommendations</p>
-              <ul>
-                {run.handoff.recommendations.map((recommendation) => (
-                  <li key={recommendation}>{recommendation}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {run.handoff.limitations.length > 0 && (
-            <>
-              <p className="eyebrow">Limitations</p>
-              <ul>
-                {run.handoff.limitations.map((limitation) => (
-                  <li key={limitation}>{limitation}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
+        <button
+          className={`text-button ${styles["specialist-run__open"]}`}
+          type="button"
+          aria-label={`Inspect ${run.specialist.name} specialist`}
+          onClick={() => setOpen(true)}
+        >
+          Details
+        </button>
+      </footer>
+      {open && (
+        <SpecialistRunModal
+          run={run}
+          actions={ownActions}
+          {...(readPicture ? { readPicture } : {})}
+          {...(onOpenPermission ? { onOpenPermission } : {})}
+          onClose={() => setOpen(false)}
+        />
       )}
-      {(run.status === "failed" || run.status === "interrupted") &&
-        run.reason && (
-          <p className={styles["specialist-run__reason"]}>{run.reason}</p>
-        )}
-      <ActionHistory
-        actions={ownActions}
-        {...(onOpenPermission ? { onOpenPermission } : {})}
-        {...(readPicture ? { readPicture } : {})}
-      />
-    </details>
+    </section>
   );
+}
+
+/** A report or a reason, as one line for the card; the modal has it whole. */
+function firstLine(text: string | undefined): string | undefined {
+  return text
+    ?.split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
 }

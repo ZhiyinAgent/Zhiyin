@@ -227,6 +227,7 @@ export function validateCommand(
     // store refuses any name it did not hand out.
     case CHANNEL.selectTask:
     case CHANNEL.deleteTask:
+    case CHANNEL.dismissIssue:
     case CHANNEL.interruptTask:
     case CHANNEL.readPicture:
     case CHANNEL.componentContent:

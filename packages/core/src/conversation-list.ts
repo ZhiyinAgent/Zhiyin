@@ -8,7 +8,11 @@
  * crash names it — and is settled then, as it would have been at launch.
  */
 
-import type { ConversationSummary, WorkspaceTask } from "@zhiyin/contract";
+import type {
+  ConversationSummary,
+  WorkspaceTask,
+  WorkspaceIssue,
+} from "@zhiyin/contract";
 import type { Sessions } from "@zhiyin/session";
 
 export function summaryOf(item: ConversationSummary): ConversationSummary {
@@ -41,7 +45,7 @@ export type Opening = {
   /** Whether settling it changed it, so it needs saving. */
   readonly changed: boolean;
   /** Something the person should be told. */
-  readonly issue?: string;
+  readonly issue?: WorkspaceIssue;
 };
 
 export class ConversationList {
@@ -50,6 +54,11 @@ export class ConversationList {
   #summaries: ConversationSummary[] = [];
   /** One read per conversation, however many ask for it at once. */
   readonly #opening = new Map<string, Promise<Opening>>();
+  /**
+   * What was found the first time a conversation would not open. Asking again
+   * answers the same, rather than reading it again and keeping another copy.
+   */
+  readonly #damaged = new Map<string, Opening>();
 
   constructor(
     sessions: Sessions,
@@ -88,11 +97,14 @@ export class ConversationList {
     const index = shown.findIndex((item) => item.id === id);
     if (index < 0) return null;
     this.#summaries = this.#summaries.filter((item) => item.id !== id);
+    this.#damaged.delete(id);
     const rest = shown.filter((item) => item.id !== id);
     return rest[Math.min(index, rest.length - 1)]?.id ?? null;
   }
 
   open(id: string): Promise<Opening> {
+    const damaged = this.#damaged.get(id);
+    if (damaged) return Promise.resolve(damaged);
     const pending = this.#opening.get(id);
     if (pending) return pending;
     const opening = this.#read(id).finally(() => this.#opening.delete(id));
@@ -110,15 +122,23 @@ export class ConversationList {
       if ((error as { code?: unknown }).code !== "corrupted")
         return {
           changed: false,
-          issue: `“${title}” could not be read. Your files are unchanged. Try opening it again.`,
+          issue: {
+            message: `“${title}” could not be read. Your files are unchanged. Try opening it again.`,
+          },
         };
       const kept = await this.#sessions
         .preserveDamaged()
         .catch(() => undefined);
-      return {
+      const damaged: Opening = {
         changed: false,
-        issue: `“${title}” is damaged and could not be opened. Every other conversation is unaffected.${kept ? ` A copy was kept at ${kept}.` : ""}`,
+        issue: {
+          message: `“${title}” is damaged and can't be opened. Your other conversations are unaffected.`,
+          ...(kept ? { keptAt: kept } : {}),
+          conversationId: id,
+        },
       };
+      this.#damaged.set(id, damaged);
+      return damaged;
     }
     const titleSource =
       read.task.titleSource ??
@@ -135,7 +155,9 @@ export class ConversationList {
       changed: task !== read.task,
       ...(read.lost
         ? {
-            issue: `The last moment of “${task.title}” before the app closed was not saved.`,
+            issue: {
+              message: `The last moment of “${task.title}” before the app closed was not saved.`,
+            },
           }
         : {}),
     };

@@ -42,15 +42,33 @@ rendered.
 
 ## Invariants
 
+- **A reported issue offers only what can change it.** A damaged
+  conversation's notice offers Delete conversation; Try again appears only
+  while the history itself could not be loaded, the one case where trying
+  again reloads anything. Where a copy was kept stands on its own line and
+  wraps only between folders. Every notice can be dismissed. Named tests:
+  `shows a damaged conversation's report with where its copy was kept set
+  apart, and deletes or dismisses it` and `offers Try again only when trying
+  again can change something`. Checked in the component lab at full and
+  narrow width.
+- **A deleted conversation is confirmed by name, once the core has deleted
+  it**, from the sidebar or from a notice, and what was reported about it goes
+  with it. A deletion that fails confirms nothing and shows the failure. Named
+  tests: `says the conversation was deleted once the core has deleted it`,
+  `says nothing was deleted when the core could not delete it`, and `drops what
+  was reported about a deleted conversation, and nothing else`.
 - **Permission asks show the decision, not the tool protocol.** File changes
   are labeled as creations or edits inside What will change, including a new
-  parent folder when one is made; the difference is reviewable before allowing.
+  parent folder when one is made. Each file shows as its name, its folder and
+  how many lines arrive and go, never as a path in a terminal face; the row
+  opens that file's difference before allowing.
   Raw syntax remains under Technical details in the resulting action card.
   Denial guidance appears only after Deny is chosen and is sent with the
   confirmed denial. Named tests: `labels a new file and its new folder inside
   what will change`, `offers guidance only after Deny, while allowing a denial
-  without text`, and `reviews a file change as a difference rather than as the
-  call` (ADR 0057).
+  without text`, `reviews a file change as a difference rather than as the
+  call`, and `shows each changed file by name, with its folder and how many
+  lines change, and opens that file's review from it` (ADR 0057).
 - **Custom instructions are an editable preference, with their scope explained
   beside the editor.** The page uses a compact responsive layout, makes the
   save action reachable at the minimum window size, and says that instructions
@@ -518,16 +536,19 @@ rendered.
   the turn and the decision beside the composer`, and `renders one structured
   Markdown answer without repeating its completion summary` guard these states.
 - The task plan is distinct from temporary work activity and durable action
-  history. It shows each criterion and never labels unresolved work as complete.
-  The named test `shows criteria and live reviewer states without claiming
-  unfinished work` guards the component states. What the assistant says of an
-  item and the assessment are shown side by side in their own words, "Done
-  (the assistant says) · Assessed as done", with a cancel reason and a mark on
-  a criterion the assistant added: `shows what the assistant says beside the
-  assessment, and never one for the other`. ADR 0052. A verdict of "Not
-  verified" and a judge that "Couldn't judge" are told apart, each with the
-  judge's reason: `tells a verdict of not verified apart from a judge that
-  could not answer`. ADR 0053.
+  history. It is one pill above the conversation, outside its scroll, that
+  opens into the steps in a fixed order (ADR 0062). It says where the work
+  stands with one of four marks per step — done, in progress, to do, skipped —
+  as the working model reported it; nothing else checks it (ADR 0063). The
+  named tests `shows nothing without a plan`, `names the step being worked on
+  and how many are done`, `names the next step when none has been started`,
+  `lists every step in order when opened, and closes on Escape`, `says done,
+  in progress, to do and skipped in plain words`, `says the plan is complete
+  when every step is done or skipped` and `stays open, in the same order,
+  while steps change` guard the states, and `keeps the explanation in the
+  turn and the decision beside the composer` guards that the plan is not in the
+  conversation. Unchecked: how the pill looks and behaves beside the browser and
+  at the minimum window size.
 - Standing instructions (ADR 0054). Settings holds the person's own, with a
   byte counter that says when only the first 16 KB will be sent: `shows what
   is saved, and saves an edit`, `can clear them`, `counts the size and says
@@ -554,6 +575,12 @@ rendered.
   the reasoning settings when the person clicks away, or the window loses
   focus`, `closes the breakdown when the person clicks outside it`, and
   `closes when Compact is chosen, and says it is compacting until it is done`.
+- The work-budget question is one row: its title, one short sentence naming
+  the limit reached (steps, minutes or cost, never "tool rounds"), and Pause
+  and Continue (ADR 0064). Named tests: `says in one short sentence why the
+  work stopped to check in, and nothing more` and `names the time or the cost
+  when that is what the work reached`. Checked in the component lab at full
+  and narrow width.
 - The work-budget question says what was repeated when Zhiyin saw the work go
   in circles. Named test: `says why the work may be going nowhere when Zhiyin
   saw it repeat itself`.
@@ -698,6 +725,13 @@ rendered.
   it, and labelled as Zhiyin's own account. A command's authoritative
   description and the agent's unverified claim about it must never read as one
   statement.
+- A permission card reads the same for every tool. First comes one line with
+  an icon for the kind of action (file, command, connection, browser, or a lock
+  when the request establishes none) and the action's name. Under it come the app's own account of what the action can do,
+  then what Zhiyin says it is for, then one quiet box with the exact command,
+  inputs or the files that change. The card uses neutral colours: only Allow once carries the
+  accent. Checked in the component lab. Not checked: the installed app and the
+  minimum window size.
 - The permission card has no generic approval heading and keeps technical detail
   collapsed. The named test `returns the exact approval decision to the core`
   guards its command boundary. The named test `prevents
@@ -752,6 +786,36 @@ rendered.
   unmodified action history — never repeated in the main list. The named
   tests `draws a delegated specialist's run through its own piece, in
   sequence order` and the `SpecialistRunHistory` component tests guard this.
+- A specialist's card is titled with the specialist's name and its status.
+  While it runs, the card names its latest call. Once it finishes, the card
+  shows the first line of its report, or of its reason for stopping. The task
+  takes one clipped line. The full report and every call stay in the modal. A
+  finished card steps back from a running one. Named tests: `shows a running
+  specialist as a short card naming its latest call, with every call kept in a
+  modal`, `shows the first line of a completed specialist's report on the
+  card, and the rest in the modal`, and `shows why a specialist stopped
+  without finishing, in the modal`.
+- The modal keeps the report and the calls on two tabs. It opens on the
+  report once there is one, and on the calls until then. The report is set
+  at a reading measure. Its task is folded away, and its findings,
+  recommendations and limitations are numbered parts headed with their
+  counts. An empty part is left out. A short label before an item's first
+  colon is set in bold. Named tests: `opens on the report once there is one,
+  and on the calls until then` and `heads each part of the report with how
+  many items it has, and sets each item's lead apart`. Checked in the
+  component lab in the dark theme at 1100 px wide. Not checked: the light
+  theme and the minimum window size.
+- Once a turn has finished with specialists still running, the conversation
+  ends with a status line naming them. The line gives how many calls they have
+  made and how long it has been since the first one started, ticking each
+  second. Nothing is shown while the turn itself is working, or once every
+  specialist has settled. Named tests: `says the conversation is waiting on the
+  specialists still running once the turn has finished`, `says which
+  specialist it is waiting for, how many calls it has made and for how long`,
+  `names every specialist it is waiting for, and says one call as one`, and
+  `shows nothing when no specialist is running`. Checked in the component lab
+  at 560 px wide, dark theme only. Not checked: the light theme and reduced
+  motion.
 
 ## Testing notes
 

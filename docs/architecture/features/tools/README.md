@@ -179,15 +179,23 @@ nothing about permission and renders nothing itself.
   when the whole output fits`.
 - **A PDF is read as text, a page at a time, and never silently in part.** The
   answer carries the page count, which pages were read, and how to ask for the
-  rest. Named tests: `reads its words rather than refusing it as binary`, `reads
-  only the pages it was asked for`, `says how to ask for the rest when it stops
-  early`, `refuses a page range that is not in the document`, `says a PDF it
-  cannot open is a PDF it cannot open`.
+  rest. Pages are asked for as a page, a range, or a list of both, read in
+  page order; asked-for pages past the end are named, not dropped. A PDF up to
+  50 MB is read; a larger one is refused with its size and the limit. Named
+  tests: `reads its words rather than refusing it as binary`, `reads only the
+  pages it was asked for`, `reads a list of pages and ranges, in order, and says
+  which it read`, `reads the pages a document has and names the ones it does
+  not`, `refuses pages it cannot understand, saying what a list looks like`,
+  `reads a PDF of several megabytes, and says how large a PDF may be when one is
+  larger`, `says how to ask for the rest when it stops early`, `refuses a page
+  range that is not in the document`, `says a PDF it cannot open is a PDF it
+  cannot open`.
 - **A PDF whose text is not text is drawn instead**, on request, two pages at a
   time and on the picture channel; a scanned document is told how to be read
   rather than left as empty pages. Drawing is offered only where a picture can
   be looked at, and only for a PDF. Named tests: `draws the pages as pictures
   when asked for pictures`, `draws only as many pages as one answer can carry`,
+  `draws the pages of a list, two at a time, and says what is left`,
   `does not draw pictures for a model that cannot be shown one`, `refuses to
   draw a picture of something that is not a PDF`, `tells a scanned document how
   to be read`.

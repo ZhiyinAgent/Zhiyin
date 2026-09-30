@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ModelRequest } from "@zhiyin/model-client";
 import { loopFrom, stubDependencies, until } from "./support.js";
-import { settledAfterRestart } from "../src/settling.js";
+import { settledAfterRestart } from "../src/turn/settling.js";
 
 describe("guidance during a turn", () => {
   it("delivers guidance after a tool round and keeps final streaming open for a third round", async () => {

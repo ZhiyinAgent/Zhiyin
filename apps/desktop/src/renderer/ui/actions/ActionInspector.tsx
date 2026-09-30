@@ -109,7 +109,7 @@ export function ActionInspector({
             for a command. A skill's instructions never name the skill, so
             there the row is the only thing identifying what was read.
           */}
-          {!repeated && (
+          {!repeated && action.target && (
             <p className={styles["change-review__summary"]}>
               <span className={styles["change-review__path"]}>
                 {action.target}
@@ -139,6 +139,22 @@ export function ActionInspector({
             saying it was what the tool returned — so the one thing a reader
             most needs, the arguments, was both mislabelled and unreadable.
           */}
+          {/*
+            Why it did not happen, for a call that stopped before or during the
+            tool. The history row says it too, but the row is behind this
+            dialog, and a dialog that only says "could not be inspected" leaves
+            the one useful sentence unread.
+          */}
+          {!described &&
+            action.reason &&
+            (action.status === "failed" || action.status === "blocked") && (
+              <p
+                className={`${styles.inspector__consequence} ${styles.inspector__reason}`}
+              >
+                {action.reason}
+              </p>
+            )}
+
           {action.invocation && (
             <ToolCallView
               invocation={action.invocation}
@@ -171,10 +187,8 @@ export function ActionInspector({
           {!described &&
             (action.evidence || (!action.invocation && action.command)) && (
               <details className={styles.inspector__raw}>
-                <summary>What the tool returned</summary>
-                {!action.invocation && action.command && (
-                  <pre>{action.command}</pre>
-                )}
+                <summary>Raw call and response</summary>
+                {action.command && <pre>{action.command}</pre>}
                 {action.policy && <p>{action.policy}</p>}
                 {action.evidence && (
                   <JsonBlock

@@ -362,6 +362,21 @@ by its routed name, `mcp__tavily__<tool>` (e.g. `mcp__tavily__tavily_search`),
 not the bare tool name the server itself reports. Primary source:
 https://docs.tavily.com/documentation/mcp and the live connection above.
 
+**Tavily limits a development key to 100 requests a minute and says so only
+after the fact.** *Verified 2026-09-30 from the documentation and the
+open-source server's code.* Search and extract allow 100 a minute on a
+development key and 1,000 on a production key; crawl 100 on either; research
+20. A successful response carries no rate-limit headers, and `GET /usage`
+reports credits and plan name, not a rate, and is itself limited to 10 calls
+per 10 minutes, so no call reveals the allowed rate without spending quota.
+The only signal is `429` with `Retry-After`. The open-source `tavily-mcp`
+server turns a 429 into the text "Usage limit exceeded" and drops the status
+and `Retry-After`, the same words it uses for exhausted credits (`432`/`433`);
+whether the hosted `mcp.tavily.com` behaves identically is unverified. Primary
+sources: https://docs.tavily.com/documentation/rate-limits,
+https://docs.tavily.com/documentation/api-reference/endpoint/search, and
+`src/index.ts` of github.com/tavily-ai/tavily-mcp.
+
 **Process containment uses Job Objects through `koffi` 3.2.1.** *Verified
 2026-09-07 under Node 22 and inside a real Electron 44.1.1 main process
 (ABI 149), and against a packaged build.* Node cannot call Win32 directly;

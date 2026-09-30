@@ -1276,3 +1276,156 @@
     padding: 18px;
   }
 }
+
+/* A reported problem: one statement, where a copy was kept on its own line,
+   and only the actions that can change it. */
+.issue {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: min(640px, 100%);
+  margin: 0 auto 12px;
+  padding: 14px 12px 14px 16px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+}
+
+.issue__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-danger);
+}
+
+.issue__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.issue__body {
+  display: grid;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.issue__message {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.issue__kept {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.issue__path {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  user-select: text;
+}
+
+.issue__path > span {
+  white-space: nowrap;
+}
+
+.issue__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue__dismiss {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--zy-radius-sm);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.issue__dismiss:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.issue__dismiss svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Confirmations float above the conversation, clear of the title bar, and
+   never take clicks meant for what is under them. */
+.toast-region {
+  position: fixed;
+  z-index: 60;
+  top: 52px;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 14px 9px 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text);
+  font-size: 13.5px;
+  animation: toast-in 160ms ease-out;
+}
+
+.toast__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.toast__icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

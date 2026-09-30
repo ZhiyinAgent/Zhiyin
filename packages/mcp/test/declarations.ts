@@ -23,6 +23,7 @@ export function managed(
   connect: McpConnectionFactory,
   credentials: McpCredentialStore,
   builtIns: readonly BuiltInMcpServer[] = [],
+  now?: () => number,
 ): DeclaringServers {
   let declared: DeclaredMcpServer[] = [];
   let failing = false;
@@ -35,6 +36,7 @@ export function managed(
       if (failing) throw new Error("packages are unreadable");
       return declared.map((server) => ({ ...server }));
     },
+    ...(now ? [now] : []),
   );
   const settle = async () => {
     await servers.manage();

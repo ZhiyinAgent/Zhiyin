@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { WorkspaceTask } from "@zhiyin/contract";
-import { beginUserTurn } from "../src/start-turn.js";
+import { beginUserTurn } from "../src/turn/start-turn.js";
 
 const task = (overrides: Partial<WorkspaceTask> = {}): WorkspaceTask => ({
   id: "task-1",
@@ -50,8 +50,7 @@ describe("beginUserTurn", () => {
           {
             id: "plan-1",
             title: "Old plan",
-            criterion: "Old work is complete",
-            status: "completed",
+            status: "done",
           },
         ],
         phase: {

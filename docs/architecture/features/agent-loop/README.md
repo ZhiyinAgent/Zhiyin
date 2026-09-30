@@ -14,16 +14,14 @@ delegated to keeps going, and the task is woken with a fresh automatic turn
 once that specialist settles (ADR 0044, superseding 0043's sequential-only
 assumption).
 
-It also owns a bounded task-guidance sequence: create a short plan with
-observable criteria, name in the background an action that did not say what it
-is for, and judge the criteria from this turn's calls when the working model
-claims items done and once at the end of the turn (ADR 0053). The working model
-sees the plan, reports its progress on it and says in each tool call what the
-call is for and which item it serves (ADR 0052).
-ADR 0008 limits this output to guidance;
-it cannot affect permission or execution. That work reaches two named model
-dependencies rather than one — presentation and judgement — so a composition can
-serve them from different models. ADR 0046.
+It also owns a small amount of task guidance: it names a new conversation from
+its first message, and names in the background an action that did not say what
+it is for. The working model keeps its own plan with `update_plan` and says in
+each tool call what the call is for; no other model writes, checks or judges the
+plan (ADR 0063, superseding ADR 0053 and the plan parts of ADR 0052).
+ADR 0008 limits this output to guidance; it cannot affect permission or
+execution. That work reaches its own named model dependency, so a composition
+can serve it from a different model. ADR 0046.
 
 The model-facing conversation is held to a budget set from the real window of
 the model in use, independently of the durable human transcript. Before every
@@ -78,7 +76,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
 - Built-in and MCP tool specifications are sent to the model through one typed
   provider-neutral request. Each returned call goes back to the capabilities
   group with its owner, and the group routes it to that owner.
-- The main and planning requests receive a bounded top-level inventory from an
+- The main request receives a bounded top-level inventory from an
   injected workspace context. The main prompt directs the model to list before
   guessing paths, read only located files, explain an action before requesting
   it, and interpret the result in a later message.
@@ -107,13 +105,15 @@ browser is not among them: it is reached, and let go of, through capabilities.
   already sent, with a `renewal` notice after the round's results. Pause leaves that proposal unexecuted and allows one
   tool-free progress-report request before the turn stops (ADR 0029).
 - The same checkpoint stops before the next action when a turn reaches 30
-  minutes, 500,000 tokens, or USD 10 of provider-reported cost. Those details
-  stay in the internal ledger; the choice shown to a person says only how many
-  tool rounds completed and offers Continue or Pause. Continue renews reached
+  minutes or USD 10 of provider-reported cost. Tokens are not limited: every
+  request is counted whole, so a long conversation would reach any total by
+  re-reading itself (ADR 0061). The question carries which limits were
+  reached, the rounds, the elapsed time, the cost when any request reported
+  one, and the allowance Continue grants (ADR 0064). Continue renews reached
   limits; Pause still allows only the tool-free report (ADR 0038). Named tests:
-  `pauses before an action when measured token or provider-cost limits are
-  reached`, `labels token use as estimated when the provider reports no usage`,
-  and `pauses before another action when elapsed work reaches its limit`.
+  `pauses before an action when the provider-cost limit is reached`,
+  `does not stop on how many tokens were read, however many`, and `pauses
+  before another action when elapsed work reaches its limit`.
 - Before a correctable refusal reaches the main model, a separate model call is
   offered the chance to re-aim it, from the refusal, the tool's schema, what the
   model said just before the call, and the last few calls with their results,
@@ -162,11 +162,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   manual title, clears the previous plan, and enters an empty working phase.
   Named tests: `constructs the first message and generated fallback title` and
   `preserves a manual title while resetting the plan and phase`.
-- A task plan starts with one to four ordered items from the planner; the
-  working model may add criteria up to eight. Every item includes an
-  observable criterion, the judge's verdict (`status`), and apart from it the
-  working model's `progress`. The judge sees the items it is asked about and
-  this turn's calls, not the full transcript, and can read the workspace.
+- A task plan is the working model's own list of at most eight items, each a
+  title and one of `pending`, `in_progress`, `done` or `skipped`. It is
+  empty until the model first calls `update_plan`.
 
 ## Invariants
 
@@ -364,14 +362,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   made, in the order it was made` and `keeps the record of a drawing that never
   arrived`.
 
-- The first message receives a locally validated LLM title. The planning
-  request supplies it when possible; if that answer omits or malforms the
-  title, a focused title request retries once before the app keeps its local
+- The first message receives a locally validated LLM title from one request
+  of its own; if the answer is missing or malformed the app keeps its local
   fallback. Every later compaction regenerates an automatic title from the
   compacted summary, while a manually entered title is never replaced and does
   not cause a wasted title request. The named tests `uses an LLM title based on
-  the first message`, `retries the first title separately when the planning
-  answer omits it`, `keeps a useful fallback when the first generated title is unusable`,
+  the first message`, `keeps a useful fallback when the first generated title is unusable`,
   `preserves a legacy title as manual when its provenance is unknowable`,
   `increments an existing compaction and regenerates its automatic title`, and
   `condenses a manually named conversation without asking for a new title` guard
@@ -483,45 +479,43 @@ browser is not among them: it is reached, and let go of, through capabilities.
   conversation no longer fits when the retried step is refused too`, `is not
   recovered once the answer has begun to show`, and `is never condensed, and
   leaves the window as listed`.
-- **The working model sees the plan it is judged on.** The first request of
-  each turn carries a `plan` notice listing every item with its criterion,
-  progress and verdict; a request that needed no plan carries none. With items
-  open, it is sent again once ten rounds pass with no `update_plan` and no
-  earlier `plan` notice, worked out from the history as saved, and says not to
-  present the task as finished while items are open. ADR 0052. Named tests:
-  `is in the first request of the turn, every item with its criterion`, `is
-  not sent when the request needed no plan`, `is no longer said to be shown
-  only by the interface`, `comes back after 10 rounds without update_plan
-  while items are open, and not for the next 9`, and `does not come back while
-  the model keeps it current`.
-- **Progress is the working model's claim; the verdict stays the judge's.**
-  `update_plan` sets an item `pending`, `in_progress`, `done` or `cancelled`,
-  adds steps under it, and adds criteria marked as the assistant's, eight
-  items at most. Done needs this turn's call ids, each with what it shows;
-  cancelled needs a reason; the schema has no field for a verdict. A rejected
-  update changes nothing and says why. A cancelled item is not judged; an
-  added one is. Named tests: `offers no way to set a verdict`, `records done
-  with this turn's calls as the assistant's claim, and leaves the verdict
-  alone`, `rejects done without the calls that show it, saying why`, `rejects
-  done that cites a call from an earlier turn`, `rejects cancelled without a
-  reason, and shows the reason when given`, `rejects an item id the plan does
-  not have, naming the ones it does`, `adds a criterion as the assistant's,
-  and it is judged at the end of the turn`, `holds the plan to eight items`,
-  and `does not judge a cancelled item`.
+- **The plan is the working model's, and an update is corrected, never
+  refused.** `update_plan` sends the whole list, each item a title and a
+  status; it replaces the plan in the order sent. Untitled entries are dropped,
+  an unknown status reads as pending, only the first item in progress stays in
+  progress, and the list is cut to eight. A title is kept whole up to 200
+  characters, the limit the schema states, and past it ends at a whole word with no ellipsis. Only an
+  update with no list is refused, and it changes nothing. The tool asks for
+  no ids, criteria or evidence. ADR 0063. Named tests: `replaces the plan with
+  the list the model sends, in its order`, `keeps only the first item in
+  progress`, `corrects an update instead of refusing it: untitled entries
+  dropped, an unknown status read as pending, at most eight items`, `keeps a
+  title up to 200 characters whole, ends a longer one at a whole word with no
+  ellipsis, and tells the model the limit`, `refuses only an update that sends no
+  list, and changes nothing`, and `asks for no ids, criteria or evidence`.
+- **Open items are pointed out, never enforced.** A turn's first request
+  carries a `plan` notice with the items still open, and none once all are
+  done or skipped. A turn about to finish with items open is sent one `plan`
+  notice naming them and gets one more request; after that it finishes
+  whatever the plan says. Named tests: `shows the next turn the items still
+  open, and nothing once all are finished`, `reminds the model once of the
+  items it would leave open, then lets it finish`, and `does not remind when
+  every item is done or skipped`.
+- **No model call stands between the person's message and the work.** The
+  first message of a conversation sends one auxiliary request, to name it; a
+  later one sends none. Named test: `starts a first message with one auxiliary
+  request, to name the conversation, and a later one with none`.
 - **A tool call describes itself, and no model call waits between actions.**
-  Every tool is offered with two optional arguments, `purpose` and
-  `plan_item`, taken off before the tool sees its input; a tool whose own
-  input uses either name keeps it. The purpose is the action's description and
-  the approval's reason; the plan item links the action. An unknown item
-  leaves the action unlinked and the result names the valid ids. The labelling
-  request no longer guesses a plan item, and no criterion is judged after an
-  action. Named tests: `makes no auxiliary request between five calls, and its
-  approval shows its purpose`, `hands the tool neither purpose nor plan_item`,
-  `links the action to the plan item it names`, `leaves an action naming an
-  unknown plan item unlinked, and the result names the valid ids`, `shows its
-  approval before the labelling call answers, then the generated title`, `no
-  longer asks the labelling call which plan item the action serves`, and
-  `takes no plan item from the answer that names an action`.
+  Every tool is offered with one optional argument, `purpose`, taken off
+  before the tool sees its input — including the tools the loop answers
+  itself, such as `activate_plugin`; a tool whose own input uses the name keeps
+  it. The purpose is the action's description and the approval's reason. No
+  tool is offered a `plan_item` argument. Named tests: `makes no auxiliary
+  request between five calls, and its approval shows its purpose`, `does not
+  hand the tool its purpose, and shows it with the action`, `is offered no
+  plan_item argument`, `shows its approval before the labelling call answers,
+  then the generated title`, and `no longer asks the labelling call which plan
+  item the action serves`.
 - **A turn going in circles is told so.** The same tool with the same input
   coming back the same way three times, or failing the same way three times in
   a row, sends one `loop` notice; the purpose a call gives is not compared, and
@@ -532,53 +526,11 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `does not count different calls as a loop`, `starts counting again after a
   change to the workspace`, `sends at most two notices in a turn`, and `gives
   the work-budget question the reason when a loop notice fired`.
-- **The judge runs when there is something to judge, once for all of it.** A
-  claim of done sends the claimed items to one request behind the turn,
-  showing them as being checked meanwhile; the end of the turn waits for it,
-  then judges every item still open in one request. No judge request follows an
-  action, and a cancelled item is never judged. An item a request leaves out is
-  asked about once on its own. ADR 0053. Named tests: `makes no judge request
-  between 20 calls and exactly one at the end`, `judges a claim of done while
-  the worker carries on`, `stores four verdicts from one request for four
-  pending items`, and `asks once more, on its own, about an item the answer
-  left out`.
-- **The judge is given this turn's calls whole, or names them.** Its request
-  carries the person's request, each criterion, the worker's progress and
-  citations labelled as the worker's claim, and the calls: cited first, then
-  those linked to the items, then the final answer, then the rest, within 15%
-  of the budget target. A call is shown whole or left out and named with
-  `open_call`, never cut from the middle. Earlier turns' actions are not
-  evidence. Named tests: `verifies an item whose only proof is the 10th of 20
-  actions`, `gives the person's request, and the claim as the worker's, not as
-  evidence`, `names what did not fit rather than cutting it from the middle`,
-  and `shows the judge what this turn's calls returned, and not an earlier
-  turn's`.
-- **The judge checks for itself and cannot change anything.** It is offered the
-  built-in `read_file`, `list_directory` and `search_files` (and `read_image`
-  when the model accepts pictures) and `open_call`, for up to five rounds. Each
-  call must inspect as read access and be allowed without asking; anything
-  else is refused to it and never put to the person. Its reads are not actions
-  of the conversation. Named tests: `opens a file with read_file to verify what
-  the results alone do not show`, `is offered no tool that changes anything,
-  and cannot run one`, and `opens a call the prompt left out with open_call`.
-- **A verdict is one of three things, and says why.** `verified` keeps the
-  calls of the turn it relied on; `not-verified` keeps what is missing; a
-  failed request or an answer still unreadable after one more ask is
-  `couldnt-judge` with its reason, never either verdict. An id answered twice
-  counts as unanswered. Named tests: `reads one verdict per id asked about, and
-  none for an id given twice`, `reports a failed judge request as couldn't
-  judge, with its reason`, `reports an answer it cannot read, twice, as
-  couldn't judge`, `keeps the calls a verified verdict relied on`, and `names
-  each of the judge's verdicts with its reason`.
-- **A gap goes back to the model once.** A not-verified verdict on a claim is
-  sent before the next request as a `gaps` notice naming what is missing, at
-  most once per item a turn. Named test: `puts exactly one gaps notice in the
-  request after a not-verified verdict`.
 - **A write still being saved is what the next read builds on.** The app
   commits a write only once it is saved; `TurnRecords` keeps each task's latest
-  write until then, so work in the background (a verdict, an action's label)
-  never undoes the turn's writes, or the turn its. Named test: `keeps every
-  write when a verdict lands while an action is being saved`.
+  write until then, so work in the background (an action's label) never undoes
+  the turn's writes, or the turn its. Named test: `keeps every write when its
+  label lands while a later action is being saved`.
 - **Standing instructions are one notice that grants nothing.** The person's
   own instructions and an approved `AGENTS.md` are sent as one `instructions`
   notice at the end of the request, each under its origin, cut at 16 KB with a
@@ -634,30 +586,19 @@ browser is not among them: it is reached, and let go of, through capabilities.
   `shows an action that ran and answered as reported, not failed`, `still shows
   an action that could not run at all as failed`, and `shows an action that
   succeeded as completed` guard the three outcomes.
-- Every auxiliary request - the plan, an action's name, the judge's review -
-  asks for the least thinking the model will do and carries enough room
-  that the answer survives whatever thinking happens anyway. Both are set where
-  the request is sent rather than at each call site, so one added later inherits
-  them; the judge sends its own, with 800 tokens and 150 more per item, as
-  `stores four verdicts from one request for four pending items` checks. A model that will not be told how much to think is asked again without
+- Every auxiliary request - a conversation's name, an action's name - asks
+  for the least thinking the model will do and carries enough room that the
+  answer survives whatever thinking happens anyway. Both are set where the
+  request is sent rather than at each call site, so one added later inherits
+  them. A model that will not be told how much to think is asked again without
   the setting instead of going unanswered. The named tests `asks for the least
   thinking the model will do`, `leaves room for an answer after the thinking`,
   `tells the model to keep its thinking short and answer`, and `is asked again
   without the setting rather than left unanswered` guard this.
 - Ordinary model generation never invents a checklist. The named test `does not
   invent user-facing work steps for ordinary model generation` guards this.
-- A plan describes work a reviewer could watch happen, so a request the reply
-  itself answers produces no plan and nothing to assess. An empty plan is a
-  valid answer rather than a malformed one, and the schema permits it. The
-  named tests `shows no plan and assesses nothing when the planner returns no
-  items` and `lets the planner return no items without that counting as a
-  malformed answer` guard this.
-- An action is linked to a plan item only by the working model's `plan_item`
-  argument, never by the request that names the action; an unlinked action
-  advances nothing. The named test `takes no plan item from the answer that
-  names an action` guards this.
-- Workspace identity and top-level entries reach both the main model and its
-  planning guidance, and the model is told to explore rather than guess. The
+- Workspace identity and top-level entries reach the main model, and the
+  model is told to explore rather than guess. The
   named test `gives the model the current workspace inventory and exploration
   guidance` guards this context boundary.
 - An explanation emitted before a tool request and an explanation emitted after
@@ -665,38 +606,17 @@ browser is not among them: it is reached, and let go of, through capabilities.
   between them. The named test `stores explanations and actions in the order
   they happened` guards event order.
 - Task guidance is validated, target-specific, and independent from permission
-  enforcement. The named tests `accepts a small ordered plan with observable
-  criteria`, `rejects malformed or inflated plans instead of displaying
-  invented work`, `reads the labelling answer, and nothing from one without
-  both parts`, `labels an action from what the code knows, specific to its
-  target`, and `asks the guidance model for the plan and action
-  copy, and the judgement model whether the criterion is met` guard the
-  boundary and state transitions. The composition test also proves that
-  auxiliary requests omit the raw tool command.
-- Presentation and judgement are separate dependencies. Writing the plan, the
-  conversation's name and an action's copy is presentation; deciding whether
-  evidence satisfies a criterion is judgement. Condensing is neither: the
-  conversation's own model writes the summary (ADR 0050). A composition may point them at different models, and neither
-  follows the other's choice. The named tests `asks the guidance model for the
-  plan and the conversation name`, `asks the judgement model whether a
-  criterion is satisfied`, and `asks the conversation's own model to condense
-  it, and neither auxiliary model` guard the split.
-- A generated answer is never discarded for its length where the answer is what
-  matters. A verdict's reason and a plan item survive a long explanation,
-  shortened to fit; only copy whose length means the request was misread falls
-  back instead. Each schema declares the limit its parser enforces, so a model
-  is never failed against a limit it was not told. The named tests `records a
-  satisfied verdict even when the model explains it at length`, `keeps a plan
-  whose criterion runs past the display limit`, and `tells the model the same
-  length limit the answer is held to` guard this.
-- The judge is shown what each call of the turn returned, not only that it
-  ran. A criterion resting on a tool's output can therefore be met by that
-  output. The named test `shows the judge what this turn's calls returned, and
-  not an earlier turn's` guards it.
-- A negative verdict at the end of one conversational turn does not close the
-  item: it reads "not verified" with what is missing, and the next turn may
-  still do the work and be judged again. The named test `keeps unmet plan work
-  open when a turn asks for more information` guards this.
+  enforcement. The named tests `reads the labelling answer, and nothing from one
+  without both parts`, `labels an action from what the code knows, specific to
+  its target`, and `asks the guidance model for the conversation's name and the
+  action's copy` guard the boundary and state transitions. The composition test
+  also proves that auxiliary requests omit the raw tool command.
+- Presentation is a dependency of its own. Writing the conversation's name and
+  an action's copy is presentation. Condensing is not: the conversation's own
+  model writes the summary (ADR 0050). A composition may point presentation at
+  a different model. The named tests `asks the guidance model for the
+  conversation name` and `asks the conversation's own model to condense it, and
+  neither auxiliary model` guard the split.
 - A conversation condensed by the loop is renamed by the same request that
   condensed it, never a second one, and a manual title is neither asked for nor
   replaced. The named tests `names a condensed conversation from the condensing
@@ -710,7 +630,7 @@ browser is not among them: it is reached, and let go of, through capabilities.
   than ignoring it. A model that answers in prose instead is read by the same
   parsers, which remain the authority on whether an answer is usable. The named
   tests `asks for one tool instead of a JSON-mode reply`, `never constrains
-  tool choice`, `reads the plan from the tool call arguments`, and `still reads
+  tool choice`, `reads the conversation name from the tool call arguments`, and `still reads
   an answer the model wrote as prose` guard the shape and both answer paths.
   ADR 0022.
 - Provider failures become a visible failed task without exposing internal
@@ -838,12 +758,15 @@ browser is not among them: it is reached, and let go of, through capabilities.
   turn woken by a specialist finishing still knows a delegation happened. Named
   test: `marks the turn completed with the specialist still running, then wakes
   with its handoff`.
-- **A specialist honors the shared budget it cannot itself ask about.** Only
-  the parent's own round loop can pause and ask a person to continue; a
-  specialist has no one to ask, so it checks the same shared ledger after
-  each of its own rounds and stops itself, interrupted, rather than running
-  unsupervised once its parent has moved on. Named test: `stops itself when
-  the shared work budget is reached while it is running alone`.
+- **A specialist has a budget of its own, and is asked for a report when it
+  is spent.** Only the parent's own round loop can ask a person to continue,
+  so a specialist neither spends the main task's budget nor stops when that
+  runs out (ADR 0061). At its own limit it gets one request with only
+  `finish_specialist` on offer; one that still does not report is interrupted.
+  Named tests: `does not count a specialist's spending against the main
+  task's budget`, `asks a specialist that reached its own budget to report what
+  it has`, and `stops a specialist that will not report once its budget is
+  spent`.
 - **Two children needing a person's decision at the same moment do not race
   for the one visible prompt.** `task.phase` holds a single approval or input
   prompt; a second concurrent request waits for the first to resolve before
@@ -866,8 +789,9 @@ browser is not among them: it is reached, and let go of, through capabilities.
   activation is also recorded as a completed, inspectable action with the
   plugin's display name and component inventory. Named tests: `advertises a
   compact inventory without exposing full plugin instructions until
-  activation` and `adds exactly an activated plugin's skills, specialists and
-  connectors to context from that point on`.
+  activation`, `adds exactly an activated plugin's skills, specialists and
+  connectors to context from that point on`, and `activates every plugin asked
+  for in one response, each saying what it is for`.
 - **A specialist handoff is durable and attributable.** Running child work is
   stored on the owning task with its definition provenance; a restart settles
   it as interrupted, and completion returns a structured handoff to the parent.
@@ -980,9 +904,12 @@ browser is not among them: it is reached, and let go of, through capabilities.
   multi-edit must match; a different folder, changed connector schema,
   deletion, shell call, or new conversation asks again. A grant is saved on
   the task, indicated by a compact badge on each covered action, and can be revoked from that
-  conversation's menu. Named tests: `covers later edits in one folder, then
-  asks after revocation and in another conversation` and `checks every edit
-  target, connector version, and excluded deletion`.
+  conversation's menu. A connector grant is named after the connection and
+  the tool, never after the page or address a call acts on, because it covers
+  that tool on every target. Named tests: `covers later edits in one folder, then
+  asks after revocation and in another conversation`, `checks every edit
+  target, connector version, and excluded deletion`, and `names a connector
+  rule after its connection, never the page the call acts on`.
 - Guidance sent while a turn owns a conversation is saved before it is
   acknowledged. It is delivered in order after a complete tool batch or a
   streamed answer, preserving the earlier result in model history. The model
@@ -1001,8 +928,7 @@ questions a turn asks of the app around it. A test that needs startup, saving,
 folders or the browser feed is a test of the core and the loop together and
 lives with the core.
 
-`keeps cancellation terminal during final assessment` covers cancellation after
-generation. `persists overlapping input as guidance without replacing the turn`
+`persists overlapping input as guidance without replacing the turn`
 covers ownership of a task. `advertises enabled skills and sends earlier tool
 results with a follow-up` covers runtime discovery and a restored
 conversation's tool results.

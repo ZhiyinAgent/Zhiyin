@@ -1,6 +1,7 @@
 # 0038. Overall work is bounded by a renewable ledger
 
-Status: accepted
+Status: accepted; the token limit is superseded by 0061; what the question
+shows is amended by 0064
 
 Date: 2026-09-13
 

@@ -80,6 +80,19 @@ describe("the catalog shipped with the application", () => {
     ]);
   });
 
+  it("paces Tavily within the rate its development keys allow", async () => {
+    // Tavily allows a development key 100 requests a minute, and a person's
+    // key type cannot be read without spending quota, so the smaller one holds.
+    const research = (await loadBuiltInPlugins(shipped)).find(
+      (plugin) => plugin.manifest.name === "research",
+    );
+    const tavily = research?.mcpServers.find((server) =>
+      server.id.endsWith("/tavily"),
+    );
+
+    expect(tavily?.requestsPerMinute).toBe(100);
+  });
+
   it("states what every plugin and connector can use and where its data goes", async () => {
     for (const plugin of await loadBuiltInPlugins(shipped)) {
       expect(plugin.manifest.accessSummary).toBeTruthy();

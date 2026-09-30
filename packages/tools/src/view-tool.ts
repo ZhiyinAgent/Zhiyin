@@ -65,8 +65,6 @@ export function defineViewTool(
       action,
       target: parsed.title,
       command: `${spec.name}(${JSON.stringify({ title: parsed.title })})`,
-      detail:
-        "This adds an inert, reviewable view to the conversation. It does not change files or contact another service.",
       requiresApproval: false,
       view,
     };

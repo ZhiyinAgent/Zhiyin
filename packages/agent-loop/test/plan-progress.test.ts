@@ -1,150 +1,145 @@
 /**
- * The working model sees the plan it is judged on and reports its progress on
- * it. Progress is its claim; the verdict stays the judge's.
+ * The working model keeps its own plan: it sends the whole list, the list is
+ * corrected rather than refused, and it is reminded once of what it left open.
+ * Nothing judges the plan. ADR 0063.
  */
 
 import { describe, expect, it } from "vitest";
-import { planText } from "../src/plan-progress.js";
-import type { WorkspaceTask } from "@zhiyin/contract";
-import {
-  notices,
-  resultOf,
-  reviewedIds,
-  withPlan,
-  type Step,
-} from "./plan-fixture.js";
+import { notices, resultOf, withPlan, type Step } from "./plan-fixture.js";
 
-const listing = (id: string, path = "reports"): Step => ({
-  calls: [{ name: "list_directory", args: { path }, id }],
-});
-const update = (id: string, args: Record<string, unknown>): Step => ({
-  calls: [{ name: "update_plan", args, id }],
+const update = (id: string, items: readonly unknown[]): Step => ({
+  calls: [{ name: "update_plan", args: { items }, id }],
 });
 const finish: Step = { text: "Done." };
 
 const plan = (fixture: ReturnType<typeof withPlan>) =>
   fixture.loop.snapshot().tasks[0]?.plan ?? [];
 
-describe("the plan the working model sees", () => {
-  it("is in the first request of the turn, every item with its criterion", async () => {
-    const fixture = withPlan({ script: () => finish });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    const [notice] = notices(fixture.requests[0], "plan");
-    expect(notice?.content).toContain("plan-1");
-    expect(notice?.content).toContain(
-      "The reports folder was listed and its files named.",
-    );
-    expect(notice?.content).toContain("plan-2");
-    expect(notice?.content).toContain(
-      "summary.md exists and names every report.",
-    );
-  });
-
-  it("is not sent when the request needed no plan", async () => {
-    const fixture = withPlan({ plan: { items: [] }, script: () => finish });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Hello");
-
-    expect(notices(fixture.requests[0], "plan")).toHaveLength(0);
-  });
-
-  it("is no longer said to be shown only by the interface", async () => {
-    const fixture = withPlan({ script: () => finish });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    expect(String(fixture.requests[0]?.messages[0]?.content)).not.toContain(
-      "separately shows the task plan",
-    );
-  });
-
-  it("comes back after 10 rounds without update_plan while items are open, and not for the next 9", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request <= 21
-          ? listing(`call-${request}`, `folder-${request}`)
-          : finish,
-      workLimits: { maximumToolRounds: 30 },
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    const counts = fixture.requests.map(
-      (request) => notices(request, "plan").length,
-    );
-    expect(counts.slice(0, 10)).toEqual(Array(10).fill(1));
-    expect(counts.slice(10, 20)).toEqual(Array(10).fill(2));
-    expect(counts[20]).toBe(3);
-    expect(notices(fixture.requests[10], "plan")[1]?.content).toContain(
-      "Do not present the task as finished while items are still open",
-    );
-  });
-
-  it("does not come back while the model keeps it current", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request > 14
-          ? finish
-          : request % 5 === 0
-            ? update(`update-${request}`, {
-                items: [{ id: "plan-1", progress: "in_progress" }],
-              })
-            : listing(`call-${request}`, `folder-${request}`),
-      workLimits: { maximumToolRounds: 30 },
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    expect(
-      fixture.requests.map((request) => notices(request, "plan").length),
-    ).toEqual(Array(15).fill(1));
-  });
-});
-
-describe("the verdicts in the plan the model sees", () => {
-  it("names each of the judge's verdicts with its reason", () => {
-    const text = planText([
-      {
-        id: "plan-1",
-        title: "List the reports",
-        criterion: "The reports were listed.",
-        status: "verified",
-        verification: "The listing names q1.pdf.",
-      },
-      {
-        id: "plan-2",
-        title: "Check the totals",
-        criterion: "The totals match the CSV.",
-        status: "needs-attention",
-        verification: "No call compared the totals.",
-      },
-      {
-        id: "plan-3",
-        title: "Write the summary",
-        criterion: "summary.md names every report.",
-        status: "couldnt-judge",
-        verification: "The review request failed.",
-      },
-    ]);
-    expect(text).toContain("Verdict: verified: The listing names q1.pdf.");
-    expect(text).toContain(
-      "Verdict: not verified: No call compared the totals.",
-    );
-    expect(text).toContain(
-      "Verdict: could not be judged: The review request failed.",
-    );
-  });
-});
-
 describe("update_plan", () => {
-  it("offers no way to set a verdict", async () => {
+  it("replaces the plan with the list the model sends, in its order", async () => {
+    const fixture = withPlan({
+      script: (request) =>
+        [
+          update("first", [
+            { title: "List the reports", status: "in_progress" },
+            { title: "Write the summary", status: "pending" },
+          ]),
+          update("second", [
+            { title: "List the reports", status: "done" },
+            { title: "Check the totals", status: "in_progress" },
+            { title: "Write the summary", status: "pending" },
+          ]),
+        ][request - 1] ?? finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Summarise the reports");
+
+    expect(plan(fixture)).toEqual([
+      { id: "plan-1", title: "List the reports", status: "done" },
+      { id: "plan-2", title: "Check the totals", status: "in_progress" },
+      { id: "plan-3", title: "Write the summary", status: "pending" },
+    ]);
+  });
+
+  it("keeps only the first item in progress", async () => {
+    const fixture = withPlan({
+      script: (request) =>
+        request === 1
+          ? update("update", [
+              { title: "Read the brief", status: "in_progress" },
+              { title: "Draft the report", status: "in_progress" },
+            ])
+          : finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Write the report");
+
+    expect(plan(fixture).map((item) => item.status)).toEqual([
+      "in_progress",
+      "pending",
+    ]);
+  });
+
+  it("corrects an update instead of refusing it: untitled entries dropped, an unknown status read as pending, at most eight items", async () => {
+    const items = [
+      { title: "Step one", status: "done" },
+      { status: "done" },
+      { title: "Step two", status: "wip" },
+      ...Array.from({ length: 9 }, (_, index) => ({
+        title: `Later step ${index + 1}`,
+        status: "pending",
+      })),
+    ];
+    const fixture = withPlan({
+      script: (request) => (request === 1 ? update("update", items) : finish),
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Do the steps");
+
+    expect(resultOf(fixture.requests[1], "update")).toMatchObject({ ok: true });
+    expect(plan(fixture).map((item) => [item.title, item.status])).toEqual([
+      ["Step one", "done"],
+      ["Step two", "pending"],
+      ...Array.from({ length: 6 }, (_, index) => [
+        `Later step ${index + 1}`,
+        "pending",
+      ]),
+    ]);
+  });
+
+  it("keeps a title up to 200 characters whole, ends a longer one at a whole word with no ellipsis, and tells the model the limit", async () => {
+    const whole =
+      "Collecter et vérifier les sources officielles (programme de cycle 1, textes réglementaires, rapports IGESR)";
+    const long = "word ".repeat(50).trim();
+    const fixture = withPlan({
+      script: (request) =>
+        request === 1
+          ? update("update", [
+              { title: whole, status: "in_progress" },
+              { title: long, status: "pending" },
+            ])
+          : finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Write the report");
+
+    expect(whole.length).toBeGreaterThan(72);
+    expect(plan(fixture)[0]?.title).toBe(whole);
+    const cut = plan(fixture)[1]?.title ?? "";
+    expect(cut.length).toBeLessThanOrEqual(200);
+    expect(cut).toBe("word ".repeat(40).trim());
+    expect(cut).not.toMatch(/…|\.\.\.$/);
+    const tool = fixture.requests[0]?.tools.find(
+      (item) => item.name === "update_plan",
+    );
+    expect(JSON.stringify(tool?.inputSchema)).toContain('"maxLength":200');
+  });
+
+  it("refuses only an update that sends no list, and changes nothing", async () => {
+    const fixture = withPlan({
+      script: (request) =>
+        [
+          update("set", [{ title: "Read the brief", status: "pending" }]),
+          { calls: [{ name: "update_plan", args: {}, id: "empty" }] },
+        ][request - 1] ?? finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Write the report");
+
+    expect(resultOf(fixture.requests[2], "empty")).toMatchObject({
+      ok: false,
+    });
+    expect(plan(fixture)).toEqual([
+      { id: "plan-1", title: "Read the brief", status: "pending" },
+    ]);
+  });
+
+  it("asks for no ids, criteria or evidence", async () => {
     const fixture = withPlan({ script: () => finish });
     const taskId = await fixture.loop.createTask();
 
@@ -153,219 +148,98 @@ describe("update_plan", () => {
     const tool = fixture.requests[0]?.tools.find(
       (item) => item.name === "update_plan",
     );
-    const schema = JSON.stringify(tool?.inputSchema);
     expect(tool).toBeDefined();
-    expect(schema).not.toMatch(/verdict|verified|"status"/);
+    expect(JSON.stringify(tool?.inputSchema)).not.toMatch(
+      /evidence|criterion|call_id|"id"/,
+    );
   });
+});
 
-  it("records done with this turn's calls as the assistant's claim, and leaves the verdict alone", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        [
-          listing("call-list"),
-          update("update-1", {
-            items: [
-              {
-                id: "plan-1",
-                progress: "done",
-                evidence: [
-                  {
-                    call_id: "call-list",
-                    shows: "It names q1.pdf and q2.pdf.",
-                  },
-                ],
-                steps: [{ text: "List the folder", done: true }],
-              },
-            ],
-          }),
-        ][request - 1] ?? finish,
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    expect(resultOf(fixture.requests[2], "update-1")).toMatchObject({
-      ok: true,
-    });
-    expect(plan(fixture)[0]).toMatchObject({
-      progress: "done",
-      evidence: [{ callId: "call-list", shows: "It names q1.pdf and q2.pdf." }],
-      steps: [{ text: "List the folder", done: true }],
-    });
-    expect(plan(fixture)[0]?.status).not.toBe("verified");
-  });
-
-  it("rejects done without the calls that show it, saying why", async () => {
+describe("the plan across a turn", () => {
+  it("reminds the model once of the items it would leave open, then lets it finish", async () => {
     const fixture = withPlan({
       script: (request) =>
         request === 1
-          ? update("update-1", { items: [{ id: "plan-1", progress: "done" }] })
+          ? update("set", [
+              { title: "Read the brief", status: "done" },
+              { title: "Draft the report", status: "in_progress" },
+              { title: "Proofread", status: "pending" },
+            ])
           : finish,
     });
     const taskId = await fixture.loop.createTask();
 
-    await fixture.loop.start(taskId, "Summarise the reports");
+    await fixture.loop.start(taskId, "Write the report");
 
-    const result = resultOf(fixture.requests[1], "update-1");
-    expect(result).toMatchObject({ ok: false, refusedBy: "input-check" });
-    expect(String(result.reason)).toMatch(/call/i);
-    expect(plan(fixture)[0]?.progress).toBeUndefined();
+    expect(fixture.requests).toHaveLength(3);
+    const [reminder] = notices(fixture.requests[2], "plan");
+    expect(reminder?.content).toContain("Draft the report");
+    expect(reminder?.content).toContain("Proofread");
+    expect(reminder?.content).not.toContain("Read the brief");
+    expect(fixture.loop.snapshot().tasks[0]?.phase).not.toBe("running");
   });
 
-  it("rejects done that cites a call from an earlier turn", async () => {
-    const earlier: WorkspaceTask = {
-      id: "task-1",
-      title: "Reports",
-      titleSource: "manual",
-      updatedLabel: "Earlier",
-      messages: [],
-      actions: [],
-      phase: { kind: "draft" },
-    };
-    let turn = 1;
-    const fixture = withPlan({
-      restore: [earlier],
-      script: (request) => {
-        if (turn === 1) return request === 1 ? listing("old-call") : finish;
-        return request === 3
-          ? update("update-1", {
-              items: [
-                {
-                  id: "plan-1",
-                  progress: "done",
-                  evidence: [{ call_id: "old-call", shows: "The listing." }],
-                },
-              ],
-            })
-          : finish;
-      },
-    });
-
-    await fixture.loop.start("task-1", "List the reports");
-    turn = 2;
-    await fixture.loop.start("task-1", "Now mark it done");
-
-    const result = resultOf(fixture.requests[3], "update-1");
-    expect(result).toMatchObject({ ok: false });
-    expect(String(result.reason)).toContain("old-call");
-    expect(String(result.reason)).toMatch(/this turn/);
-  });
-
-  it("rejects cancelled without a reason, and shows the reason when given", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        [
-          update("update-1", {
-            items: [{ id: "plan-2", progress: "cancelled" }],
-          }),
-          update("update-2", {
-            items: [
-              {
-                id: "plan-2",
-                progress: "cancelled",
-                reason: "The person asked for no summary.",
-              },
-            ],
-          }),
-        ][request - 1] ?? finish,
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    expect(resultOf(fixture.requests[1], "update-1")).toMatchObject({
-      ok: false,
-    });
-    expect(plan(fixture)[1]).toMatchObject({
-      progress: "cancelled",
-      progressNote: "The person asked for no summary.",
-    });
-  });
-
-  it("rejects an item id the plan does not have, naming the ones it does", async () => {
+  it("does not remind when every item is done or skipped", async () => {
     const fixture = withPlan({
       script: (request) =>
         request === 1
-          ? update("update-1", {
-              items: [{ id: "plan-9", progress: "in_progress" }],
-            })
+          ? update("set", [
+              { title: "Read the brief", status: "done" },
+              { title: "Proofread", status: "skipped" },
+            ])
           : finish,
     });
     const taskId = await fixture.loop.createTask();
 
-    await fixture.loop.start(taskId, "Summarise the reports");
+    await fixture.loop.start(taskId, "Write the report");
 
-    const reason = String(resultOf(fixture.requests[1], "update-1").reason);
-    expect(reason).toContain("plan-9");
-    expect(reason).toContain("plan-1, plan-2");
+    expect(fixture.requests).toHaveLength(2);
+    expect(notices(fixture.requests[1], "plan")).toHaveLength(0);
   });
 
-  it("adds a criterion as the assistant's, and it is judged at the end of the turn", async () => {
+  it("shows the next turn the items still open, and nothing once all are finished", async () => {
     const fixture = withPlan({
       script: (request) =>
         request === 1
-          ? update("update-1", {
-              add: [
-                {
-                  title: "Check the totals",
-                  criterion: "The totals in q2.pdf match the CSV.",
-                },
-              ],
-            })
-          : finish,
+          ? update("set", [
+              { title: "Read the brief", status: "done" },
+              { title: "Proofread", status: "pending" },
+            ])
+          : request === 4
+            ? update("close", [
+                { title: "Read the brief", status: "done" },
+                { title: "Proofread", status: "done" },
+              ])
+            : finish,
     });
     const taskId = await fixture.loop.createTask();
 
-    await fixture.loop.start(taskId, "Summarise the reports");
+    // Requests 1-3: the plan is set, the model stops, is reminded, stops.
+    await fixture.loop.start(taskId, "Write the report");
+    // Requests 4-5: the plan is shown, the model finishes it.
+    await fixture.loop.start(taskId, "Carry on");
+    // Request 6: nothing is open, so nothing is added.
+    await fixture.loop.start(taskId, "Thanks");
 
-    expect(plan(fixture)[2]).toMatchObject({
-      id: "plan-3",
-      title: "Check the totals",
-      addedBy: "assistant",
-    });
-    // One review, for the planner's items and the one the model added.
-    expect(fixture.reviews.map(reviewedIds)).toEqual([
-      ["plan-1", "plan-2", "plan-3"],
-    ]);
+    expect(notices(fixture.requests[3], "plan").at(-1)?.content).toContain(
+      "Proofread",
+    );
+    expect(notices(fixture.requests[5], "plan")).toHaveLength(
+      notices(fixture.requests[4], "plan").length,
+    );
   });
 
-  it("holds the plan to eight items", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request === 1
-          ? update("update-1", {
-              add: Array.from({ length: 7 }, (_, index) => ({
-                title: `Extra ${index}`,
-                criterion: `Extra criterion ${index}.`,
-              })),
-            })
-          : finish,
-    });
+  it("starts a first message with one auxiliary request, to name the conversation, and a later one with none", async () => {
+    const fixture = withPlan({ script: () => finish });
     const taskId = await fixture.loop.createTask();
 
     await fixture.loop.start(taskId, "Summarise the reports");
+    const first = fixture.log.filter((entry) => entry !== "work");
+    await fixture.loop.start(taskId, "And the invoices");
+    const both = fixture.log.filter((entry) => entry !== "work");
 
-    expect(resultOf(fixture.requests[1], "update-1")).toMatchObject({
-      ok: false,
-    });
-    expect(plan(fixture)).toHaveLength(2);
-  });
-
-  it("does not judge a cancelled item", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request === 1
-          ? update("update-1", {
-              items: [
-                { id: "plan-2", progress: "cancelled", reason: "Not wanted." },
-              ],
-            })
-          : finish,
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
-    expect(fixture.reviews.map(reviewedIds)).toEqual([["plan-1"]]);
+    expect(first).toEqual(["other"]);
+    expect(both).toEqual(["other"]);
+    expect(plan(fixture)).toEqual([]);
   });
 });

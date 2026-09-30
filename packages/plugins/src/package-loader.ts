@@ -5,6 +5,7 @@ import {
   InvalidPluginError,
   SHIPPED,
   portableName,
+  validRate,
   validatePluginPackage,
   type PluginAppConnector,
   type PluginManifest,
@@ -13,7 +14,7 @@ import {
   type PluginProvenance,
   type PluginSkill,
   type PluginSpecialist,
-} from "./index.js";
+} from "./plugins.js";
 
 export const MCP_PLUGINS_SCHEMA =
   "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
@@ -464,8 +465,21 @@ async function serversFrom(
           parsed.origin,
           `MCP server “${id}” data destination`,
         ),
+        ...requestRate(server["requestsPerMinute"], id),
       };
     });
+}
+
+function requestRate(
+  value: unknown,
+  id: string,
+): { requestsPerMinute?: number } {
+  if (value === undefined) return {};
+  if (!validRate(value))
+    throw new InvalidPluginError(
+      `MCP server “${id}” requests per minute must be a positive whole number.`,
+    );
+  return { requestsPerMinute: value };
 }
 
 export async function loadPluginDirectory(

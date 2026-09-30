@@ -67,7 +67,7 @@ function budgetPrompt(loop: AgentLoop, taskId: string) {
 }
 
 describe("AgentLoop renewable work budget", () => {
-  it("pauses before an action when measured token or provider-cost limits are reached", async () => {
+  it("pauses before an action when the provider-cost limit is reached", async () => {
     const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));
     const base = stubDependencies(() => {});
     let request = 0;
@@ -75,7 +75,6 @@ describe("AgentLoop renewable work budget", () => {
       ...base,
       workLimits: {
         maximumElapsedMs: 60_000,
-        maximumTokens: 100,
         maximumProviderCostUsd: 0.1,
       },
       tools: workTool(execute),
@@ -119,38 +118,13 @@ describe("AgentLoop renewable work budget", () => {
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
 
     expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
+    expect(budgetPrompt(loop, taskId)).toMatchObject({
+      completedRounds: 0,
+      reached: ["providerCost"],
+      costUsd: 0.12,
+      allowance: { toolRounds: 24, elapsedMs: 60_000, providerCostUsd: 0.1 },
+    });
     expect(budgetPrompt(loop, taskId)).not.toHaveProperty("message");
-    await loop.resolveUserInput(taskId, "limit-1", {
-      answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
-    });
-    await running;
-  });
-
-  it("labels token use as estimated when the provider reports no usage", async () => {
-    const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));
-    const base = stubDependencies(() => {});
-    const loop = loopFrom({
-      ...base,
-      workLimits: {
-        maximumElapsedMs: 60_000,
-        maximumTokens: 1,
-        maximumProviderCostUsd: 1,
-      },
-      tools: workTool(execute),
-      permissions: {
-        decide: async () => ({ outcome: "allow" as const, reason: "Read" }),
-      },
-      model: { ...base.model, send: repeatedWork(1, []) },
-      newUserInputId: () => "limit-1",
-    });
-    const taskId = await loop.createTask();
-
-    const running = loop.start(taskId, "Inspect everything");
-    await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
-
-    expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
     await loop.resolveUserInput(taskId, "limit-1", {
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });
@@ -166,7 +140,6 @@ describe("AgentLoop renewable work budget", () => {
       now: () => now,
       workLimits: {
         maximumElapsedMs: 1_000,
-        maximumTokens: 1_000_000,
         maximumProviderCostUsd: 10,
       },
       tools: workTool(execute),
@@ -195,7 +168,12 @@ describe("AgentLoop renewable work budget", () => {
     await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
 
     expect(execute).not.toHaveBeenCalled();
-    expect(budgetPrompt(loop, taskId).completedRounds).toBe(0);
+    expect(budgetPrompt(loop, taskId)).toMatchObject({
+      completedRounds: 0,
+      reached: ["elapsed"],
+      elapsedMs: 2_000,
+    });
+    expect(budgetPrompt(loop, taskId)).not.toHaveProperty("costUsd");
     await loop.resolveUserInput(taskId, "limit-1", {
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });
@@ -286,6 +264,7 @@ describe("AgentLoop renewable work budget", () => {
       id: "budget-1",
       kind: "workBudget",
       completedRounds: 24,
+      reached: ["toolRounds"],
     });
 
     await loop.resolveUserInput(taskId, "budget-1", {

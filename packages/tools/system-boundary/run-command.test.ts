@@ -115,14 +115,8 @@ withShell("bash", () => {
       // consequence.
       claim: "Lists which files in the project have been changed.",
     });
-    expect(inspection).toHaveProperty(
-      "detail",
-      expect.stringContaining("can read, change, or delete any files"),
-    );
-    expect(inspection).toHaveProperty(
-      "detail",
-      expect.stringContaining("is not confined to that folder"),
-    );
+    // What every command could do is not restated on every card.
+    expect(inspection).not.toHaveProperty("detail");
   });
 
   it("runs in the workspace and reports what the command wrote", async () => {

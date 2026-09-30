@@ -7,7 +7,8 @@
       "name": "Tavily",
       "description": "Searches the web and extracts, maps, and crawls pages for research.",
       "access": "Needs a Tavily API key.",
-      "dataDestination": "Searches and requested addresses are sent to mcp.tavily.com."
+      "dataDestination": "Searches and requested addresses are sent to mcp.tavily.com.",
+      "requestsPerMinute": 100
     }
   }
 }

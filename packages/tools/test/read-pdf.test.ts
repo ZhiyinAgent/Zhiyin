@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -80,6 +80,116 @@ describe("reading a PDF", () => {
     expect(value.pagesRead).toMatch(/^1-\d+$/);
     expect(value.pagesRead).not.toBe("1-60");
     expect(value.text).toContain("pages");
+  }, 60_000);
+
+  it("reads a list of pages and ranges, in order, and says which it read", async () => {
+    const fivePages = [
+      "Page one alpha",
+      "Page two beta",
+      "Page three gamma",
+      "Page four delta",
+      "Page five epsilon",
+    ];
+    const tools = new WorkspaceTools(await workspaceWith(fivePages));
+
+    const result = await tools.execute("read_file", {
+      path: "report.pdf",
+      pages: "4, 1,3-4",
+    });
+
+    if (!result.ok) throw new Error(result.reason);
+    const value = result.value as { text: string; pagesRead: string };
+    expect(value.pagesRead).toBe("1, 3-4");
+    expect(value.text).toContain("Page one alpha");
+    expect(value.text).toContain("Page three gamma");
+    expect(value.text).toContain("Page four delta");
+    expect(value.text).not.toContain("Page two beta");
+    expect(value.text).not.toContain("Page five epsilon");
+    expect(value.text.indexOf("alpha")).toBeLessThan(
+      value.text.indexOf("gamma"),
+    );
+  }, 30_000);
+
+  it("reads the pages a document has and names the ones it does not", async () => {
+    const tools = new WorkspaceTools(await workspaceWith(threePages));
+
+    const result = await tools.execute("read_file", {
+      path: "report.pdf",
+      pages: "2,7-8",
+    });
+
+    if (!result.ok) throw new Error(result.reason);
+    const value = result.value as { text: string; pagesRead: string };
+    expect(value.pagesRead).toBe("2");
+    expect(value.text).toContain("Page two holds the numbers");
+    expect(value.text).toContain(
+      "This PDF has 3 pages, so pages 7-8 were not read.",
+    );
+  }, 30_000);
+
+  it("refuses pages it cannot understand, saying what a list looks like", async () => {
+    const tools = new WorkspaceTools(await workspaceWith(threePages));
+
+    for (const pages of ["3-1", "two", "1,,2", "0"]) {
+      const result = await tools.execute("read_file", {
+        path: "report.pdf",
+        pages,
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining('"2-5,8"'),
+      });
+    }
+  }, 30_000);
+
+  it("draws the pages of a list, two at a time, and says what is left", async () => {
+    const tools = new WorkspaceTools(await workspaceWith(threePages), {
+      acceptsImages: () => true,
+    });
+
+    const result = await tools.execute("read_file", {
+      path: "report.pdf",
+      pages: "1,3",
+      as: "image",
+    });
+
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.images).toHaveLength(2);
+    expect(result.value).toMatchObject({ pagesRead: "1, 3" });
+    expect(result.value).not.toHaveProperty("truncated");
+  }, 60_000);
+
+  it("reads a PDF of several megabytes, and says how large a PDF may be when one is larger", async () => {
+    const heavy = Array.from(
+      { length: 70 },
+      (_, index) => `Page ${index + 1} ${"weighty filler ".repeat(2600)}`,
+    );
+    const root = await workspaceWith(heavy);
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("read_file", {
+      path: "report.pdf",
+      pages: "2",
+    });
+
+    if (!result.ok) throw new Error(result.reason);
+    expect((await readFile(join(root, "report.pdf"))).length).toBeGreaterThan(
+      2 * 1024 * 1024,
+    );
+    expect((result.value as { pagesRead: string }).pagesRead).toBe("2");
+
+    await writeFile(
+      join(root, "huge.pdf"),
+      Buffer.concat([
+        Buffer.from("%PDF-1.4\n"),
+        Buffer.alloc(51 * 1024 * 1024),
+      ]),
+    );
+    const huge = await tools.execute("read_file", { path: "huge.pdf" });
+    expect(huge).toEqual({
+      ok: false,
+      reason: "This PDF is 51 MB; PDFs up to 50 MB can be read.",
+    });
   }, 60_000);
 
   it("refuses a page range that is not in the document", async () => {

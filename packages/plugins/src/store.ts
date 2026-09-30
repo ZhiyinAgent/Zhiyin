@@ -13,7 +13,7 @@ import {
   InvalidPluginError,
   type PluginPackage,
   type PluginProvenance,
-} from "./index.js";
+} from "./plugins.js";
 import { PluginStoreError } from "./errors.js";
 import { loadPluginDirectory } from "./package-loader.js";
 

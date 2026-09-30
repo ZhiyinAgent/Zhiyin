@@ -61,17 +61,27 @@ export function useReadingPosition(
 
     remember();
     scroller.addEventListener("scroll", remember, { passive: true });
-    // A change of width invalidates the position; a change of height does not,
-    // and is handled below as the conversation growing.
+    // A change of width invalidates the position. Any other change of size —
+    // a card that was already shown growing as its details arrive, or the view
+    // getting shorter because something appeared below it — adds no element and
+    // fires no scroll, so it is followed here for someone at the end.
     const resizes = new ResizeObserver(() => {
-      if (scroller.clientWidth === width) return;
-      width = scroller.clientWidth;
-      restore();
+      if (scroller.clientWidth !== width) {
+        width = scroller.clientWidth;
+        restore();
+      } else if (atBottom) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
     });
     resizes.observe(scroller);
+    for (const child of scroller.children) resizes.observe(child);
     // Anything added, removed or rewritten anywhere in the conversation. Only
     // someone who was already at the end is carried along by it.
-    const changes = new MutationObserver(() => {
+    const changes = new MutationObserver((records) => {
+      for (const record of records)
+        for (const node of record.addedNodes)
+          if (node.parentNode === scroller && node instanceof Element)
+            resizes.observe(node);
       if (atBottom) scroller.scrollTop = scroller.scrollHeight;
     });
     changes.observe(scroller, {

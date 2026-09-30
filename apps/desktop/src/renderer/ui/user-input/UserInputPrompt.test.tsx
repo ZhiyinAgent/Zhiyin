@@ -88,8 +88,11 @@ const quiz: PendingUserInputRequest = {
 const workBudget: PendingUserInputRequest = {
   id: "budget-1",
   kind: "workBudget",
-  title: "Continue working?",
+  title: "Keep working on this?",
   completedRounds: 24,
+  reached: ["toolRounds"],
+  elapsedMs: 12 * 60_000,
+  allowance: { toolRounds: 24, elapsedMs: 30 * 60_000, providerCostUsd: 10 },
 };
 
 const folderInstructions: PendingUserInputRequest = {
@@ -150,15 +153,65 @@ describe("UserInputPrompt", () => {
       />,
     );
 
-    expect(
-      screen.getByText("This task has completed 24 tool rounds."),
-    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
       answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
     });
+  });
+
+  it("says in one short sentence why the work stopped to check in, and nothing more", () => {
+    render(
+      <UserInputPrompt
+        prompt={workBudget}
+        onSubmit={async () => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    const card = screen.getByRole("region", { name: "Work budget reached" });
+    expect(within(card).getByText("Keep working on this?")).toBeVisible();
+    expect(within(card).getByText("Zhiyin has taken 24 steps.")).toBeVisible();
+    expect(within(card).queryByRole("list")).toBeNull();
+    expect(card).not.toHaveTextContent(/min|\$|another|summary|tool round/);
+  });
+
+  it("names the time or the cost when that is what the work reached", () => {
+    const { rerender } = render(
+      <UserInputPrompt
+        prompt={
+          {
+            ...workBudget,
+            completedRounds: 17,
+            reached: ["elapsed"],
+            elapsedMs: 30 * 60_000 + 20_000,
+            costUsd: 2.4,
+          } as PendingUserInputRequest
+        }
+        onSubmit={async () => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("Zhiyin has been working for 30 minutes."),
+    ).toBeVisible();
+    expect(screen.queryByText(/17|\$2\.40/)).toBeNull();
+
+    rerender(
+      <UserInputPrompt
+        prompt={
+          {
+            ...workBudget,
+            reached: ["providerCost"],
+            costUsd: 10.02,
+          } as PendingUserInputRequest
+        }
+        onSubmit={async () => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(screen.getByText("This task has cost $10.02 so far.")).toBeVisible();
   });
 
   it("says why the work may be going nowhere when Zhiyin saw it repeat itself", () => {

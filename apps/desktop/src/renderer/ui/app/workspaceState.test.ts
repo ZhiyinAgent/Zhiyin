@@ -229,4 +229,25 @@ describe("the conversation list", () => {
 
     expect(listedConversations(state).map((item) => item.id)).toEqual(["open"]);
   });
+
+  it("drops what was reported about a deleted conversation, and nothing else", () => {
+    const withIssues = workspaceReducer(createWorkspaceState(), {
+      type: "workspaceHydrated",
+      snapshot: {
+        ...snapshot,
+        issues: [
+          { message: "“Closed” is damaged.", conversationId: "closed" },
+          { message: "Plugins could not be loaded." },
+        ],
+      },
+    });
+
+    const state = workspaceReducer(withIssues, {
+      type: "taskRemoved",
+      taskId: "closed",
+      selectedTaskId: "open",
+    });
+
+    expect(state.issues).toEqual([{ message: "Plugins could not be loaded." }]);
+  });
 });

@@ -29,7 +29,8 @@ type PackageOptions = {
   readonly hooks?: string;
   readonly logo?: string;
   readonly skill?: string;
-  readonly mcp?: boolean;
+  /** Adds a connector; an object adds these fields to its declaration. */
+  readonly mcp?: boolean | Readonly<Record<string, unknown>>;
 };
 
 async function writePackage(
@@ -88,6 +89,7 @@ async function writePackage(
           search: {
             type: "streamable-http",
             url: "https://example.com/mcp",
+            ...(typeof options.mcp === "object" ? options.mcp : {}),
           },
         },
       }),
@@ -128,6 +130,29 @@ describe("portable plugin directories", () => {
         },
       ],
     });
+  });
+
+  it("reads the request rate a connector declares, and refuses one that is not a positive number", async () => {
+    const parent = await temporaryRoot("request-rate");
+    const paced = await writePackage(parent, {
+      mcp: { requestsPerMinute: 100 },
+    });
+    const invalid = await Promise.all(
+      [0, -5, "fast", 1.5].map((requestsPerMinute, index) =>
+        writePackage(parent, {
+          name: `invalid-rate-${index}`,
+          mcp: { requestsPerMinute },
+        }),
+      ),
+    );
+
+    expect((await loadPluginDirectory(paced, personal)).mcpServers).toEqual([
+      expect.objectContaining({ requestsPerMinute: 100 }),
+    ]);
+    for (const source of invalid)
+      await expect(loadPluginDirectory(source, personal)).rejects.toThrow(
+        /requests per minute/i,
+      );
   });
 
   it("rejects paths outside the package and components this host cannot run", async () => {

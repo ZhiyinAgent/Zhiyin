@@ -8,7 +8,7 @@ import { loopFrom, stubDependencies, until } from "./support.js";
 import {
   matchingPermission,
   offeredPermission,
-} from "../src/conversation-permissions.js";
+} from "../src/tools/conversation-permissions.js";
 
 describe("conversation permissions", () => {
   it("checks every edit target, connector version, and excluded deletion", async () => {
@@ -94,6 +94,25 @@ describe("conversation permissions", () => {
       ),
     ).toBeUndefined();
   });
+  it("names a connector rule after its connection, never the page the call acts on", async () => {
+    const scope = await offeredPermission(
+      "mcp",
+      "mcp__browser__browser_resize",
+      {
+        ok: true as const,
+        action: "Resize browser",
+        target:
+          "http://127.0.0.1:58390/59d140463bb6688c6454924d9e99a5eaa8404fb6636f9259/page-maternelle.html",
+        connection: "Zhiyin’s browser",
+        command: "browser_resize(...)",
+        invocation: { name: "Resize browser", arguments: [] },
+        identity: "server-and-schema-v1",
+      },
+    );
+
+    expect(scope?.label).toBe("Zhiyin’s browser · Resize browser");
+  });
+
   it("covers later edits in one folder, then asks after revocation and in another conversation", async () => {
     const root = await mkdtemp(
       join(tmpdir(), "zhiyin-conversation-permission-"),

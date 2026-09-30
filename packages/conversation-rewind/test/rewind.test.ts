@@ -52,8 +52,7 @@ function task(): WorkspaceTask {
       {
         id: "plan-1",
         title: "Later plan",
-        criterion: "Done",
-        status: "verified",
+        status: "done",
       },
     ],
     compaction: {

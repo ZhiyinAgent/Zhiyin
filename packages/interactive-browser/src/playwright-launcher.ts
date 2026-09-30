@@ -23,7 +23,7 @@ import type {
   BrowserLauncher,
   BrowserTarget,
   BrowserViewport,
-} from "./index.js";
+} from "./interactive-browser.js";
 
 const channels = ["msedge", "chrome"] as const;
 const frameQuality = 55;
@@ -162,11 +162,9 @@ function targetFrom(
         format: "jpeg",
         quality: frameQuality,
       });
-      return {
-        data: shot.data,
-        width: viewport.width,
-        height: viewport.height,
-      };
+      // The page's size now, which the agent may have changed since launch.
+      const size = page.viewportSize() ?? viewport;
+      return { data: shot.data, width: size.width, height: size.height };
     },
     startFrames: async (onFrame: (frame: BrowserFrame) => void) => {
       cdp.on("Page.screencastFrame", (frame) => {
@@ -179,11 +177,13 @@ function targetFrom(
           height: frame.metadata.deviceHeight ?? 0,
         });
       });
+      // Uncapped, so a streamed frame is the same picture size as a captured
+      // one. Capped at the launch size, a page resized past it streamed
+      // scaled-down frames between full-size captures, and the panel jumped
+      // between the two on every action.
       await cdp.send("Page.startScreencast", {
         format: "jpeg",
         quality: frameQuality,
-        maxWidth: viewport.width,
-        maxHeight: viewport.height,
         everyNthFrame: 2,
       });
     },

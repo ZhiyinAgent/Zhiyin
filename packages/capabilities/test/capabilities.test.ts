@@ -108,6 +108,7 @@ function research(): PluginView {
         url: "https://mcp.tavily.com/mcp/",
         access: "Needs an API key.",
         dataDestination: "mcp.tavily.com",
+        requestsPerMinute: 100,
         enabled: true,
       },
     ],
@@ -702,7 +703,12 @@ describe("a call handed back", () => {
         "load_skill",
         unoffered,
       ),
-    ).toEqual({ ok: false, reason: "Choose one offered skill by id." });
+    ).toEqual({
+      ok: false,
+      correctable: true,
+      reason:
+        "No skill with the id “deep-research/triangulate” is available here. Available: software-engineering/test-first.",
+    });
     expect(
       await capabilities.execute(
         "conversation-1",
@@ -710,12 +716,20 @@ describe("a call handed back", () => {
         "load_skill",
         unoffered,
       ),
-    ).toEqual({ ok: false, reason: "Choose one offered skill by id." });
+    ).toEqual({
+      ok: false,
+      reason:
+        "No skill with the id “deep-research/triangulate” is available here. Available: software-engineering/test-first.",
+    });
     expect(
       await capabilities.execute("conversation-2", "skill", "load_skill", {
         id: "software-engineering/test-first",
       }),
-    ).toEqual({ ok: false, reason: "Choose one offered skill by id." });
+    ).toEqual({
+      ok: false,
+      reason:
+        "No skill with the id “software-engineering/test-first” is available here. No skills are available in this conversation.",
+    });
   });
 
   it("refuses to load an offered skill whose plugin was switched off since", async () => {
@@ -749,7 +763,12 @@ describe("a call handed back", () => {
         id: "software-engineering/test-first",
         also: "this",
       }),
-    ).toEqual({ ok: false, reason: "Choose one offered skill by id." });
+    ).toEqual({
+      ok: false,
+      correctable: true,
+      reason:
+        "Pass exactly one argument, “id”, naming a skill. Available: software-engineering/test-first.",
+    });
     expect(
       await capabilities.inspect("conversation-1", "skill", "load_skill", {
         id: "software-engineering/test-first",
@@ -775,7 +794,11 @@ describe("a call handed back", () => {
       await capabilities.execute("conversation-1", "skill", "load_skill", {
         id: "software-engineering/test-first",
       }),
-    ).toEqual({ ok: false, reason: "Choose one offered skill by id." });
+    ).toEqual({
+      ok: false,
+      reason:
+        "No skill with the id “software-engineering/test-first” is available here. No skills are available in this conversation.",
+    });
   });
 
   it("cannot take a person's answer when the built-in tools do not accept one", async () => {
@@ -1028,7 +1051,7 @@ describe("what a person has set up", () => {
     ]);
   });
 
-  it("declares every package connector to the connection feature, off when its plugin or itself is off", async () => {
+  it("declares every package connector to the connection feature with its request rate, off when its plugin or itself is off", async () => {
     const asked: unknown[][] = [];
     const plugins = pluginsHolding([engineering(), research()], asked);
     await plugins.setEnabled("deep-research", false);
@@ -1046,6 +1069,7 @@ describe("what a person has set up", () => {
         name: "Tavily",
         url: "https://mcp.tavily.com/mcp/",
         enabled: false,
+        requestsPerMinute: 100,
       },
     ]);
   });

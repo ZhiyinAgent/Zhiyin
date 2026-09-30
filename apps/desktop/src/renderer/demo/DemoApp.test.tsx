@@ -28,7 +28,9 @@ describe("DemoApp", () => {
     render(<DemoApp initialScenario="thinking" />);
 
     expect(screen.getByText("Working")).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Task plan" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /^plan \d+\/\d+/i }),
+    ).toBeNull();
   });
 
   it("switches to a compact approval state while keeping steering available", () => {

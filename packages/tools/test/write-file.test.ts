@@ -72,8 +72,7 @@ describe("write_file", () => {
       ok: true,
       action: "Overwrite an existing workspace file",
       target: "brief.md",
-      detail:
-        "This replaces the current contents of brief.md (15 bytes). It cannot be undone.",
+      detail: "This replaces the current contents of brief.md (15 bytes).",
       access: "change",
       scope: "workspace",
       // Both sides: the text on disk and the text proposed for it.

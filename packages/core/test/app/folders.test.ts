@@ -286,6 +286,11 @@ describe("AgentLoop per-conversation folders", () => {
     expect(loop.snapshot().selectedTaskId).toBe(reports);
     // Not silently relabelled as the folder it failed to open.
     expect(loop.snapshot().workspace?.path).toBe("C:/work/notes");
-    expect(loop.snapshot().issues?.join(" ")).toMatch(/could not be opened/i);
+    expect(
+      loop
+        .snapshot()
+        .issues?.map((issue) => issue.message)
+        .join(" "),
+    ).toMatch(/could not be opened/i);
   });
 });

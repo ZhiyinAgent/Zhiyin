@@ -49,6 +49,10 @@ Invoke-Step "eslint"    { pnpm lint }
 # up when the ground changes underneath it, so it is caught here instead.
 Invoke-Step "theme"     { node scripts/check-theme.mjs }
 
+# Files nothing reaches and dependencies nothing imports. Unused exports are
+# not part of this step yet; see tasks/unused-exports.md.
+Invoke-Step "knip"     { pnpm knip }
+
 Invoke-Step "prettier"  { pnpm format:check }
 Invoke-Step "typecheck" { pnpm typecheck }
 Invoke-Step "test"      { pnpm test }

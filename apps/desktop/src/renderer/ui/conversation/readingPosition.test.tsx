@@ -10,7 +10,8 @@ import { useReadingPosition } from "./readingPosition.js";
  */
 const messageCount = 12;
 const wideHeight = 100;
-const viewHeight = 300;
+let viewHeight = 300;
+let extraHeight = 0;
 
 let width = 1000;
 let notify: (() => void) | undefined;
@@ -21,7 +22,8 @@ function heightOf(): number {
 
 function layOut(container: HTMLElement): void {
   let scrollTop = 0;
-  const contentHeight = () => container.children.length * heightOf();
+  const contentHeight = () =>
+    container.children.length * heightOf() + extraHeight;
   const measure = (element: Element, top: () => number) =>
     vi.spyOn(element, "getBoundingClientRect").mockImplementation(
       () =>
@@ -77,6 +79,11 @@ function Conversation({ count = messageCount }: { count?: number }) {
   );
 }
 
+/** Reports the width the fixture gave the column, so later reports are heights. */
+function settleWidth(): void {
+  notify?.();
+}
+
 function narrowTheColumn(): void {
   width = 400;
   notify?.();
@@ -84,6 +91,8 @@ function narrowTheColumn(): void {
 
 afterEach(() => {
   width = 1000;
+  viewHeight = 300;
+  extraHeight = 0;
   notify = undefined;
   vi.restoreAllMocks();
 });
@@ -137,6 +146,56 @@ describe("the place someone is reading", () => {
         (messageCount + 1) * wideHeight - viewHeight,
       ),
     );
+  });
+
+  it("keeps the end in view when a call already shown grows taller", () => {
+    render(<Conversation />);
+    const conversation = screen.getByTestId("conversation");
+    layOut(conversation);
+    settleWidth();
+
+    conversation.scrollTop = messageCount * wideHeight;
+    fireEvent.scroll(conversation);
+
+    // Nothing is added: a card that was already there finishes loading its
+    // details, and no change to the page's structure says so.
+    extraHeight = 240;
+    notify?.();
+
+    expect(conversation.scrollTop).toBe(
+      messageCount * wideHeight + 240 - viewHeight,
+    );
+  });
+
+  it("keeps the end in view when the space below the conversation takes room", () => {
+    render(<Conversation />);
+    const conversation = screen.getByTestId("conversation");
+    layOut(conversation);
+    settleWidth();
+
+    conversation.scrollTop = messageCount * wideHeight;
+    fireEvent.scroll(conversation);
+
+    // A question or an approval appears under the conversation and the view
+    // gets shorter, without any scrolling by the person.
+    viewHeight = 150;
+    notify?.();
+
+    expect(conversation.scrollTop).toBe(messageCount * wideHeight - 150);
+  });
+
+  it("does not follow growth once someone has scrolled up", () => {
+    render(<Conversation />);
+    const conversation = screen.getByTestId("conversation");
+    layOut(conversation);
+    settleWidth();
+
+    conversation.scrollTop = 2 * wideHeight;
+    fireEvent.scroll(conversation);
+    extraHeight = 240;
+    notify?.();
+
+    expect(conversation.scrollTop).toBe(2 * wideHeight);
   });
 
   it("does not pull someone who has scrolled up back to the end", async () => {

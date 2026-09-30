@@ -242,6 +242,13 @@ the settings commands to them directly.
   conversation nobody opened exactly as it was saved`, `reports a damaged
   conversation, keeps a copy, and opens every other`, and `says when the last
   moment before the app closed was not saved`.
+- **An issue is said once, with what can be done about it.** An issue is a
+  plain statement; where a copy was kept and the conversation it concerns
+  travel beside it, not inside it. A damaged conversation is read and copied
+  once however often it is opened, and its report goes when it is deleted. Any
+  issue can be dismissed. Named tests: `reports a damaged conversation once
+  and keeps one copy however often it is opened, and drops the report when it
+  is deleted` and `lets a person dismiss a report`.
 - Saved history that will not open is kept before anything else happens, and
   nothing is written over it until the person chooses. What can still be read
   is counted and offered; recovering keeps those conversations and their

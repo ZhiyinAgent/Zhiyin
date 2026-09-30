@@ -291,11 +291,9 @@ export function buildCore({
         // than refused, and the model is told what it is looking at.
         pictures: new CanvasPictureFitting(),
         model,
-        // Both the selected model for now. They are named apart so a local
-        // model can take the presentation work without also taking the
-        // judgement that decides what the plan and the summary claim.
+        // The selected model for now. Named apart so a local model can take
+        // the naming and labelling work.
         guidanceModel: model,
-        judgementModel: model,
         newMessageId: randomUUID,
         newActionId: randomUUID,
         newSpecialistRunId: randomUUID,

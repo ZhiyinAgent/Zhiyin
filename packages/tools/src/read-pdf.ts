@@ -23,13 +23,15 @@ import { maximumImagePixels } from "./image-size.js";
 const maximumPdfCharacters = 60_000;
 
 export type PdfRange = { readonly first: number; readonly last: number };
+/** Pages, as ranges in page order that neither touch nor overlap. */
+export type PdfPages = readonly PdfRange[];
 
 export type PdfReadResult =
   | {
       readonly ok: true;
       readonly text: string;
       readonly pages: number;
-      readonly read: PdfRange;
+      readonly read: PdfPages;
       readonly complete: boolean;
     }
   | { readonly ok: false; readonly reason: string };
@@ -128,22 +130,83 @@ function loadPdfjs(): Promise<PdfjsModule> {
   return pdfjs;
 }
 
-/** `3` or `2-5`. Anything else is not a page range and is not guessed at. */
-export function parsePageRange(
-  value: unknown,
-): PdfRange | undefined | "invalid" {
+/**
+ * `3`, `2-5`, or a list of both such as `2-5,8`: read in page order, each page
+ * once. Anything else is not a page list and is not guessed at.
+ */
+export function parsePages(value: unknown): PdfPages | undefined | "invalid" {
   if (value === undefined) return undefined;
   if (typeof value !== "string") return "invalid";
-  const single = /^\s*(\d+)\s*$/.exec(value);
-  if (single) {
-    const page = Number(single[1]);
-    return page >= 1 ? { first: page, last: page } : "invalid";
+  const ranges: PdfRange[] = [];
+  for (const part of value.split(",")) {
+    const match = /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(part);
+    if (!match) return "invalid";
+    const first = Number(match[1]);
+    const last = match[2] === undefined ? first : Number(match[2]);
+    if (first < 1 || last < first) return "invalid";
+    ranges.push({ first, last });
   }
-  const range = /^\s*(\d+)\s*-\s*(\d+)\s*$/.exec(value);
-  if (!range) return "invalid";
-  const first = Number(range[1]);
-  const last = Number(range[2]);
-  return first >= 1 && last >= first ? { first, last } : "invalid";
+  return merged(ranges);
+}
+
+function merged(ranges: readonly PdfRange[]): PdfRange[] {
+  const out: PdfRange[] = [];
+  for (const range of [...ranges].sort((a, b) => a.first - b.first)) {
+    const previous = out.at(-1);
+    if (previous && range.first <= previous.last + 1)
+      out[out.length - 1] = {
+        first: previous.first,
+        last: Math.max(previous.last, range.last),
+      };
+    else out.push(range);
+  }
+  return out;
+}
+
+/** Pages as a person, or the `pages` argument, would write them. */
+export function describePages(pages: PdfPages): string {
+  return pages
+    .map(({ first, last }) =>
+      first === last ? `${first}` : `${first}-${last}`,
+    )
+    .join(", ");
+}
+
+const asPages = (numbers: readonly number[]): PdfRange[] =>
+  merged(numbers.map((page) => ({ first: page, last: page })));
+
+/** The asked-for pages the document has, in order, and those it has not. */
+function pagesIn(requested: PdfPages | undefined, total: number) {
+  const asked = requested ?? [{ first: 1, last: total }];
+  const order = asked
+    .filter((range) => range.first <= total)
+    .flatMap(({ first, last }) =>
+      Array.from(
+        { length: Math.min(last, total) - first + 1 },
+        (_, index) => first + index,
+      ),
+    );
+  const missing = asked
+    .filter((range) => range.last > total)
+    .map((range) => ({
+      first: Math.max(range.first, total + 1),
+      last: range.last,
+    }));
+  return { order, missing };
+}
+
+const pageCount = (total: number) =>
+  `${total} ${total === 1 ? "page" : "pages"}`;
+
+function noSuchPage(total: number, requested: PdfPages): string {
+  return `This PDF has ${pageCount(total)}, so there is no page ${requested[0]?.first ?? total + 1}.`;
+}
+
+/** Said of the asked-for pages past the end, so none goes missing silently. */
+export function missingPages(total: number, missing: PdfPages): string {
+  if (!missing.length) return "";
+  const one = missing.length === 1 && missing[0]?.first === missing[0]?.last;
+  return `This PDF has ${pageCount(total)}, so ${one ? "page" : "pages"} ${describePages(missing)} ${one ? "was" : "were"} not read.`;
 }
 
 function textOfPage(items: readonly unknown[]): string {
@@ -179,7 +242,7 @@ function documentOptions(bytes: Buffer): Record<string, unknown> {
 
 export async function readPdfText(
   bytes: Buffer,
-  requested: PdfRange | undefined,
+  requested: PdfPages | undefined,
   signal?: AbortSignal,
 ): Promise<PdfReadResult> {
   let pdf: PdfjsModule;
@@ -206,17 +269,13 @@ export async function readPdfText(
 
   try {
     const total = document.numPages;
-    if (requested && requested.first > total)
-      return {
-        ok: false,
-        reason: `This PDF has ${total} ${total === 1 ? "page" : "pages"}, so there is no page ${requested.first}.`,
-      };
-    const first = requested?.first ?? 1;
-    const last = Math.min(requested?.last ?? total, total);
+    const { order, missing } = pagesIn(requested, total);
+    if (requested && !order.length)
+      return { ok: false, reason: noSuchPage(total, requested) };
     const parts: string[] = [];
-    let read = first - 1;
+    const read: number[] = [];
     let length = 0;
-    for (let page = first; page <= last; page += 1) {
+    for (const page of order) {
       if (signal?.aborted)
         return { ok: false, reason: "Reading the PDF was cancelled." };
       const text = textOfPage(
@@ -228,13 +287,14 @@ export async function readPdfText(
       if (length + block.length > maximumPdfCharacters && parts.length) break;
       parts.push(block);
       length += block.length + 2;
-      read = page;
+      read.push(page);
     }
-    const complete =
-      read >= last && (requested !== undefined || last === total);
+    const left = order.slice(read.length);
+    const complete = left.length === 0;
     const notice = complete
       ? ""
-      : `\n\n… Stopped after page ${read} of ${total}. Read further with pages: "${read + 1}-${Math.min(read + 10, total)}". …`;
+      : `\n\n… Stopped after page ${read.at(-1)} of ${total}. Read further with pages: "${describePages(asPages(left.slice(0, 10)))}". …`;
+    const past = missingPages(total, missing);
     const body = parts.join("\n\n");
     if (!body.replace(/--- Page \d+ ---|\(no text on this page\)/g, "").trim())
       return {
@@ -244,9 +304,9 @@ export async function readPdfText(
       };
     return {
       ok: true,
-      text: `${body}${notice}`,
+      text: `${body}${notice}${past ? `\n\n${past}` : ""}`,
       pages: total,
-      read: { first, last: read },
+      read: asPages(read),
       complete,
     };
   } catch {
@@ -262,7 +322,10 @@ export type PdfRenderResult =
       readonly ok: true;
       readonly images: readonly { mediaType: string; data: string }[];
       readonly pages: number;
-      readonly read: PdfRange;
+      readonly read: PdfPages;
+      /** Asked-for pages that exist and were not drawn this time. */
+      readonly rest: PdfPages;
+      readonly missing: PdfPages;
       readonly complete: boolean;
     }
   | { readonly ok: false; readonly reason: string };
@@ -274,7 +337,7 @@ export type PdfRenderResult =
  */
 export async function renderPdfPages(
   bytes: Buffer,
-  requested: PdfRange | undefined,
+  requested: PdfPages | undefined,
   signal?: AbortSignal,
 ): Promise<PdfRenderResult> {
   let pdf: PdfjsModule;
@@ -305,16 +368,12 @@ export async function renderPdfPages(
 
   try {
     const total = document.numPages;
-    if (requested && requested.first > total)
-      return {
-        ok: false,
-        reason: `This PDF has ${total} ${total === 1 ? "page" : "pages"}, so there is no page ${requested.first}.`,
-      };
-    const first = requested?.first ?? 1;
-    const wanted = Math.min(requested?.last ?? total, total);
-    const last = Math.min(wanted, first + maximumRenderedPages - 1);
+    const { order, missing } = pagesIn(requested, total);
+    if (requested && !order.length)
+      return { ok: false, reason: noSuchPage(total, requested) };
+    const drawing = order.slice(0, maximumRenderedPages);
     const images: { mediaType: string; data: string }[] = [];
-    for (let number = first; number <= last; number += 1) {
+    for (const number of drawing) {
       if (signal?.aborted)
         return { ok: false, reason: "Drawing the PDF was cancelled." };
       const page = await document.getPage(number);
@@ -352,8 +411,10 @@ export async function renderPdfPages(
       ok: true,
       images,
       pages: total,
-      read: { first, last },
-      complete: last >= wanted,
+      read: asPages(drawing),
+      rest: asPages(order.slice(drawing.length)),
+      missing,
+      complete: drawing.length === order.length,
     };
   } catch {
     return { ok: false, reason: "This PDF could not be drawn." };

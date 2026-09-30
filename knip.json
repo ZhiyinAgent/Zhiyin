@@ -1,0 +1,29 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreBinaries": ["chcp"],
+  "ignore": ["evaluation/**"],
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"]
+    },
+    "apps/desktop": {
+      "entry": [
+        "src/renderer/main.tsx",
+        "src/renderer/demo/main.tsx",
+        "src/renderer/demo/lab.tsx"
+      ],
+      "ignoreDependencies": [
+        "koffi",
+        "@koromix/koffi-win32-x64",
+        "@napi-rs/keyring",
+        "@napi-rs/canvas",
+        "pdfjs-dist",
+        "@playwright/mcp",
+        "jsdom"
+      ]
+    },
+    "packages/process-ownership": {
+      "entry": ["test/fixtures/**/*.{mjs,mts}"]
+    }
+  }
+}

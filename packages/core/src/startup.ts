@@ -13,6 +13,7 @@ import type {
   PluginState,
   UsageState,
   WorkspaceContext,
+  WorkspaceIssue,
   WorkspaceSnapshot,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -41,7 +42,7 @@ export async function returnToWorkspace(
 type FolderState = {
   readonly selection: WorkspaceSnapshot["workspace"];
   readonly recents: NonNullable<WorkspaceSnapshot["recentWorkspaces"]>;
-  readonly issues: string[];
+  readonly issues: WorkspaceIssue[];
 };
 
 /**
@@ -63,9 +64,9 @@ export async function enterFolder(
   } catch {
     return {
       ...current,
-      issues: current.issues.includes(notice)
+      issues: current.issues.some((issue) => issue.message === notice)
         ? current.issues
-        : [...current.issues, notice],
+        : [...current.issues, { message: notice }],
     };
   }
   const description = await workspace.describeWorkspace();
@@ -74,7 +75,8 @@ export async function enterFolder(
     selection,
     recents: withRecentWorkspace(current.recents, selection),
     issues: current.issues.filter(
-      (issue) => issue !== notice && issue !== movedWorkspaceNotice,
+      (issue) =>
+        issue.message !== notice && issue.message !== movedWorkspaceNotice,
     ),
   };
 }
@@ -123,7 +125,7 @@ export type StartupState = {
   readonly recentWorkspaces: NonNullable<WorkspaceSnapshot["recentWorkspaces"]>;
   readonly plugins: PluginState[];
   readonly usage: UsageState;
-  readonly issues: string[];
+  readonly issues: WorkspaceIssue[];
   readonly historyAvailable: boolean;
   readonly historyRecovery: HistoryRecovery | undefined;
   readonly capabilitiesAvailable: boolean;
@@ -148,7 +150,8 @@ export async function loadStartup(
   deps: StartupDependencies,
   current: CurrentStartupState,
 ): Promise<StartupState> {
-  const issues: string[] = [];
+  const issues: WorkspaceIssue[] = [];
+  const say = (message: string) => issues.push({ message });
   let historyAvailable = true;
   let capabilitiesAvailable = true;
   let historyRecovery = current.historyRecovery;
@@ -159,7 +162,7 @@ export async function loadStartup(
         historyAvailable = false;
         historyRecovery ??= await offerHistoryRecovery(deps.sessions);
         if (!historyRecovery)
-          issues.push(
+          say(
             "Saved history could not be opened. Your files have been preserved. Retry after fixing access to the history file.",
           );
         return undefined;
@@ -167,7 +170,7 @@ export async function loadStartup(
       .catch(() => undefined),
     deps.capabilities.pluginStates([]).catch(() => {
       capabilitiesAvailable = false;
-      issues.push(
+      say(
         "Plugins could not be loaded. Workspace tools still work; plugins return once they can be read.",
       );
       return [];
@@ -179,9 +182,10 @@ export async function loadStartup(
   ]);
 
   if (restored?.setAside)
-    issues.push(
-      `${restored.setAside.count === 1 ? "One saved conversation was" : `${restored.setAside.count} saved conversations were`} damaged beyond reading and left out of the list. A copy was kept at ${restored.setAside.keptAt}.`,
-    );
+    issues.push({
+      message: `${restored.setAside.count === 1 ? "One saved conversation was" : `${restored.setAside.count} saved conversations were`} damaged beyond reading and left out of the list.`,
+      keptAt: restored.setAside.keptAt,
+    });
   let needsSave = false;
   const tasks = restored ? [] : [...current.tasks];
   const conversations = restored
@@ -203,7 +207,7 @@ export async function loadStartup(
     try {
       await deps.workspace.selectWorkspace(workspace.path);
     } catch {
-      issues.push(movedWorkspaceNotice);
+      say(movedWorkspaceNotice);
     }
   }
 
@@ -218,7 +222,7 @@ export async function loadStartup(
       plugins = [...(await deps.capabilities.pluginStates([]))];
       needsSave = true;
     } catch {
-      issues.push(
+      say(
         "Your saved preferences could not be applied to the available capabilities. They will be tried again next time.",
       );
     }
@@ -249,17 +253,16 @@ export async function loadConnections(
   install: (result: {
     readonly mcpServers: McpServerState[];
     readonly plugins?: PluginState[];
-    readonly issues?: readonly string[];
+    readonly issues?: readonly WorkspaceIssue[];
   }) => void,
 ): Promise<void> {
-  const issues: string[] = [];
+  const issues: WorkspaceIssue[] = [];
+  const say = (message: string) => issues.push({ message });
   let mcpServers: McpServerState[] = [];
   try {
     mcpServers = [...(await capabilities.connections())];
   } catch {
-    issues.push(
-      "Connections could not be loaded. You can still work without them.",
-    );
+    say("Connections could not be loaded. You can still work without them.");
   }
   install({
     mcpServers,
@@ -273,7 +276,10 @@ export async function loadConnections(
       mcpServers,
       plugins: [],
       issues: [
-        "Plugins could not be loaded. Workspace tools still work; plugins return once they can be read.",
+        {
+          message:
+            "Plugins could not be loaded. Workspace tools still work; plugins return once they can be read.",
+        },
       ],
     });
   }

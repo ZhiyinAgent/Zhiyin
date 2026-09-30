@@ -12,7 +12,7 @@
 
 import type { ModelRetryRecord } from "@zhiyin/contract";
 import type { ModelClientErrorCode } from "./failures.js";
-import type { ModelEvent } from "./index.js";
+import type { ModelEvent } from "./model-client.js";
 
 /** Attempts before anything was passed on, the first included. */
 export const maximumAttempts = 5;

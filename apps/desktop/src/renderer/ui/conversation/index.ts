@@ -3,7 +3,7 @@ export { ContextShelf } from "./ContextShelf.js";
 export { MarkdownMessage } from "./MarkdownMessage.js";
 export { OutcomeCard } from "./OutcomeCard.js";
 export { StreamingMarkdown } from "./StreamingMarkdown.js";
-export { TaskPlan } from "./TaskPlan.js";
+export { PlanPill } from "./PlanPill.js";
 export { WorkTrace } from "./WorkTrace.js";
 export type { SessionContext } from "./ContextShelf.js";
 export type { WorkStep } from "./WorkTrace.js";
@@ -13,6 +13,7 @@ export {
   type TimelineMessage,
   type TimelinePieces,
   type TimelineTask,
+  type WaitingOn,
 } from "./ConversationTimeline.js";
 export { ConversationSkeleton } from "./ConversationSkeleton.js";
 export { NewConversation } from "./NewConversation.js";

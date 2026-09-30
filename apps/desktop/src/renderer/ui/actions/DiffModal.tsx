@@ -19,12 +19,15 @@ import styles from "./actions.module.css";
  */
 export function DiffModal({
   changes,
+  initialPath,
   onClose,
 }: {
   changes: readonly FileChange[];
+  /** The file to open on; the first one otherwise. */
+  initialPath?: string;
   onClose: () => void;
 }) {
-  const [openPath, setOpenPath] = useState(changes[0]?.path);
+  const [openPath, setOpenPath] = useState(initialPath ?? changes[0]?.path);
   const dialog = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const current = changes.find((change) => change.path === openPath);

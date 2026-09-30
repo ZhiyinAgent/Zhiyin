@@ -1,6 +1,6 @@
 # 0044. Specialists run in parallel and in the background
 
-Status: accepted
+Status: accepted; the shared ledger is superseded by 0061
 
 Supersedes: 0043 (0043's content is unchanged; only its `Status:` line
 points here, per the working agreement's "supersede, never rewrite")

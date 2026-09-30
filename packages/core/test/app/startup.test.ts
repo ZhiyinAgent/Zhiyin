@@ -210,7 +210,7 @@ describe("AgentLoop startup", () => {
     expect(loop.snapshot().runtime.tasks).toBe("available");
     await until(() =>
       (loop.snapshot().issues ?? []).some((issue) =>
-        issue.includes("Connections could not be loaded"),
+        issue.message.includes("Connections could not be loaded"),
       ),
     );
   });

@@ -254,8 +254,11 @@ describe("AgentLoop folder authority across a restart", () => {
     const second = await launch(data);
 
     expect(second.tools.workspaceRoot()).toBeUndefined();
-    expect(second.loop.snapshot().issues?.join(" ")).toContain(
-      "Choose its new location before using files.",
-    );
+    expect(
+      second.loop
+        .snapshot()
+        .issues?.map((issue) => issue.message)
+        .join(" "),
+    ).toContain("Choose its new location before using files.");
   });
 });

@@ -3,39 +3,48 @@ import { WorkLedger } from "../src/index.js";
 
 const limits = {
   maximumElapsedMs: 60_000,
-  maximumTokens: 1_000,
   maximumProviderCostUsd: 10,
   maximumToolRounds: 3,
 };
 
-describe("a shared parent work ledger", () => {
-  it("shares model usage and tool rounds with child work", () => {
-    const parent = new WorkLedger(limits, new Date("2026-09-16T18:00:00Z"));
-    const child = parent;
+describe("a work ledger", () => {
+  it("stops at its tool-round limit", () => {
+    const ledger = new WorkLedger(limits, new Date("2026-09-16T18:00:00Z"));
 
-    parent.completeToolRound();
-    child.record({ requestId: "child-request", totalTokens: 600 });
-    child.completeToolRound();
-    parent.completeToolRound();
+    ledger.completeToolRound();
+    ledger.completeToolRound();
+    ledger.completeToolRound();
 
-    expect(parent.completedToolRounds()).toBe(3);
-    expect(parent.reached(new Date("2026-09-16T18:00:01Z"))).toEqual([
+    expect(ledger.reached(new Date("2026-09-16T18:00:01Z"))).toEqual([
       "toolRounds",
     ]);
     expect(
-      parent.describe(new Date("2026-09-16T18:00:01Z"), ["toolRounds"]),
+      ledger.describe(new Date("2026-09-16T18:00:01Z"), ["toolRounds"]),
     ).toContain("3 tool rounds");
   });
 
-  it("renews the one tranche for parent and child together", () => {
-    const parent = new WorkLedger(limits, new Date("2026-09-16T18:00:00Z"));
-    const child = parent;
-    child.completeToolRound();
-    child.record({ requestId: "child-request", totalTokens: 900 });
+  it("does not stop on how many tokens were read, however many", () => {
+    const ledger = new WorkLedger(limits, new Date("2026-09-16T18:00:00Z"));
 
-    parent.renew(new Date("2026-09-16T18:00:02Z"));
+    // Each request is counted whole, so a long conversation re-reads its own
+    // history every round: size is not a measure of work done.
+    for (let request = 0; request < 50; request += 1)
+      ledger.record({ requestId: `request-${request}`, totalTokens: 200_000 });
 
-    expect(child.completedToolRounds()).toBe(0);
-    expect(child.reached(new Date("2026-09-16T18:00:03Z"))).toEqual([]);
+    expect(ledger.reached(new Date("2026-09-16T18:00:01Z"))).toEqual([]);
+  });
+
+  it("renews rounds and cost together", () => {
+    const ledger = new WorkLedger(limits, new Date("2026-09-16T18:00:00Z"));
+    ledger.completeToolRound();
+    ledger.record({ requestId: "r", totalTokens: 1, costUsd: 11 });
+    expect(ledger.reached(new Date("2026-09-16T18:00:01Z"))).toEqual([
+      "providerCost",
+    ]);
+
+    ledger.renew(new Date("2026-09-16T18:00:02Z"));
+
+    expect(ledger.completedToolRounds()).toBe(0);
+    expect(ledger.reached(new Date("2026-09-16T18:00:03Z"))).toEqual([]);
   });
 });

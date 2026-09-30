@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Sessions } from "@zhiyin/session";
-import { deliverPendingHandoffs } from "../src/specialist-handoff-delivery.js";
-import { PendingHandoffs } from "../src/pending-handoffs.js";
-import type { ModelHistory } from "../src/model-history.js";
-import type { TurnRecords } from "../src/turn-records.js";
+import { deliverPendingHandoffs } from "../src/specialist/specialist-handoff-delivery.js";
+import { PendingHandoffs } from "../src/specialist/pending-handoffs.js";
+import type { ModelHistory } from "../src/context/model-history.js";
+import type { TurnRecords } from "../src/turn/turn-records.js";
 
 describe("specialist handoff delivery", () => {
   it("keeps later handoffs queued when an earlier notice cannot be saved", async () => {

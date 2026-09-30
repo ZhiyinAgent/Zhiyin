@@ -203,4 +203,64 @@ describe("plugin activation", () => {
       }),
     ]);
   });
+
+  it("activates every plugin asked for in one response, each saying what it is for", async () => {
+    const research = pluginOffering({
+      name: "research",
+      skills: [
+        { id: "web", description: "Search the web.", instructions: "Search." },
+      ],
+    });
+    let requestNumber = 0;
+    const requests: ModelRequest[] = [];
+    const base = dependenciesWithPlugin(async function* (request) {
+      requests.push(request);
+      requestNumber += 1;
+      if (requestNumber === 1) {
+        yield {
+          kind: "toolCallDelta",
+          index: 0,
+          callId: "activate-1",
+          name: "activate_plugin",
+          argumentsDelta: JSON.stringify({
+            id: "software-engineering",
+            purpose: "Pour relire le code.",
+          }),
+        };
+        yield {
+          kind: "toolCallDelta",
+          index: 1,
+          callId: "activate-2",
+          name: "activate_plugin",
+          argumentsDelta: JSON.stringify({
+            id: "research",
+            purpose: "Pour vérifier les textes officiels.",
+          }),
+        };
+        yield { kind: "done" };
+        return;
+      }
+      yield { kind: "textDelta", text: "Activated." };
+      yield { kind: "done" };
+    });
+    const loop = loopFrom({
+      ...base,
+      plugins: pluginsOffering([softwareEngineering, research]),
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Use both plugins.");
+
+    const results = (requests[1]?.messages ?? [])
+      .filter((message) => message.role === "tool")
+      .map((message) => unfenced((message as { content: string }).content));
+    expect(results).toEqual([
+      expect.objectContaining({ ok: true, id: "software-engineering" }),
+      expect.objectContaining({ ok: true, id: "research" }),
+    ]);
+    expect(loop.snapshot().tasks[0]?.activatedPlugins).toEqual([
+      "software-engineering",
+      "research",
+    ]);
+  });
 });

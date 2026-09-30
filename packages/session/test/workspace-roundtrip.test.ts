@@ -238,9 +238,7 @@ const snapshot: WorkspaceSnapshot = {
         {
           id: "plan-1",
           title: "Identify the project",
-          criterion: "The answer names the project from workspace evidence.",
-          status: "verified",
-          verification: "package.json names Zhiyin.",
+          status: "done",
         },
       ],
       views: [
@@ -562,78 +560,16 @@ describe("FileSessions workspace persistence", () => {
       new FileSessions(marked).loadWorkspace(),
     ).rejects.toBeInstanceOf(SessionStoreError);
   });
-  it("keeps the working model's progress on a plan apart from its verdict, and rejects progress it cannot have", async () => {
+  it("keeps the working model's plan and where each item stands, and rejects a status it cannot have", async () => {
     const plan = [
-      {
-        id: "plan-1",
-        title: "List the reports",
-        criterion: "The reports folder was listed.",
-        status: "pending" as const,
-        progress: "done" as const,
-        evidence: [{ callId: "call-1", shows: "It names q1.pdf." }],
-        steps: [{ text: "List the folder", done: true }],
-      },
+      { id: "plan-1", title: "List the reports", status: "done" as const },
       {
         id: "plan-2",
         title: "Check the totals",
-        criterion: "The totals match the CSV.",
-        status: "pending" as const,
-        progress: "cancelled" as const,
-        progressNote: "The person asked for no check.",
-        addedBy: "assistant" as const,
+        status: "in_progress" as const,
       },
-    ];
-    const action = { ...snapshot.tasks[0]!.actions![0]!, planItemId: "plan-1" };
-    const kept = await temporaryRoot();
-    await new FileSessions(kept).saveWorkspace({
-      ...snapshot,
-      tasks: [{ ...snapshot.tasks[0]!, plan, actions: [action] }],
-    });
-    await expect(new FileSessions(kept).loadWorkspace()).resolves.toMatchObject(
-      { tasks: [{ plan, actions: [action] }] },
-    );
-
-    for (const wrong of [
-      { ...plan[0], progress: "finished" },
-      { ...plan[0], evidence: [{ callId: "call-1" }] },
-      { ...plan[0], steps: [{ text: "List", done: "yes" }] },
-      { ...plan[1], addedBy: "planner" },
-    ]) {
-      const root = await temporaryRoot();
-      await plantHistory(root, {
-        ...snapshot,
-        tasks: [{ ...snapshot.tasks[0], plan: [wrong] }],
-      });
-      await expect(
-        new FileSessions(root).loadWorkspace(),
-      ).rejects.toBeInstanceOf(SessionStoreError);
-    }
-  });
-
-  it("keeps each of the judge's three verdicts and the calls one relied on", async () => {
-    const plan = [
-      {
-        id: "plan-1",
-        title: "List the reports",
-        criterion: "The reports folder was listed.",
-        status: "verified" as const,
-        verification: "The listing names q1.pdf.",
-        verdictEvidence: ["call-1"],
-      },
-      {
-        id: "plan-2",
-        title: "Check the totals",
-        criterion: "The totals match the CSV.",
-        status: "needs-attention" as const,
-        verification: "No call compared the totals with the CSV.",
-      },
-      {
-        id: "plan-3",
-        title: "Write the summary",
-        criterion: "summary.md names every report.",
-        status: "couldnt-judge" as const,
-        verification: "The provider is unreachable.",
-      },
+      { id: "plan-3", title: "Write the summary", status: "pending" as const },
+      { id: "plan-4", title: "Email the team", status: "skipped" as const },
     ];
     const kept = await temporaryRoot();
     await new FileSessions(kept).saveWorkspace({
@@ -645,9 +581,9 @@ describe("FileSessions workspace persistence", () => {
     );
 
     for (const wrong of [
-      { ...plan[0], status: "judged" },
-      { ...plan[0], verdictEvidence: "call-1" },
-      { ...plan[0], verdictEvidence: [1] },
+      { ...plan[0], status: "verified" },
+      { ...plan[0], title: 3 },
+      { title: "No id", status: "done" },
     ]) {
       const root = await temporaryRoot();
       await plantHistory(root, {
@@ -788,8 +724,15 @@ describe("FileSessions workspace persistence", () => {
           prompt: {
             id: "budget-1",
             kind: "workBudget" as const,
-            title: "Continue working?",
+            title: "Keep working on this?",
             completedRounds: 24,
+            reached: ["toolRounds" as const],
+            elapsedMs: 600_000,
+            allowance: {
+              toolRounds: 24,
+              elapsedMs: 1_800_000,
+              providerCostUsd: 10,
+            },
           },
         },
       })),
@@ -821,8 +764,15 @@ describe("FileSessions workspace persistence", () => {
           prompt: {
             id: "budget-1",
             kind: "workBudget" as const,
-            title: "Continue working?",
+            title: "Keep working on this?",
             completedRounds: 24,
+            reached: ["toolRounds" as const],
+            elapsedMs: 600_000,
+            allowance: {
+              toolRounds: 24,
+              elapsedMs: 1_800_000,
+              providerCostUsd: 10,
+            },
             reason,
           },
         },
@@ -843,6 +793,67 @@ describe("FileSessions workspace persistence", () => {
     await expect(
       new FileSessions(wrong).loadWorkspace(),
     ).rejects.toBeInstanceOf(SessionStoreError);
+  });
+
+  it("keeps where the work stood when it stopped to check in, and rejects a checkpoint it cannot have", async () => {
+    const waiting = (prompt: Record<string, unknown>) => ({
+      ...snapshot,
+      tasks: snapshot.tasks.map((task) => ({
+        ...task,
+        phase: {
+          kind: "input" as const,
+          steps: [],
+          prompt: {
+            id: "budget-1",
+            kind: "workBudget" as const,
+            title: "Keep working on this?",
+            completedRounds: 0,
+            reached: ["elapsed", "providerCost"],
+            elapsedMs: 1_800_000,
+            costUsd: 10.2,
+            allowance: {
+              toolRounds: 24,
+              elapsedMs: 1_800_000,
+              providerCostUsd: 10,
+            },
+            ...prompt,
+          },
+        },
+      })),
+    });
+    const kept = await temporaryRoot();
+    await new FileSessions(kept).saveWorkspace(
+      waiting({}) as WorkspaceSnapshot,
+    );
+    await expect(new FileSessions(kept).loadWorkspace()).resolves.toMatchObject(
+      {
+        tasks: [
+          {
+            phase: {
+              prompt: {
+                completedRounds: 0,
+                reached: ["elapsed", "providerCost"],
+                costUsd: 10.2,
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    for (const wrong of [
+      { reached: ["tokens"] },
+      { reached: [] },
+      { elapsedMs: -1 },
+      { costUsd: "10" },
+      { allowance: { toolRounds: 24 } },
+    ]) {
+      const root = await temporaryRoot();
+      await plantHistory(root, waiting(wrong));
+      await expect(
+        new FileSessions(root).loadWorkspace(),
+      ).rejects.toBeInstanceOf(SessionStoreError);
+    }
   });
 
   it("persists a submitted quiz as one ordered conversation result", async () => {

@@ -39,7 +39,6 @@ export type TaskAction = {
   readonly detail?: string;
   /** Model-written and unverified. */
   readonly claim?: string;
-  readonly planItemId?: string;
   readonly invocation?: ToolInvocation;
   readonly sequence?: number;
   readonly status:

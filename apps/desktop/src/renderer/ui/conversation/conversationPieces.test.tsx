@@ -2,134 +2,147 @@
 
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { TaskPlan } from "./TaskPlan.js";
+import type { PlanStatus, TaskPlanItem } from "@zhiyin/contract";
+import { PlanPill } from "./PlanPill.js";
 import { WorkTrace } from "./WorkTrace.js";
 import { ContextShelf } from "./ContextShelf.js";
 import { Composer } from "./Composer.js";
 import { OutcomeCard } from "./OutcomeCard.js";
 import { MarkdownMessage } from "./MarkdownMessage.js";
 
-describe("TaskPlan", () => {
-  it("shows criteria and live reviewer states without claiming unfinished work", () => {
-    render(
-      <TaskPlan
-        items={[
-          {
-            id: "plan-1",
-            title: "Identify the project",
-            criterion:
-              "The project identity is supported by workspace evidence.",
-            status: "verified",
-            verification: "package.json names the project.",
-          },
-          {
-            id: "plan-2",
-            title: "Explain the architecture",
-            criterion: "The answer names the runtime and package boundaries.",
-            status: "checking",
-          },
-          {
-            id: "plan-3",
-            title: "Summarize the current state",
-            criterion: "The answer distinguishes working and unfinished areas.",
-            status: "pending",
-          },
-        ]}
-      />,
-    );
+const step = (
+  id: string,
+  title: string,
+  status: PlanStatus = "pending",
+): TaskPlanItem => ({ id, title, status });
 
-    const plan = screen.getByRole("region", { name: "Task plan" });
-    expect(within(plan).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(plan).getByText("Checking")).toBeVisible();
-    expect(
-      within(plan).getByText(
-        "The answer distinguishes working and unfinished areas.",
-      ),
-    ).toBeVisible();
-    expect(
-      within(plan).getByText("package.json names the project."),
-    ).toBeVisible();
+describe("PlanPill", () => {
+  it("shows nothing without a plan", () => {
+    const { container } = render(<PlanPill items={[]} />);
+
+    expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows what the assistant says beside the assessment, and never one for the other", () => {
+  it("names the step being worked on and how many are done", () => {
     render(
-      <TaskPlan
+      <PlanPill
         items={[
-          {
-            id: "plan-1",
-            title: "List the reports",
-            criterion: "The reports folder was listed.",
-            status: "verified",
-            progress: "done",
-          },
-          {
-            id: "plan-2",
-            title: "Write the summary",
-            criterion: "summary.md names every report.",
-            status: "pending",
-            progress: "done",
-          },
-          {
-            id: "plan-3",
-            title: "Check the totals",
-            criterion: "The totals match the CSV.",
-            status: "pending",
-            progress: "cancelled",
-            progressNote: "The person asked for no check.",
-            addedBy: "assistant",
-          },
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Find the totals", "done"),
+          step("3", "Write the report", "in_progress"),
+          step("4", "Send the summary"),
         ]}
       />,
     );
 
-    const plan = screen.getByRole("region", { name: "Task plan" });
-    expect(
-      within(plan).getByText("Done (the assistant says) · Assessed as done"),
-    ).toBeVisible();
-    expect(within(plan).getByText("Done (the assistant says)")).toBeVisible();
-    expect(within(plan).getByText("Cancelled")).toBeVisible();
-    expect(
-      within(plan).getByText("The person asked for no check."),
-    ).toBeVisible();
-    expect(within(plan).getByText("Added by the assistant")).toBeVisible();
-    expect(within(plan).getByText("1/3 assessed as done")).toBeVisible();
+    const pill = screen.getByRole("button", { name: /plan/i });
+    expect(pill).toHaveTextContent("2/4");
+    expect(pill).toHaveTextContent("Write the report");
   });
 
-  it("tells a verdict of not verified apart from a judge that could not answer", () => {
+  it("names the next step when none has been started", () => {
     render(
-      <TaskPlan
+      <PlanPill
         items={[
-          {
-            id: "plan-1",
-            title: "Check the totals",
-            criterion: "The totals match the CSV.",
-            status: "needs-attention",
-            progress: "done",
-            verification: "No call compared the totals with the CSV.",
-          },
-          {
-            id: "plan-2",
-            title: "Write the summary",
-            criterion: "summary.md names every report.",
-            status: "couldnt-judge",
-            verification: "The review request failed: network unreachable.",
-          },
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Find the totals"),
         ]}
       />,
     );
 
-    const plan = screen.getByRole("region", { name: "Task plan" });
+    expect(screen.getByRole("button", { name: /plan/i })).toHaveTextContent(
+      "Find the totals",
+    );
+  });
+
+  it("lists every step in order when opened, and closes on Escape", () => {
+    render(
+      <PlanPill
+        items={[
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Write the report", "in_progress"),
+          step("3", "Send the summary"),
+        ]}
+      />,
+    );
+    const pill = screen.getByRole("button", { name: /plan/i });
+
+    expect(screen.queryByRole("list")).toBeNull();
+    fireEvent.click(pill);
+    expect(pill).toHaveAttribute("aria-expanded", "true");
     expect(
-      within(plan).getByText("Done (the assistant says) · Not verified"),
-    ).toBeVisible();
-    expect(
-      within(plan).getByText("No call compared the totals with the CSV."),
-    ).toBeVisible();
-    expect(within(plan).getByText("Couldn't judge")).toBeVisible();
-    expect(
-      within(plan).getByText("The review request failed: network unreachable."),
-    ).toBeVisible();
-    expect(within(plan).getByText("0/2 assessed as done")).toBeVisible();
+      screen.getAllByRole("listitem").map((item) => item.textContent),
+    ).toEqual([
+      expect.stringContaining("Read the spreadsheet"),
+      expect.stringContaining("Write the report"),
+      expect.stringContaining("Send the summary"),
+    ]);
+
+    fireEvent.keyDown(pill, { key: "Escape" });
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(pill).toHaveFocus();
+  });
+
+  it("says done, in progress, to do and skipped in plain words", () => {
+    render(
+      <PlanPill
+        items={[
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Write the report", "in_progress"),
+          step("3", "Send the summary"),
+          step("4", "Check the formatting", "skipped"),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /plan/i }));
+
+    const [done, doing, todo, skipped] = screen.getAllByRole("listitem");
+    expect(done).toHaveTextContent("Done");
+    expect(doing).toHaveTextContent("In progress");
+    expect(todo).toHaveTextContent("To do");
+    expect(skipped).toHaveTextContent("Skipped");
+  });
+
+  it("says the plan is complete when every step is done or skipped", () => {
+    render(
+      <PlanPill
+        items={[
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Check the formatting", "skipped"),
+        ]}
+      />,
+    );
+
+    const pill = screen.getByRole("button", { name: /plan/i });
+    expect(pill).toHaveTextContent("Plan complete");
+    expect(pill).toHaveTextContent("2/2");
+  });
+
+  it("stays open, in the same order, while steps change", () => {
+    const { rerender } = render(
+      <PlanPill
+        items={[
+          step("1", "Read the spreadsheet", "in_progress"),
+          step("2", "Write the report"),
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /plan/i }));
+
+    rerender(
+      <PlanPill
+        items={[
+          step("1", "Read the spreadsheet", "done"),
+          step("2", "Write the report", "in_progress"),
+        ]}
+      />,
+    );
+
+    const listed = screen.getAllByRole("listitem");
+    expect(listed[0]).toHaveTextContent("Read the spreadsheet");
+    expect(listed[0]).toHaveTextContent("Done");
+    expect(listed[1]).toHaveTextContent("Write the report");
+    expect(listed[1]).toHaveTextContent("In progress");
   });
 });
 

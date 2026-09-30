@@ -11,7 +11,6 @@ import { ConversationSkeleton } from "./ConversationSkeleton.js";
 import { OutcomeCard } from "./OutcomeCard.js";
 import { PastedText } from "./PastedText.js";
 import { StreamingMarkdown } from "./StreamingMarkdown.js";
-import { TaskPlan } from "./TaskPlan.js";
 import { WorkTrace, type WorkStep } from "./WorkTrace.js";
 import styles from "./conversation.module.css";
 
@@ -68,6 +67,19 @@ export type TimelineTask<
   readonly condensedThrough?: string;
   readonly plan?: readonly TaskPlanItem[];
   readonly phase: TimelinePhase;
+  /**
+   * Specialists still running after the turn itself has finished: the only
+   * thing the conversation is waiting on.
+   */
+  readonly waitingOn?: WaitingOn;
+};
+
+export type WaitingOn = {
+  readonly names: readonly string[];
+  /** Calls the running specialists have made between them. */
+  readonly calls: number;
+  /** When the first of them started. */
+  readonly since: string;
 };
 
 /**
@@ -202,6 +214,43 @@ function RetryCountdown({
         {note}
         <span aria-live="off">{seconds > 0 ? ` in ${seconds} s` : ""}</span>
         {count ? ` (${count})` : ""}…
+      </span>
+    </div>
+  );
+}
+
+/** "5 s", "1 min 20 s", "1 h 5 min". */
+function elapsed(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
+  if (seconds < 60) return `${seconds} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
+function listed(names: readonly string[]): string {
+  return names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+function WaitingForSpecialists({ waitingOn }: { waitingOn: WaitingOn }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className={styles["response-status"]} role="status">
+      <span aria-hidden="true" />
+      <span>
+        Waiting for {listed(waitingOn.names)} · {waitingOn.calls}{" "}
+        {waitingOn.calls === 1 ? "call" : "calls"}
+        {/* Ticking every second; announced once, with the rest. */}
+        <span aria-live="off">
+          {" "}
+          · {elapsed(now - Date.parse(waitingOn.since))}
+        </span>
       </span>
     </div>
   );
@@ -344,8 +393,8 @@ function timelineBlocks<
 
 /**
  * A conversation as it happened: messages, actions, views and answered
- * questions in the order they occurred, the plan after the latest request, and
- * what the turn is doing or how it ended.
+ * questions in the order they occurred, and what the turn is doing or how it
+ * ended. The plan is not part of it: it is a pill above the conversation.
  */
 export function ConversationTimeline<
   Action extends Placed,
@@ -492,7 +541,6 @@ export function ConversationTimeline<
         ) : (
           pieces.actions(block.actions)
         )}
-        {index === latestUserIndex && <TaskPlan items={task.plan ?? []} />}
       </Fragment>
     );
   });
@@ -530,9 +578,10 @@ export function ConversationTimeline<
 
       {composingNote && (
         <AgentTurn status compact={compact}>
-          <div className={styles["activity-note"]} role="status">
-            <Icon name="code" />
-            <span>{composingNote}</span>
+          {/* The same status as "Working": this is that, with its object named. */}
+          <div className={styles["response-status"]} role="status">
+            <span aria-hidden="true" />
+            {composingNote}
           </div>
         </AgentTurn>
       )}
@@ -561,6 +610,12 @@ export function ConversationTimeline<
               </div>
             )
           )}
+        </AgentTurn>
+      )}
+
+      {task.phase.kind === "completed" && task.waitingOn && (
+        <AgentTurn status compact={compact}>
+          <WaitingForSpecialists waitingOn={task.waitingOn} />
         </AgentTurn>
       )}
 

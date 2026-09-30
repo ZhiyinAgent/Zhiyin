@@ -2,6 +2,11 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
+import {
+  SdkError,
+  SdkErrorCode,
+  SdkHttpError,
+} from "@modelcontextprotocol/client";
 import { describe, expect, it, vi } from "vitest";
 import {
   InMemoryMcpCredentials,
@@ -252,6 +257,10 @@ describe("ManagedMcpServers", () => {
       // arguments run long and how they should read. Only a server that says
       // nothing is described from the outside.
       command: "navigate()",
+      // Which connection this is stays the app's word, whatever page the
+      // built-in names as the call's target.
+      target: "https://example.test",
+      connection: "Browser",
     });
     expect(
       await servers.execute(
@@ -807,6 +816,142 @@ describe("ManagedMcpServers", () => {
     await servers.switchTo("docs", false);
     await servers.switchTo("docs", true);
     expect(connect).toHaveBeenCalledTimes(3);
+  });
+
+  it("says why a server could not be reached, not only that it could not", async () => {
+    const causes: [unknown, string][] = [
+      [
+        new SdkError(SdkErrorCode.RequestTimeout, "Request timed out"),
+        "The server did not answer in time.",
+      ],
+      [
+        new SdkHttpError(SdkErrorCode.ClientHttpForbidden, "Forbidden", {
+          status: 503,
+        }),
+        "The server answered with HTTP 503.",
+      ],
+      [
+        Object.assign(new TypeError("fetch failed"), {
+          cause: { code: "ENOTFOUND" },
+        }),
+        "The server's address could not be found. Check the internet connection.",
+      ],
+    ];
+    for (const [error, sentence] of causes) {
+      const servers = managed(
+        await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+        async () => {
+          throw error;
+        },
+        new InMemoryMcpCredentials(),
+      );
+      await servers.declare({
+        id: "docs",
+        name: "Docs",
+        url: "https://example.com/mcp",
+        enabled: true,
+      });
+
+      expect(await servers.manage()).toEqual([
+        expect.objectContaining({
+          status: "failed",
+          reason: `Could not connect to this MCP server. ${sentence}`,
+        }),
+      ]);
+    }
+  });
+
+  it("names the connection that is down when one of its tools is called", async () => {
+    const servers = managed(
+      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      async () => {
+        throw new SdkError(SdkErrorCode.RequestTimeout, "Request timed out");
+      },
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const reason =
+      "Docs is not connected. Could not connect to this MCP server. The server did not answer in time. The person can retry it from the plugin's page.";
+    expect(await servers.inspect("mcp__docs__lookup", {})).toEqual({
+      ok: false,
+      reason,
+    });
+    expect(await servers.execute("mcp__docs__lookup", {})).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+
+  it("tries a server that failed again once a short wait has passed, and not before", async () => {
+    let clock = 0;
+    let reachable = false;
+    const connect = vi.fn(async () => {
+      if (!reachable) throw new Error("offline");
+      return {
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      };
+    });
+    const servers = managed(
+      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => clock,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    // A blip is not held against the server, but it is not hammered either.
+    clock = 5_000;
+    reachable = true;
+    expect(await servers.availableTools()).toEqual([]);
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    clock = 60_000;
+    expect(await servers.availableTools()).toEqual([
+      expect.objectContaining({ name: "mcp__docs__lookup" }),
+    ]);
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+
+  it("never retries a refused token on its own", async () => {
+    let clock = 0;
+    const connect = vi.fn(async () => {
+      throw new McpUnauthorizedError("refused");
+    });
+    const servers = managed(
+      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => clock,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    clock = 10 * 60_000;
+    await servers.manage();
+
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 
   it("withdraws tools after a connection fails during a call", async () => {

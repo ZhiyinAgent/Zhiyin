@@ -19,17 +19,17 @@ function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
   };
 }
 
-/** Both auxiliary seams behind one stand-in, answering with the plan. */
-function guidanceFor(responses: { plan?: string }, requests: ModelRequest[]) {
+/** The auxiliary model, answering every request with the same text. */
+function guidanceFor(responses: { answer?: string }, requests: ModelRequest[]) {
   const model = {
     send: async function* (request: ModelRequest) {
       requests.push(request);
-      if (responses.plan)
-        yield { kind: "textDelta" as const, text: responses.plan };
+      if (responses.answer)
+        yield { kind: "textDelta" as const, text: responses.answer };
       yield { kind: "done" as const };
     },
   };
-  return { guidanceModel: model, judgementModel: model };
+  return { guidanceModel: model };
 }
 
 /**
@@ -90,10 +90,7 @@ describe("conversation context", () => {
       ...deps,
       ...guidanceFor(
         {
-          plan: JSON.stringify({
-            conversationTitle: "Review launch readiness",
-            items: [],
-          }),
+          answer: JSON.stringify({ title: "Review launch readiness" }),
         },
         guidanceRequests,
       ),
@@ -117,10 +114,7 @@ describe("conversation context", () => {
       ...deps,
       ...guidanceFor(
         {
-          plan: JSON.stringify({
-            conversationTitle: "x".repeat(73),
-            items: [],
-          }),
+          answer: JSON.stringify({ title: "x".repeat(73) }),
         },
         [],
       ),
@@ -138,17 +132,14 @@ describe("conversation context", () => {
     });
   });
 
-  it("never replaces a manually entered title", async () => {
+  it("never replaces a manually entered title, and does not ask for one", async () => {
     const guidanceRequests: ModelRequest[] = [];
     const deps = stubDependencies(() => {}, [{ kind: "done" }]);
     const loop = loopFrom({
       ...deps,
       ...guidanceFor(
         {
-          plan: JSON.stringify({
-            conversationTitle: "Generated title",
-            items: [],
-          }),
+          answer: JSON.stringify({ title: "Generated title" }),
         },
         guidanceRequests,
       ),
@@ -162,9 +153,7 @@ describe("conversation context", () => {
       title: "My launch notes",
       titleSource: "manual",
     });
-    expect(guidanceRequests[0]?.messages.at(-1)?.content).not.toContain(
-      "conversationTitle",
-    );
+    expect(guidanceRequests).toHaveLength(0);
   });
 
   it("resumes from a durable summary without removing the human transcript", async () => {
@@ -248,7 +237,7 @@ describe("conversation context", () => {
           }),
         requests,
       ),
-      ...guidanceFor({ plan: JSON.stringify({ items: [] }) }, []),
+      ...guidanceFor({}, []),
     });
     loop.restore([previous]);
 

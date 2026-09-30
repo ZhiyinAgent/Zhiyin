@@ -27,7 +27,13 @@ describe("ApprovalPrompt", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Allow for this conversation" }),
     );
+    expect(
+      screen.getByText("Allow this for the rest of the conversation?"),
+    ).toBeVisible();
     expect(screen.getByText("Changes to files in reports/")).toBeVisible();
+    expect(
+      screen.getByText(/You can take this back from the conversation menu/),
+    ).toBeVisible();
     expect(onDecision).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: "Allow for this conversation" }),
@@ -129,9 +135,8 @@ describe("ApprovalPrompt", () => {
     const readingOrder = [
       "Run a shell command",
       "This runs in TestZhiyin and can read, change, or delete files there.",
-      "Zhiyin says this is for",
+      "Zhiyin says",
       "Check whether Python 3 with pandas is installed.",
-      "What will run",
       "command -v python3",
     ].map((text) =>
       (prompt.textContent ?? "").indexOf(
@@ -226,7 +231,7 @@ describe("ApprovalPrompt", () => {
       />,
     );
 
-    expect(screen.getByText("Edit file")).toBeVisible();
+    expect(screen.getByText("Edited")).toBeVisible();
     expect(
       screen.queryByText("This replaces the current contents of brief.md."),
     ).toBeNull();
@@ -260,13 +265,55 @@ describe("ApprovalPrompt", () => {
     );
 
     const prompt = screen.getByRole("region", { name: "Permission request" });
-    expect(within(prompt).getByText("What will change")).toBeVisible();
+    expect(
+      within(prompt).getByRole("list", { name: "What will change" }),
+    ).toBeVisible();
     expect(within(prompt).getByText("New file")).toBeVisible();
-    expect(within(prompt).getByText("reports/2026/brief.md")).toBeVisible();
+    expect(within(prompt).getByText("brief.md")).toBeVisible();
+    expect(within(prompt).getByText("in reports/2026")).toBeVisible();
     expect(
       within(prompt).getByText("Also creates folder reports/2026"),
     ).toBeVisible();
     expect(within(prompt).queryByText(/Nothing is replaced/)).toBeNull();
+  });
+
+  it("shows each changed file by name, with its folder and how many lines change, and opens that file's review from it", () => {
+    render(
+      <ApprovalPrompt
+        title="Edit workspace files"
+        target="docs/brief.md, notes.md"
+        command="edit_files(…)"
+        changes={[
+          {
+            path: "docs/brief.md",
+            change: "updated",
+            before: "One.\nTwo.\nThree.\n",
+            after: "One.\n2.\nThree.\nFour.\n",
+          },
+          { path: "notes.md", change: "created", after: "A.\nB.\n" },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const files = within(
+      screen.getByRole("list", { name: "What will change" }),
+    ).getAllByRole("listitem");
+    expect(files[0]).toHaveTextContent("brief.md");
+    expect(files[0]).toHaveTextContent("in docs");
+    expect(files[0]).toHaveTextContent("+2");
+    expect(files[0]).toHaveTextContent("−1");
+    expect(files[1]).toHaveTextContent("notes.md");
+    expect(files[1]).toHaveTextContent("+2");
+    // No path set in a terminal face, and no raw call.
+    expect(files[0]?.querySelector("code")).toBeNull();
+    expect(screen.queryByText("edit_files(…)")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review this change to notes.md" }),
+    );
+    const review = screen.getByRole("dialog");
+    expect(within(review).getByText("A.")).toBeVisible();
   });
 
   it("states whether declared file changes are protected before approval", () => {
@@ -810,9 +857,11 @@ describe("ActionHistory", () => {
     expect(
       within(inspector).getByText("https://mcp.tavily.com/mcp/"),
     ).toBeVisible();
-    expect(
-      within(inspector).queryByText(/mcp__tavily__tavily_search\(/),
-    ).toBeNull();
+    // The raw call stays available, behind the disclosure: present for anyone
+    // auditing it, not the lead.
+    const raw = within(inspector).getByText(/mcp__tavily__tavily_search\(/);
+    expect(raw).toBeInTheDocument();
+    expect(raw).not.toBeVisible();
   });
 
   it("lays a remote answer out instead of dumping it as one escaped line", () => {
@@ -876,9 +925,52 @@ describe("ActionHistory", () => {
     fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
 
     const inspector = screen.getByRole("dialog");
-    expect(within(inspector).getByText("What the tool returned")).toBeVisible();
+    expect(within(inspector).getByText("Raw call and response")).toBeVisible();
     // Present, behind the disclosure: the only record there is, not the lead.
     expect(within(inspector).getByText(/tavily_search/)).toBeInTheDocument();
+  });
+
+  it("says why a call that never ran did not, and keeps the raw call and answer", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            id: "refused",
+            action: "Load skill",
+            toolName: "load_skill",
+            target: "",
+            status: "failed",
+            description: "The requested action could not be inspected.",
+            reason: "No skill with the id “pdf” is available here.",
+            command: 'load_skill({"id":"pdf"})',
+            evidence:
+              '{"ok":false,"reason":"No skill with the id “pdf” is available here."}',
+            invocation: {
+              name: "load_skill",
+              arguments: [{ name: "id", value: "pdf" }],
+            },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+    const inspector = screen.getByRole("dialog");
+
+    expect(
+      within(inspector).getByText(
+        "No skill with the id “pdf” is available here.",
+      ),
+    ).toBeVisible();
+    expect(within(inspector).getByText("pdf")).toBeVisible();
+    expect(within(inspector).queryByText("Unavailable")).toBeNull();
+    expect(
+      within(inspector).getByText('load_skill({"id":"pdf"})'),
+    ).toBeInTheDocument();
+    // Once as the lead, once inside the raw answer.
+    expect(
+      within(inspector).getAllByText(/No skill with the id/).length,
+    ).toBeGreaterThan(1);
   });
 
   it("offers no inspection for an action with nothing recorded about it", () => {

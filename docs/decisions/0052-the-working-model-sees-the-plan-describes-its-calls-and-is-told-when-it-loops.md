@@ -1,6 +1,6 @@
 # 0052. The working model sees the plan, describes its own calls, and is told when it loops
 
-Status: accepted; amends ADR 0008 and ADR 0046
+Status: accepted; amends ADR 0008 and ADR 0046; how the plan is shown amended by ADR 0062; the plan, progress and `plan_item` parts superseded by ADR 0063
 
 ## Context
 

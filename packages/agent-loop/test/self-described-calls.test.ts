@@ -1,13 +1,11 @@
 /**
- * Every tool call says what it is for and which plan item it serves, so no
- * model call is made to name it; one that says nothing is named in the
+ * Every tool call says what it is for, so no model call is made to name it; one that says nothing is named in the
  * background, never holding up its approval.
  */
 
 import { describe, expect, it } from "vitest";
 import {
   LABEL,
-  resultOf,
   until,
   withPlan,
   type Call,
@@ -44,18 +42,12 @@ describe("a tool call that describes itself", () => {
   it("makes no auxiliary request between five calls, and its approval shows its purpose", async () => {
     const steps: Step[] = [
       ...["one", "two", "three", "four"].map((id) => ({
-        calls: [
-          call("list_directory", id, {
-            purpose: `Look in ${id}.`,
-            plan_item: "plan-1",
-          }),
-        ],
+        calls: [call("list_directory", id, { purpose: `Look in ${id}.` })],
       })),
       {
         calls: [
           call("write_note", "five", {
             purpose: "Save the summary the person asked for.",
-            plan_item: "plan-2",
           }),
         ],
       },
@@ -83,18 +75,11 @@ describe("a tool call that describes itself", () => {
     expect(prompts).toEqual(["Save the summary the person asked for."]);
   });
 
-  it("hands the tool neither purpose nor plan_item", async () => {
+  it("does not hand the tool its purpose, and shows it with the action", async () => {
     const fixture = withPlan({
       script: (request) =>
         request === 1
-          ? {
-              calls: [
-                call("list_directory", "one", {
-                  purpose: "Look.",
-                  plan_item: "plan-1",
-                }),
-              ],
-            }
+          ? { calls: [call("list_directory", "one", { purpose: "Look." })] }
           : finish,
     });
     const taskId = await fixture.loop.createTask();
@@ -102,55 +87,19 @@ describe("a tool call that describes itself", () => {
     await fixture.loop.start(taskId, "Summarise the reports");
 
     expect(fixture.inspected).toEqual([{ path: "one.md" }, { path: "one.md" }]);
-  });
-
-  it("links the action to the plan item it names", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request === 1
-          ? {
-              calls: [
-                call("list_directory", "one", {
-                  purpose: "Look.",
-                  plan_item: "plan-1",
-                }),
-              ],
-            }
-          : finish,
-    });
-    const taskId = await fixture.loop.createTask();
-
-    await fixture.loop.start(taskId, "Summarise the reports");
-
     expect(task(fixture)?.actions?.[0]).toMatchObject({
       description: "Look.",
-      planItemId: "plan-1",
     });
   });
 
-  it("leaves an action naming an unknown plan item unlinked, and the result names the valid ids", async () => {
-    const fixture = withPlan({
-      script: (request) =>
-        request === 1
-          ? {
-              calls: [
-                call("list_directory", "one", {
-                  purpose: "Look.",
-                  plan_item: "plan-9",
-                }),
-              ],
-            }
-          : finish,
-    });
+  it("is offered no plan_item argument", async () => {
+    const fixture = withPlan({ script: () => finish });
     const taskId = await fixture.loop.createTask();
 
     await fixture.loop.start(taskId, "Summarise the reports");
 
-    expect(task(fixture)?.actions?.[0]?.planItemId).toBeUndefined();
-    const result = resultOf(fixture.requests[1], "one");
-    expect(result).toMatchObject({ ok: true });
-    expect(JSON.stringify(result.planItem)).toContain("plan-9");
-    expect(JSON.stringify(result.planItem)).toContain("plan-1, plan-2");
+    for (const tool of fixture.requests[0]?.tools ?? [])
+      expect(JSON.stringify(tool.inputSchema)).not.toContain("plan_item");
   });
 });
 
@@ -201,5 +150,35 @@ describe("a tool call that does not describe itself", () => {
 
     expect(fixture.labels[0]).toContain(LABEL);
     expect(fixture.labels[0]).not.toContain("planItemId");
+  });
+
+  it("keeps every write when its label lands while a later action is being saved", async () => {
+    const fixture: ReturnType<typeof withPlan> = withPlan({
+      savesSlowly: true,
+      holdLabels: true,
+      label: { title: "Look in one", description: "Finds the reports." },
+      script: (request) => {
+        // The label answers while the turn is saving the actions after it.
+        if (request === 3) fixture.release.forEach((release) => release());
+        return request === 1
+          ? { calls: [call("list_directory", "one")] }
+          : request <= 6
+            ? {
+                calls: [
+                  call("list_directory", `n${request}`, { purpose: "Look." }),
+                ],
+              }
+            : finish;
+      },
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Summarise the reports");
+    await until(() => task(fixture)?.actions?.[0]?.action === "Look in one");
+
+    expect(task(fixture)?.actions?.map((action) => action.status)).toEqual(
+      Array(6).fill("completed"),
+    );
+    expect(task(fixture)?.phase.kind).toBe("completed");
   });
 });

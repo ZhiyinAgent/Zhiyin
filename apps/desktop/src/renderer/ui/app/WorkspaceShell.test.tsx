@@ -1699,6 +1699,74 @@ describe("WorkspaceShell", () => {
     expect(conversation.scrollTop).toBe(120);
   });
 
+  it("says the conversation is waiting on the specialists still running once the turn has finished", () => {
+    const specialist = (id: string, name: string) => ({
+      id,
+      name,
+      description: `${name}.`,
+      instructions: "Check.",
+      provenance: { source: "plugin" as const, pluginId: "research" },
+    });
+    const state = createWorkspaceState({
+      connection: "ready",
+      selectedTaskId: "task",
+      tasks: [
+        {
+          id: "task",
+          title: "Check the reports",
+          updatedLabel: "Now",
+          messages: [
+            { id: "user", role: "user", text: "Check the reports" },
+            {
+              id: "assistant",
+              role: "assistant",
+              text: "The fact-checker is on it.",
+            },
+          ],
+          specialistRuns: [
+            {
+              id: "run-1",
+              specialist: specialist("fact-checker", "Fact-checker"),
+              task: "Check every figure.",
+              depth: 1,
+              status: "running",
+              startedAt: new Date().toISOString(),
+              actionIds: ["a1", "a2"],
+            },
+            {
+              id: "run-2",
+              specialist: specialist("researcher", "Researcher"),
+              task: "Find the sources.",
+              depth: 1,
+              status: "completed",
+              startedAt: new Date().toISOString(),
+              actionIds: ["a3"],
+            },
+          ],
+          phase: {
+            kind: "completed",
+            outcome: { title: "Waiting", summary: "Waiting on a specialist." },
+            backgroundSpecialistIds: ["run-1"],
+          },
+        },
+      ],
+    });
+
+    render(
+      <WorkspaceShell
+        state={state}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />,
+    );
+
+    const waiting = screen
+      .getAllByRole("status")
+      .filter((status) => status.textContent?.startsWith("Waiting for"));
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]).toHaveTextContent(/^Waiting for Fact-checker · 2 calls/);
+  });
+
   it("keeps the explanation in the turn and the decision beside the composer", () => {
     const state = createWorkspaceState({
       connection: "ready",
@@ -1720,9 +1788,7 @@ describe("WorkspaceShell", () => {
             {
               id: "plan-1",
               title: "Identify the project",
-              criterion:
-                "The project identity is supported by workspace evidence.",
-              status: "active",
+              status: "in_progress",
             },
           ],
           phase: {
@@ -1766,7 +1832,12 @@ describe("WorkspaceShell", () => {
         name: "Permission request",
       }),
     ).toBeNull();
-    expect(screen.getByRole("region", { name: "Task plan" })).toBeVisible();
+    const plan = screen.getByRole("button", { name: /^plan \d+\/\d+/i });
+    expect(plan).toBeVisible();
+    expect(plan).toHaveTextContent("Identify the project");
+    expect(
+      within(conversation).queryByRole("button", { name: /^plan \d+\/\d+/i }),
+    ).toBeNull();
     expect(composer).not.toBeNull();
     expect(
       permission.compareDocumentPosition(composer as Node) &
@@ -2095,8 +2166,15 @@ describe("WorkspaceShell", () => {
             prompt: {
               id: "budget-7",
               kind: "workBudget",
-              title: "Continue working?",
+              title: "Keep working on this?",
               completedRounds: 24,
+              reached: ["toolRounds"],
+              elapsedMs: 600_000,
+              allowance: {
+                toolRounds: 24,
+                elapsedMs: 1_800_000,
+                providerCostUsd: 10,
+              },
             },
           },
         },
@@ -2179,5 +2257,73 @@ describe("WorkspaceShell", () => {
     const composer = screen.getByLabelText("Message Zhiyin");
     expect(composer).toBeVisible();
     expect(composer).toBeEnabled();
+  });
+
+  describe("deleting a conversation", () => {
+    const damaged = () =>
+      createWorkspaceState({
+        connection: "ready",
+        runtime: { tasks: "available", capabilities: "available" },
+        conversations: [
+          { id: "task-9", title: "Rapport maternelle", updatedLabel: "9m" },
+        ],
+        issues: [
+          {
+            message:
+              "“Rapport maternelle” is damaged and can't be opened. Your other conversations are unaffected.",
+            conversationId: "task-9",
+          },
+        ],
+      });
+
+    it("says the conversation was deleted once the core has deleted it", async () => {
+      const deleteTask = vi.fn<CoreApi["deleteTask"]>(async () => {});
+      render(
+        <WorkspaceShell
+          state={damaged()}
+          dispatch={() => undefined}
+          commands={{ ...stubCommands, deleteTask }}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Delete conversation" }),
+      );
+
+      expect(deleteTask).toHaveBeenCalledWith("task-9");
+      await waitFor(() =>
+        expect(screen.getByRole("status")).toHaveTextContent(
+          "Deleted “Rapport maternelle”.",
+        ),
+      );
+    });
+
+    it("says nothing was deleted when the core could not delete it", async () => {
+      const dispatch = vi.fn();
+      render(
+        <WorkspaceShell
+          state={damaged()}
+          dispatch={dispatch}
+          commands={{
+            ...stubCommands,
+            deleteTask: async () => {
+              throw new Error("The conversation could not be deleted.");
+            },
+          }}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Delete conversation" }),
+      );
+
+      await waitFor(() =>
+        expect(dispatch).toHaveBeenCalledWith({
+          type: "commandErrorShown",
+          message: "The conversation could not be deleted.",
+        }),
+      );
+      expect(screen.queryByText(/Deleted “/)).toBeNull();
+    });
   });
 });

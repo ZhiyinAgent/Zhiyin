@@ -37,16 +37,16 @@ function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
   };
 }
 
-function guidanceFor(responses: { plan?: string }, requests: ModelRequest[]) {
+function guidanceFor(responses: { answer?: string }, requests: ModelRequest[]) {
   const model = {
     send: async function* (request: ModelRequest) {
       requests.push(request);
-      if (responses.plan)
-        yield { kind: "textDelta" as const, text: responses.plan };
+      if (responses.answer)
+        yield { kind: "textDelta" as const, text: responses.answer };
       yield { kind: "done" as const };
     },
   };
-  return { guidanceModel: model, judgementModel: model };
+  return { guidanceModel: model };
 }
 
 describe("a compaction that is saved", () => {
@@ -101,7 +101,7 @@ describe("a compaction that is saved", () => {
         loadWorkspace: async () => restored(previous),
         saveWorkspace: async (snapshot) => saved.push(snapshot),
       },
-      ...guidanceFor({ plan: JSON.stringify({ items: [] }) }, []),
+      ...guidanceFor({}, []),
       model: {
         ...deps.model,
         // A 13,600-token Medium budget, which the analysis takes past.

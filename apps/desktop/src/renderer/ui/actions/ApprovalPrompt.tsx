@@ -6,6 +6,7 @@ import type {
   ToolInvocation,
 } from "@zhiyin/contract";
 import { DiffModal } from "./DiffModal.js";
+import { diffLines } from "./diff.js";
 import { ToolCallView } from "./ToolCallView.js";
 import { Icon } from "../shared/index.js";
 import styles from "./actions.module.css";
@@ -64,7 +65,7 @@ export function ApprovalPrompt({
   compact = false,
   onDecision,
 }: ApprovalPromptProps) {
-  const [reviewing, setReviewing] = useState(false);
+  const [reviewing, setReviewing] = useState<string>();
   const [denying, setDenying] = useState(false);
   const [pendingDecision, setPendingDecision] =
     useState<ApprovalDecision | null>(null);
@@ -94,17 +95,21 @@ export function ApprovalPrompt({
     }
   }
 
+  const kind = kindOf({ changes, destination, invocation, title, effect });
+
   return (
     <section
       className={`${styles.approval}${compact ? ` ${styles["approval--compact"]}` : ""}`}
       aria-label="Permission request"
     >
-      <div className={styles.approval__icon}>
-        <Icon name="lock" />
-      </div>
       <div className={styles.approval__content}>
-        <div className={styles.approval__summary}>
+        <header className={styles.approval__head}>
+          <span className={styles.approval__kind} aria-hidden="true">
+            <Icon name={kind} />
+          </span>
           <h3>{title}</h3>
+        </header>
+        <div className={styles.approval__summary}>
           {effect && effect !== title && (
             <p className={styles.approval__effect}>{effect}</p>
           )}
@@ -114,7 +119,7 @@ export function ApprovalPrompt({
           {claim && (
             <p className={styles.approval__claim}>
               <span>
-                Zhiyin says this is for
+                Zhiyin says
                 <button
                   type="button"
                   className={styles["approval__claim-about"]}
@@ -127,7 +132,7 @@ export function ApprovalPrompt({
                 >
                   <Icon name="info" />
                 </button>
-              </span>
+              </span>{" "}
               {claim}
               {claimTipAt &&
                 createPortal(
@@ -149,61 +154,44 @@ export function ApprovalPrompt({
             <p className={styles.approval__reason}>{description}</p>
           )}
           {destination && (
-            <div className={styles.approval__destination}>
-              <span>Connection</span>
-              <strong>{destination}</strong>
-              <p>This request sends these inputs to this connection.</p>
-            </div>
+            <p className={styles.approval__destination}>
+              Sends these inputs to <strong>{destination}</strong>.
+            </p>
           )}
           {changes?.length ? (
-            <div className={styles.approval__target}>
-              <span>What will change</span>
-              <ul className={styles["approval__file-list"]}>
-                {changes.map((change) => (
-                  <li key={change.path}>
-                    <span className={styles["approval__file-kind"]}>
-                      {change.change === "created" ? "New file" : "Edit file"}
-                    </span>
-                    <code>{change.path}</code>
-                    {change.createdFolder && (
-                      <small>Also creates folder {change.createdFolder}</small>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ul
+              className={styles["approval__file-list"]}
+              aria-label="What will change"
+            >
+              {/*
+                A file change is reviewed as a difference, never as the call
+                that would make it. Each row names the file the way a person
+                would, and opens that file's review.
+              */}
+              {changes.map((change) => (
+                <li key={change.path}>
+                  <FileRow
+                    change={change}
+                    disabled={pendingDecision !== null}
+                    onReview={() => setReviewing(change.path)}
+                  />
+                </li>
+              ))}
+            </ul>
           ) : invocation ? (
             (!actionAlreadyNamed || invocation.arguments.length > 0) && (
               <ToolCallView
                 invocation={invocation}
-                label="What will run"
                 hideName={actionAlreadyNamed}
               />
             )
           ) : (
-            <div className={styles.approval__target}>
-              <span>What will run</span>
-              <code>{target}</code>
-            </div>
-          )}
-          {/*
-            A file change is reviewed as a difference, never as the call that
-            would make it. Nobody consents to replacing a file by reading
-            `write_file({"path":…,"text":…})`; the question they are
-            answering is which lines go and which arrive.
-          */}
-          {!!changes?.length && (
-            <button
-              className={`text-button ${styles.approval__review}`}
-              type="button"
-              disabled={pendingDecision !== null}
-              onClick={() => setReviewing(true)}
+            <code
+              className={styles.approval__command}
+              aria-label="What will run"
             >
-              <Icon name="file" />
-              {changes.length === 1
-                ? "Review this change"
-                : `Review ${changes.length} changed files`}
-            </button>
+              {target}
+            </code>
           )}
           {recovery?.files.some((file) => file.status === "unprotected") && (
             <div
@@ -246,15 +234,14 @@ export function ApprovalPrompt({
           </div>
         )}
         {confirmingScope && conversationRule && (
-          <p className={styles["approval__scope-confirm"]}>
-            Allow for this conversation:{" "}
+          <div className={styles["approval__scope-confirm"]}>
+            <p>Allow this for the rest of the conversation?</p>
             <strong>{conversationRule.label}</strong>
-            <span>
-              {" "}
-              Future matching actions will run without another prompt. You can
-              revoke this permission from the conversation menu.
-            </span>
-          </p>
+            <p>
+              It will run without asking again. You can take this back from the
+              conversation menu.
+            </p>
+          </div>
         )}
         <div className={styles.approval__footer}>
           <div className={styles.approval__actions}>
@@ -332,8 +319,100 @@ export function ApprovalPrompt({
         </div>
       </div>
       {reviewing && !!changes?.length && (
-        <DiffModal changes={changes} onClose={() => setReviewing(false)} />
+        <DiffModal
+          changes={changes}
+          initialPath={reviewing}
+          onClose={() => setReviewing(undefined)}
+        />
       )}
     </section>
   );
+}
+
+function FileRow({
+  change,
+  disabled,
+  onReview,
+}: {
+  change: FileChange;
+  disabled: boolean;
+  onReview: () => void;
+}) {
+  const slash = change.path.lastIndexOf("/");
+  const name = change.path.slice(slash + 1);
+  const folder = slash > 0 ? change.path.slice(0, slash) : undefined;
+  const counts =
+    change.after === undefined
+      ? undefined
+      : diffLines(change.before ?? "", change.after);
+  return (
+    <button
+      type="button"
+      className={styles.approval__file}
+      aria-label={`Review this change to ${name}`}
+      disabled={disabled}
+      onClick={onReview}
+    >
+      <span className={styles["approval__file-icon"]} aria-hidden="true">
+        <Icon name="file" />
+      </span>
+      <span className={styles["approval__file-text"]}>
+        <span className={styles["approval__file-name"]}>{name}</span>
+        <span className={styles["approval__file-meta"]}>
+          <span>{change.change === "created" ? "New file" : "Edited"}</span>
+          {folder && <span>in {folder}</span>}
+          {change.createdFolder && (
+            <span>Also creates folder {change.createdFolder}</span>
+          )}
+          {change.omitted && <span>{change.omitted}</span>}
+        </span>
+      </span>
+      {counts && (
+        <span className={styles["approval__file-counts"]}>
+          {counts.added > 0 && (
+            <span className={styles["approval__file-added"]}>
+              +{counts.added}
+            </span>
+          )}
+          {counts.removed > 0 && (
+            <span className={styles["approval__file-removed"]}>
+              −{counts.removed}
+            </span>
+          )}
+        </span>
+      )}
+      <span className={styles["approval__file-open"]} aria-hidden="true">
+        <Icon name="chevron" />
+      </span>
+    </button>
+  );
+}
+
+type IconName = Parameters<typeof Icon>[0]["name"];
+
+/**
+ * What kind of action this is, drawn as the card's one icon so a request reads
+ * at a glance. Only what the request itself establishes is used; a request
+ * that establishes nothing gets the plain lock.
+ */
+function kindOf({
+  changes,
+  destination,
+  invocation,
+  title,
+  effect,
+}: {
+  changes: readonly FileChange[] | undefined;
+  destination: string | undefined;
+  invocation: ToolInvocation | undefined;
+  title: string;
+  effect: string | undefined;
+}): IconName {
+  if (changes?.length) return "file";
+  if (destination || invocation?.via) return "plug";
+  const said =
+    `${effect ?? ""} ${title} ${invocation?.name ?? ""}`.toLowerCase();
+  if (/shell|command|bash|powershell/.test(said)) return "code";
+  if (/browser|page|web/.test(said)) return "globe";
+  return "lock";
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { ComponentContent } from "./index.js";
+import type { ComponentContent } from "./plugins.js";
 import { PluginStoreError } from "./errors.js";
 
 /** A person's content edit, with a fingerprint of the content it replaced. */

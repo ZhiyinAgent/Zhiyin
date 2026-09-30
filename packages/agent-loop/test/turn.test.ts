@@ -141,52 +141,6 @@ describe("AgentLoop", () => {
       true,
     );
   });
-  it("keeps cancellation terminal during final assessment", async () => {
-    let release!: () => void;
-    const waiting = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let evaluating = false;
-    const auxiliary = {
-      send: async function* (request: ModelRequest) {
-        const prompt = request.messages.at(-1)?.content ?? "";
-        if (prompt.includes("Create an ordered plan")) {
-          yield {
-            kind: "textDelta" as const,
-            text: JSON.stringify({
-              items: [
-                { title: "Answer", criterion: "The question is answered" },
-              ],
-            }),
-          };
-        } else {
-          evaluating = true;
-          await waiting;
-          yield {
-            kind: "textDelta" as const,
-            text: '{"satisfied":true,"summary":"Answered"}',
-          };
-        }
-        yield { kind: "done" as const };
-      },
-    };
-    const loop = loopFrom({
-      ...stubDependencies(() => {}, [
-        { kind: "textDelta", text: "Answer" },
-        { kind: "done" },
-      ]),
-      guidanceModel: auxiliary,
-      judgementModel: auxiliary,
-    });
-    await loop.createTask();
-    const running = loop.start("task-1", "A question");
-    await until(() => evaluating);
-    await loop.cancel("task-1");
-    release();
-    await running;
-    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
-  });
-
   it("persists overlapping input as guidance without replacing the turn", async () => {
     let release!: () => void;
     const waiting = new Promise<void>((resolve) => {
@@ -904,9 +858,8 @@ describe("AgentLoop", () => {
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
   });
 
-  it("asks the guidance model for the plan and action copy, and the judgement model whether the criterion is met", async () => {
+  it("asks the guidance model for the conversation's name and the action's copy", async () => {
     const guidanceRequests: ModelRequest[] = [];
-    const judgementRequests: ModelRequest[] = [];
     const modelRequests: ModelRequest[] = [];
     const loop = loopFrom({
       ...stubDependencies(() => {}),
@@ -938,19 +891,9 @@ describe("AgentLoop", () => {
           const prompt = request.messages.at(-1)?.content ?? "";
           yield {
             kind: "textDelta",
-            text: prompt.includes("Create an ordered plan")
-              ? '{"conversationTitle":"Identify current project","items":[{"title":"Identify the project","criterion":"The project name and package manager are supported by workspace evidence."}]}'
-              : '{"title":"Read project manifest","description":"I need package.json to identify the project and its package manager.","planItemId":"plan-1"}',
-          };
-          yield { kind: "done" };
-        },
-      },
-      judgementModel: {
-        send: async function* (request) {
-          judgementRequests.push(request);
-          yield {
-            kind: "textDelta",
-            text: '{"items":[{"id":"plan-1","verdict":"verified","reason":"package.json identifies Zhiyin and pnpm."}]}',
+            text: prompt.includes("Name this conversation")
+              ? '{"title":"Identify current project"}'
+              : '{"title":"Read project manifest","description":"I need package.json to identify the project and its package manager."}',
           };
           yield { kind: "done" };
         },
@@ -991,15 +934,6 @@ describe("AgentLoop", () => {
     });
 
     expect(loop.snapshot().tasks[0]).toMatchObject({
-      plan: [
-        {
-          id: "plan-1",
-          title: "Identify the project",
-          criterion:
-            "The project name and package manager are supported by workspace evidence.",
-          status: "active",
-        },
-      ],
       phase: {
         kind: "approval",
         prompt: {
@@ -1017,9 +951,8 @@ describe("AgentLoop", () => {
     );
     await running;
 
-    // The plan and the action's copy; the criterion went to the other seam.
+    // The conversation's name and the action's copy, and nothing else.
     expect(guidanceRequests).toHaveLength(2);
-    expect(judgementRequests).toHaveLength(1);
     expect(JSON.stringify(guidanceRequests)).not.toContain("read_file");
     expect(modelRequests[0]?.messages[0]).toMatchObject({
       role: "system",
@@ -1037,12 +970,7 @@ describe("AgentLoop", () => {
           status: "completed",
         },
       ],
-      plan: [
-        {
-          status: "verified",
-          verification: "package.json identifies Zhiyin and pnpm.",
-        },
-      ],
+      title: "Identify current project",
       phase: { kind: "completed" },
     });
   });
@@ -1179,10 +1107,21 @@ describe("AgentLoop", () => {
       expect.objectContaining({
         action: "Missing tool",
         description: "Zhiyin requested a capability that is not connected.",
-        target: "Unavailable",
         status: "failed",
+        // The call as it was made and the answer the model was given, kept for
+        // the person to unfold — not a placeholder saying nothing was known.
+        command: "missing_tool({})",
+        toolName: "missing_tool",
+        invocation: { name: "missing_tool", arguments: [] },
+        reason: "The tool “missing_tool” is not available.",
+        evidence: expect.stringContaining(
+          "The tool “missing_tool” is not available.",
+        ),
       }),
     ]);
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.target).not.toBe(
+      "Unavailable",
+    );
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
   });
 

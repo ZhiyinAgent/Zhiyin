@@ -1,6 +1,6 @@
 # 0008. Auxiliary model output guides presentation and criteria, not policy
 
-Status: accepted; two claims below amended by ADR 0016, one assumption amended
+Status: accepted; two claims below amended by ADR 0016, one assumption amended; the plan and its criteria superseded by ADR 0063
 by ADR 0022, the single auxiliary dependency and its cost assumption amended by
 ADR 0046
 

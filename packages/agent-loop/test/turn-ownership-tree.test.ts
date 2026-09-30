@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { TurnOwnership } from "../src/turn-ownership.js";
+import { TurnOwnership } from "../src/turn/turn-ownership.js";
 
 describe("TurnOwnership descendants", () => {
   it("cancels every descendant when its parent is cancelled", () => {

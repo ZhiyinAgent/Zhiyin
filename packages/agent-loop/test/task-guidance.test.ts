@@ -1,40 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { actionLabelFrom, factsLabel, planFrom } from "../src/task-guidance.js";
+import { actionLabelFrom, factsLabel } from "../src/context/task-guidance.js";
 
 describe("task guidance", () => {
-  it("accepts a small ordered plan with observable criteria", () => {
-    expect(
-      planFrom(
-        '{"items":[{"title":"Identify the project","criterion":"The answer names the project from workspace evidence."}]}',
-      ),
-    ).toEqual([
-      {
-        id: "plan-1",
-        title: "Identify the project",
-        criterion: "The answer names the project from workspace evidence.",
-        status: "active",
-      },
-    ]);
-  });
-
-  it("rejects malformed or inflated plans instead of displaying invented work", () => {
-    expect(planFrom("not json")).toBeUndefined();
-    expect(
-      planFrom(
-        JSON.stringify({
-          items: Array.from({ length: 5 }, (_, index) => ({
-            title: `Step ${index}`,
-            criterion: `Criterion ${index}`,
-          })),
-        }),
-      ),
-    ).toBeUndefined();
-  });
-
   it("reads the labelling answer, and nothing from one without both parts", () => {
     expect(
       actionLabelFrom(
-        '{"title":"Read project manifest","description":"Use package metadata to identify the project.","planItemId":"plan-1"}',
+        '{"title":"Read project manifest","description":"Use package metadata to identify the project."}',
       ),
     ).toEqual({
       title: "Read project manifest",

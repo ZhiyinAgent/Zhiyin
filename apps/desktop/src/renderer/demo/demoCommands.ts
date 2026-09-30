@@ -30,6 +30,7 @@ export function demoCommands(
     renameTask: async (taskId, title) =>
       dispatch({ type: "taskRenamed", taskId, title }),
     deleteTask: async (taskId) => dispatch({ type: "taskDeleted", taskId }),
+    dismissIssue: async () => undefined,
     sendMessage: async (taskId, message) =>
       dispatch({ type: "messageSubmitted", taskId, message }),
     // The demo keeps nothing; a paste is shown as though it were kept.

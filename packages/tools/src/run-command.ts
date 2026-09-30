@@ -255,10 +255,7 @@ export type CommandContext = {
   readonly items?: ConversationItems;
 };
 
-export function inspectRunCommand(
-  workspaceName: string,
-  args: unknown,
-): ToolCallInspection {
+export function inspectRunCommand(args: unknown): ToolCallInspection {
   const input = commandArguments(args);
   if (!input) {
     return {
@@ -274,9 +271,6 @@ export function inspectRunCommand(
     ok: true,
     action: "Run a shell command",
     target: shortened(input.command, shownCommandLength),
-    // Authoritative: true of every command, whatever the model says about
-    // this one.
-    detail: `This starts in ${workspaceName} but is not confined to that folder. It can read, change, or delete any files your account can access, reach the network, and start other programs. It cannot be undone.`,
     claim: input.explanation,
     // A shell command declares neither. It can do anything the account can do,
     // and where it reaches is not knowable from the string, so it never

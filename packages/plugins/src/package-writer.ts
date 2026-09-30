@@ -5,7 +5,7 @@ import type {
   AuthoredSkillDraft,
   AuthoredSpecialistDraft,
 } from "@zhiyin/contract";
-import { AGENT_PLUGINS_SCHEMA } from "./index.js";
+import { AGENT_PLUGINS_SCHEMA } from "./plugins.js";
 import { MCP_PLUGINS_SCHEMA } from "./package-loader.js";
 
 /**

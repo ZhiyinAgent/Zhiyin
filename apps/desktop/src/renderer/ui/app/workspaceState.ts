@@ -137,7 +137,7 @@ export type WorkspaceState = {
   personalInstructions?: CoreWorkspaceSnapshot["personalInstructions"];
   workspace?: CoreWorkspaceSnapshot["workspace"];
   recentWorkspaces: NonNullable<CoreWorkspaceSnapshot["recentWorkspaces"]>;
-  issues?: readonly string[];
+  issues?: CoreWorkspaceSnapshot["issues"];
   /**
    * The last command failure on screen, whether the command came from the
    * window or from the application menu. Empty once it is dismissed.
@@ -453,6 +453,13 @@ export function workspaceReducer(
         conversations: state.conversations.filter(
           (item) => item.id !== action.taskId,
         ),
+        ...(state.issues
+          ? {
+              issues: state.issues.filter(
+                (issue) => issue.conversationId !== action.taskId,
+              ),
+            }
+          : {}),
         selectedTaskId: action.selectedTaskId,
         surface: "thread",
         browser: action.selectedTaskId

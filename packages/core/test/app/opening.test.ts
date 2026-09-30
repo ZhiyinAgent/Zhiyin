@@ -149,11 +149,58 @@ describe("opening conversations", () => {
     await app.selectTask("task-2");
 
     expect(app.snapshot().selectedTaskId).toBe("task-0");
-    expect(app.snapshot().issues?.join(" ")).toMatch(
-      /“Conversation 2” is damaged.*A copy was kept at/,
-    );
+    expect(app.snapshot().issues).toEqual([
+      {
+        message:
+          "“Conversation 2” is damaged and can't be opened. Your other conversations are unaffected.",
+        keptAt: expect.stringContaining("damaged-history"),
+        conversationId: "task-2",
+      },
+    ]);
     await app.selectTask("task-1");
     expect(app.snapshot().selectedTaskId).toBe("task-1");
+  });
+
+  it("reports a damaged conversation once and keeps one copy however often it is opened, and drops the report when it is deleted", async () => {
+    const root = await temporaryRoot();
+    await plant(root, 2);
+    await writeFile(
+      join(root, "history", "conversations", "c-task-1", "conversation.jsonl"),
+      "not json",
+      "utf8",
+    );
+    const app = appOver(new FileSessions(root));
+    await app.initialize();
+
+    for (let attempt = 0; attempt < 3; attempt += 1)
+      await app.selectTask("task-1");
+
+    expect(app.snapshot().issues).toHaveLength(1);
+    expect(await readdir(join(root, "damaged-history"))).toHaveLength(1);
+
+    await app.deleteTask("task-1");
+    expect(app.snapshot().issues ?? []).toEqual([]);
+    expect(app.snapshot().conversations?.map((item) => item.id)).toEqual([
+      "task-0",
+    ]);
+  });
+
+  it("lets a person dismiss a report", async () => {
+    const root = await temporaryRoot();
+    await plant(root, 2);
+    await writeFile(
+      join(root, "history", "conversations", "c-task-1", "conversation.jsonl"),
+      "not json",
+      "utf8",
+    );
+    const app = appOver(new FileSessions(root));
+    await app.initialize();
+    await app.selectTask("task-1");
+    const [issue] = app.snapshot().issues ?? [];
+
+    await app.dismissIssue(issue?.message ?? "");
+
+    expect(app.snapshot().issues ?? []).toEqual([]);
   });
 
   it("lists the conversation changed last first", async () => {
@@ -185,9 +232,14 @@ describe("opening conversations", () => {
       "task-0",
       "task-1",
     ]);
-    expect(app.snapshot().issues?.join(" ")).toMatch(
-      /One saved conversation was damaged beyond reading.*kept at .*damaged-history/,
-    );
+    expect(app.snapshot().issues).toEqual([
+      {
+        message: expect.stringMatching(
+          /^One saved conversation was damaged beyond reading/,
+        ),
+        keptAt: expect.stringContaining("damaged-history"),
+      },
+    ]);
   });
 
   it("says when the last moment before the app closed was not saved", async () => {
@@ -203,9 +255,10 @@ describe("opening conversations", () => {
     await app.initialize();
 
     expect(app.snapshot().tasks[0]).toEqual(conversation(0));
-    expect(app.snapshot().issues).toContain(
-      "The last moment of “Conversation 0” before the app closed was not saved.",
-    );
+    expect(app.snapshot().issues).toContainEqual({
+      message:
+        "The last moment of “Conversation 0” before the app closed was not saved.",
+    });
   });
 });
 

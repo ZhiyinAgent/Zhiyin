@@ -45,6 +45,13 @@ tools and conversation resources are not package contents.
 - `loadPluginDirectory()` reads the portable fixed paths — `plugin.json`,
   `skills/`, `mcp.json` — and refuses unsafe paths, symbolic links,
   unsupported components, or partial packages before returning anything.
+- A connector in `mcp.json` may declare `requestsPerMinute`, the most calls a
+  minute its service accepts; it is handed to the connection feature with the
+  endpoint. Anything but a positive whole number refuses the package. The
+  shipped Tavily connector declares 100, the development-key limit, because a
+  key's tier cannot be read without spending quota. Named tests: `reads the
+  request rate a connector declares, and refuses one that is not a positive
+  number` and `paces Tavily within the rate its development keys allow`.
 - Specialist declarations may specify `access: "read" | "change"` and a tool
   name allowlist. Missing access means `change` for existing packages; the
   agent loop enforces a read role before tool inspection and approval.

@@ -27,7 +27,13 @@ import { keptAddress, type ConversationItems } from "./conversation-items.js";
 import { pageLines, readPage } from "./text-pages.js";
 import type { Page } from "./text-pages.js";
 import { fileDigest } from "./file-read-state.js";
-import { parsePageRange, readPdfText, renderPdfPages } from "./read-pdf.js";
+import {
+  describePages,
+  missingPages,
+  parsePages,
+  readPdfText,
+  renderPdfPages,
+} from "./read-pdf.js";
 import {
   describeBytes,
   errorCode,
@@ -38,8 +44,13 @@ import {
   type PathScope,
 } from "./workspace-path.js";
 
-/** A PDF is read whole to find its pages; text is streamed a page at a time. */
-const maximumPdfBytes = 2 * 1024 * 1024;
+/**
+ * A PDF is read whole to find its pages; each answer is still bounded by the
+ * pages and characters it carries. Measured 2026-09-30: an 83-page, 6.4 MB
+ * report opened in 59 ms and gave eight pages of text in 125 ms, for 45 MB.
+ */
+const maximumPdfMegabytes = 50;
+const maximumPdfBytes = maximumPdfMegabytes * 1024 * 1024;
 /** Enough of the head to tell text from anything else. */
 const sampleBytes = 4096;
 
@@ -69,7 +80,7 @@ export const readFileSpec: ToolSpec = {
       pages: {
         type: "string",
         description:
-          'PDF only: which pages to read, as "4" or "2-9". Defaults to as many as fit from the first page.',
+          'PDF only: which pages to read, as "4", "2-9" or a list like "2-5,8". Defaults to as many as fit from the first page.',
       },
       as: {
         type: "string",
@@ -332,14 +343,14 @@ export async function runReadTextFile(
       if (file.size > maximumPdfBytes)
         return {
           ok: false,
-          reason: "The PDF is too large to read in one tool call.",
+          reason: `This PDF is ${Math.round(file.size / 1024 / 1024)} MB; PDFs up to ${maximumPdfMegabytes} MB can be read.`,
         };
-      const range = parsePageRange(input.pages);
+      const range = parsePages(input.pages);
       if (range === "invalid")
         return {
           ok: false,
           reason:
-            'Ask for pages as a single number, like "4", or a range, like "2-9".',
+            'Ask for pages as a number, a range, or a list of both, like "4", "2-9" or "2-5,8".',
         };
       const bytes = await readFile(realTarget, signal ? { signal } : {});
       if (input.as === "image") {
@@ -351,10 +362,8 @@ export async function runReadTextFile(
           };
         const drawn = await renderPdfPages(bytes, range, signal);
         if (!drawn.ok) return drawn;
-        const shown =
-          drawn.read.first === drawn.read.last
-            ? String(drawn.read.first)
-            : `${drawn.read.first}-${drawn.read.last}`;
+        const shown = describePages(drawn.read);
+        const past = missingPages(drawn.pages, drawn.missing);
         return {
           ok: true,
           value: {
@@ -365,8 +374,9 @@ export async function runReadTextFile(
               ? {}
               : {
                   truncated: true,
-                  more: `Drawn ${shown} of ${drawn.pages} pages. Ask for the rest with pages: "${drawn.read.last + 1}-${Math.min(drawn.read.last + 2, drawn.pages)}".`,
+                  more: `Drawn ${shown} of ${drawn.pages} pages. Ask for the rest with pages: "${describePages(drawn.rest)}".`,
                 }),
+            ...(past ? { missing: past } : {}),
           },
           images: drawn.images,
           ...detailsOf(
@@ -380,10 +390,7 @@ export async function runReadTextFile(
       }
       const read = await readPdfText(bytes, range, signal);
       if (!read.ok) return read;
-      const pagesRead =
-        read.read.first === read.read.last
-          ? String(read.read.first)
-          : `${read.read.first}-${read.read.last}`;
+      const pagesRead = describePages(read.read);
       return {
         ok: true,
         value: {

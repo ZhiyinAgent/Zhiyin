@@ -3,7 +3,7 @@
  * what a request asks the provider to keep in its cache.
  */
 
-import type { ModelMessage, ModelUsage } from "./index.js";
+import type { ModelMessage, ModelUsage } from "./model-client.js";
 
 /**
  * Models whose provider reuses a cached request start only up to a marked

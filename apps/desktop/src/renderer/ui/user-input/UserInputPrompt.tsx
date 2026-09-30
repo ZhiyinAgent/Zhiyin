@@ -9,6 +9,7 @@ import type {
 import styles from "./user-input.module.css";
 import { FolderInstructionsPrompt } from "./FolderInstructionsPrompt.js";
 import { quizOutcome, sameSet } from "./quiz.js";
+import { StepTrack } from "./StepTrack.js";
 import { WorkBudgetPrompt } from "./WorkBudgetPrompt.js";
 
 export { InteractionCard } from "./InteractionCard.js";
@@ -75,18 +76,6 @@ export function UserInputPrompt({
       onCancel={onCancel}
     />
   );
-}
-
-function answeredCount(
-  prompt: QuestionPrompt,
-  selected: Answers,
-  written: TextAnswers,
-): number {
-  return prompt.questions.filter(
-    (question) =>
-      (selected[question.id] ?? []).length > 0 ||
-      Boolean(written[question.id]?.trim()),
-  ).length;
 }
 
 function ClarificationPrompt({
@@ -167,7 +156,10 @@ function ClarificationPrompt({
             <h3>{prompt.title}</h3>
           </div>
           <span>All {total} answered</span>
-          <progress aria-label="Answer progress" value={total} max={total} />
+          <StepTrack
+            label="Answer progress"
+            done={prompt.questions.map(() => true)}
+          />
         </header>
         <ol className={styles["input-review"]}>
           {prompt.questions.map((item, index) => (
@@ -257,10 +249,14 @@ function ClarificationPrompt({
           </span>
         )}
         {stepped && (
-          <progress
-            aria-label="Answer progress"
-            value={answeredCount(prompt, selected, written)}
-            max={total}
+          <StepTrack
+            label="Answer progress"
+            current={questionIndex}
+            done={prompt.questions.map(
+              (item) =>
+                (selected[item.id] ?? []).length > 0 ||
+                Boolean(written[item.id]?.trim()),
+            )}
           />
         )}
       </header>
@@ -571,10 +567,10 @@ function QuizPrompt({
         <span>
           Question {questionIndex + 1} of {prompt.questions.length}
         </span>
-        <progress
-          aria-label="Quiz progress"
-          value={questionIndex + 1}
-          max={prompt.questions.length}
+        <StepTrack
+          label="Quiz progress"
+          current={questionIndex}
+          done={prompt.questions.map((item) => reviewed.includes(item.id))}
         />
       </header>
       <form

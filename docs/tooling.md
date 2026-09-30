@@ -67,6 +67,21 @@ depends on live in `eslint.config.js` and run in the gate:
   where a god class grows back. A file already past the limit may be pinned at
   an explicit lint ceiling. Raising that ceiling deliberately is legitimate
   when the commit records why; the ratchet stops growth nobody decided on.
+  The same limit covers every package and every renderer module, the demo
+  stage included.
+- A package's `index.ts` only re-exports. Its implementation lives in files
+  named for what they do, so the entry point is the list of what the package
+  offers and nothing else.
+- The contract package holds at most 300 lines a file, one file per concept.
+  It is imported by everything, so a change to a shared file touches every
+  dependent; small files keep that blast radius readable.
+- Imports do not form cycles. A cycle means two files each need the other to
+  be understood; the fix is to move the shared piece out, not to silence the
+  rule.
+- `knip` runs in the gate and fails on a file nothing reaches or a dependency
+  nothing imports. Unused exports are not yet enforced
+  (`tasks/unused-exports.md`). Dependencies loaded by name at run time, such as
+  native modules, are listed with their reason in `knip.json`.
 
 This is weaker than a compiler and can be silenced with a comment — see
 ADR 0001's consequences. Because a lint rule that silently stops working

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { actionContextLines, guidanceLimits } from "../src/guidance-context.js";
+import {
+  actionContextLines,
+  guidanceLimits,
+} from "../src/context/guidance-context.js";
 
 function size(lines: readonly string[]): number {
   return lines.join("\n").length;
@@ -9,12 +12,10 @@ const plan = [
   {
     id: "plan-1",
     title: "Reproduce the reported defect",
-    criterion: "A failing check demonstrates the reported behaviour.",
   },
   {
     id: "plan-2",
     title: "Apply the smallest fix",
-    criterion: "The failing check passes and no other check regresses.",
   },
 ];
 

@@ -144,7 +144,12 @@ describe("AgentLoop after a save that failed", () => {
 
     await expect(loop.createTask()).rejects.toThrow();
 
-    expect(loop.snapshot().issues?.join(" ")).toContain("could not be saved");
+    expect(
+      loop
+        .snapshot()
+        .issues?.map((issue) => issue.message)
+        .join(" "),
+    ).toContain("could not be saved");
   });
 
   it("keeps the last committed state on disk when a later save fails", async () => {

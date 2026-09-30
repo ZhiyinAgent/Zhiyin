@@ -150,6 +150,9 @@ export function declaredConnections(
       name: server.name,
       url: server.url,
       enabled: view.enabled && server.enabled,
+      ...(server.requestsPerMinute
+        ? { requestsPerMinute: server.requestsPerMinute }
+        : {}),
     })),
   );
 }

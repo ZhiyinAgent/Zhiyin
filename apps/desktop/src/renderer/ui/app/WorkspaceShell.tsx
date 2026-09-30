@@ -16,13 +16,16 @@ import {
   ContextShelf,
   ConversationTimeline,
   NewConversation,
+  PlanPill,
   useReadingPosition,
 } from "../conversation/index.js";
-import { Icon, Notice } from "../shared/index.js";
+import { Icon } from "../shared/index.js";
+import { IssueNotices } from "./IssueNotices.js";
+import { useConversationDeletion } from "./useConversationDeletion.js";
 import { WorkspaceSkeleton } from "./WorkspaceSkeleton.js";
 import { useAppShortcuts } from "./useAppShortcuts.js";
 import { useContextBudget } from "./useContextBudget.js";
-import { timelinePieces } from "./timelinePieces.js";
+import { timelinePieces, timelineTask } from "./timelinePieces.js";
 import { WorkspaceSurfaces } from "./WorkspaceSurfaces.js";
 import {
   approvalPromptDetails,
@@ -107,6 +110,7 @@ type WorkspaceShellProps = {
         | "exportView"
         | "readPicture"
         | "selectNothing"
+        | "dismissIssue"
         | "previewRewind"
         | "commitRewind"
         | "readEvidence"
@@ -133,6 +137,11 @@ export function WorkspaceShell({
   const commandError = state.commandError ?? "";
   const setCommandError = (message: string) =>
     dispatch({ type: "commandErrorShown", message });
+  const [toast, deleteConversation] = useConversationDeletion(
+    state,
+    commands.deleteTask,
+    act,
+  );
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const permissions = useConversationPermissions(
@@ -177,14 +186,6 @@ export function WorkspaceShell({
   const selectedTask =
     state.tasks.find((task) => task.id === state.selectedTaskId) ?? null;
   const returnedGuidance = guidanceDraft(selectedTask);
-  // A specialist's own actions are drawn nested under its run in the
-  // timeline, not a second time in the main action-history list.
-  const specialistOwnedActionIds = new Set([
-    ...(selectedTask?.specialistRuns ?? []).flatMap((run) => run.actionIds),
-    ...(selectedTask?.actions ?? [])
-      .filter((action) => action.specialistRunId)
-      .map((action) => action.id),
-  ]);
   const budget = useContextBudget(state, selectedTask, commands, () =>
     openNavigationSurface("instructions"),
   );
@@ -352,7 +353,7 @@ export function WorkspaceShell({
         }}
         onNewTask={startNewTask}
         onRenameTask={(id, title) => commands.renameTask(id, title)}
-        onDeleteTask={(id) => commands.deleteTask(id)}
+        onDeleteTask={deleteConversation}
         onTaskPermissions={permissions.open}
         onOpenUsage={() => openNavigationSurface("usage")}
         onOpenEvidence={() => openNavigationSurface("evidence")}
@@ -431,6 +432,10 @@ export function WorkspaceShell({
                 }}
               >
                 <div className={styles["workspace-view"]}>
+                  <PlanPill
+                    key={selectedTask?.id}
+                    items={selectedTask?.plan ?? []}
+                  />
                   <div
                     className={`${styles["thread-scroll"]}${selectedTask ? "" : ` ${styles["thread-scroll--new"]}`}${browserView ? ` ${styles["thread-scroll--compact"]}` : ""}`}
                     ref={conversationRef}
@@ -446,21 +451,19 @@ export function WorkspaceShell({
                         80;
                     }}
                   >
-                    {state.issues?.map((issue) => (
-                      <Notice role="alert" key={issue}>
-                        <p>{issue}</p>
-                        {commands.frontendReady && (
-                          <button
-                            className="button"
-                            onClick={() =>
-                              void act(() => commands.frontendReady?.())
-                            }
-                          >
-                            Try again
-                          </button>
-                        )}
-                      </Notice>
-                    ))}
+                    <IssueNotices
+                      issues={state.issues}
+                      retry={
+                        commands.frontendReady &&
+                        state.runtime.tasks === "unavailable"
+                          ? () => void act(() => commands.frontendReady?.())
+                          : undefined
+                      }
+                      onDelete={deleteConversation}
+                      onDismiss={(message) =>
+                        void act(() => commands.dismissIssue?.(message))
+                      }
+                    />
                     {!selectedTask && (
                       <NewConversation
                         onSuggestion={(value) =>
@@ -481,13 +484,7 @@ export function WorkspaceShell({
                       )}
                     {selectedTask && selectedTask.messages.length > 0 && (
                       <ConversationTimeline
-                        task={{
-                          ...selectedTask,
-                          actions: (selectedTask.actions ?? []).filter(
-                            (action) =>
-                              !specialistOwnedActionIds.has(action.id),
-                          ),
-                        }}
+                        task={timelineTask(selectedTask)}
                         pieces={pieces(selectedTask)}
                         compact={browserView}
                       />
@@ -638,6 +635,7 @@ export function WorkspaceShell({
         </>
       )}
       {permissions.panel}
+      {toast}
     </div>
   );
 }

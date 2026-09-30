@@ -11,7 +11,7 @@ import type {
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { contextBudgets, typedMessageCharacters } from "@zhiyin/contract";
-import { estimatedRequestTokens } from "../src/conversation-context.js";
+import { estimatedRequestTokens } from "../src/context/conversation-context.js";
 import type {
   ModelEvent,
   ModelMessage,

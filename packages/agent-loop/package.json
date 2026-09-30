@@ -22,7 +22,6 @@
     "@zhiyin/permission-engine": "workspace:*",
     "@zhiyin/rewind": "workspace:*",
     "@zhiyin/recovery": "workspace:*",
-    "@zhiyin/mcp": "workspace:*",
     "@zhiyin/usage": "workspace:*",
     "@zhiyin/views": "workspace:*",
     "@zhiyin/session": "workspace:*",

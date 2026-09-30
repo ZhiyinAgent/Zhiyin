@@ -1,6 +1,6 @@
 # 0053. One judge request assesses the plan from this turn's evidence, and says which of three things its verdict is
 
-Status: accepted; amends ADR 0008, ADR 0046 and ADR 0052
+Status: superseded by 0063
 
 ## Context
 

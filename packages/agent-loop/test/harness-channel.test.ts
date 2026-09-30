@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolCallInspection, WorkspaceTask } from "@zhiyin/contract";
 import type { ModelMessage, ModelRequest } from "@zhiyin/model-client";
-import { harnessNotice, noticeKinds, toolOutput } from "../src/notices.js";
+import { harnessNotice, noticeKinds, toolOutput } from "../src/turn/notices.js";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
 /**
@@ -55,7 +55,6 @@ describe("a notice from Zhiyin", () => {
       "cleared",
       "plan",
       "loop",
-      "gaps",
       "instructions",
       "guidance",
       "recovery",

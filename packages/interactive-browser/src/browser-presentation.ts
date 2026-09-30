@@ -3,7 +3,7 @@ import type {
   ToolCallInspection,
   ToolInvocationResult,
 } from "@zhiyin/contract";
-import type { InteractiveBrowser } from "./index.js";
+import type { InteractiveBrowser } from "./interactive-browser.js";
 
 const names: Record<string, string> = {
   browser_navigate: "Open page",

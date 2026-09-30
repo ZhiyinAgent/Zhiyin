@@ -47,11 +47,11 @@ the project has not yet proved.
   asks again the same way: `manage()` only skips a built-in it is already
   connected to, never one it has only failed to open, so `server.open()` is
   retried on every `manage()` call until it succeeds. This is deliberate, and
-  different from a *configured* server's failure, which stays cached until an
-  explicit toggle: a built-in's prerequisite (a browser, a local `git.exe`) is
-  cheap to re-check and its fix normally happens outside the app, where an
-  external server's failure is a network condition not worth re-dialing on
-  every poll. Named test: `retries an unscoped built-in that failed once
+  different from a *configured* server's failure, which is retried only once
+  30 s have passed (ADR 0060): a built-in's prerequisite (a browser, a local
+  `git.exe`) is cheap to re-check and its fix normally happens outside the app,
+  where an external server's failure is a network condition not worth
+  re-dialing on every poll. Named test: `retries an unscoped built-in that failed once
   fixed, and asks again next time`.
 - Connections come from a declaration source handed in at construction: every
   connector the installed packages declare, each with the endpoint its package
@@ -63,6 +63,17 @@ the project has not yet proved.
   state says whether one is held, never what it is.
 - `retryFailed()` forgets remembered connection failures, so the next look
   dials again. This is what "check again" asks for.
+- A configured server that could not be reached is also dialed again by the
+  first look after 30 s, and never sooner; a refused token and an invalid
+  endpoint are never retried on their own. Named test: `tries a server that
+  failed again once a short wait has passed, and not before` and `never
+  retries a refused token on its own`.
+- A failure's reason names a recognised cause (timeout, closed connection,
+  HTTP status, unresolvable address) and nothing else of the error. Named test:
+  `says why a server could not be reached, not only that it could not`.
+- Calling a tool of a server that is down is refused naming that server and
+  its reason. Named test: `names the connection that is down when one of its
+  tools is called`.
 - `builtInIds()` names the connections the application itself provides, so a
   caller can withhold them the same way it withholds a package's.
 - `saveToken(id, token)` and `clearToken(id)` own the access token for one
@@ -128,6 +139,15 @@ the project has not yet proved.
   `rejects malformed and unsupported result content`, `accepts text, image,
   and structured result content`, and `accepts an embedded text resource
   returned for a repository file`.
+- **Calls to a connection never exceed the rate its declaration gives.** Each
+  call takes the next free slot, one interval after the previous, and waits
+  for it; a connection that declares no rate is not held back. A model writing
+  quickly with calls approved in advance otherwise sends bursts a service
+  refuses, and a refusal relayed through a remote MCP server does not say how
+  long to wait. A call stopped while waiting was never sent. Named tests:
+  `spaces the calls sent to a connector by the rate it declares`, `does not
+  hold back a connector that declares no rate`, and `never sends a call that
+  was stopped while it waited its turn`.
 - Cancellation before dispatch is a stopped action. Once a remote call was
   dispatched, either a late result or a thrown transport failure remains
   uncertain: the server may already have acted. Named tests: `distinguishes

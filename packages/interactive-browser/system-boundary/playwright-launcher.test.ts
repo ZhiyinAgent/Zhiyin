@@ -62,6 +62,18 @@ async function waitFor(
   }
 }
 
+/** A JPEG's pixel size, read from its start-of-frame marker. */
+function jpegSize(base64: string): string {
+  const bytes = Buffer.from(base64, "base64");
+  for (let at = 2; at + 9 < bytes.length;) {
+    const marker = bytes[at + 1]!;
+    if (marker >= 0xc0 && marker <= 0xc3)
+      return `${bytes.readUInt16BE(at + 7)}x${bytes.readUInt16BE(at + 5)}`;
+    at += 2 + bytes.readUInt16BE(at + 2);
+  }
+  throw new Error("Not a JPEG with a frame header");
+}
+
 describe("the production browser", () => {
   it("names the browser it will use, or says why it has none", () => {
     if (availability.available) {
@@ -351,6 +363,54 @@ describe.runIf(availability.available)("a real browser session", () => {
         if (!server.listening) return done();
         server.close((error) => (error ? fail(error) : done()));
       });
+    }
+  }, 180_000);
+
+  /**
+   * The panel draws two kinds of frame: the stream the browser sends as the
+   * page repaints, and one taken after each action. When the two disagree in
+   * size the panel alternates between them on every action, and the page
+   * visibly jumps. Resizing past the size the browser opened at is what used
+   * to make them disagree.
+   */
+  it("sends every frame at one size, the page's own, after the agent resizes it", async () => {
+    const session = new BrowserSession({
+      launcher,
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session);
+    const frames: { pixels: string; size: string }[] = [];
+    session.onFrame((frame) =>
+      frames.push({
+        pixels: jpegSize(frame.data),
+        size: `${frame.width}x${frame.height}`,
+      }),
+    );
+    try {
+      await automation.callTool("browser_navigate", { url: page });
+      await waitFor(() => session.state().title === "Takeover");
+      await automation.callTool("browser_resize", { width: 390, height: 844 });
+      const resized = frames.length;
+
+      await automation.callTool("browser_evaluate", {
+        function: "() => { document.body.style.background = 'rgb(200,0,0)'; }",
+      });
+      await session.scroll(100, 100, 200);
+      await waitFor(() =>
+        frames.slice(resized).some((frame) => frame.size === "390x844"),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const after = frames.slice(resized);
+      expect(new Set(after.map((frame) => frame.pixels))).toEqual(
+        new Set(["390x844"]),
+      );
+      expect(new Set(after.map((frame) => frame.size))).toEqual(
+        new Set(["390x844"]),
+      );
+    } finally {
+      await automation.close();
+      await session.close();
     }
   }, 180_000);
 

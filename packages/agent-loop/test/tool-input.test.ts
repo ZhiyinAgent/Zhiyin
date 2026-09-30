@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readToolInput } from "../src/tool-input.js";
+import { readToolInput } from "../src/tools/tool-input.js";
 
 describe("reading a tool call's input", () => {
   it("reads a well-formed object as it is, with nothing corrected", () => {

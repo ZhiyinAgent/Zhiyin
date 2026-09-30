@@ -1,5 +1,5 @@
 import { ActionHistory, SpecialistRunHistory } from "../actions/index.js";
-import type { TimelinePieces } from "../conversation/index.js";
+import type { TimelinePieces, WaitingOn } from "../conversation/index.js";
 import { TaskViewCard } from "../views/index.js";
 import { InteractionCard } from "../user-input/index.js";
 import { RewindMessage } from "../rewind/index.js";
@@ -12,6 +12,57 @@ import type {
 } from "./workspaceState.js";
 import type { WorkspaceCommands } from "./WorkspaceShell.js";
 import type { MessageAttachment } from "@zhiyin/contract";
+
+/**
+ * The specialists a finished turn left running, which is all the conversation
+ * is waiting on; nothing while the turn itself is still working.
+ */
+function waitingOn(task: WorkspaceTask): WaitingOn | undefined {
+  if (task.phase.kind !== "completed") return undefined;
+  const running = (task.specialistRuns ?? []).filter(
+    (run) => run.status === "running",
+  );
+  if (running.length === 0) return undefined;
+  const ids = new Set(running.map((run) => run.id));
+  const calls = new Set([
+    ...running.flatMap((run) => run.actionIds),
+    ...(task.actions ?? [])
+      .filter(
+        (action) => action.specialistRunId && ids.has(action.specialistRunId),
+      )
+      .map((action) => action.id),
+  ]).size;
+  return {
+    names: [...new Set(running.map((run) => run.specialist.name))],
+    calls,
+    since: running
+      .map((run) => run.startedAt)
+      .reduce((earliest, startedAt) =>
+        Date.parse(startedAt) < Date.parse(earliest) ? startedAt : earliest,
+      ),
+  };
+}
+
+/**
+ * The task as the conversation draws it. A specialist's own actions are drawn
+ * under its run, not a second time in the main history.
+ */
+export function timelineTask(task: WorkspaceTask) {
+  const specialistOwned = new Set([
+    ...(task.specialistRuns ?? []).flatMap((run) => run.actionIds),
+    ...(task.actions ?? [])
+      .filter((action) => action.specialistRunId)
+      .map((action) => action.id),
+  ]);
+  const waiting = waitingOn(task);
+  return {
+    ...task,
+    ...(waiting ? { waitingOn: waiting } : {}),
+    actions: (task.actions ?? []).filter(
+      (action) => !specialistOwned.has(action.id),
+    ),
+  };
+}
 
 /** What the shell hands back when a rewind lands. */
 type RewindLanding = {

@@ -183,7 +183,6 @@ export function isWorkspaceTask(task: unknown): boolean {
               action.detail,
               action.claim,
               action.reason,
-              action.planItemId,
             ].every(optionalText) &&
             validChanges(action.changes) &&
             validDetails(action.details) &&
@@ -247,48 +246,13 @@ export function isWorkspaceTask(task: unknown): boolean {
   );
 }
 
-/** One plan item: the judge's verdict and, apart from it, the worker's progress. */
+/** One plan item: a title and where the working model says it stands. */
 function validPlanItem(item: unknown): boolean {
-  const listOf = (
-    value: unknown,
-    valid: (entry: Record<string, unknown>) => boolean,
-  ) =>
-    value === undefined ||
-    (Array.isArray(value) &&
-      value.every((entry) => isRecord(entry) && valid(entry)));
   return (
     isRecord(item) &&
     typeof item.id === "string" &&
     typeof item.title === "string" &&
-    typeof item.criterion === "string" &&
-    optionalText(item.verification) &&
-    [
-      "pending",
-      "active",
-      "checking",
-      "verified",
-      "needs-attention",
-      "couldnt-judge",
-    ].includes(String(item.status)) &&
-    (item.verdictEvidence === undefined ||
-      (Array.isArray(item.verdictEvidence) &&
-        item.verdictEvidence.every((id) => typeof id === "string"))) &&
-    (item.progress === undefined ||
-      ["pending", "in_progress", "done", "cancelled"].includes(
-        String(item.progress),
-      )) &&
-    optionalText(item.progressNote) &&
-    listOf(
-      item.evidence,
-      (entry) =>
-        typeof entry.callId === "string" && typeof entry.shows === "string",
-    ) &&
-    listOf(
-      item.steps,
-      (entry) =>
-        typeof entry.text === "string" && typeof entry.done === "boolean",
-    ) &&
-    (item.addedBy === undefined || item.addedBy === "assistant")
+    ["pending", "in_progress", "done", "skipped"].includes(String(item.status))
   );
 }
 
@@ -424,6 +388,12 @@ function validUserInputRequest(value: unknown): boolean {
   );
 }
 
+const workLimits = new Set<unknown>(["toolRounds", "elapsed", "providerCost"]);
+const count = (value: unknown) =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const amount = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
 function validPendingUserInputRequest(value: unknown): boolean {
   return (
     validUserInputRequest(value) ||
@@ -431,9 +401,16 @@ function validPendingUserInputRequest(value: unknown): boolean {
     (isRecord(value) &&
       value.kind === "workBudget" &&
       typeof value.title === "string" &&
-      typeof value.completedRounds === "number" &&
-      Number.isSafeInteger(value.completedRounds) &&
-      value.completedRounds > 0 &&
+      count(value.completedRounds) &&
+      Array.isArray(value.reached) &&
+      value.reached.length > 0 &&
+      value.reached.every((limit) => workLimits.has(limit)) &&
+      amount(value.elapsedMs) &&
+      (value.costUsd === undefined || amount(value.costUsd)) &&
+      isRecord(value.allowance) &&
+      count(value.allowance.toolRounds) &&
+      amount(value.allowance.elapsedMs) &&
+      amount(value.allowance.providerCostUsd) &&
       optionalText(value.reason))
   );
 }

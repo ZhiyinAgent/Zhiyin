@@ -24,7 +24,7 @@ import { isWorkspaceTask } from "./saved-workspace.js";
 import { isRecord } from "./saved-values.js";
 import { isConversationSummary, isSavedSettings } from "./saved-index.js";
 import { SessionStoreError } from "./errors.js";
-import type { DamageReport, SavedWorkspace } from "./index.js";
+import type { DamageReport, SavedWorkspace } from "./session.js";
 
 /** The choices a person made. */
 export type SavedSettings = Omit<SavedWorkspace, "tasks" | "conversations">;

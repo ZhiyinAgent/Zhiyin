@@ -50,11 +50,11 @@ describe("auxiliary model calls", () => {
 
     await loop.start(taskId, "Review the launch readiness material");
 
-    const planRequest = requests[0];
-    expect(planRequest?.jsonMode).toBeUndefined();
-    expect(planRequest?.responseFormat).toBeUndefined();
-    expect(planRequest?.tools).toHaveLength(1);
-    expect(planRequest?.tools?.[0]?.inputSchema).toMatchObject({
+    const nameRequest = requests[0];
+    expect(nameRequest?.jsonMode).toBeUndefined();
+    expect(nameRequest?.responseFormat).toBeUndefined();
+    expect(nameRequest?.tools).toHaveLength(1);
+    expect(nameRequest?.tools?.[0]?.inputSchema).toMatchObject({
       type: "object",
     });
   });
@@ -82,20 +82,15 @@ describe("auxiliary model calls", () => {
     }
   });
 
-  it("reads the plan from the tool call arguments", async () => {
+  it("reads the conversation name from the tool call arguments", async () => {
     const requests: ModelRequest[] = [];
     const deps = stubDependencies(() => {}, [{ kind: "done" }]);
     const loop = loopFrom({
       ...deps,
-      guidanceModel: guidance(requests, (request) =>
-        request.tools?.[0]?.name === "record_plan"
-          ? toolCall("record_plan", {
-              conversationTitle: "Review launch readiness",
-              items: [
-                { title: "Read the material", criterion: "The file is read" },
-              ],
-            })
-          : [],
+      guidanceModel: guidance(requests, () =>
+        toolCall("record_conversation_title", {
+          title: "Review launch readiness",
+        }),
       ),
     });
     const taskId = await loop.createTask();
@@ -104,47 +99,6 @@ describe("auxiliary model calls", () => {
 
     expect(loop.snapshot().tasks[0]).toMatchObject({
       title: "Review launch readiness",
-      plan: [{ title: "Read the material", criterion: "The file is read" }],
-    });
-  });
-
-  it("retries the first title separately when the planning answer omits it", async () => {
-    const requests: ModelRequest[] = [];
-    const deps = stubDependencies(() => {}, [{ kind: "done" }]);
-    const loop = loopFrom({
-      ...deps,
-      guidanceModel: guidance(requests, (request) => {
-        const tool = request.tools?.[0]?.name;
-        if (tool === "record_plan")
-          return toolCall("record_plan", {
-            items: [
-              {
-                title: "Inspect the checklist",
-                criterion: "The launch checklist has been reviewed.",
-              },
-            ],
-          });
-        if (tool === "record_conversation_title")
-          return toolCall("record_conversation_title", {
-            title: "Assess launch readiness",
-          });
-        return [];
-      }),
-    });
-    const taskId = await loop.createTask();
-
-    await loop.start(
-      taskId,
-      "Please inspect the launch checklist before tomorrow's review",
-    );
-
-    expect(requests.map((request) => request.tools?.[0]?.name)).toEqual([
-      "record_plan",
-      "record_conversation_title",
-    ]);
-    expect(loop.snapshot().tasks[0]).toMatchObject({
-      title: "Assess launch readiness",
-      plan: [{ title: "Inspect the checklist" }],
     });
   });
 
@@ -163,12 +117,7 @@ describe("auxiliary model calls", () => {
       guidanceModel: guidance(requests, () => [
         {
           kind: "textDelta",
-          text: JSON.stringify({
-            conversationTitle: "Review launch readiness",
-            items: [
-              { title: "Read the material", criterion: "The file is read" },
-            ],
-          }),
+          text: JSON.stringify({ title: "Review launch readiness" }),
         },
       ]),
     });
@@ -178,7 +127,6 @@ describe("auxiliary model calls", () => {
 
     expect(loop.snapshot().tasks[0]).toMatchObject({
       title: "Review launch readiness",
-      plan: [{ title: "Read the material", criterion: "The file is read" }],
     });
   });
 });

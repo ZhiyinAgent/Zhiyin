@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "vitest";
 import type { ToolCallInspection, WorkspaceTask } from "@zhiyin/contract";
-import { TurnWaits } from "../src/turn-waits.js";
-import type { TurnRecords } from "../src/turn-records.js";
+import { TurnWaits } from "../src/turn/turn-waits.js";
+import type { TurnRecords } from "../src/turn/turn-records.js";
 
 function recordsStub(taskId: string): {
   readonly records: TurnRecords;

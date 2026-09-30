@@ -23,18 +23,83 @@
   box-shadow: var(--zy-shadow-raised);
 }
 
-/* Asked where the composer sits: it gives up height to the room it is given
-   rather than pushing the composer away. */
-.user-input--work-budget {
+/* Asked where the composer sits: one row, the question and why on the left,
+   the two answers on the right. It wraps rather than squeezing on a narrow
+   window, and gives up height rather than pushing the composer away. */
+.work-budget {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: center;
   min-height: 0;
+  padding: 12px 14px;
 }
 
-.work-budget__message {
-  margin: 0;
-  padding: 16px;
+.work-budget__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: var(--zy-wash);
   color: var(--zy-text-soft);
-  font-size: 14px;
-  line-height: 1.55;
+}
+
+.work-budget__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.work-budget__text {
+  display: grid;
+  flex: 1 1 240px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.work-budget__text h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.work-budget__text p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.work-budget__text .work-budget__warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 4px;
+  color: var(--zy-text-soft);
+}
+
+.work-budget__warning svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: var(--zy-danger);
+}
+
+.work-budget__text .work-budget__error {
+  color: var(--zy-danger);
+}
+
+.work-budget__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .user-input--folder-instructions {
@@ -54,11 +119,6 @@
   line-height: 1.5;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-}
-
-.work-budget__actions {
-  justify-content: space-between;
-  border-top: 1px solid var(--zy-line);
 }
 
 .user-input__header,
@@ -153,25 +213,43 @@
   white-space: nowrap;
 }
 
-.input-flow__header progress {
+.step-track {
   grid-column: 1 / -1;
-  width: 100%;
-  height: 3px;
-  margin-top: 12px;
-  border: 0;
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-track__segment {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
   border-radius: 999px;
-  overflow: hidden;
-  color: var(--zy-blue);
-  background: var(--zy-line);
-  appearance: none;
+  background: var(--zy-line-strong);
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
-.input-flow__header progress::-webkit-progress-bar {
-  background: var(--zy-line);
+.step-track__segment--done {
+  background: color-mix(in srgb, var(--zy-blue) 55%, transparent);
 }
 
-.input-flow__header progress::-webkit-progress-value {
+.step-track__segment--current {
+  background: color-mix(in srgb, var(--zy-blue) 35%, var(--zy-line-strong));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--zy-blue) 70%, transparent);
+}
+
+.step-track__segment--done.step-track__segment--current {
   background: var(--zy-blue);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-track__segment {
+    transition: none;
+  }
 }
 
 .input-flow__question {

@@ -200,8 +200,14 @@ const ORCHESTRATION_FILES = [
   "apps/desktop/src/renderer/ui/app/**/*.{ts,tsx}",
 ];
 const PACKAGE_SOURCE_FILES = ["packages/*/src/**/*.ts"];
-const RENDERER_MODULE_FILES = ["apps/desktop/src/renderer/ui/**/*.{ts,tsx}"];
+const RENDERER_MODULE_FILES = [
+  "apps/desktop/src/renderer/ui/**/*.{ts,tsx}",
+  // The demo stage and component lab are code too; a catalog that grew to
+  // 1,900 lines sat outside every limit until it was looked at.
+  "apps/desktop/src/renderer/demo/**/*.{ts,tsx}",
+];
 const orchestrationLineLimit = 600;
+const contractLineLimit = 300;
 
 /*
  * A file already past the shared limit may be pinned here at an explicit lint
@@ -232,17 +238,23 @@ const OVERSIZED_ORCHESTRATION_FILES = {
   // is this class's own async orchestration methods, each reaching several
   // injected members through `this.#members` — not extractable to a pure
   // function without losing that access.
-  "packages/capabilities/src/index.ts": 700,
+  "packages/capabilities/src/capabilities.ts": 622,
+  // Grouping agent-loop into concept folders lengthened every cross-folder
+  // import path, and Prettier wrapped a few of them. These three sat within a
+  // few lines of the limit; the pins hold them at that size until they are
+  // split by concern.
+  "packages/agent-loop/src/specialist/specialist-execution.ts": 603,
+  "packages/agent-loop/src/tools/tool-calls.ts": 604,
+  "packages/agent-loop/src/turn/turn-loop.ts": 602,
 };
 
 const OVERSIZED_PACKAGE_FILES = {
   // Each entry is pinned at its effective line count when the feature-layer
   // ceiling was introduced. Splitting concerns may lower a pin; ordinary
   // feature work may not raise one.
-  "packages/mcp/src/index.ts": 1192,
-  "packages/model-client/src/index.ts": 639,
-  "packages/contract/src/index.ts": 849,
-  "packages/recovery/src/index.ts": 640,
+  "packages/mcp/src/mcp.ts": 1094,
+  "packages/model-client/src/model-client.ts": 614,
+  "packages/recovery/src/recovery.ts": 640,
 };
 
 const OVERSIZED_RENDERER_FILES = {
@@ -250,7 +262,7 @@ const OVERSIZED_RENDERER_FILES = {
   // the module-wide ceiling was introduced. Splitting a component may lower a
   // pin; ordinary UI work may not raise one.
   "apps/desktop/src/renderer/ui/capabilities/CapabilityLibrary.tsx": 764,
-  "apps/desktop/src/renderer/ui/user-input/UserInputPrompt.tsx": 674,
+  "apps/desktop/src/renderer/ui/user-input/UserInputPrompt.tsx": 671,
 };
 
 const OVERSIZED_FILES = {
@@ -385,6 +397,7 @@ export default tseslint.config(
   {
     plugins: { "import-x": importX },
     settings: {
+      "import-x/extensions": [".ts", ".tsx", ".js", ".mjs"],
       // Source imports name the `.js` file TypeScript will emit. Without this
       // alias the path rules cannot find the `.ts` file behind the name, and a
       // rule that cannot resolve an import silently allows it.
@@ -413,6 +426,9 @@ export default tseslint.config(
       // A relative path that climbs out into a sibling package is the same
       // violation wearing a different hat.
       "import-x/no-relative-packages": "error",
+      // The layer rules stop a cycle between packages. Inside one package
+      // nothing did, and a cycle there is the first sign two files are one.
+      "import-x/no-cycle": "error",
     },
   },
 
@@ -547,6 +563,38 @@ export default tseslint.config(
     ],
     ignores: ["**/*.test.ts", "**/*.test.tsx"],
     rules: { "max-lines": lineLimit(orchestrationLineLimit) },
+  },
+  {
+    // The contract is read by both sides of every boundary, so a file of it
+    // is held well under the general limit.
+    files: ["packages/contract/src/**/*.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: { "max-lines": lineLimit(contractLineLimit) },
+  },
+  {
+    // A package's entry point is its public interface, so it lists what is
+    // public and holds no implementation. Code placed there is imported back
+    // from it by its neighbours, which is how a cycle starts.
+    files: ["packages/*/src/index.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        ...[
+          "VariableDeclaration",
+          "FunctionDeclaration",
+          "ClassDeclaration",
+          "TSTypeAliasDeclaration",
+          "TSInterfaceDeclaration",
+          "TSEnumDeclaration",
+          "ExportDefaultDeclaration",
+          "ExportNamedDeclaration[declaration]",
+        ].map((kind) => ({
+          selector: `Program > ${kind}`,
+          message:
+            "index.ts only re-exports. Put the declaration in a file named for what it is and export it from here.",
+        })),
+      ],
+    },
   },
   ...Object.entries(OVERSIZED_FILES).map(([path, max]) => ({
     files: [path],

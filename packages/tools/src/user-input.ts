@@ -294,8 +294,6 @@ function defineInputTool(
             action,
             target: request.title,
             command: `${spec.name}(${JSON.stringify({ title: request.title })})`,
-            detail:
-              "This pauses the task for an answer inside the conversation. It does not change files or contact another service.",
             requiresApproval: false,
             input: request,
           };

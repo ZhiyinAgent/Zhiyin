@@ -1,6 +1,6 @@
 # 0046. Presentation and judgement are separate model seams
 
-Status: accepted; amends two claims in ADR 0008; its placement of the durable summary under judgement superseded by 0050
+Status: accepted; amends two claims in ADR 0008; its placement of the durable summary under judgement superseded by 0050; the judgement seam superseded by ADR 0063
 
 ## Context
 

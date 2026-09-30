@@ -38,10 +38,32 @@ export type UserInputRequest =
       readonly questions: readonly QuizQuestion[];
     };
 
+/** A point at which long work stops to ask whether to go on. */
+export type WorkLimit = "toolRounds" | "elapsed" | "providerCost";
+
+/** How much work one stretch may do before it asks again. */
+export type WorkAllowance = {
+  readonly toolRounds: number;
+  readonly elapsedMs: number;
+  readonly providerCostUsd: number;
+};
+
+/**
+ * Asked when a stretch of work reaches its allowance: which limits it reached,
+ * what it used, and what Continue would grant, so the choice can be made
+ * without knowing how the budget works.
+ */
 export type WorkBudgetRequest = {
   readonly kind: "workBudget";
   readonly title: string;
   readonly completedRounds: number;
+  /** At least one. */
+  readonly reached: readonly WorkLimit[];
+  readonly elapsedMs: number;
+  /** Absent when no request of this stretch reported a cost. */
+  readonly costUsd?: number;
+  /** What Continue grants: the same allowance again. */
+  readonly allowance: WorkAllowance;
   /** Why the work may be going nowhere, when Zhiyin saw it repeat itself. */
   readonly reason?: string;
 };

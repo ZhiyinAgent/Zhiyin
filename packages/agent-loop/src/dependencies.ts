@@ -15,7 +15,7 @@ import type { ModelClient } from "@zhiyin/model-client";
 import type { UsageTelemetry } from "@zhiyin/usage";
 import type { ViewValidator } from "@zhiyin/views";
 import type { Rewind } from "@zhiyin/rewind";
-import type { WorkLimits } from "./work-limits.js";
+import type { WorkLimits } from "./turn/work-limits.js";
 
 export interface AgentLoopDependencies {
   readonly permissions: PermissionEngine;
@@ -28,18 +28,13 @@ export interface AgentLoopDependencies {
   readonly sessions: Sessions;
   readonly model: ModelClient;
   /**
-   * Writes the plan, the conversation's name, and the copy shown around an
-   * action. Wrong here costs a worse label.
+   * Writes the conversation's name and the copy shown around an action.
+   * Wrong here costs a worse label.
    */
   readonly guidanceModel: Pick<ModelClient, "send">;
-  /**
-   * Decides whether evidence satisfies a criterion, and distils the summary
-   * every later turn is handed. Wrong here is wrong in ways nothing downstream
-   * can detect, so it is named apart from `guidanceModel` rather than sharing
-   * whatever that happens to point at.
-   */
-  readonly judgementModel: Pick<ModelClient, "send">;
   readonly workLimits?: WorkLimits;
+  /** What one specialist may use, apart from the main task's limits. */
+  readonly specialistWorkLimits?: WorkLimits;
   readonly pictures?: PictureFitting;
   /**
    * How far the shown answer trails the model, in milliseconds. Defaults to

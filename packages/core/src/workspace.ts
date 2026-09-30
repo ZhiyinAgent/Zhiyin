@@ -31,6 +31,7 @@ import type {
   ShellAvailability,
   UsageState,
   WorkspaceContext,
+  WorkspaceIssue,
   WorkspaceSnapshot,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -68,6 +69,7 @@ import { WorkspaceConnections } from "./workspace-connections.js";
 import { WorkspaceShell } from "./workspace-shell.js";
 import { closeInTurn } from "./closing.js";
 import * as produced from "./produced-files.js";
+import { Issues } from "./issues.js";
 import { ConversationList } from "./conversation-list.js";
 import { KeptItems } from "./kept-items.js";
 
@@ -108,7 +110,7 @@ export class Workspace {
   #selectedTaskId: string | null = null;
   #workspaceSelection: WorkspaceSnapshot["workspace"];
   #recentWorkspaces: NonNullable<WorkspaceSnapshot["recentWorkspaces"]> = [];
-  #issues: string[] = [];
+  readonly #issues = new Issues();
   #historyAvailable = true;
   #historyRecovery: WorkspaceSnapshot["historyRecovery"];
   #connectionsReady: Promise<void> = Promise.resolve();
@@ -141,13 +143,10 @@ export class Workspace {
       () => this.snapshot(),
       () => this.#historyAvailable,
       () => {
-        if (!this.#issues.includes(UNSAVED_CHANGES))
-          this.#issues = [...this.#issues, UNSAVED_CHANGES];
+        this.#issues.add(UNSAVED_CHANGES);
       },
       () => {
-        this.#issues = this.#issues.filter(
-          (issue) => issue !== UNSAVED_CHANGES,
-        );
+        this.#issues.remove(UNSAVED_CHANGES);
       },
     );
     this.settings = new ModelSettings(deps.model, (event) => this.emit(event));
@@ -209,7 +208,7 @@ export class Workspace {
     this.choices.restore(restored);
     this.#workspaceSelection = restored.workspace;
     this.#recentWorkspaces = restored.recentWorkspaces;
-    this.#issues = restored.issues;
+    this.#issues.replace(restored.issues);
     this.#historyAvailable = restored.historyAvailable;
     this.#historyRecovery = restored.historyRecovery;
     this.#capabilitiesAvailable = restored.capabilitiesAvailable;
@@ -219,14 +218,14 @@ export class Workspace {
     if (this.#selectedTaskId && !(await this.#ensureOpen(this.#selectedTaskId)))
       this.#selectedTaskId = null;
     const rewindIssue = await this.#rewinds.resume();
-    if (rewindIssue) this.#issues = [...this.#issues, rewindIssue];
+    if (rewindIssue) this.#issues.add(rewindIssue);
     if (restored.needsSave) await this.#persistence.save();
     this.#connectionsReady = startup.loadConnections(
       this.#deps.capabilities,
       ({ mcpServers, plugins, issues }) => {
         this.#mcpServers = mcpServers;
         if (plugins) this.#plugins = plugins;
-        if (issues) this.#issues = [...this.#issues, ...issues];
+        for (const issue of issues ?? []) this.#issues.add(issue);
         this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
       },
     );
@@ -263,7 +262,7 @@ export class Workspace {
       ...(this.#recentWorkspaces.length
         ? { recentWorkspaces: this.#recentWorkspaces }
         : {}),
-      ...(this.#issues.length ? { issues: this.#issues } : {}),
+      ...(this.#issues.list().length ? { issues: this.#issues.list() } : {}),
       tasks: this.#tasks,
       conversations: this.#listed(),
       selectedTaskId: this.#selectedTaskId,
@@ -404,6 +403,7 @@ export class Workspace {
     await this.#deps.capabilities.forgetConversation(taskId);
     this.#tasks = this.#tasks.filter((task) => task.id !== taskId);
     const next = this.#conversations.remove(taskId, this.#tasks);
+    this.#issues.forgetConversation(taskId);
     if (this.#selectedTaskId === taskId)
       this.#selectedTaskId =
         next && (await this.#ensureOpen(next)) ? next : null;
@@ -620,9 +620,14 @@ export class Workspace {
   }
 
   /** Said once, and the window is told at once rather than at the next change. */
-  #reportIssue(notice: string): void {
-    if (this.#issues.includes(notice)) return;
-    this.#issues.push(notice);
+  #reportIssue(notice: string | WorkspaceIssue): void {
+    if (!this.#issues.add(notice)) return;
+    this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
+  }
+
+  /** Stops showing an issue the person has read. */
+  async dismissIssue(message: string): Promise<void> {
+    this.#issues.remove(message);
     this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
   }
 
@@ -639,7 +644,7 @@ export class Workspace {
     );
     this.#historyRecovery = undefined;
     this.#historyAvailable = true;
-    this.#issues = [];
+    this.#issues.replace([]);
     if (choice === "startFresh") {
       this.#tasks = [];
       this.#conversations.replace([]);
@@ -708,11 +713,11 @@ export class Workspace {
     const moved = await startup.enterFolder(this.#deps.workspace, task, {
       selection: this.#workspaceSelection,
       recents: this.#recentWorkspaces,
-      issues: this.#issues,
+      issues: this.#issues.list(),
     });
     this.#workspaceSelection = moved.selection;
     this.#recentWorkspaces = moved.recents;
-    this.#issues = moved.issues;
+    this.#issues.replace(moved.issues);
     return true;
   }
 
@@ -740,9 +745,7 @@ export class Workspace {
       this.#selectedTaskId,
       this.#workspaceSelection,
     );
-    this.#issues = this.#issues.filter(
-      (issue) => issue !== startup.movedWorkspaceNotice,
-    );
+    this.#issues.remove(startup.movedWorkspaceNotice);
     try {
       await this.#persistence.save();
     } catch (error) {
@@ -760,7 +763,7 @@ export class Workspace {
       );
       if (issue) {
         this.#workspaceSelection = undefined;
-        this.#issues = [...this.#issues, issue];
+        this.#issues.add(issue);
       }
       this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
       throw error;

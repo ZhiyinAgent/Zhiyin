@@ -30,7 +30,7 @@ import {
   type AgentLoopDependencies,
   type TurnHost,
 } from "../src/index.js";
-import { settledWhenTurnEnded } from "../src/settling.js";
+import { settledWhenTurnEnded } from "../src/turn/settling.js";
 
 export async function until(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 50; attempt += 1) {
@@ -599,11 +599,6 @@ export function stubDependencies(
       cleanup: async () => {},
     },
     guidanceModel: {
-      send: async function* () {
-        yield { kind: "done" };
-      },
-    },
-    judgementModel: {
       send: async function* () {
         yield { kind: "done" };
       },

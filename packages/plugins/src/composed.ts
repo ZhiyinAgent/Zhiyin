@@ -12,7 +12,7 @@ import {
   type PluginPackage,
   type PluginView,
   type Plugins,
-} from "./index.js";
+} from "./plugins.js";
 import { PluginStoreError } from "./errors.js";
 import { loadPluginDirectory } from "./package-loader.js";
 import { writePluginDirectory } from "./package-writer.js";

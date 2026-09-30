@@ -236,7 +236,7 @@ async function planWrite(
         ],
         detail: `This replaces the current contents of ${input.path} (${describeBytes(
           target.bytes,
-        )}). It cannot be undone.`,
+        )}).`,
         command,
       },
     };

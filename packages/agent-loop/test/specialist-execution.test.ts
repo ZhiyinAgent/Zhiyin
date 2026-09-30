@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TaskAction, ToolCallInspection } from "@zhiyin/contract";
+import type { ModelEvent } from "@zhiyin/model-client";
+import type { WorkLimits } from "../src/index.js";
 import {
   completeHandoffMessage,
   handoffMessage,
-} from "../src/specialist-execution.js";
+} from "../src/specialist/specialist-execution.js";
 import {
   loopFrom,
   pluginOffering,
@@ -633,15 +635,28 @@ describe("specialist child execution", () => {
     expect(runs.every((run) => run.status === "completed")).toBe(true);
   });
 
-  it("stops itself when the shared work budget is reached while it is running alone", async () => {
+  /**
+   * One delegation to a reviewer whose every round is scripted. The parent
+   * delegates once and then answers; `specialist` says what the reviewer does
+   * on its nth request, and is given the tools it was offered.
+   */
+  function delegatingLoop(options: {
+    readonly workLimits?: WorkLimits;
+    readonly specialistWorkLimits?: WorkLimits;
+    readonly specialist: (
+      round: number,
+      tools: readonly string[],
+      messages: string,
+    ) => readonly ModelEvent[];
+  }) {
     const base = stubDependencies(() => {});
-    const loop = loopFrom({
+    let specialistRound = 0;
+    return loopFrom({
       ...base,
-      workLimits: {
-        maximumElapsedMs: 60_000,
-        maximumTokens: 100,
-        maximumProviderCostUsd: 10,
-      },
+      ...(options.workLimits ? { workLimits: options.workLimits } : {}),
+      ...(options.specialistWorkLimits
+        ? { specialistWorkLimits: options.specialistWorkLimits }
+        : {}),
       plugins: pluginsOffering([
         pluginOffering({
           name: "engineering",
@@ -684,40 +699,16 @@ describe("specialist child execution", () => {
         send: async function* (request) {
           const text = JSON.stringify(request.messages);
           if (text.includes("You are the Reviewer specialist")) {
-            yield {
-              kind: "usage" as const,
-              usage: {
-                requestId: "specialist-usage-1",
-                model: "test",
-                inputTokens: 90,
-                outputTokens: 30,
-                totalTokens: 120,
-              },
-            };
-            yield {
-              kind: "toolCallDelta" as const,
-              index: 0,
-              callId: "read-1",
-              name: "read_file",
-              argumentsDelta: JSON.stringify({ path: "x" }),
-            };
+            specialistRound += 1;
+            yield* options.specialist(
+              specialistRound,
+              request.tools.map((tool) => tool.name),
+              text,
+            );
             yield { kind: "done" as const };
             return;
           }
           if (!text.includes("Review this.")) {
-            // A small measured usage, not the estimate fallback: the parent's
-            // own round must not itself trip the tiny shared budget below —
-            // this test is about the specialist tripping it on top.
-            yield {
-              kind: "usage" as const,
-              usage: {
-                requestId: "parent-usage-1",
-                model: "test",
-                inputTokens: 5,
-                outputTokens: 5,
-                totalTokens: 10,
-              },
-            };
             yield {
               kind: "toolCallDelta" as const,
               index: 0,
@@ -731,36 +722,121 @@ describe("specialist child execution", () => {
             yield { kind: "done" as const };
             return;
           }
-          yield {
-            kind: "usage" as const,
-            usage: {
-              requestId: "parent-usage-2",
-              model: "test",
-              inputTokens: 5,
-              outputTokens: 5,
-              totalTokens: 10,
-            },
-          };
           yield { kind: "textDelta" as const, text: "Noted." };
           yield { kind: "done" as const };
         },
       },
       newSpecialistRunId: () => "specialist-1",
     });
-    const taskId = await loop.createTask(["engineering"]);
+  }
 
+  const readsAFile = (round: number): ModelEvent => ({
+    kind: "toolCallDelta",
+    index: 0,
+    callId: `read-${round}`,
+    name: "read_file",
+    argumentsDelta: JSON.stringify({ path: "x" }),
+  });
+
+  const finishes = (summary: string): ModelEvent => ({
+    kind: "toolCallDelta",
+    index: 0,
+    callId: "finish",
+    name: "finish_specialist",
+    argumentsDelta: JSON.stringify({
+      summary,
+      findings: [],
+      recommendations: [],
+      limitations: [],
+    }),
+  });
+
+  async function settled(loop: ReturnType<typeof delegatingLoop>) {
+    const taskId = await loop.createTask(["engineering"]);
     await loop.start(taskId, "Review this change");
     await until(
       () => loop.snapshot().tasks[0]?.specialistRuns?.[0]?.status !== "running",
     );
+    return loop.snapshot().tasks[0]?.specialistRuns?.[0];
+  }
 
-    expect(loop.snapshot().tasks[0]?.specialistRuns).toMatchObject([
-      {
-        id: "specialist-1",
-        status: "interrupted",
-        reason: expect.stringContaining("shared work budget"),
+  it("does not count a specialist's spending against the main task's budget", async () => {
+    const loop = delegatingLoop({
+      // A cost the specialist alone goes far past. It has to finish, and the
+      // main task has to go on, without being asked to continue.
+      workLimits: {
+        maximumElapsedMs: 60_000,
+        maximumProviderCostUsd: 0.1,
       },
-    ]);
+      specialist: (round) =>
+        round === 1
+          ? [
+              {
+                kind: "usage",
+                usage: {
+                  requestId: "specialist-usage-1",
+                  model: "test",
+                  inputTokens: 90,
+                  outputTokens: 30,
+                  totalTokens: 120,
+                  costUsd: 5,
+                },
+              },
+              readsAFile(round),
+            ]
+          : [finishes("Done.")],
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({ status: "completed" });
+    expect(loop.snapshot().tasks[0]?.phase.kind).not.toBe("input");
+  });
+
+  it("asks a specialist that reached its own budget to report what it has", async () => {
+    const offered: (readonly string[])[] = [];
+    let wrapUp = "";
+    const loop = delegatingLoop({
+      specialistWorkLimits: {
+        maximumElapsedMs: 60_000,
+        maximumProviderCostUsd: 10,
+        maximumToolRounds: 2,
+      },
+      specialist: (round, tools, messages) => {
+        offered.push(tools);
+        if (round <= 2) return [readsAFile(round)];
+        wrapUp = messages;
+        return [finishes("Partial: two files read.")];
+      },
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "completed",
+      handoff: { summary: "Partial: two files read." },
+    });
+    // Only the way out is on offer once the budget is spent.
+    expect(offered.at(-1)).toEqual(["finish_specialist"]);
+    expect(wrapUp).toContain("work budget is used up");
+  });
+
+  it("stops a specialist that will not report once its budget is spent", async () => {
+    const loop = delegatingLoop({
+      specialistWorkLimits: {
+        maximumElapsedMs: 60_000,
+        maximumProviderCostUsd: 10,
+        maximumToolRounds: 1,
+      },
+      specialist: (round) => [readsAFile(round)],
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "interrupted",
+      reason: expect.stringContaining("budget"),
+    });
   });
 
   it("answers a specialist's unreadable tool input instead of failing the specialist", async () => {

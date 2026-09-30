@@ -1,16 +1,12 @@
 /**
  * Which model each auxiliary request goes to.
  *
- * The loop asks a second model for two different kinds of thing, and they are
- * not interchangeable. Writing a label for an action is presentation: a weaker
- * model writes a slightly worse title. Deciding whether evidence satisfies a
- * criterion is judgement: a weaker model is wrong in ways nothing downstream
- * can detect. Condensing a conversation is neither: it is asked of the
+ * The loop asks a second model to name a conversation and to label an action:
+ * presentation, where a weaker model writes a slightly worse title.
+ * Condensing a conversation is not presentation: it is asked of the
  * conversation's own model, from the request that model already has cached.
- *
- * One seam could not tell them apart, so both followed whichever model the
- * person had selected. These tests hold the two apart so a composition can
- * point them at different models.
+ * These tests hold the two apart so a composition can point the naming at a
+ * different model.
  */
 
 import { describe, expect, it } from "vitest";
@@ -82,75 +78,25 @@ function pastItsBudget(): WorkspaceTask {
 }
 
 describe("auxiliary model seams", () => {
-  it("asks the guidance model for the plan and the conversation name", async () => {
+  it("asks the guidance model for the conversation name", async () => {
     const guidance: ModelRequest[] = [];
-    const judgement: ModelRequest[] = [];
     const deps = stubDependencies(() => {}, [{ kind: "done" }]);
     const loop = loopFrom({
       ...deps,
       guidanceModel: recorder(guidance, {
-        "Create an ordered plan": {
-          conversationTitle: "Explain the assistant",
-          items: [
-            { title: "Answer", criterion: "The reply explains what it is." },
-          ],
-        },
+        "Name this conversation": { title: "Explain the assistant" },
       }),
-      judgementModel: recorder(judgement),
     });
     const taskId = await loop.createTask();
 
     await loop.start(taskId, "Who are you and what can you do?");
 
-    expect(promptsOf(guidance)).toContain("Create an ordered plan");
-    expect(promptsOf(judgement)).not.toContain("Create an ordered plan");
+    expect(promptsOf(guidance)).toContain("Name this conversation");
     expect(loop.snapshot().tasks[0]?.title).toBe("Explain the assistant");
-  });
-
-  it("asks the judgement model whether a criterion is satisfied", async () => {
-    const guidance: ModelRequest[] = [];
-    const judgement: ModelRequest[] = [];
-    const deps = stubDependencies(() => {}, [
-      { kind: "textDelta", text: "It is a desktop assistant." },
-      { kind: "done" },
-    ]);
-    const loop = loopFrom({
-      ...deps,
-      guidanceModel: recorder(guidance, {
-        "Create an ordered plan": {
-          items: [
-            { title: "Answer", criterion: "The reply explains what it is." },
-          ],
-        },
-      }),
-      judgementModel: recorder(judgement, {
-        "Review whether each plan criterion is met.": {
-          items: [
-            {
-              id: "plan-1",
-              verdict: "verified",
-              reason: "The reply explains what it is.",
-            },
-          ],
-        },
-      }),
-    });
-    const taskId = await loop.createTask();
-
-    await loop.start(taskId, "Who are you and what can you do?");
-
-    expect(promptsOf(judgement)).toContain(
-      "Review whether each plan criterion is met.",
-    );
-    expect(promptsOf(guidance)).not.toContain(
-      "Review whether each plan criterion is met.",
-    );
-    expect(loop.snapshot().tasks[0]?.plan?.[0]?.status).toBe("verified");
   });
 
   it("asks the conversation's own model to condense it, and neither auxiliary model", async () => {
     const guidance: ModelRequest[] = [];
-    const judgement: ModelRequest[] = [];
     const main: ModelRequest[] = [];
     const loop = loopFrom({
       ...stubDependencies(() => {}),
@@ -164,10 +110,7 @@ describe("auxiliary model seams", () => {
           },
         }),
       },
-      guidanceModel: recorder(guidance, {
-        "Create an ordered plan": { items: [] },
-      }),
-      judgementModel: recorder(judgement),
+      guidanceModel: recorder(guidance),
     });
     loop.restore([pastItsBudget()]);
 
@@ -175,7 +118,6 @@ describe("auxiliary model seams", () => {
 
     expect(promptsOf(main)).toContain("about to be condensed");
     expect(promptsOf(guidance)).not.toContain("about to be condensed");
-    expect(promptsOf(judgement)).not.toContain("about to be condensed");
     expect(loop.snapshot().tasks[0]).toMatchObject({
       compaction: { summary: "The earlier material was discussed." },
     });
@@ -196,9 +138,7 @@ describe("auxiliary model seams", () => {
           },
         }),
       },
-      guidanceModel: recorder(guidance, {
-        "Create an ordered plan": { items: [] },
-      }),
+      guidanceModel: recorder(guidance),
     });
     loop.restore([pastItsBudget()]);
 
