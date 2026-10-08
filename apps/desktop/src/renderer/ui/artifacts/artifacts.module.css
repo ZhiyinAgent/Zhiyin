@@ -1,0 +1,202 @@
+/* Styles owned by the artifacts module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* Files a task produced: reviewed here, taken away with a copy. */
+.artifacts {
+  width: 100%;
+}
+
+.artifacts__list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.artifacts__item + .artifacts__item {
+  padding-top: 10px;
+  border-top: 1px solid var(--zy-line);
+}
+
+/*
+ * Three rows, not one wrapping line. The panel is narrow enough that a flex
+ * row would wrap the name, the size and the action anyway, in whatever order
+ * they fit, with the action stranded on its own. Named rows keep the reading
+ * order the same at every width.
+ */
+.artifacts__row {
+  display: grid;
+  grid-template:
+    "name   save" auto
+    "meta   save" auto
+    "path   path" auto / minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: center;
+}
+
+.artifacts__open {
+  grid-area: name;
+  display: inline-flex;
+  justify-self: start;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-text);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.artifacts__open:hover {
+  border-color: var(--zy-line);
+}
+
+.artifacts__open svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-muted);
+}
+
+.artifacts__open[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
+}
+
+.artifacts__name {
+  overflow-wrap: anywhere;
+}
+
+.artifacts__meta {
+  grid-area: meta;
+  padding-left: 8px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+}
+
+.artifacts__save {
+  grid-area: save;
+  align-self: center;
+}
+
+/* Always its own line: the path is the widest thing here and the least willing
+   to wrap, so it never competes with the name or the action for room. */
+.artifacts__path {
+  grid-area: path;
+  min-width: 0;
+  margin-top: 4px;
+  padding-left: 8px;
+  overflow-wrap: anywhere;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+}
+
+.artifacts__preview {
+  margin-top: 8px;
+}
+
+.artifacts__preview pre {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel);
+  color: var(--zy-text);
+  font-family: var(--zy-font-data);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.artifacts__note {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.artifacts__error {
+  margin: 8px 0 0;
+  color: var(--zy-danger);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/*
+ * The produced files sit over the conversation rather than beside it. Pushing
+ * the thread aside would reflow every message and move the composer under the
+ * cursor mid-sentence; covering part of it costs nothing that closing does not
+ * give straight back.
+ */
+.files-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(420px, 100%);
+  border-left: 1px solid var(--zy-line-strong);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-menu);
+  animation: files-drawer-in 140ms ease-out;
+}
+
+/* As with the review dialog: focus lands here to catch Escape, not as a choice. */
+.files-drawer:focus {
+  outline: none;
+}
+
+.files-drawer__header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.files-drawer__header h2 {
+  margin: 0;
+  font: 600 13px/1.3 var(--zy-font-display);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--zy-muted);
+}
+
+.files-drawer__body {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 18px 20px;
+  overflow-y: auto;
+}
+
+.files-drawer__empty {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .files-drawer {
+    animation: none;
+  }
+}
+
+@keyframes files-drawer-in {
+  from {
+    transform: translateX(12px);
+    opacity: 0;
+  }
+}

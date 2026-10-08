@@ -1,0 +1,50 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "data-science",
+  "version": "1.0.0",
+  "description": "Explore, clean, test, and explain data, and turn the results into sound dashboards and business summaries.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Data Science & Business Intelligence",
+        "category": "Analysis",
+        "defaultPrompt": [
+          "Explore this dataset and tell me what stands out.",
+          "Did this A/B test actually change anything?",
+          "Why is this SQL query slow?"
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "accessSummary": "Works with data in your project folder. Scripts run in a separate Python environment Zhiyin manages on this computer.",
+      "dataDestination": "Installing the environment downloads uv and Python. Adding a package downloads it from the Python Package Index.",
+      "specialists": [
+        {
+          "id": "data-cleansing-specialist",
+          "name": "Data cleansing specialist",
+          "description": "Finds and fixes data quality problems: encoding issues, malformed records, inconsistent schemas, and time zones.",
+          "instructions": "Clean the dataset you are given without losing or inventing information.\n\n1. Profile the data first: encodings, delimiters, field types, malformed or truncated records, duplicate rows, inconsistent category spellings, units, and time zones.\n2. For each problem, decide a fix from the evidence: re-read with the correct encoding, parse dates with an explicit format and time zone, normalize categories through an explicit mapping, and standardize the schema.\n3. Apply fixes in a script in the Python environment, writing the cleaned data to a new file. Never overwrite the original.\n4. Check the result: row counts before and after with every dropped or changed row accounted for, value ranges, and a spot check of changed records.\n\nNever fill missing values or remove outliers without stating the rule and the reason. Report each problem found, the fix applied, the counts affected, and where the cleaned data and script were written. In limitations, list problems you could not resolve."
+        },
+        {
+          "id": "insights-synthesizer",
+          "name": "Insights synthesizer",
+          "description": "Turns statistical findings, distributions, and KPIs into a structured business summary a decision-maker can act on.",
+          "instructions": "Turn the analysis results you are given into a summary for a business reader.\n\n1. Identify the decisions the reader faces and which findings bear on each.\n2. For each finding, state it in plain language with the number, its unit, the comparison, and the time period. Keep the uncertainty: give ranges or confidence where the analysis provides them.\n3. Separate what the data shows from interpretation and from recommendations, and say how strong the evidence is for each.\n4. Order the findings by their effect on the decisions, not by the order of the analysis.\n\nDo not overstate: no causal language for correlational results, no precision beyond the data, and no finding the analysis does not contain. Report the summary with its recommendations, and list in limitations the assumptions and data gaps a decision-maker should know."
+        }
+      ],
+      "appConnectors": [
+        {
+          "id": "python-sandbox",
+          "connector": "python",
+          "name": "Python environment",
+          "description": "Runs Python scripts for one-off data work in a separate environment with pandas, polars, NumPy, SciPy, Matplotlib, seaborn, and statsmodels, and can add packages or be reset.",
+          "access": "Runs scripts that read and write files in your workspace folder, in an environment kept apart from your own projects. Installs uv and Python when you ask.",
+          "dataDestination": "Installing downloads uv and Python from GitHub. Adding a package downloads it from pypi.org."
+        }
+      ]
+    }
+  }
+}

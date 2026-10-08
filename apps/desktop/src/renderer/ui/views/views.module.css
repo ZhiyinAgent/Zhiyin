@@ -1,0 +1,372 @@
+/* Styles owned by the views module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* Tool-result views use the same restrained work-surface language as the thread. */
+.task-view {
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.task-view__header,
+.task-view__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+/*
+ * The title gives way, the controls do not. A long title would otherwise
+ * squeeze the buttons until "Rendered" and "Source" broke across two lines
+ * each: the title has room to wrap and a control label has none, so the
+ * shrinking happens on the side that can absorb it.
+ */
+.task-view__header > div:first-child {
+  min-width: 0;
+}
+
+.task-view__header h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.task-view__actions {
+  flex: 0 0 auto;
+}
+
+.task-view__tabs button,
+.task-view__save {
+  white-space: nowrap;
+}
+
+.task-view__eyebrow {
+  color: var(--zy-muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.task-view__actions,
+.task-view__tabs,
+.task-view__zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-view__tabs {
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel);
+}
+
+.task-view__tabs button,
+.task-view__zoom button,
+.task-view__save {
+  border: 0;
+  border-radius: 6px;
+  color: var(--zy-text-soft);
+  background: transparent;
+  padding: 6px 9px;
+}
+
+.task-view__tabs button[aria-selected="true"] {
+  color: var(--zy-text);
+  background: var(--zy-wash-strong);
+}
+
+.task-view__save {
+  border: 1px solid var(--zy-line-strong);
+  color: var(--zy-text-soft);
+}
+
+.task-view__tabs button:hover,
+.task-view__zoom button:hover,
+.task-view__save:hover {
+  color: var(--zy-text);
+  background: var(--zy-wash);
+}
+
+.task-view__body {
+  display: grid;
+  /*
+   * One full-width column, so the source pane still fills the frame, with the
+   * drawing centred inside it by its own margins.
+   */
+  grid-template-columns: minmax(0, 1fr);
+  /*
+   * Down the frame only, and `safe`. A drawing smaller than the frame should
+   * have the space around it rather than below it; one larger than the frame
+   * must not have its top edge pushed out of a scroll container, where it
+   * could never be scrolled back to. `safe` centres while there is room and
+   * lines up to the start once there is not.
+   */
+  align-content: safe center;
+  overflow: auto;
+  min-height: 260px;
+  max-height: min(62vh, 620px);
+  outline: none;
+}
+
+.task-view__body[aria-label$="diagram"] {
+  cursor: grab;
+}
+
+.task-view__body[aria-label$="diagram"]:active {
+  cursor: grabbing;
+}
+
+/*
+ * For whoever is navigating by keyboard, and only them. Grabbing a diagram to
+ * drag it focuses this region too, and the browser reports that as
+ * focus-visible, so the attribute is what separates the two.
+ */
+.task-view__body:focus-visible:not([data-pointer-focus]) {
+  box-shadow: inset 0 0 0 2px var(--zy-accent);
+}
+
+.task-view__canvas {
+  min-width: 100%;
+  padding: 20px;
+}
+
+.task-view__canvas svg {
+  display: block;
+  width: 100%;
+  min-width: 520px;
+  height: auto;
+  max-height: 540px;
+}
+
+/*
+ * A zoomable canvas drops the caps that keep a drawing sitting still in the
+ * thread. With them, zoom would appear to do nothing: the canvas would widen
+ * and the drawing inside it would not, already at its ceiling. A diagram also
+ * arrives carrying its own inline max-width, which is
+ * overridden here because how the app lays a drawing out is the app's
+ * decision, not the drawing's.
+ */
+.task-view__canvas--zoomable {
+  /*
+   * Both floors have to go for zooming out to do anything: the canvas is held
+   * at the frame's width, and the drawing inside has a width of its own it will
+   * not go below. Either one alone keeps the picture exactly where it was.
+   */
+  min-width: 0;
+  /* Centred, so zooming out leaves room around the drawing rather than a gap
+     down one side of it. */
+  margin-inline: auto;
+  /* Wrapped round the drawing at its zoomed width. Until the drawing has a
+     size there is no width to wrap, the declaration falls away, and the
+     canvas fills the frame as any other does. */
+  width: calc(var(--drawing-width) + 40px);
+}
+
+.task-view__canvas--zoomable svg {
+  width: var(--drawing-width);
+  min-width: 0;
+  max-width: none !important;
+  max-height: none;
+}
+
+.task-view__source {
+  min-height: 260px;
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  color: var(--zy-text-soft);
+  background: var(--zy-panel);
+  font: 12px/1.65 var(--zy-font-data);
+  white-space: pre-wrap;
+}
+
+/* A chart's data read as rows, with the JSON it came from folded under it. */
+.task-view__data {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-height: 260px;
+  padding: 16px 20px 20px;
+  background: var(--zy-panel);
+}
+
+.task-view__data[hidden] {
+  display: none;
+}
+
+.task-table {
+  overflow-x: auto;
+}
+
+/* As wide as its columns need, not stretched across the card: a two-column
+   table spread over 800px puts each value a long way from its name. */
+.task-table table {
+  min-width: min(100%, 360px);
+  border-collapse: collapse;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-table th,
+.task-table td {
+  padding: 7px 24px 7px 0;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.task-table thead th {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.task-table tbody th {
+  color: var(--zy-text);
+  font-weight: 500;
+}
+
+/* Numbers line up on their last digit, under a heading aligned with them. */
+.task-table td,
+.task-table thead th:not(:first-child) {
+  text-align: right;
+}
+
+.task-table tr > :last-child {
+  padding-right: 0;
+}
+
+.task-view__technical summary {
+  width: fit-content;
+  color: var(--zy-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.task-view__technical summary:hover {
+  color: var(--zy-text-soft);
+}
+
+.task-view__technical .task-view__source {
+  min-height: 0;
+  max-height: 320px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+}
+
+.task-view__footer {
+  min-height: 42px;
+  border-top: 1px solid var(--zy-line);
+  border-bottom: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.task-view__zoom-reset {
+  margin-left: 4px;
+}
+
+/* Readable while unavailable: it says the drawing is already fitted. */
+.task-view__zoom-reset:disabled {
+  color: var(--zy-faint);
+  cursor: default;
+}
+
+.task-view__zoom-reset:disabled:hover {
+  color: var(--zy-faint);
+  background: transparent;
+}
+
+.task-view__hint {
+  margin-right: auto;
+  color: var(--zy-faint);
+}
+
+.task-view__zoom span {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.task-view__loading,
+.task-view__failure {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  color: var(--zy-muted);
+  text-align: center;
+}
+
+.task-view__failure {
+  color: var(--zy-danger);
+}
+
+.task-view__note {
+  margin: 12px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.task-chart__axis {
+  stroke: var(--zy-faint);
+  stroke-width: 1;
+}
+
+.task-chart__line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.task-chart__box {
+  fill: var(--zy-panel-soft);
+  stroke-width: 2;
+}
+
+.task-chart__tick,
+.task-chart__label,
+.task-chart__legend {
+  fill: var(--zy-muted);
+  font: 12px var(--zy-font-body);
+}
+
+.task-chart__legend {
+  font-weight: 600;
+}
+
+/*
+ * The controls stay beside the title while they fit and wrap under it only
+ * when they do not, rather than being sent to a line of their own at every
+ * narrow window whatever the title.
+ */
+.task-view__header {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  /* A zoomable canvas keeps its padding: the fitting arithmetic counts it. */
+  .task-view__canvas:not(.task-view__canvas--zoomable) {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .task-view *,
+  .task-view *::before,
+  .task-view *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}

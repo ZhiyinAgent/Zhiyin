@@ -1,0 +1,119 @@
+/* Styles owned by the recovery module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* The answers to a damaged history, drawn like the onboarding choices: a card
+   each, saying what it does with the conversations, so neither is a guess. */
+.recovery-choices {
+  display: grid;
+  gap: 14px;
+}
+
+.recovery-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 23px 56px 23px 23px;
+  border: 1px solid var(--zy-line);
+  border-radius: 20px;
+  background: var(--zy-panel);
+  color: var(--zy-text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms,
+    transform 160ms;
+}
+
+.recovery-choice:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--zy-accent-line);
+}
+
+.recovery-choice--primary {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+.recovery-choice:disabled {
+  cursor: default;
+}
+
+.recovery-choice > svg {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 8px;
+  color: var(--zy-accent);
+}
+
+.recovery-choice strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.recovery-choice > span:not(.recovery-choice__go) {
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recovery-choice__go {
+  position: absolute;
+  top: 24px;
+  right: 22px;
+  color: var(--zy-muted);
+}
+
+.recovery-choice--primary .recovery-choice__go {
+  color: var(--zy-accent);
+}
+
+.recovery-choice__go svg {
+  width: 18px;
+  height: 18px;
+  transform: rotate(90deg);
+}
+
+/* A newer history is not damage: its only ways forward are where it is kept
+   and the version that can open it. */
+.newer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* The question about conversations an earlier version saved. */
+.update-dialog__text {
+  margin: 0 0 12px;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.update-dialog__text:last-child {
+  margin-bottom: 0;
+}
+
+.update-dialog__text strong {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+/* Later stands apart from the two answers that change something. */
+.update-dialog__later {
+  margin-right: auto;
+}
+
+/* Above the shared button rule, which sets its own colour. */
+button.update-dialog__delete {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-danger);
+}
+
+.update-dialog__failure {
+  margin: 14px 0 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}

@@ -1,0 +1,1788 @@
+/* Styles owned by the actions module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.approval {
+  display: flex;
+  flex-direction: column;
+  width: min(780px, 100%);
+  min-height: 0;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.approval h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* One line saying what this is: the kind of action, then the action. */
+.approval__head {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.approval__kind {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.approval__kind svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* The exact text that will run, shown whole. It wraps rather than clipping:
+   a command a person cannot finish reading is one they cannot consent to. */
+.approval__command {
+  display: block;
+  max-height: 240px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font: 12px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.approval__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.approval__summary {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-top: 6px;
+  /* Everything under the title starts where the title does. */
+  padding-left: 36px;
+}
+
+.approval__file-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  list-style: none;
+  overflow: hidden;
+}
+
+.approval__file-list li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+/* One file as a person would name it: what it is called, where it lives,
+   and how much of it changes. The whole row opens its review. */
+.approval__file {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval__file:hover:not(:disabled) {
+  background: var(--zy-wash-faint);
+}
+
+.approval__file:disabled {
+  cursor: default;
+}
+
+.approval__file-icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.approval__file-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.approval__file-text {
+  display: grid;
+  flex: 1;
+  gap: 1px;
+  min-width: 0;
+}
+
+.approval__file-name {
+  color: var(--zy-text);
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.approval__file-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.approval__file-meta > span + span::before {
+  margin-right: 6px;
+  content: "·";
+}
+
+.approval__file-counts {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  font: 12px var(--zy-font-data);
+}
+
+.approval__file-added {
+  color: var(--zy-green);
+}
+
+.approval__file-removed {
+  color: var(--zy-danger);
+}
+
+.approval__file-open {
+  display: grid;
+  flex: 0 0 auto;
+  color: var(--zy-muted);
+}
+
+.approval__file-open svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+}
+
+.approval__reason {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+/* What the action can do, as the app knows it: above anything the model says. */
+.approval__detail {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Remote schema copy is useful context, but its source is named once for the
+   card instead of repeating the same heading above every argument. */
+.tool-call__description-source {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tool-call__described {
+  max-width: 58ch;
+  margin: 0 0 4px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.approval__claim {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.approval__claim span {
+  display: inline-flex;
+  align-items: center;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+/* A 24px target drawn round a 14px mark; the margin keeps the line it sits
+   in from growing to fit it. */
+.approval__claim-about {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -3px -4px -1px;
+  padding: 5px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.approval__claim-about:hover,
+.approval__claim-about:focus-visible {
+  color: var(--zy-text);
+}
+
+.approval__claim-tip {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  transform: translate(-50%, calc(-100% - 10px));
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 10px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  pointer-events: none;
+}
+
+.approval__claim-tip::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--zy-line-strong);
+  border-bottom: 1px solid var(--zy-line-strong);
+  background: var(--zy-panel);
+  content: "";
+}
+
+.approval__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* The broader allowance, set apart from the decision on this one action, with
+   what it would cover said under it. */
+.approval__allowance {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 8px;
+  margin-left: -8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval__allowance:hover:not(:disabled),
+.approval__allowance:focus-visible {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.approval__allowance small {
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The connector's own names for what is sent, for whoever wants them. */
+.approval__technical > summary {
+  width: fit-content;
+  min-height: 24px;
+  padding-block: 4px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.approval__technical > summary:hover {
+  color: var(--zy-text-soft);
+}
+
+.approval__technical[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* The rule being granted, set apart and wrapped whole: it is what the person
+   is agreeing to, so it is never cut or pushed out of the card. */
+.approval__scope-confirm {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 10px 0 0 36px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+}
+
+.approval__scope-confirm p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.approval__scope-confirm strong {
+  color: var(--zy-text);
+  font-size: 13.5px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.approval__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 12px;
+  background: var(--zy-panel-raised);
+}
+
+.approval__error {
+  margin: 8px 0 0;
+  color: var(--zy-danger);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.approval :global(.text-button):disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.approval--compact {
+  padding: 12px 14px 10px;
+}
+
+/* One scroll region per decision. A request scrolls inside itself when it is
+   taller than the room it is given, so the blocks within it that would bound
+   themselves elsewhere give that up here: a long command is read by scrolling
+   the request once rather than a scrollbar inside a scrollbar. */
+.approval .approval__command,
+.approval .tool-call__value,
+.approval .json-block {
+  max-height: none;
+  overflow: visible;
+}
+
+/* One delegated specialist's run, as a short card: who, how it stands, what it
+   is doing now or what it found, and its task on one line. The task in full,
+   the report and every call are in the modal opened from it. */
+.specialist-run {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  /* The one-line task must clip, not widen the card past its lane. */
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-accent-soft);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+}
+
+/* A finished run is history: it steps back so running work stands out. */
+.specialist-run--settled {
+  border-color: var(--zy-line);
+  background: var(--zy-panel-soft);
+}
+
+.specialist-run__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.specialist-run__head h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.specialist-run__marker {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  color: var(--zy-muted);
+}
+
+.specialist-run__marker svg {
+  width: 13px;
+  height: 13px;
+}
+
+.specialist-run__now {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.specialist-run__now--stopped {
+  color: var(--zy-danger);
+}
+
+/* A delegated task is often a page of instructions; the modal has it whole. */
+.specialist-run__task {
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.specialist-run__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.specialist-run__open {
+  flex: 0 0 auto;
+}
+
+.specialist-run__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.specialist-run__status svg {
+  width: 12px;
+  height: 12px;
+}
+
+.specialist-run__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zy-running);
+  box-shadow: 0 0 0 3px var(--zy-running-fill);
+  animation: specialist-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes specialist-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .specialist-run__pulse {
+    animation: none;
+  }
+}
+
+.specialist-run__status--running {
+  color: var(--zy-running);
+}
+
+.specialist-run__status--completed {
+  color: var(--zy-green);
+}
+
+.specialist-run__status--failed,
+.specialist-run__status--interrupted {
+  color: var(--zy-danger);
+}
+
+/* One gutter for the header, the tabs and both panels. As tall as what it
+   holds, within the window: a run of one call is a short dialog. */
+.diff-modal.specialist-modal {
+  width: min(720px, 100%);
+  max-height: min(760px, 100%);
+}
+
+.specialist-modal__panel {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 20px;
+  overflow: auto;
+}
+
+.specialist-modal__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.specialist-modal__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.specialist-modal__tabs button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-sm);
+  background: none;
+  color: var(--zy-muted);
+  font: 13px/1.3 var(--zy-font-body);
+  cursor: pointer;
+}
+
+.specialist-modal__tabs button:hover {
+  color: var(--zy-text);
+}
+
+.specialist-modal__tabs button[aria-selected="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.specialist-modal__tabs button span {
+  color: var(--zy-muted);
+  font: 12px/1 var(--zy-font-data);
+}
+
+/* The report is prose to read: a measure a line can be followed across, and
+   each finding apart from the next. */
+.specialist-report {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--zy-text-soft);
+  font-size: 14.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.specialist-report > p {
+  margin: 0;
+}
+
+.specialist-report__task {
+  padding: 10px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-wash-faint);
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.specialist-report__task summary {
+  color: var(--zy-text-soft);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.specialist-report__task p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.specialist-report__part {
+  margin-top: 10px;
+}
+
+.specialist-report__part h3 {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-text);
+  font: 600 15px/1.3 var(--zy-font-display);
+}
+
+.specialist-report__part h3 span {
+  color: var(--zy-muted);
+  font: 12px/1 var(--zy-font-data);
+}
+
+.specialist-report__part ol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding-left: 26px;
+}
+
+.specialist-report__part li {
+  padding-left: 4px;
+}
+
+.specialist-report__part li::marker {
+  color: var(--zy-muted);
+  font: 12px var(--zy-font-data);
+}
+
+.specialist-report__part strong {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.specialist-report__empty {
+  margin: 0;
+  padding: 24px 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.specialist-run__reason {
+  margin: 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.action-history {
+  padding-top: 2px;
+}
+
+.action-history ul {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+}
+
+.action-history__item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.action-history__marker {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0 4px;
+  border: 1px solid var(--zy-line);
+  border-radius: 6px;
+  color: var(--zy-muted);
+}
+
+.action-history__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.action-history__item--completed .action-history__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+/* Ran and answered, but the answer was not success: read as neither. */
+.action-history__item--reported .action-history__marker {
+  border-color: var(--zy-amber-line);
+  background: var(--zy-amber-fill);
+  color: var(--zy-amber);
+}
+
+/*
+ * Grey, and deliberately not the accent: failed, denied and blocked use the
+ * accent ring, and a command still running must not look like one that has
+ * gone wrong.
+ */
+.action-history__item--running .action-history__marker {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+}
+
+.action-history__item--failed .action-history__marker,
+.action-history__item--denied .action-history__marker,
+.action-history__item--blocked .action-history__marker {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.action-history__content,
+.action-history__summary {
+  min-width: 0;
+}
+
+.action-history__content {
+  display: grid;
+  gap: 2px;
+}
+
+.action-history__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-history__summary strong {
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  font-weight: 570;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-history__status {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.action-history__item--failed .action-history__status,
+.action-history__item--denied .action-history__status,
+.action-history__item--blocked .action-history__status {
+  color: var(--zy-danger);
+}
+
+.action-history__item--reported .action-history__status {
+  color: var(--zy-amber);
+}
+
+/* What was done, and on what, under why: one quiet line that gives way at
+   its end rather than wrapping. */
+.action-history__what {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.action-history__what > span:first-child:not(.action-history__target) {
+  flex: none;
+}
+
+.action-history__target {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--zy-muted);
+  font: 12px/1.45 var(--zy-font-data);
+  text-overflow: ellipsis;
+}
+
+.action-history__permission {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: help;
+}
+
+.action-history__permission svg {
+  width: 11px;
+  height: 11px;
+}
+
+.action-history__permission::after {
+  position: absolute;
+  z-index: 10;
+  bottom: calc(100% + 7px);
+  left: 0;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 32px));
+  padding: 6px 8px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 6px;
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.action-history__permission:hover::after,
+.action-history__permission:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.action-history__permission:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.action-history__reason {
+  display: -webkit-box;
+  margin-top: 2px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  /* A compiler can report thousands of lines; the row says it failed and the
+     start of why, and Details holds the rest. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* What was called, and with what. Every context uses this whole card; only its
+   outer margin belongs to the permission prompt or action inspector. */
+.tool-call {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+  container-type: inline-size;
+}
+
+.tool-call__header {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+}
+
+.tool-call__label {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tool-call__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-call__identity code {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tool-call__via {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-faint);
+  font: 12px/1.4 var(--zy-font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call__none {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.tool-call__arguments {
+  display: grid;
+  margin: 0;
+  padding: 3px 0;
+}
+
+.tool-call__arguments > div {
+  display: grid;
+  grid-template-columns: minmax(92px, 124px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-width: 0;
+  padding: 7px 12px;
+}
+
+.tool-call__arguments > div + div {
+  border-top: 1px solid var(--zy-line);
+}
+
+.tool-call__arguments dt {
+  color: var(--zy-muted);
+  font: 12px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+}
+
+.tool-call__arguments dd {
+  min-width: 0;
+  margin: 0;
+}
+
+/* Says what is missing, in the place it is missing from. */
+.tool-call__omitted {
+  color: var(--zy-amber);
+  font-style: normal;
+}
+
+/* A tool's answer, indented and coloured. Bounded and scrollable: a useful
+   answer can be very long, and the panel is not the place to read all of it. */
+.json-block,
+.inspector__json,
+.tool-call__value {
+  max-height: 340px;
+  margin: 0;
+  overflow: auto;
+  color: var(--zy-code-punct);
+  font: 12px/1.55 var(--zy-font-data);
+}
+
+.tool-call__value {
+  max-height: 220px;
+  color: var(--zy-code-string);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 420px) {
+  .tool-call__arguments > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .tool-call__via {
+    flex-basis: 100%;
+  }
+}
+
+/* Punctuation recedes, keys lead, prose reads as prose. Only the values that
+   are not language — numbers, true, false, null — take a tint, because those
+   are the ones a reader scanning a structure is actually looking for. */
+.json-key {
+  color: var(--zy-code-key);
+}
+
+.json-string {
+  color: var(--zy-code-string);
+}
+
+.json-number {
+  color: var(--zy-code-number);
+}
+
+.json-literal {
+  color: var(--zy-code-literal);
+}
+
+.json-line {
+  /* Wrapped text lands under the line's own indent rather than the margin. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-indent: -1ch;
+  padding-left: 1ch;
+}
+
+/* Present to a screen reader, absent to everyone else. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.diff-modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--zy-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.diff-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow);
+}
+
+/*
+ * No ring. Focus is moved here only so Escape and scrolling have somewhere to
+ * land; it is not a control anyone chose, and outlining the whole dialog reads
+ * as a border on the panel rather than as focus.
+ */
+.diff-modal:focus {
+  outline: none;
+}
+
+.diff-modal__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__header h2 {
+  margin: 0;
+  font: 600 15px/1.3 var(--zy-font-display);
+}
+
+.diff-modal__title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.diff-modal__title p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-modal__files {
+  display: flex;
+  gap: 6px;
+  padding: 10px 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__files button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-sm);
+  background: none;
+  color: var(--zy-muted);
+  font: 12px/1.4 var(--zy-font-data);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.diff-modal__files button[aria-selected="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.diff-modal__body {
+  flex: 1;
+  padding: 0 0 12px;
+  overflow: auto;
+}
+
+.change-review__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.change-review__path {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+}
+
+.change-review__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.change-review__count--added {
+  color: var(--zy-green);
+}
+
+.change-review__count--removed {
+  color: var(--zy-danger);
+}
+
+.change-review__unavailable {
+  padding: 24px 20px;
+  color: var(--zy-text-soft);
+}
+
+.change-review__unavailable p {
+  margin: 0 0 8px;
+}
+
+.diff {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.6 var(--zy-font-data);
+}
+
+.diff__row td {
+  padding: 0;
+  vertical-align: top;
+}
+
+/* One number, the line's place in the changed file: room for four digits,
+   and never broken across lines. The page around lets words break anywhere,
+   which would leave a number one digit wide. */
+.diff__number {
+  width: 4ch;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  padding: 0 8px !important;
+  color: var(--zy-faint);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff__text {
+  width: 100%;
+  padding-right: 16px !important;
+}
+
+.diff__text code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff__marker {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--zy-faint);
+  text-align: center;
+  user-select: none;
+}
+
+.diff__row--added {
+  background: var(--zy-green-fill);
+}
+
+.diff__row--added .diff__marker {
+  color: var(--zy-green);
+}
+
+.diff__row--removed {
+  background: var(--zy-accent-veil);
+}
+
+/* The words a rewritten line changed, inside the line's own colour. */
+.diff__changed {
+  border-radius: 3px;
+  background: var(--zy-green-line);
+  color: inherit;
+}
+
+.diff__row--removed .diff__changed {
+  background: var(--zy-accent-soft-hover);
+}
+
+.diff__row--removed .diff__marker {
+  color: var(--zy-danger);
+}
+
+.diff__skip td {
+  padding: 4px 20px;
+  border-top: 1px solid var(--zy-line);
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/* The page a PDF's lines are on, named where the lines move onto it. */
+.diff__page th {
+  padding: 12px 20px 4px;
+  color: var(--zy-text-soft);
+  font: 600 12px/1.4 var(--zy-font-body);
+  text-align: left;
+}
+
+/* With no line numbers, the marker starts the line instead. */
+.diff__row .diff__text:first-child {
+  padding-left: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-modal__scrim {
+    backdrop-filter: none;
+  }
+}
+
+/* What an action did, opened from the record of it. */
+.inspector__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 12.5px;
+}
+
+.inspector__facts > div {
+  display: contents;
+}
+
+.inspector__facts dt {
+  color: var(--zy-muted);
+}
+
+.inspector__facts dd {
+  margin: 0;
+  color: var(--zy-text);
+  overflow-wrap: anywhere;
+}
+
+.inspector__block {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.inspector__block h3 {
+  margin: 0 0 8px;
+  color: var(--zy-muted);
+  font: 600 12px/1.4 var(--zy-font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 12px/1.7 var(--zy-font-data);
+  color: var(--zy-text-soft);
+}
+
+.inspector__matches {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.7 var(--zy-font-data);
+}
+
+.inspector__matches td {
+  padding: 2px 12px 2px 0;
+  vertical-align: top;
+}
+
+.inspector__where {
+  width: 1%;
+  color: var(--zy-muted);
+  white-space: nowrap;
+}
+
+.inspector__line {
+  color: var(--zy-faint);
+}
+
+.inspector__matches code {
+  overflow-wrap: anywhere;
+}
+
+.inspector__note {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+/* The inspector controls only the card's placement. Its internal spacing is
+   identical to the permission request and every catalog example. */
+.diff-modal__body > .tool-call {
+  margin: 12px 20px 0;
+}
+
+.approval__summary > .tool-call {
+  margin: 0;
+}
+
+/* Small enough to sit inside a record of what happened, and openable at the
+   size it was taken. Checkered ground: a screenshot with transparency has to
+   read as transparent rather than as whatever the panel happens to be. */
+.result-image__frame {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin-top: 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.result-image :global(.text-button) {
+  margin-top: 6px;
+}
+
+.inspector__raw {
+  padding: 16px 20px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.inspector__raw summary {
+  padding-block: 5px;
+  cursor: pointer;
+}
+
+.inspector__raw p {
+  margin-block: 8px;
+}
+
+/* What was agreed to, kept with the record of it having happened. */
+.inspector__lead,
+.inspector__consequence,
+.inspector__claim {
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.inspector__lead {
+  color: var(--zy-text);
+}
+
+.inspector__consequence {
+  color: var(--zy-text-soft);
+}
+
+.inspector__claim {
+  color: var(--zy-text-soft);
+}
+
+.inspector__reason {
+  max-height: 12em;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.inspector__claim span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.approval__effect {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.approval__destination {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.inspector__raw pre,
+.inspector__block pre {
+  max-height: 200px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-panel-soft);
+  font: 12px/1.6 var(--zy-font-data);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.action-history__inspect {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.action-history__status + .action-history__inspect {
+  margin-left: 0;
+}
+
+.approval__recovery {
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+}
+
+.approval__recovery p,
+.approval__recovery ul {
+  margin: 0;
+}
+
+.approval__recovery ul {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 0 18px;
+}
+
+.approval__recovery li span {
+  display: block;
+}
+.approval__denial-reason {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.approval__deny-step {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+  font-size: 12.5px;
+}
+
+.approval__deny-step > strong {
+  font-size: 13px;
+}
+
+.approval__denial-reason textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.5rem;
+  resize: vertical;
+  color: inherit;
+  background: var(--zy-panel-raised);
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 0.4rem;
+  font: inherit;
+}
+
+/*
+ * What a turn did to the person's files. A quiet card under the turn: the
+ * header answers "how much", the rows answer "which", and nothing competes
+ * with the answer above it for attention.
+ */
+.turn-files {
+  width: min(560px, 100%);
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel);
+}
+
+.turn-files__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 8px 4px 12px;
+  color: var(--zy-muted);
+}
+
+.turn-files__header > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.turn-files__header h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-files__counts {
+  display: inline-flex;
+  gap: 6px;
+  font: 12px/1 var(--zy-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-files__added {
+  color: var(--zy-green);
+}
+
+.turn-files__removed {
+  color: var(--zy-danger);
+}
+
+.turn-files__undone {
+  padding: 2px 7px;
+  border: 1px solid var(--zy-line);
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.turn-files__undo {
+  margin: 0 0 0 auto;
+}
+
+.turn-files__rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+  /* The rows, not the panel: a container would hold the dialogs it opens. */
+  container-type: inline-size;
+}
+
+.turn-files__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px 0 12px;
+}
+
+.turn-files__row + .turn-files__row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.turn-files__kind {
+  display: grid;
+  place-items: center;
+  color: var(--zy-muted);
+}
+
+.turn-files__kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.turn-files__kind--created {
+  color: var(--zy-green);
+}
+
+/* A removed file is drawn as removed, not as something that went wrong. */
+.turn-files__kind--recycled,
+.turn-files__kind--deleted {
+  color: var(--zy-text-soft);
+}
+
+.turn-files__path {
+  color: var(--zy-text-soft);
+  font: 12.5px/1.4 var(--zy-font-data);
+}
+
+.turn-files__note {
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.turn-files__review {
+  margin: 0;
+}
+
+.turn-files__more {
+  margin: 0 0 6px 12px;
+}
+
+/* What the panel says about commands beyond their files. */
+.turn-files__notes {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.turn-files__notes p {
+  margin: 0;
+}
+
+.turn-files__error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.turn-files__lead {
+  margin: 0;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* What undo does to each file: one box, its rows divided by rules, the
+   path above what happens to it, beside an icon saying which. */
+.turn-files__preview {
+  margin: 16px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: 12px;
+  list-style: none;
+}
+
+.turn-files__preview li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.turn-files__preview li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+.turn-files__preview li > svg {
+  grid-row: span 2;
+  align-self: start;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--zy-muted);
+}
+
+.turn-files__preview li > span:first-of-type {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-files__preview li > span:last-child {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+/* A narrow panel: the note moves under the path rather than squeezing it. */
+@container (max-width: 440px) {
+  .turn-files__row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    row-gap: 0;
+    padding-block: 6px;
+  }
+
+  .turn-files__note,
+  .turn-files__row > .turn-files__counts {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: left;
+  }
+}

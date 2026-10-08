@@ -1,0 +1,19 @@
+{
+  "name": "@zhiyin/session",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Saves conversations and the workspace, so they can be resumed after a restart.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/process-ownership": "workspace:*"
+  }
+}

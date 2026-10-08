@@ -1,0 +1,120 @@
+name: Developer preview release
+
+on:
+  push:
+    tags:
+      - "v*-alpha.*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: Build and publish the alpha
+    runs-on: windows-latest
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Enable the pinned pnpm version
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+
+      - name: Install dependencies
+        shell: powershell
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Electron runtime after the clean install
+        shell: powershell
+        run: pnpm --filter desktop install:electron
+
+      - name: Require an alpha tag matching the application version
+        shell: powershell
+        run: |
+          if ($env:GITHUB_REF_NAME -notmatch '^v(?<version>\d+\.\d+\.\d+-alpha\.\d+)$') {
+            throw "Release tags must look like v0.1.0-alpha.1."
+          }
+
+          $desktop = Get-Content -LiteralPath apps/desktop/package.json -Raw | ConvertFrom-Json
+          if ($desktop.version -ne $Matches.version) {
+            throw "Tag version $($Matches.version) does not match desktop version $($desktop.version)."
+          }
+
+      - name: Run the full repository gate
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1 -Full
+
+      - name: Prepare installer, checksum, and release notes
+        id: artifacts
+        shell: powershell
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath apps/desktop/release -File -Filter '*.exe')
+          if ($installers.Count -ne 1) {
+            throw "Expected one release installer, found $($installers.Count)."
+          }
+
+          $installer = $installers[0]
+          if ($installer.Name -match '\s') {
+            throw "GitHub renames an asset with spaces, so SHA256SUMS.txt would name a file nobody downloads: $($installer.Name)"
+          }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $checksums = Join-Path $installer.DirectoryName 'SHA256SUMS.txt'
+          $checksumLine = "$hash *$($installer.Name)"
+          # One LF-ended line: with CRLF, `sha256sum -c` looks for a file whose
+          # name ends in a carriage return.
+          [System.IO.File]::WriteAllText($checksums, "$checksumLine`n", [System.Text.Encoding]::ASCII)
+
+          $notes = Join-Path $installer.DirectoryName 'RELEASE_NOTES.md'
+          @(
+            '## Developer preview'
+            ''
+            'This alpha is a convenience build for developers evaluating Zhiyin. It is Windows-only and not code-signed yet, so Microsoft Defender SmartScreen may warn before it runs. It has no automatic update channel. Clone and build the tagged source when you need the most inspectable installation path.'
+            ''
+            'The installer requires a local Edge or Chrome installation for browser work. Live provider and remote MCP behavior require credentials and are not exercised by pull-request CI.'
+            ''
+            '## SHA-256'
+            ''
+            'Verify the installer against `SHA256SUMS.txt` or the value below before running it.'
+            ''
+            '```text'
+            $checksumLine
+            '```'
+          ) | Set-Content -LiteralPath $notes -Encoding utf8
+
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "checksums=$checksums" >> $env:GITHUB_OUTPUT
+          "notes=$notes" >> $env:GITHUB_OUTPUT
+
+      - name: Attest the installer provenance
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ steps.artifacts.outputs.installer }}
+
+      - name: Publish the GitHub prerelease
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLER_PATH: ${{ steps.artifacts.outputs.installer }}
+          CHECKSUMS_PATH: ${{ steps.artifacts.outputs.checksums }}
+          NOTES_PATH: ${{ steps.artifacts.outputs.notes }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            $env:INSTALLER_PATH `
+            $env:CHECKSUMS_PATH `
+            --verify-tag `
+            --prerelease `
+            --latest=false `
+            --title "Zhiyin $env:GITHUB_REF_NAME - developer preview" `
+            --notes-file $env:NOTES_PATH

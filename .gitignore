@@ -1,0 +1,32 @@
+# Dependencies and build output
+node_modules
+dist
+out
+release
+*.tsbuildinfo
+
+# Spelling dictionaries, fetched by scripts/dictionaries.mjs when the app is built
+apps/desktop/dictionaries/
+
+# Secrets and local settings
+.env
+.env.local
+.claude/settings.local.json
+
+# Personal Claude Code instructions for this project
+CLAUDE.local.md
+
+# Output of a Playwright MCP server run locally
+.playwright-mcp/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Kept by the maintainers outside the repository: the task list and roadmap,
+# the evaluation cases and their protocol, the trailer's production material,
+# and the lessons from prior art.
+tasks/
+evaluation/
+trailer/
+docs/reference/prior-art-lessons.md

@@ -1,0 +1,20 @@
+{
+  "name": "@zhiyin/recovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Copies a file before an action changes it, so it can be put back.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/workspace-containment": "workspace:*",
+    "koffi": "3.2.1"
+  }
+}

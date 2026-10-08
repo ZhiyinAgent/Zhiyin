@@ -1,0 +1,21 @@
+{
+  "name": "@zhiyin/document-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PDFs and pictures shown beside the conversation, drawn as pages in a contained process.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/pdf-engine": "workspace:*",
+    "@zhiyin/process-ownership": "workspace:*",
+    "@zhiyin/workspace-containment": "workspace:*"
+  }
+}

@@ -1,0 +1,47 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Build scripts allowed to run: esbuild and unrs-resolver compile native
+# helpers, electron-winstaller is part of packaging.
+allowBuilds:
+  electron-winstaller: true
+  esbuild: true
+  # koffi ships prebuilt binaries for the platforms this app targets, so its
+  # build script has nothing to do. It does not run here; listing it records
+  # that choice, so pnpm does not ask.
+  koffi: false
+  unrs-resolver: true
+
+# Advisories with no fix that do not apply here, each with why.
+auditConfig:
+  ignoreGhsas:
+    # http-cache-semantics <=4.2.0, with no fixed version: a cache shared by
+    # several users can hand one user's blanked-out response to another who
+    # asks with a large max-stale. It reaches us only as
+    # electron-builder > app-builder-lib > @electron/get 3 > got >
+    # cacheable-request, the build-time download of Electron on one machine
+    # for one user, and got consults it only when given a cache. Nothing of it
+    # ships.
+    - GHSA-ch52-4w7c-c8xp
+    # sprintf-js <=1.1.3, with no fixed version: a format string with an
+    # unbounded precision specifier can stall the process. It reaches
+    # us only as electron-builder > app-builder-lib > @electron/get 3 >
+    # global-agent > roarr, the logger of the same build-time download of
+    # Electron, which formats its own fixed messages. Nothing of it ships.
+    # @electron/get 5 drops global-agent; app-builder-lib 26.15.3 still asks
+    # for 3.
+    - GHSA-hp3w-g68c-fv3c
+
+# Kept only where a parent's range excludes the fix.
+overrides:
+  # KaTeX <0.18.2, GHSA-238p-pmpm-9mq7: an existing prototype pollution can
+  # bypass KaTeX's trust restrictions. It ships with mermaid, which renders
+  # diagrams the model writes; mermaid 11.17.2 and 12.1.0 both ask for katex
+  # ^0.16.47, and no 0.16 release has the fix.
+  katex: ^0.18.2
+
+minimumReleaseAgeExclude:
+  - "@types/node@26.4.1"
+  - electron@44.1.1
+  - globals@17.12.0

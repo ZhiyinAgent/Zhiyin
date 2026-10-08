@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "alphaxiv": {
+      "type": "streamable-http",
+      "url": "https://api.alphaxiv.org/mcp/v1",
+      "name": "alphaXiv",
+      "description": "Finds arXiv research, reads papers' full text, searches citations and researchers, and explores papers' code repositories.",
+      "access": "Needs an alphaXiv API key, created under Settings > API Keys on alphaxiv.org. With it, the model can also change your alphaXiv library and followed researchers.",
+      "dataDestination": "Searches, paper requests, and library changes are sent to api.alphaxiv.org.",
+      "setup": {
+        "url": "https://www.alphaxiv.org/settings",
+        "keyName": "API key",
+        "advice": "Sign in, open API Keys, and create a key."
+      }
+    }
+  }
+}

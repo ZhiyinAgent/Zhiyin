@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "name": "GitHub",
+      "description": "Searches and works with repositories, issues, and pull requests in your GitHub account.",
+      "access": "Needs a GitHub personal access token, and acts with that token's permissions.",
+      "dataDestination": "Repository, issue, and pull request data is sent to api.githubcopilot.com.",
+      "setup": {
+        "url": "https://github.com/settings/personal-access-tokens/new",
+        "keyName": "personal access token",
+        "advice": "Choose the repositories Zhiyin should work with, or all of them. Under Repository permissions, set Contents, Issues and Pull requests to Read and write: that covers searching, reading and making commits, branches, issues and pull requests. Add Workflows too if it should change GitHub Actions files."
+      }
+    }
+  }
+}

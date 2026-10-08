@@ -1,0 +1,25 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "tavily": {
+      "type": "streamable-http",
+      "url": "https://mcp.tavily.com/mcp/",
+      "name": "Tavily",
+      "description": "Searches the web and extracts, maps, and crawls pages for research.",
+      "access": "Needs a Tavily API key. Searches count against the Tavily account the key belongs to.",
+      "dataDestination": "Searches and requested addresses are sent to mcp.tavily.com.",
+      "requestsPerMinute": 100,
+      "readOnlyTools": [
+        "tavily_search",
+        "tavily_extract",
+        "tavily_map",
+        "tavily_crawl"
+      ],
+      "setup": {
+        "url": "https://app.tavily.com/home",
+        "keyName": "API key",
+        "advice": "Sign in, then copy your API key from the dashboard."
+      }
+    }
+  }
+}

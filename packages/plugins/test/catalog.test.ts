@@ -1,0 +1,145 @@
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { ALLOWED_EXTERNAL_URLS } from "@zhiyin/contract";
+import { loadBuiltInPlugins } from "../src/index.js";
+
+const shipped = fileURLToPath(new URL("../built-in", import.meta.url));
+
+const local = (ids: readonly { id: string }[]) =>
+  ids.map((item) => item.id.slice(item.id.indexOf("/") + 1));
+
+describe("the catalog shipped with the application", () => {
+  it("offers the four verticals, each with exactly its planned skills, specialists, and connectors", async () => {
+    const plugins = await loadBuiltInPlugins(shipped);
+
+    expect(
+      plugins.map((plugin) => ({
+        name: plugin.manifest.name,
+        displayName: plugin.manifest.displayName,
+        skills: local(plugin.skills),
+        specialists: local(plugin.specialists),
+        connectors: [
+          ...local(plugin.mcpServers),
+          ...plugin.appConnectors.map((item) => `app:${item.connector}`),
+        ],
+      })),
+    ).toEqual([
+      {
+        name: "engineering",
+        displayName: "Full-Stack Software Engineering",
+        skills: [
+          "backend-api-patterns",
+          "database-architecture-and-design",
+          "frontend-design-systems",
+          "system-architecture",
+          "test-driven-development",
+        ],
+        specialists: [
+          "code-reviewer",
+          "interactive-debugger",
+          "refactoring-architect",
+          "qa-e2e-verifier",
+        ],
+        connectors: ["github", "app:browser", "app:git"],
+      },
+      {
+        name: "publishing",
+        displayName: "Technical & Academic Publishing",
+        skills: [
+          "bibliography-hygiene",
+          "diagram-engineering",
+          "latex-typst-authoring",
+          "whitepaper-structure",
+        ],
+        specialists: ["peer-review-critic", "citation-auditor"],
+        connectors: ["alphaxiv", "app:documents"],
+      },
+      {
+        name: "data-science",
+        displayName: "Data Science & Business Intelligence",
+        skills: [
+          "dashboard-design",
+          "exploratory-data-analysis",
+          "sql-optimization",
+          "statistical-testing",
+        ],
+        specialists: ["data-cleansing-specialist", "insights-synthesizer"],
+        connectors: ["app:python"],
+      },
+      {
+        name: "research",
+        displayName: "Deep Research & Synthesis",
+        skills: [
+          "competitive-analysis",
+          "knowledge-graph-mapping",
+          "neutrality-review",
+          "source-triangulation",
+        ],
+        specialists: ["fact-checker", "report-synthesizer"],
+        connectors: ["tavily"],
+      },
+    ]);
+  });
+
+  it("paces Tavily within the rate its development keys allow", async () => {
+    // Tavily allows a development key 100 requests a minute, and a person's
+    // key type cannot be read without spending quota, so the smaller one holds.
+    const research = (await loadBuiltInPlugins(shipped)).find(
+      (plugin) => plugin.manifest.name === "research",
+    );
+    const tavily = research?.mcpServers.find((server) =>
+      server.id.endsWith("/tavily"),
+    );
+
+    expect(tavily?.requestsPerMinute).toBe(100);
+  });
+
+  it("lets the research specialists search with Tavily: its tools that only read are declared", async () => {
+    const research = (await loadBuiltInPlugins(shipped)).find(
+      (plugin) => plugin.manifest.name === "research",
+    );
+    const tavily = research?.mcpServers.find((server) =>
+      server.id.endsWith("/tavily"),
+    );
+
+    expect(tavily?.readOnlyTools).toEqual(
+      expect.arrayContaining(["tavily_search", "tavily_extract"]),
+    );
+  });
+
+  it("says for every shipped connector what key it needs and where that key is made", async () => {
+    const connectors = (await loadBuiltInPlugins(shipped)).flatMap(
+      (plugin) => plugin.mcpServers,
+    );
+
+    expect(
+      Object.fromEntries(
+        connectors.map((server) => [
+          server.name,
+          [server.setup?.keyName, server.setup?.url],
+        ]),
+      ),
+    ).toEqual({
+      GitHub: [
+        "personal access token",
+        "https://github.com/settings/personal-access-tokens/new",
+      ],
+      alphaXiv: ["API key", "https://www.alphaxiv.org/settings"],
+      Tavily: ["API key", "https://app.tavily.com/home"],
+    });
+    for (const server of connectors)
+      expect(ALLOWED_EXTERNAL_URLS).toContain(server.setup?.url);
+  });
+
+  it("states what every plugin and connector can use and where its data goes", async () => {
+    for (const plugin of await loadBuiltInPlugins(shipped)) {
+      expect(plugin.manifest.accessSummary).toBeTruthy();
+      expect(plugin.manifest.dataDestination).toBeTruthy();
+      expect(plugin.manifest.defaultPrompts.length).toBeGreaterThan(0);
+      for (const connector of [...plugin.mcpServers, ...plugin.appConnectors]) {
+        expect(connector.access).toBeTruthy();
+        expect(connector.dataDestination).toBeTruthy();
+      }
+    }
+  });
+});

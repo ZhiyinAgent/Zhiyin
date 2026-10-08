@@ -1,0 +1,506 @@
+/* Styles owned by the usage module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.range-control {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-panel-soft);
+}
+
+.range-control button {
+  min-height: 27px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.range-control button[aria-pressed="true"] {
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.usage-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--zy-line-strong);
+}
+
+.usage-metrics article {
+  min-width: 0;
+  padding: 24px 20px 22px 0;
+}
+
+.usage-metrics article + article {
+  padding-left: 20px;
+  border-left: 1px solid var(--zy-line-strong);
+}
+
+.usage-metrics strong,
+.usage-metrics small {
+  display: block;
+}
+
+.usage-metrics strong {
+  margin-top: 8px;
+  color: var(--zy-text);
+  font-family: var(--zy-font-instrument);
+  font-size: clamp(29px, 4vw, 44px);
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+
+.usage-metrics small {
+  margin-top: 9px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.usage-instruments {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding-top: 14px;
+}
+
+.usage-instruments figure {
+  min-width: 0;
+  margin: 0;
+  padding: 17px 18px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-panel-soft);
+}
+
+.usage-instruments figcaption {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 38px;
+}
+
+.usage-instruments figcaption strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--zy-text);
+  font-size: 15px;
+  font-weight: 550;
+}
+
+.usage-instruments figcaption > span:last-child {
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+}
+
+/*
+ * A value per day over a scale. The plot, its day columns and the dates below
+ * share one grid of columns, so a point, its bar and its date line up.
+ */
+.daily-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 150px auto;
+  column-gap: 10px;
+  row-gap: 8px;
+  margin-top: 18px;
+}
+
+/* Top, middle and zero, each centred on its grid line. */
+.daily-chart__scale {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  line-height: 1;
+  text-align: right;
+}
+
+.daily-chart__scale span:first-child {
+  transform: translateY(-50%);
+}
+
+.daily-chart__scale span:last-child {
+  transform: translateY(50%);
+}
+
+.daily-chart__plot {
+  position: relative;
+}
+
+.daily-chart__plot > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.daily-chart__days {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.daily-chart__days li {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 4px;
+  outline: none;
+}
+
+.daily-chart__days li:hover,
+.daily-chart__days li:focus-visible {
+  background: var(--zy-wash);
+}
+
+.daily-chart__days li:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--zy-accent);
+}
+
+.daily-chart__bar {
+  width: min(70%, 28px);
+  height: calc(var(--value) * 100%);
+  min-height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--zy-line-strong);
+}
+
+.daily-chart__days li:hover .daily-chart__bar,
+.daily-chart__days li:focus-visible .daily-chart__bar {
+  background: var(--zy-accent-fill);
+}
+
+/* A day's point on the line, shown on the day being looked at. */
+.daily-chart__point {
+  position: absolute;
+  top: calc((1 - var(--value)) * 100%);
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--zy-panel-soft);
+  border-radius: 50%;
+  background: var(--zy-accent);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+}
+
+.daily-chart__days li:hover .daily-chart__point,
+.daily-chart__days li:focus-visible .daily-chart__point {
+  opacity: 1;
+}
+
+.daily-chart__dates {
+  grid-column: 2;
+  display: grid;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.daily-chart__dates span {
+  overflow: visible;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.chart-grid {
+  fill: none;
+  stroke: var(--zy-line);
+  stroke-width: 1;
+}
+
+.chart-area {
+  fill: var(--zy-accent-veil);
+  stroke: none;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--zy-accent);
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The model mix runs the width of the page, so names have room to be read. */
+.model-mix {
+  grid-column: 1 / -1;
+}
+
+.model-chart__body {
+  display: grid;
+  grid-template-columns: 138px minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.model-dial {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.model-dial svg {
+  width: 132px;
+  height: 132px;
+  transform: rotate(-90deg);
+}
+
+.model-dial circle {
+  fill: none;
+  stroke-width: 12;
+}
+
+.model-dial__track {
+  stroke: var(--zy-line);
+}
+
+.model-dial__segment--0 {
+  stroke: var(--zy-accent);
+}
+
+.model-dial__segment--1 {
+  stroke: var(--zy-text);
+}
+
+.model-dial__segment--2 {
+  stroke: var(--zy-faint);
+}
+
+.model-dial > span {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.model-dial > span strong {
+  color: var(--zy-text);
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.model-legend {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-legend li {
+  display: grid;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.model-key {
+  width: 6px;
+  height: 20px;
+  background: var(--zy-faint);
+}
+
+.model-key--0 {
+  background: var(--zy-accent-fill);
+}
+
+.model-key--1 {
+  background: var(--zy-text);
+}
+
+.model-key--2 {
+  background: var(--zy-faint);
+}
+
+.model-legend strong,
+.model-legend small {
+  display: block;
+}
+
+.model-legend strong {
+  overflow-wrap: anywhere;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.3;
+}
+
+.model-legend small {
+  margin-top: 2px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.model-key {
+  align-self: stretch;
+}
+
+.model-legend em {
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.usage-unavailable {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  color: var(--zy-muted);
+  text-align: center;
+}
+
+.usage-unavailable svg {
+  width: 32px;
+  margin-bottom: 14px;
+  color: var(--zy-accent);
+}
+
+.usage-unavailable strong {
+  color: var(--zy-text);
+  font-size: 14px;
+}
+
+.usage-unavailable p {
+  max-width: 44ch;
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+@media (max-width: 880px) {
+  .usage-instruments {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-metrics article {
+    padding-right: 14px;
+  }
+
+  .usage-metrics article + article {
+    padding-left: 14px;
+  }
+
+  .usage-metrics :global(.instrument-label) {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 620px) {
+  .usage-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-metrics article + article {
+    padding-left: 0;
+    border-top: 1px solid var(--zy-line);
+    border-left: 0;
+  }
+
+  .model-chart__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * What each conversation cost, under the charts and as wide as them. A row
+ * that opens its conversation is one button from edge to edge; its text
+ * lines up with the heading above, the hover wash reaching past it.
+ */
+.conversation-costs {
+  grid-column: 1 / -1;
+}
+
+.conversation-costs ul {
+  display: grid;
+  gap: 2px;
+  margin: 10px -10px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-costs__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.conversation-costs__row {
+  cursor: pointer;
+}
+
+button.conversation-costs__row:hover {
+  background: var(--zy-wash);
+}
+
+.conversation-costs strong,
+.conversation-costs small {
+  display: block;
+}
+
+.conversation-costs strong {
+  overflow: hidden;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-costs small {
+  margin-top: 2px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.conversation-costs em {
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.conversation-costs strong.conversation-costs__gone {
+  color: var(--zy-muted);
+  font-weight: 450;
+}

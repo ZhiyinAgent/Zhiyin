@@ -1,0 +1,289 @@
+/*
+ * The app's settings: a narrow column of groups, each a quiet card of rows.
+ * A row reads left to right as what it is, what it changes, and its control.
+ */
+.app-settings {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  padding: 28px clamp(20px, 5vw, 72px) 56px;
+  color: var(--zy-text);
+}
+
+.app-settings__head,
+.app-settings__body {
+  width: min(100%, 720px);
+  margin-inline: auto;
+}
+
+.app-settings__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.app-settings__head h1 {
+  margin: 7px 0 0;
+  font-size: clamp(24px, 2.5vw, 30px);
+  letter-spacing: -0.025em;
+}
+
+.app-settings__body {
+  display: grid;
+  gap: 24px;
+  margin-top: 28px;
+}
+
+.app-settings__failure {
+  margin: 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.settings-group {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-group h2 {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-group__rows {
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 16px;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.setting-row strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The words run up to the control, so no gap opens between them. */
+.setting-row p {
+  margin: 4px 0 0;
+  text-wrap: pretty;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.setting-switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 999px;
+  background: var(--zy-panel);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+/* The switch is drawn small; the area that takes a click is 40 × 28. */
+.setting-switch::after {
+  content: "";
+  position: absolute;
+  inset: -5px -3px;
+}
+
+.setting-switch span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--zy-muted);
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.setting-switch[aria-checked="true"] {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+}
+
+.setting-switch[aria-checked="true"] span {
+  background: var(--zy-green);
+  transform: translateX(16px);
+}
+
+/* Three choices side by side, the chosen one raised: a segmented control. */
+.setting-choices {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.setting-choices label {
+  position: relative;
+  display: block;
+}
+
+.setting-choices input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.setting-choices span {
+  display: block;
+  padding: 6px 12px;
+  border-radius: calc(var(--zy-radius-sm) - 3px);
+  color: var(--zy-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.setting-choices input:checked + span {
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  box-shadow: 0 1px 3px var(--zy-inset);
+}
+
+.setting-choices input:focus-visible + span {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .setting-switch,
+  .setting-switch span,
+  .setting-choices span {
+    transition: none;
+  }
+}
+
+.setting-row__action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* A row whose control needs the width: the words above, the control below. */
+.setting-row--stacked {
+  display: grid;
+  justify-content: stretch;
+  gap: 12px;
+}
+
+/* The chosen languages as removable chips, then the list to add one from. */
+.spelling-languages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.spelling-languages__list {
+  display: contents;
+}
+
+.spelling-languages__list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 999px;
+  background: var(--zy-panel-soft);
+  font-size: 13px;
+}
+
+.spelling-languages__list li[data-status="unavailable"] {
+  border-color: var(--zy-danger);
+}
+
+.spelling-languages__note {
+  color: var(--zy-danger);
+  font-size: 12px;
+}
+
+.spelling-languages__list button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.spelling-languages__list button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.spelling-languages__list button:hover:enabled {
+  background: var(--zy-line);
+  color: var(--zy-text);
+}
+
+.spelling-languages__list button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* As wide as what it says, not as its longest language. */
+.spelling-languages__add {
+  field-sizing: content;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 0 32px 0 12px;
+  border: 1px dashed var(--zy-line-strong);
+  border-radius: 999px;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%239b9da2' stroke-width='1.6' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.spelling-languages__add:hover {
+  border-color: var(--zy-text-soft);
+}
+
+/* The open list is drawn by the system; give it the panel's colours. */
+.spelling-languages__add option {
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+}

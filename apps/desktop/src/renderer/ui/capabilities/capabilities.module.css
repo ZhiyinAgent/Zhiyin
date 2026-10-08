@@ -1,0 +1,1315 @@
+/* Styles owned by the capabilities module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/*
+ * The plugin page follows the model settings page: no frame around its
+ * columns, the same type scale, and the accent kept for what needs a look.
+ * The directory and the details each keep a scroller of their own, so the
+ * list stays in reach while a long plugin is read.
+ */
+.capability-library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  container-type: inline-size;
+  container-name: plugins;
+}
+
+/* The page actions drop below the title when the panel is too narrow for
+   both, instead of running off its edge. */
+.library-header {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  row-gap: 16px;
+}
+
+.library-header > div:first-child {
+  flex: 1 1 300px;
+}
+
+.library-header > div:last-child {
+  margin-left: auto;
+}
+
+.library-action {
+  white-space: nowrap;
+}
+
+.library-new svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.capability-error,
+.shell-notice {
+  flex: none;
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 10px;
+  background: var(--zy-accent-veil);
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.shell-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-color: var(--zy-amber-line);
+  background: var(--zy-amber-fill);
+}
+
+.shell-notice__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.capability-confirm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 10px;
+  background: var(--zy-accent-veil);
+}
+
+.capability-confirm strong {
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 540;
+}
+
+.capability-confirm p {
+  margin: 4px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---- Layout ------------------------------------------------------------ */
+
+.plugin-layout {
+  display: grid;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  gap: 0 40px;
+  flex: 1;
+  min-height: 0;
+  /* With the directory's top padding, the search field lands where the model
+     page's does. The padding keeps the field's focus ring inside the
+     directory's scroller. */
+  margin-top: 23px;
+}
+
+/* ---- Directory --------------------------------------------------------- */
+
+.plugin-directory {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 0 -10px;
+  padding: 3px 10px 24px;
+  overflow-y: auto;
+}
+
+.plugin-search {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 0 11px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 9px;
+  background: var(--zy-panel);
+  color: var(--zy-faint);
+}
+
+.plugin-search:focus-within {
+  border-color: var(--zy-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--zy-accent) 12%, transparent);
+}
+
+.plugin-search svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plugin-search input {
+  min-width: 0;
+  padding: 11px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.plugin-search input:focus-visible {
+  outline: 0;
+}
+
+.plugin-search input::placeholder {
+  color: var(--zy-faint);
+}
+
+.plugin-directory__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 10px 8px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plugin-directory__count span:last-child {
+  font-family: var(--zy-font-data);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.plugin-directory nav {
+  display: grid;
+  gap: 2px;
+}
+
+.plugin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+
+.plugin-row:hover {
+  background: var(--zy-wash);
+}
+
+/* Selection is where you are, not a warning: a neutral outline. */
+.plugin-row--selected,
+.plugin-row--selected:hover {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+}
+
+.plugin-row__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.plugin-row__copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 540;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-row__copy span {
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.plugin-row--off .plugin-row__copy strong {
+  color: var(--zy-muted);
+}
+
+.plugin-status {
+  flex: none;
+  padding: 3px 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: 999px;
+  background: var(--zy-wash-faint);
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Setup left to do is not a fault: a quiet mark that names itself on hover. */
+.plugin-status--partial {
+  border-color: var(--zy-line-strong);
+  background: transparent;
+  color: var(--zy-muted);
+}
+
+.plugin-status--icon {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+}
+
+.plugin-status--icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.plugin-status--failed {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+  color: var(--zy-accent);
+}
+
+.plugin-empty {
+  margin: 0;
+  padding: 16px 10px;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- Details ----------------------------------------------------------- */
+
+.plugin-details {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 4px 48px 0;
+  overflow-y: auto;
+  container-type: inline-size;
+  container-name: plugin-details;
+}
+
+.plugin-details > * {
+  max-width: 1080px;
+}
+
+.plugin-details__header {
+  padding: 4px 0 24px;
+}
+
+.plugin-details__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+}
+
+.plugin-details__title h2 {
+  margin: 0;
+  font-family: var(--zy-font-display);
+  font-size: 27px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.plugin-details__activation {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Where the plugin came from, with what can be done to it at the far end. */
+.plugin-details__meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  min-height: 30px;
+  margin-top: 6px;
+}
+
+.plugin-details__meta {
+  margin: 0;
+  color: var(--zy-faint);
+  font-size: 12.5px;
+}
+
+.plugin-details__description {
+  max-width: 90ch;
+  margin: 12px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.plugin-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  margin: 18px 0 0;
+}
+
+.plugin-facts div {
+  display: grid;
+  gap: 4px;
+  max-width: 44ch;
+}
+
+.plugin-facts dt {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plugin-facts dd {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-management {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.plugin-off-notice {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 10px;
+  background: var(--zy-wash-faint);
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ---- Component sections ------------------------------------------------ */
+
+.plugin-groups {
+  display: grid;
+  gap: 30px;
+  padding-top: 24px;
+}
+
+.plugin-group {
+  min-width: 0;
+}
+
+.plugin-group > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  margin-bottom: 6px;
+}
+
+.plugin-group h3 {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.plugin-group__count {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+}
+
+.plugin-group__new {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-accent);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.plugin-group__new:hover {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+.plugin-group__new svg {
+  width: 13px;
+  height: 13px;
+}
+
+.plugin-group__empty {
+  margin: 0;
+  padding: 14px 10px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-faint);
+  font-size: 13px;
+}
+
+/* Every row in a section shares one set of columns, so statuses, switches,
+   and buttons line up down the page the way the provider table's do. */
+.plugin-group ul {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+}
+
+.plugin-component {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--zy-line);
+  transition: background-color 140ms ease;
+}
+
+.plugin-component:hover {
+  background: var(--zy-wash-faint);
+}
+
+.plugin-component__copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.plugin-component__copy strong {
+  font-size: 14px;
+  font-weight: 540;
+}
+
+.plugin-component__copy > span {
+  max-width: 72ch;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.plugin-component__copy small {
+  max-width: 72ch;
+  color: var(--zy-faint);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.plugin-component__copy small.plugin-component__edited {
+  color: var(--zy-amber);
+  font-style: normal;
+}
+
+/* A component that is not running reads quieter; its controls stay at full
+   strength, because reviewing or turning it on still works. */
+.plugin-component--disabled .plugin-component__copy strong {
+  color: var(--zy-muted);
+}
+
+.plugin-component--disabled .plugin-component__copy > span {
+  color: var(--zy-faint);
+}
+
+.plugin-component__status {
+  justify-self: end;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.plugin-component__status--ready {
+  color: var(--zy-green);
+}
+
+.plugin-component__status--setup-required {
+  color: var(--zy-amber);
+}
+
+.plugin-component__status--failed {
+  color: var(--zy-danger);
+}
+
+.plugin-component__status--unavailable {
+  color: var(--zy-faint);
+}
+
+.plugin-component__control {
+  display: flex;
+  justify-content: center;
+  min-width: 36px;
+}
+
+/* Buttons start where the widest row's do, so every switch sits the same
+   short distance from the button beside it. */
+.plugin-component__actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.plugin-component__edit {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.plugin-component__edit:hover {
+  border-color: var(--zy-text-soft);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.plugin-groups--off .plugin-component__copy strong,
+.plugin-groups--off .plugin-component__status {
+  color: var(--zy-faint);
+}
+
+/* A part of an off plugin keeps its own setting but is not in use, so its
+   switch keeps its position and loses its colour. */
+.plugin-groups--off .plugin-switch[aria-checked="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+}
+
+.plugin-groups--off .plugin-switch[aria-checked="true"] span {
+  background: var(--zy-muted);
+}
+
+.plugin-switch {
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  padding: 2px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 999px;
+  background: var(--zy-panel);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+/* The switch is drawn small; the area that takes a click is 40 × 28. */
+.plugin-switch::after {
+  content: "";
+  position: absolute;
+  inset: -5px -3px;
+}
+
+.plugin-switch span {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--zy-muted);
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.plugin-switch:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.plugin-switch[aria-checked="true"] {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+}
+
+.plugin-switch[aria-checked="true"] span {
+  background: var(--zy-green);
+  transform: translateX(16px);
+}
+
+/* ---- Empty and loading ------------------------------------------------- */
+
+.plugin-details--empty {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 8px;
+  padding: 96px 40px;
+  color: var(--zy-muted);
+  text-align: center;
+}
+
+.plugin-details--empty svg {
+  width: 26px;
+  height: 26px;
+  color: var(--zy-faint);
+}
+
+.plugin-details--empty h2 {
+  margin: 6px 0 0;
+  color: var(--zy-text);
+  font-size: 15px;
+  font-weight: 520;
+}
+
+.plugin-details--empty p {
+  max-width: 44ch;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+/* The component-edit modal: skill, specialist, and connector forms. */
+
+.component-editor__form {
+  display: grid;
+  gap: 17px;
+}
+
+.component-editor__form label {
+  display: grid;
+  gap: 7px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.component-editor__form input:not([type="checkbox"]),
+.component-editor__form textarea {
+  width: 100%;
+  padding: 9px 10px;
+  resize: vertical;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 7px;
+  background: var(--zy-panel);
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.component-editor__form input:disabled,
+.component-editor__form textarea:disabled {
+  color: var(--zy-muted);
+  opacity: 0.7;
+}
+
+.component-editor__form small {
+  color: var(--zy-danger);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.component-editor__form input[aria-invalid="true"],
+.component-editor__form textarea[aria-invalid="true"] {
+  border-color: var(--zy-danger);
+}
+
+/* What installing a connector's programs would download, read as a manifest:
+   what arrives, from where, and how much of it. */
+.install-dialog {
+  display: grid;
+  gap: 14px;
+}
+
+.install-dialog__lead {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.install-manifest {
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+}
+
+.install-manifest__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+  color: var(--zy-muted);
+  font: 12px var(--zy-font-instrument);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.install-manifest__head span:last-child {
+  color: var(--zy-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.install-manifest ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-manifest li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px;
+}
+
+.install-manifest li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+.install-manifest__name {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.install-manifest__name strong {
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 540;
+}
+
+.install-manifest__name small {
+  overflow-wrap: anywhere;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.install-manifest__size {
+  flex: none;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.install-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.install-note svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+/* What editing a shipped component means, said once at the top. */
+.component-editor__note {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.component-editor__changed {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--zy-amber-line);
+  border-radius: 8px;
+  background: var(--zy-amber-fill);
+  color: var(--zy-text);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.component-editor__identity {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.component-editor__identity strong {
+  color: var(--zy-text);
+  font: 13px var(--zy-font-instrument);
+  font-weight: 500;
+}
+
+/* The shipped text, for comparison, kept out of the way until asked for. */
+.component-editor__shipped {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.component-editor__shipped dl {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-wash-faint);
+}
+
+.component-editor__shipped dt {
+  color: var(--zy-muted);
+  font: 12px var(--zy-font-instrument);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.component-editor__shipped dd {
+  margin: 4px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.component-editor__shipped pre {
+  max-height: 16rem;
+  margin: 0;
+  overflow: auto;
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.component-editor__test {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.component-editor__test-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.component-editor__test-status svg {
+  width: 13px;
+  height: 13px;
+}
+
+.component-editor__test-status--ok {
+  border: 1px solid var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.component-editor__test-status--failed {
+  color: var(--zy-danger);
+  font-size: 12px;
+}
+
+.component-editor__tools {
+  min-inline-size: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+}
+
+.component-editor__tools legend {
+  padding: 0 4px;
+  color: var(--zy-muted);
+  font: 12px var(--zy-font-instrument);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.component-editor__tools ul {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A whole tool row takes the click, so the box itself can stay small. */
+.component-editor__tools label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 28px;
+  padding: 4px 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.component-editor__tools label input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  cursor: pointer;
+}
+
+.component-editor__tools label span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.component-editor__tools label small {
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.component-editor__tools-empty {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.component-editor__error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 8px;
+  background: var(--zy-accent-soft);
+  color: var(--zy-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ---- Narrow ------------------------------------------------------------ */
+
+/* A row too narrow for its columns puts the text on a line of its own, and
+   keeps the switch beside the buttons rather than stranded mid-row. */
+@container plugin-details (max-width: 560px) {
+  .plugin-group ul {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The name keeps its switch and buttons on its own line; what it does and
+     how it is reads underneath, the full width. */
+  .plugin-component {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 4px 10px;
+    padding-inline: 4px;
+  }
+
+  .plugin-component__copy {
+    display: contents;
+  }
+
+  .plugin-component__copy strong {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+  }
+
+  /* Switches line up at the row's end; buttons sit just before them. */
+  .plugin-component__actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .plugin-component__control {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .plugin-component__copy > span,
+  .plugin-component__copy small,
+  .plugin-component__status {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .plugin-component__status:empty {
+    display: none;
+  }
+
+  .capability-confirm > div {
+    grid-column: 1 / -1;
+  }
+
+  .capability-confirm > button:first-of-type {
+    grid-column: 2;
+  }
+}
+
+/* Too narrow for two columns: the directory sits above the details. */
+@container plugins (max-width: 620px) {
+  .plugin-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .plugin-directory {
+    max-height: 210px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--zy-line);
+    margin-bottom: 18px;
+  }
+
+  .plugin-directory__count {
+    padding-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugin-switch,
+  .plugin-switch span,
+  .plugin-row,
+  .plugin-component,
+  .plugin-component__edit {
+    transition: none;
+  }
+}
+
+/* Making a connector's key, as three steps on the service's own page. */
+.connector-setup {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.connector-setup h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.connector-setup ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.connector-setup p {
+  margin: 0;
+  color: var(--zy-muted);
+}
+
+.connector-setup__open {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--zy-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.connector-setup__revoke {
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.connector-setup__revoke summary {
+  width: max-content;
+  cursor: pointer;
+}
+
+.connector-setup__revoke p {
+  margin: 6px 0 0;
+}
+
+/* How Zhiyin gets into a connector's service: two choices side by side, the
+   chosen one outlined. Each says what it asks of the person. */
+.access-choice {
+  display: grid;
+  gap: 7px;
+}
+
+.access-choice__title {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.access-choice__options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px;
+}
+
+.component-editor__form .access-choice__option {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px 10px 34px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.component-editor__form .access-choice__option > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The radio mark, drawn so it matches the theme in both modes. */
+.access-choice__option::before {
+  content: "";
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--zy-line-strong);
+  border-radius: 50%;
+  background: var(--zy-panel);
+}
+
+.access-choice__option:has(input:checked) {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+}
+
+.access-choice__option:has(input:checked)::before {
+  border: 4px solid var(--zy-accent);
+}
+
+.access-choice__option:has(input:focus-visible) {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.access-choice__label {
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.access-choice__detail {
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Where an account stands, with its one action beside the words. */
+.access-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 10px;
+  background: var(--zy-wash);
+}
+
+.access-card__text {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 3px;
+  min-width: 0;
+}
+
+.access-card__text strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.access-card__text strong svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-green);
+}
+
+.access-card__text span {
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.access-card > :global(.button) {
+  flex: none;
+}
+
+.access-card--ok {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+}
+
+.access-card--waiting {
+  border-color: var(--zy-accent-line);
+}
+
+.access-card--failed .access-card__text span {
+  color: var(--zy-danger);
+}
+
+/* What testing the address found, read beside the choice it informs. */
+.connector-test-note {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.component-editor__footer-start {
+  margin-right: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .component-editor__form .access-choice__option {
+    transition: none;
+  }
+}

@@ -1,0 +1,572 @@
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import {
+  emptyConversationLists,
+  type AppEvent,
+  type CoreApi,
+  type WorkspaceSnapshot,
+} from "@zhiyin/contract";
+import { App } from "./App.js";
+
+/** A core that answers the handshake the way the real one does. */
+const emptySnapshot: WorkspaceSnapshot = {
+  runtime: { tasks: "available", capabilities: "unavailable" },
+  recentWorkspaces: [],
+  tasks: [],
+  selectedTaskId: null,
+  plugins: [],
+  mcpServers: [],
+  usage: { status: "unavailable", reason: "No requests yet." },
+};
+
+function fakeCore(version: string): CoreApi & {
+  sendMessage: ReturnType<typeof vi.fn<CoreApi["sendMessage"]>>;
+  resendTask: ReturnType<typeof vi.fn<CoreApi["resendTask"]>>;
+} {
+  const handlers: ((event: AppEvent) => void)[] = [];
+
+  const sendMessage = vi.fn<CoreApi["sendMessage"]>(async () => {});
+  const resendTask = vi.fn<CoreApi["resendTask"]>(async () => {});
+
+  return {
+    frontendReady: async () => {
+      handlers.forEach((handler) => {
+        handler({ kind: "coreReady", data: { version } });
+        handler({ kind: "workspaceSnapshot", data: emptySnapshot });
+      });
+    },
+    createTask: async () => "core-task-1",
+    selectTask: async () => {},
+    resendTask,
+    renameTask: async () => {},
+    deleteTask: async () => {},
+    sendMessage,
+    keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
+    setContextBudget: async () => {},
+    setDefaultContextBudget: async () => {},
+    setPersonalInstructions: async () => {},
+    setNotifications: async () => {},
+    openDataFolder: async () => {},
+    showInFolder: async () => {},
+    setAppearance: async () => {},
+    setSpelling: async () => {},
+    keepPicture: async () => ({
+      status: "refused" as const,
+      reason: "Not in this test.",
+    }),
+    condenseNow: async () => {},
+    openAttachment: async () => {},
+    previewRewind: async () => {
+      throw new Error("No rewind preview configured for this test.");
+    },
+    commitRewind: async () => ({ files: [] }),
+    previewUndo: async () => {
+      throw new Error("No undo preview configured for this test.");
+    },
+    commitUndo: async () => ({ files: [] }),
+    compareDocument: async () => ({ after: [] }),
+    interruptTask: async () => {},
+    runningCommands: async () => [],
+    commandOutput: async () => undefined,
+    stopCommand: async () => {},
+    resolveApproval: async () => {},
+    revokeConversationPermission: async () => {},
+    resolveUserInput: async () => {},
+    setComponentEnabled: async () => {},
+    componentContent: async () => undefined,
+    overrideComponent: async () => {},
+    resetComponent: async () => {},
+    installToolchain: async () => {},
+    setPluginEnabled: async () => {},
+    installPlugin: async () => ({ status: "cancelled" }),
+    updatePlugin: async () => ({ status: "cancelled" }),
+    rollbackPlugin: async () => {},
+    removePlugin: async () => {},
+    createPlugin: async () => {},
+    savePluginContents: async () => {},
+    editablePluginContents: async () => undefined,
+    setMcpServerToolEnabled: async () => {},
+    testMcpConnection: async () => ({ ok: false, reason: "Not configured." }),
+    saveMcpServerToken: async () => {},
+    clearMcpServerToken: async () => {},
+    signInToMcpServer: async () => ({ status: "cancelled" }),
+    cancelMcpSignIn: async () => {},
+    refreshConnections: async () => {},
+    checkMcpConnection: async () => {
+      throw new Error("Not configured.");
+    },
+    shellAvailability: async () => ({ available: true }),
+    recheckShell: async () => ({ available: true }),
+    openExternalUrl: async () => {},
+    driveBrowser: async () => {},
+    chooseWorkspaceView: async () => {},
+    showDocument: async () => ({ ok: true }),
+    closeDocument: async () => {},
+    drawDocumentPage: async () => ({ ok: false, reason: "Not drawn here." }),
+    openDocument: async () => {},
+    showDocumentInFolder: async () => {},
+    saveProviderApiKey: async () => ({ status: "accepted" as const }),
+    clearProviderApiKey: async () => {},
+    listModels: async () => ({ status: "ready" as const, models: [] }),
+    listModelProviders: async () => ({
+      status: "unavailable" as const,
+      reason: "not in this test",
+    }),
+    selectModel: async () => {},
+    previewArtifact: async () => ({
+      status: "missing" as const,
+      path: "",
+      reason: "Not available in this test.",
+    }),
+    exportArtifact: async () => ({ status: "cancelled" as const }),
+    exportView: async () => ({ status: "cancelled" as const }),
+    exportConversation: async () => ({ status: "cancelled" as const }),
+    answerViewCheck: async () => {},
+    onViewCheck: () => () => {},
+    onAppEvent: (handler) => {
+      handlers.push(handler);
+      return () => {
+        handlers.splice(handlers.indexOf(handler), 1);
+      };
+    },
+  };
+}
+
+describe("App", () => {
+  it("offers the browser workspace from core events and updates its live picture without a context shelf", async () => {
+    const core = fakeCore("0.1.0");
+    const original = core.onAppEvent;
+    let receive!: (event: AppEvent) => void;
+    core.onAppEvent = (handler) => {
+      receive = handler;
+      return original(handler);
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    act(() => {
+      receive({
+        kind: "taskChanged",
+        data: {
+          id: "browser-task",
+          title: "Browser task",
+          updatedLabel: "Now",
+          titleSource: "generated" as const,
+          updatedAt: "2026-10-05T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: { kind: "draft" },
+        },
+      });
+      receive({
+        kind: "taskSelectionChanged",
+        data: { taskId: "browser-task" },
+      });
+    });
+    act(() =>
+      receive({
+        kind: "browserChanged",
+        data: {
+          taskId: "browser-task",
+          browser: {
+            status: "opening",
+            loading: true,
+            url: "",
+            title: "",
+          },
+        },
+      }),
+    );
+    // The core opens the space on a conversation's first browser: nobody
+    // has to find the tab to learn there is one.
+    act(() =>
+      receive({
+        kind: "workspaceViewChanged",
+        data: { taskId: "browser-task", view: "browser" },
+      }),
+    );
+    expect(screen.getByRole("tab", { name: "Workspace" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByLabelText("Zhiyin's browser")).toBeVisible();
+    expect(screen.getByText("Loading…")).toBeVisible();
+    for (const data of ["first-frame", "second-frame"]) {
+      act(() =>
+        receive({
+          kind: "browserChanged",
+          data: {
+            taskId: "browser-task",
+            browser: {
+              status: "open",
+              loading: false,
+              url: "http://localhost/",
+              title: "Preview",
+              frame: { data, width: 1280, height: 800 },
+            },
+          },
+        }),
+      );
+      expect(
+        screen.getByAltText("Preview — the page Zhiyin is working on"),
+      ).toHaveAttribute("src", `data:image/jpeg;base64,${data}`);
+    }
+    act(() =>
+      receive({
+        kind: "browserChanged",
+        data: {
+          taskId: "browser-task",
+          browser: {
+            status: "failed",
+            loading: false,
+            url: "",
+            title: "",
+            reason: "Browser disconnected",
+          },
+        },
+      }),
+    );
+    expect(screen.getByText("Browser disconnected")).toBeVisible();
+    act(() =>
+      receive({
+        kind: "browserChanged",
+        data: {
+          taskId: "browser-task",
+          browser: { status: "closed", loading: false, url: "", title: "" },
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByLabelText("Zhiyin's browser"),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("shows the document the core announces beside the conversation, and closes it when the core says so", async () => {
+    const core = fakeCore("0.1.0");
+    const original = core.onAppEvent;
+    let receive!: (event: AppEvent) => void;
+    core.onAppEvent = (handler) => {
+      receive = handler;
+      return original(handler);
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    const place = { path: "out/q3.pdf", name: "q3.pdf", folder: "out" };
+    act(() => {
+      receive({
+        kind: "taskChanged",
+        data: {
+          id: "report",
+          title: "Report",
+          updatedLabel: "Now",
+          titleSource: "generated" as const,
+          updatedAt: "2026-10-05T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: { kind: "draft" },
+        },
+      });
+      receive({ kind: "taskSelectionChanged", data: { taskId: "report" } });
+      receive({
+        kind: "documentChanged",
+        data: {
+          taskId: "report",
+          document: {
+            ...place,
+            status: "shown",
+            documents: [place],
+            revision: "r1",
+            kind: "pdf",
+            pages: [{ width: 612, height: 792 }],
+            openable: true,
+          },
+        },
+      });
+      receive({
+        kind: "workspaceViewChanged",
+        data: { taskId: "report", view: "document" },
+      });
+    });
+    expect(screen.getByRole("tab", { name: "Workspace" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("heading", { name: "q3.pdf" })).toBeVisible();
+    act(() => {
+      receive({
+        kind: "documentChanged",
+        data: {
+          taskId: "report",
+          document: { status: "closed", documents: [place] },
+        },
+      });
+      receive({
+        kind: "workspaceViewChanged",
+        data: { taskId: "report", view: "conversation" },
+      });
+    });
+    expect(screen.queryByRole("tab", { name: "Workspace" })).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "q3.pdf" })).toBeNull(),
+    );
+  });
+
+  it("removes another conversation's browser tab and notice after switching conversations", async () => {
+    const core = fakeCore("0.1.0");
+    const original = core.onAppEvent;
+    let receive!: (event: AppEvent) => void;
+    core.onAppEvent = (handler) => {
+      receive = handler;
+      return original(handler);
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    const task = (id: string, title: string) => ({
+      id,
+      title,
+      updatedLabel: "Now",
+      titleSource: "generated" as const,
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "draft" as const },
+    });
+    act(() => {
+      receive({ kind: "taskChanged", data: task("first", "First") });
+      receive({ kind: "taskChanged", data: task("second", "Second") });
+      receive({
+        kind: "taskSelectionChanged",
+        data: { taskId: "first" },
+      });
+      receive({
+        kind: "browserChanged",
+        data: {
+          taskId: "first",
+          browser: {
+            status: "open",
+            loading: false,
+            url: "https://first.example/",
+            title: "First browser",
+          },
+        },
+      });
+    });
+    expect(screen.getByRole("tab", { name: "Workspace" })).toBeVisible();
+
+    act(() => {
+      receive({
+        kind: "taskSelectionChanged",
+        data: { taskId: "second" },
+      });
+      receive({
+        kind: "browserChanged",
+        data: {
+          taskId: "first",
+          browser: {
+            status: "open",
+            loading: false,
+            url: "https://first.example/updated",
+            title: "First browser",
+          },
+        },
+      });
+    });
+
+    expect(screen.queryByRole("tab", { name: "Workspace" })).toBeNull();
+    expect(screen.queryByText(/opened a browser/i)).toBeNull();
+  });
+  it("answers core view checks from the renderer that owns drawing", async () => {
+    const core = fakeCore("0.1.0");
+    const answer = vi.fn<CoreApi["answerViewCheck"]>(async () => {});
+    let check: Parameters<CoreApi["onViewCheck"]>[0] | undefined;
+    core.answerViewCheck = answer;
+    core.onViewCheck = (handler) => {
+      check = handler;
+      return () => {
+        check = undefined;
+      };
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+
+    check?.({
+      id: "check-1",
+      kind: "histogram",
+      source: JSON.stringify({
+        kind: "histogram",
+        title: "Latency",
+        values: [1, 2, 3],
+      }),
+    });
+
+    await waitFor(() =>
+      expect(answer).toHaveBeenCalledWith("check-1", { ok: true }),
+    );
+  });
+
+  it("recovers when the first handshake fails", async () => {
+    const core = fakeCore("0.1.0");
+    const ready = core.frontendReady;
+    let attempts = 0;
+    core.frontendReady = async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("not ready");
+      await ready();
+    };
+    render(<App core={core} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    expect(
+      await screen.findByRole("heading", { name: "What should we work on?" }),
+    ).toBeVisible();
+  });
+  it("says what it could not reach, and what to do when trying again does not help", async () => {
+    const core = fakeCore("0.1.0");
+    core.frontendReady = async () => {
+      throw new Error("not ready");
+    };
+    render(<App core={core} />);
+
+    const first = await screen.findByRole("main");
+    expect(first).toHaveTextContent(
+      "This window could not reach the rest of Zhiyin.",
+    );
+    expect(first).toHaveTextContent(
+      "Your conversations are stored on this computer and have not been removed.",
+    );
+    expect(first).not.toHaveTextContent("Close Zhiyin and open it again.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(
+      await screen.findByText(/Close Zhiyin and open it again./),
+    ).toBeVisible();
+  });
+
+  it("says the window restarted after a problem, and that the work is intact, until dismissed", async () => {
+    render(<App core={fakeCore("0.1.0")} restarted />);
+
+    const title = await screen.findByText(
+      "The window restarted after a problem.",
+    );
+    const notice = title.closest('[role="status"]');
+    // Said politely: nothing went wrong that the person has to act on.
+    expect(notice).not.toBeNull();
+    expect(notice).toHaveTextContent("Your work is intact.");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(
+      screen.queryByText("The window restarted after a problem."),
+    ).toBeNull();
+  });
+
+  it("says the window restarted once, not again on coming back from another page", async () => {
+    render(<App core={fakeCore("0.1.0")} restarted />);
+    await screen.findByText("The window restarted after a problem.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Plugins" }));
+    fireEvent.click(screen.getByRole("button", { name: "New task" }));
+
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    expect(
+      screen.queryByText("The window restarted after a problem."),
+    ).toBeNull();
+  });
+
+  it("says nothing about a restart on an ordinary start", async () => {
+    render(<App core={fakeCore("0.1.0")} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+
+    expect(screen.queryByText(/The window restarted/)).toBeNull();
+  });
+
+  it("replaces the loading shell with the production workspace after the handshake", async () => {
+    render(<App core={fakeCore("0.1.0")} />);
+    expect(
+      await screen.findByRole("heading", { name: "What should we work on?" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Core version 0.1.0")).toBeNull();
+    expect(screen.getByLabelText("Message Zhiyin")).toBeEnabled();
+  });
+
+  it("sends the first message through the core-owned task command", async () => {
+    const core = fakeCore("0.1.0");
+    render(<App core={core} />);
+
+    const composer = await screen.findByLabelText("Message Zhiyin");
+    fireEvent.change(composer, { target: { value: "Introduce yourself" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() =>
+      expect(core.sendMessage).toHaveBeenCalledWith(
+        "core-task-1",
+        "Introduce yourself",
+        undefined,
+      ),
+    );
+  });
+
+  it("asks for a conversation whole after missing one of its changes, and then shows it as the core holds it", async () => {
+    const core = fakeCore("0.1.0");
+    const original = core.onAppEvent;
+    let receive!: (event: AppEvent) => void;
+    core.onAppEvent = (handler) => {
+      receive = handler;
+      return original(handler);
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    const task = (text: string) => ({
+      id: "notes",
+      title: "Notes",
+      updatedLabel: "Now",
+      titleSource: "generated" as const,
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { id: "ask", role: "user" as const, text: "Count.", sequence: 0 },
+        { id: "answer", role: "assistant" as const, text, sequence: 1 },
+      ],
+      phase: { kind: "interrupted" as const },
+    });
+    const words = (sequence: number, text: string): AppEvent => ({
+      kind: "taskUpdated",
+      data: {
+        taskId: "notes",
+        sequence,
+        appended: [{ messageId: "answer", text }],
+      },
+    });
+    act(() =>
+      receive({
+        kind: "workspaceSnapshot",
+        data: {
+          ...emptySnapshot,
+          tasks: [task("One")],
+          selectedTaskId: "notes",
+        },
+      }),
+    );
+    act(() => receive(words(1, " two")));
+    expect(await screen.findByText("One two")).toBeVisible();
+
+    act(() => receive(words(3, " four")));
+    act(() => receive(words(4, " five")));
+    expect(core.resendTask).toHaveBeenCalledTimes(1);
+    expect(core.resendTask).toHaveBeenCalledWith("notes");
+    expect(screen.getByText("One two")).toBeVisible();
+
+    act(() =>
+      receive({ kind: "taskChanged", data: task("One two three four five") }),
+    );
+    act(() => receive(words(1, " six")));
+    expect(
+      await screen.findByText("One two three four five six"),
+    ).toBeVisible();
+  });
+});

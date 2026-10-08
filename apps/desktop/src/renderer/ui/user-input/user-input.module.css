@@ -1,0 +1,831 @@
+/* Styles owned by the user-input module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.user-input,
+.interaction-card {
+  overflow: hidden;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+}
+
+.interaction-card--quiz {
+  box-shadow:
+    0 5px 0 -2px var(--zy-panel-soft),
+    0 9px 0 -4px var(--zy-line),
+    var(--zy-shadow-pop);
+}
+
+.user-input--quiz {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-raised);
+}
+
+/* Asked where the composer sits: one row, the question and why on the left,
+   the two answers on the right. It wraps rather than squeezing on a narrow
+   window, and gives up height rather than pushing the composer away. */
+.work-budget {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  align-items: center;
+  min-height: 0;
+  padding: 12px 14px;
+}
+
+.work-budget__icon {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  align-self: flex-start;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border: 1px solid var(--zy-line);
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.work-budget__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.work-budget__text {
+  display: grid;
+  flex: 1 1 240px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.work-budget__text h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.work-budget__text p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.work-budget__text .work-budget__warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 4px;
+  color: var(--zy-text-soft);
+}
+
+.work-budget__warning svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: var(--zy-danger);
+}
+
+.work-budget__text .work-budget__error {
+  color: var(--zy-danger);
+}
+
+.work-budget__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.user-input--folder-instructions {
+  min-height: 0;
+}
+
+.folder-instructions__message {
+  max-width: 68ch;
+  margin: 14px 16px 12px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.folder-instructions__message code {
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+}
+
+.folder-instructions__text {
+  max-height: 240px;
+  margin: 0 16px 16px;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user-input__header,
+.interaction-card__header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.user-input__header p,
+.interaction-card__header p {
+  margin: 0 0 4px;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.user-input__header h3,
+.interaction-card__header h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 16px;
+}
+
+.interaction-card__answers {
+  display: grid;
+}
+
+.user-input__written {
+  display: grid;
+  gap: 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.user-input__written textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 9px 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  color: var(--zy-text);
+  background: var(--zy-panel);
+}
+
+.user-input__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 11px 14px;
+}
+
+.user-input__error {
+  margin: 10px 16px 0;
+  color: var(--zy-danger);
+  font-size: 12.5px;
+}
+
+.input-flow__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 20px;
+  padding: 20px 24px 0;
+}
+
+.input-flow__header > div {
+  min-width: 0;
+}
+
+.input-flow__header p,
+.quiz-result__eyebrow {
+  margin: 0 0 4px;
+  color: var(--zy-muted);
+  font: 600 12px/1.4 var(--zy-font-instrument);
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.input-flow__header h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font: 600 16px/1.35 var(--zy-font-display);
+  overflow-wrap: anywhere;
+}
+
+.input-flow__header > span {
+  align-self: end;
+  padding-bottom: 2px;
+  color: var(--zy-muted);
+  font: 12px/1.4 var(--zy-font-data);
+  white-space: nowrap;
+}
+
+.step-track {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-track__segment {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--zy-line-strong);
+  transition:
+    background-color 200ms ease,
+    box-shadow 200ms ease;
+}
+
+/* The track is a question card still being answered, which is work in
+   progress: one red, softer for what is answered and full for where the
+   person is. Green is kept for a quiz answer checked as correct. */
+.step-track__segment--done {
+  background: var(--zy-running-line);
+}
+
+.step-track__segment--current {
+  background: var(--zy-running);
+  box-shadow: 0 0 0 1px var(--zy-running-line);
+}
+
+.step-track__segment--done.step-track__segment--current {
+  background: var(--zy-running);
+}
+
+/* A checked quiz answer colours its segment by how it went, the current one
+   included: success in the app's green for done, the one place a quiz is not
+   in the brand red. Two classes, so it outranks the answered-and-current red. */
+.step-track__segment.step-track__segment--correct {
+  background: var(--zy-green);
+}
+
+.step-track__segment.step-track__segment--incomplete {
+  background: var(--zy-amber);
+}
+
+.step-track__segment.step-track__segment--wrong {
+  background: var(--zy-danger);
+}
+
+.step-track__segment--current.step-track__segment--correct {
+  box-shadow: 0 0 0 1px var(--zy-green-line);
+}
+
+.step-track__segment--current.step-track__segment--incomplete {
+  box-shadow: 0 0 0 1px var(--zy-amber-line);
+}
+
+.step-track__segment--current.step-track__segment--wrong {
+  box-shadow: 0 0 0 1px var(--zy-accent-line);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step-track__segment {
+    transition: none;
+  }
+}
+
+/* Sized to sit whole in the thread at the usual window, so a question card's
+   answers are reached without scrolling. */
+.input-flow__question {
+  min-height: 260px;
+}
+
+.input-flow__question-body {
+  min-width: 0;
+  padding: 22px 24px 20px;
+}
+
+.input-flow__question-body h4 {
+  max-width: 680px;
+  margin: 0;
+  color: var(--zy-text);
+  font: 600 19px/1.32 var(--zy-font-display);
+  letter-spacing: -0.01em;
+}
+
+.input-flow__hint {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.input-flow__options {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.input-flow__option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  color: var(--zy-text-soft);
+  background: var(--zy-panel-soft);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.input-flow__option:hover:not(:has(input:disabled)) {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+}
+
+.input-flow__option--selected {
+  border-color: var(--zy-accent-line);
+  color: var(--zy-text);
+  background: var(--zy-accent-veil);
+}
+
+.input-flow__option--correct {
+  border-color: var(--zy-green-line);
+  color: var(--zy-text);
+  background: var(--zy-green-fill);
+}
+
+.input-flow__option--incomplete {
+  border-color: var(--zy-amber-line);
+  color: var(--zy-text);
+  background: var(--zy-amber-fill);
+}
+
+/* Said on the answer itself, at the far end of its row, not by colour alone. */
+.input-flow__option:has(.input-flow__missed) {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.input-flow__missed {
+  color: var(--zy-amber);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.input-flow__option--wrong {
+  border-color: var(--zy-accent-line);
+  color: var(--zy-text);
+  background: var(--zy-accent-veil);
+}
+
+.input-flow__option:has(input:disabled) {
+  cursor: default;
+}
+
+.input-flow__option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--zy-accent-fill);
+}
+
+/* What the person ticked, once checked as correct, ticks in green. */
+.input-flow__option--correct input {
+  accent-color: var(--zy-green);
+}
+
+.input-flow__option > span {
+  display: block;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.4;
+}
+
+.input-flow__option strong {
+  display: block;
+  font-weight: inherit;
+}
+
+.input-flow__option small {
+  display: block;
+  margin-top: 3px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: 1.4;
+}
+
+.input-flow__option--selected small {
+  color: var(--zy-text-soft);
+}
+
+/* The verdict over its explanation, so the explanation has the card's width. */
+.input-flow__feedback {
+  display: grid;
+  gap: 6px;
+  margin: 0 24px 28px;
+  padding-top: 17px;
+  border-top: 1px solid var(--zy-line-strong);
+}
+
+.input-flow__feedback--correct strong {
+  color: var(--zy-green);
+}
+
+.input-flow__feedback--incomplete strong {
+  color: var(--zy-amber);
+}
+
+.input-flow__feedback--wrong strong {
+  color: var(--zy-danger);
+}
+
+.input-flow__feedback strong {
+  font: 600 14px/1.35 var(--zy-font-display);
+}
+
+.input-flow__feedback p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.input-flow__footer {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.input-flow__footer:has(> .input-flow__actions:only-child) {
+  justify-content: flex-end;
+}
+
+/* Asked in the place the quiet button was, so nothing else moves. */
+.input-flow__stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+}
+
+.input-flow__stop-confirm {
+  border-color: var(--zy-danger);
+  color: var(--zy-danger);
+}
+
+.input-flow__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.user-input--clarification {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.user-input--clarification .input-flow__header,
+.user-input--clarification .user-input__footer {
+  flex: 0 0 auto;
+}
+
+.user-input--clarification .input-flow__question,
+.user-input--clarification .input-review {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.user-input--clarification .input-flow__question {
+  min-height: 0;
+}
+
+.user-input--clarification .input-flow__question-body {
+  padding: 22px 24px 24px;
+}
+
+.user-input--clarification .input-flow__options {
+  margin-top: 18px;
+}
+
+.input-review {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 20px 24px 22px;
+  list-style: none;
+}
+
+.input-review__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.input-review__row > div {
+  min-width: 0;
+}
+
+.input-review__row p {
+  display: flex;
+  gap: 9px;
+  margin: 0 0 5px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.input-review__row p span {
+  color: var(--zy-running);
+  font: 12px/1.55 var(--zy-font-data);
+}
+
+.input-review__row strong {
+  display: block;
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 560;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.user-input__written {
+  margin-top: 4px;
+}
+
+.quiz-result {
+  display: grid;
+  justify-items: center;
+  padding: 34px 24px 30px;
+  text-align: center;
+}
+
+.quiz-result__score {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+}
+
+.quiz-result__score strong {
+  color: var(--zy-text);
+  font: 650 54px/1 var(--zy-font-display);
+  letter-spacing: -0.055em;
+}
+
+.quiz-result__score span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.quiz-result__track {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(30px, 1fr));
+  gap: 6px;
+  width: min(100%, 520px);
+  margin: 26px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quiz-result__track li {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  color: var(--zy-muted);
+  font: 12px/1 var(--zy-font-data);
+  background: var(--zy-panel-soft);
+}
+
+.quiz-result__track li.is-correct {
+  border-color: var(--zy-green-line);
+  color: var(--zy-green);
+  background: var(--zy-green-fill);
+}
+
+.quiz-result__track li.is-incomplete {
+  border-color: var(--zy-amber-line);
+  color: var(--zy-amber);
+  background: var(--zy-amber-fill);
+}
+
+.quiz-result__track li.is-wrong {
+  border-color: var(--zy-accent-line);
+  color: var(--zy-danger);
+  background: var(--zy-accent-veil);
+}
+
+.quiz-result h4 {
+  margin: 26px 0 0;
+  color: var(--zy-text);
+  font: 600 20px/1.3 var(--zy-font-display);
+}
+
+.quiz-result__summary {
+  max-width: 430px;
+  margin: 7px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.quiz-result__retry {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  width: min(100%, 520px);
+  margin-top: 28px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--zy-line);
+  text-align: left;
+}
+
+.quiz-result__retry > div {
+  display: grid;
+  gap: 2px;
+}
+
+.quiz-result__retry strong {
+  color: var(--zy-text);
+  font-size: 13px;
+}
+
+.quiz-result__retry span {
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.interaction-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.interaction-card__score {
+  flex: 0 0 auto;
+  color: var(--zy-text);
+  font-size: 12px;
+}
+
+.interaction-card__score--strong {
+  color: var(--zy-green);
+}
+
+.interaction-card__score--fair {
+  color: var(--zy-amber);
+}
+
+.interaction-card__score--weak {
+  color: var(--zy-orange);
+}
+
+.interaction-card__score--poor {
+  color: var(--zy-danger);
+}
+
+.interaction-card__answer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.interaction-card__answer:last-child {
+  border-bottom: 0;
+}
+
+.interaction-card__answer > p {
+  display: flex;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+}
+
+.interaction-card__answer > strong {
+  font-size: 13.5px;
+}
+
+.interaction-card__answer > em {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.interaction-card__answer--correct > em {
+  color: var(--zy-green);
+}
+
+.interaction-card__answer--incomplete > em {
+  color: var(--zy-amber);
+}
+
+.interaction-card__answer--wrong > em {
+  color: var(--zy-danger);
+}
+
+.interaction-card__answer > small {
+  grid-column: 1 / -1;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* A short window gives the answers the room before the type. */
+@media (max-height: 700px) {
+  .input-flow__question {
+    min-height: 0;
+  }
+
+  .input-flow__question-body {
+    padding: 16px 20px;
+  }
+
+  .input-flow__question-body h4 {
+    font-size: 17px;
+  }
+
+  .input-flow__options {
+    margin-top: 12px;
+  }
+
+  .input-flow__option {
+    min-height: 40px;
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 620px) {
+  .input-flow__header {
+    grid-template-columns: 1fr;
+    padding-inline: 18px;
+  }
+
+  .input-flow__header > span {
+    justify-self: start;
+  }
+
+  .input-flow__question-body,
+  .quiz-result,
+  .input-review {
+    padding-inline: 18px;
+  }
+
+  .input-review__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .input-review__row :global(.button) {
+    justify-self: start;
+    padding-inline: 0;
+  }
+
+  .input-flow__feedback {
+    margin-inline: 18px;
+  }
+
+  .input-flow__footer,
+  .quiz-result__retry {
+    align-items: stretch;
+  }
+
+  .input-flow__footer {
+    flex-direction: column-reverse;
+  }
+
+  .input-flow__actions,
+  .quiz-result__retry {
+    flex-direction: column;
+  }
+
+  .input-flow__actions,
+  .input-flow__actions :global(.button),
+  .input-flow__footer > :global(.button),
+  .quiz-result__retry :global(.button) {
+    width: 100%;
+  }
+}

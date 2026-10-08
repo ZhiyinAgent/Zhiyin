@@ -1,0 +1,1930 @@
+/* Styles owned by the conversation module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* A conversation taking shape before it has anything to show. */
+.thread-skeleton {
+  display: grid;
+  gap: 28px;
+  padding: 48px clamp(24px, 4vw, 50px);
+}
+
+.thread-skeleton__note {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.thread-skeleton__response {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.thread-skeleton__message {
+  width: 58%;
+  height: 58px;
+  margin-left: auto;
+}
+
+.thread-skeleton__panel {
+  display: block;
+  width: 82%;
+  height: 168px;
+  margin-top: 20px;
+}
+
+/*
+ * The running edge: two lit heads travelling opposite sides of the border.
+ * It is painted as a masked 1px ring in a pseudo-element rather than as a
+ * border, because a border cannot hold a gradient that follows the 24px
+ * radius — a conic gradient on the box itself corners square. The element's
+ * own border is dimmed to --zy-line underneath so the edge is still drawn
+ * where no head is currently passing.
+ */
+@property --composer-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.work-trace h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+/*
+ * The plan: one pill centred above the conversation that opens into the list.
+ * Red is the app's colour for work under way (the composer uses it while a
+ * turn runs), green for done.
+ */
+.plan-pill {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  width: calc(100% - 2 * clamp(16px, 4vw, 50px));
+  margin: 12px auto 0;
+}
+
+.plan-pill__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, 100%);
+  min-height: 34px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 999px;
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.plan-pill__button:hover,
+.plan-pill__button[aria-expanded="true"] {
+  border-color: var(--zy-muted);
+  background: var(--zy-panel-soft);
+}
+
+.plan-pill__button--working {
+  border-color: var(--zy-running-line);
+}
+
+.plan-pill__button:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.plan-pill__button > svg:last-child {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+  transition: transform 160ms ease;
+}
+
+.plan-pill__button[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.plan-pill__ring {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+
+.plan-pill__ring circle {
+  fill: none;
+  stroke-width: 2.25;
+}
+
+.plan-pill__ring circle {
+  stroke: var(--zy-line-strong);
+}
+
+.plan-pill__ring .plan-pill__arc {
+  stroke: var(--zy-green);
+  stroke-linecap: round;
+  transition: stroke-dasharray 300ms ease;
+}
+
+.plan-pill__name {
+  color: var(--zy-muted);
+  font-weight: 600;
+}
+
+.plan-pill__count {
+  color: var(--zy-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-pill__current {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-text);
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-pill__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  width: min(440px, 100%);
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-menu);
+  transform: translateX(-50%);
+  animation: plan-pill-open 140ms ease-out;
+}
+
+@keyframes plan-pill-open {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+.plan-pill__head {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-pill__head > span:first-child {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.plan-pill__bar {
+  height: 3px;
+  margin: 0 16px 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--zy-wash-strong);
+}
+
+.plan-pill__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--zy-green);
+  transition: width 300ms ease;
+}
+
+.plan-pill__list {
+  margin: 0;
+  padding: 4px 8px 8px;
+  list-style: none;
+}
+
+.plan-pill__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--zy-radius-sm);
+}
+
+/* A thread from each marker to the next, so the list reads as a sequence. It
+   hangs from the marker rather than the row, so a title on two lines does not
+   leave a gap. */
+.plan-pill__item:not(:last-child)::after {
+  position: absolute;
+  top: 27px;
+  bottom: -8px;
+  left: 16.5px;
+  width: 1px;
+  background: var(--zy-line-strong);
+  content: "";
+}
+
+.plan-pill__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 0.5px;
+  border: 1.5px solid var(--zy-line-strong);
+  border-radius: 50%;
+  background: var(--zy-panel-raised);
+  color: var(--zy-muted);
+}
+
+.plan-pill__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.plan-pill__text {
+  display: grid;
+  min-width: 0;
+}
+
+.plan-pill__title {
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* The state is said in words for anyone who cannot see the marker. */
+.plan-pill__state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.plan-pill__item--todo .plan-pill__title {
+  color: var(--zy-muted);
+}
+
+.plan-pill__item--doing {
+  background: var(--zy-accent-veil);
+}
+
+.plan-pill__item--doing .plan-pill__marker {
+  border-color: var(--zy-running);
+  background: radial-gradient(
+    circle,
+    var(--zy-running) 0 3.5px,
+    var(--zy-panel-raised) 4px
+  );
+  animation: plan-pill-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes plan-pill-pulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--zy-running-fill);
+  }
+}
+
+.plan-pill__item--doing .plan-pill__title {
+  color: var(--zy-text);
+  font-weight: 570;
+}
+
+.plan-pill__item--done .plan-pill__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.plan-pill__item--done .plan-pill__title {
+  color: var(--zy-text-soft);
+}
+
+.plan-pill__item--skipped .plan-pill__marker {
+  border-style: dashed;
+}
+
+.plan-pill__item--skipped .plan-pill__title {
+  color: var(--zy-faint);
+  text-decoration: line-through;
+}
+
+.work-trace {
+  padding: 16px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-soft);
+}
+
+.work-trace__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.work-trace__pulse {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--zy-running);
+  box-shadow: 0 0 0 5px var(--zy-running-fill);
+}
+
+.work-trace__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+}
+
+.work-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  min-height: 41px;
+  padding: 5px 0;
+}
+
+.work-step:not(:last-child)::after {
+  position: absolute;
+  top: 27px;
+  bottom: -5px;
+  left: 8px;
+  width: 1px;
+  background: var(--zy-line-strong);
+  content: "";
+}
+
+.work-step__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 50%;
+  background: var(--zy-panel-soft);
+  color: var(--zy-muted);
+}
+
+.work-step__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.work-step--complete .work-step__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.work-step--active .work-step__marker {
+  border-color: var(--zy-accent-line);
+}
+
+.work-step--failed .work-step__marker {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.work-step--active .work-step__marker span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--zy-accent-fill);
+}
+
+.work-step__label {
+  display: block;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.work-step--active .work-step__label {
+  color: var(--zy-text);
+}
+
+.work-step--failed .work-step__label {
+  color: var(--zy-danger);
+}
+
+.work-step--queued .work-step__label {
+  color: var(--zy-faint);
+}
+
+.work-step p {
+  margin: 2px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 19px 20px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 24px;
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-raised);
+}
+
+.composer:focus-within {
+  border-color: var(--zy-accent-line);
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 25px;
+  max-height: 120px;
+  padding: 2px 3px;
+  resize: none;
+  field-sizing: content;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--zy-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.composer textarea::placeholder {
+  color: var(--zy-faint);
+}
+
+.composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.composer__tools > button,
+.composer__send {
+  display: grid;
+  place-items: center;
+  border: 0;
+  cursor: pointer;
+}
+
+.composer__tools > button {
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zy-muted);
+}
+
+.composer__tools > button:hover {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.composer__tools svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composer__send {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.composer__tools > button:disabled {
+  color: var(--zy-faint);
+  cursor: default;
+}
+
+.composer__tools > button:disabled:hover {
+  background: transparent;
+}
+
+/* A filled control cannot be disabled by opacity: fading it towards the ground
+   makes it disappear rather than look unavailable, on a dark ground most of
+   all. It is muted by naming the muted colours instead, so it stays a visible
+   control on any ground. */
+.composer__send:disabled {
+  cursor: default;
+  outline: 1px solid var(--zy-line-strong);
+  outline-offset: -1px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-faint);
+}
+
+.composer__send svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composer__stop {
+  border: 1px solid var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.composer__stop:hover {
+  background: var(--zy-accent-soft-hover);
+}
+
+.composer__stop svg {
+  width: 13px;
+  height: 13px;
+  fill: currentcolor;
+}
+
+.composer--disabled {
+  border-color: var(--zy-line);
+  background: var(--zy-panel-soft);
+  box-shadow: none;
+}
+
+.composer--running {
+  border-color: var(--zy-line);
+}
+
+.composer--running::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--composer-spin),
+    var(--zy-running) 0deg,
+    transparent 40deg,
+    transparent 140deg,
+    var(--zy-running) 180deg,
+    transparent 220deg,
+    transparent 320deg,
+    var(--zy-running) 360deg
+  );
+  mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: composer-spin 3.4s linear infinite;
+}
+
+/*
+ * Travel is the part reduced motion removes, not the signal. The edge keeps
+ * saying a response is running; it holds still and breathes instead of
+ * chasing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .composer--running::before {
+    animation: none;
+    background: none;
+  }
+
+  .composer--running {
+    border-color: var(--zy-running-line);
+    animation: composer-breathe 2.6s ease-in-out infinite;
+  }
+}
+
+.welcome-orbit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  margin-bottom: 34px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 38% 35%,
+    var(--zy-panel-soft) 12%,
+    var(--zy-panel-raised) 56%,
+    var(--zy-panel)
+  );
+  box-shadow:
+    inset 0 0 25px var(--zy-wash-strong),
+    var(--zy-shadow-pop);
+}
+
+.welcome-orbit__ring {
+  position: absolute;
+  inset: -9px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 50%;
+  transform: rotate(-28deg) scaleY(0.45);
+  pointer-events: none;
+}
+
+.welcome-orbit__ring:last-child {
+  inset: -18px;
+  transform: rotate(35deg) scaleY(0.5);
+  border-color: var(--zy-line-strong);
+}
+
+.new-view {
+  animation: welcome-arrive 650ms ease-out both;
+}
+
+.composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/* A kept paste: named as the file it is, with its size, never its text. */
+.pasted-text {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+}
+
+.pasted-text button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.pasted-text button:disabled {
+  cursor: default;
+}
+
+.pasted-text svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Taking a paste or a picture off is a target of its own, at least 28px. */
+.pasted-text button[aria-label^="Remove"],
+.attached-picture button[aria-label^="Remove"] {
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.pasted-text__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pasted-text__size {
+  color: var(--zy-faint);
+  white-space: nowrap;
+}
+
+/* A picture the person attached: small, with its name, opening full size. */
+.attached-picture {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+}
+
+.attached-picture button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 8px 4px 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: zoom-in;
+}
+
+.attached-picture button[aria-label^="Remove"] {
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.attached-picture__thumbnail {
+  width: 36px;
+  height: 36px;
+  border-radius: 5px;
+  background: var(--zy-panel-soft);
+  object-fit: cover;
+}
+
+.attached-picture__name {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* On a chip inside the message bubble, two grounds up from any the theme
+   check measures, where the muted colour reads at 3.9:1; the soft text colour
+   is used instead. */
+.attached-picture__gone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  color: var(--zy-text-soft);
+}
+
+.attached-picture svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.user-turn__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.composer__error {
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.composer__note {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.user-turn {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(490px, 86%);
+  margin-inline: auto max(0px, calc((100% - 780px) / 2));
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--zy-line);
+  border-radius: 13px 13px 3px 13px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.agent-turn {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* The mark alone, on the conversation's own ground. It is a speaker label, not
+   a control, and a box around it reads as something to press. */
+.agent-turn__mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+}
+
+.agent-turn__body {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-turn--status {
+  align-items: center;
+}
+
+.agent-turn--status .agent-turn__mark {
+  margin-top: 0;
+}
+
+.agent-turn--status .agent-turn__body {
+  justify-content: center;
+  min-height: 28px;
+}
+
+.agent-turn--compact {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.message-prose {
+  width: 100%;
+  max-width: none;
+  color: var(--zy-text-soft);
+  font-size: 15.5px;
+  line-height: 1.68;
+}
+
+.message-prose p {
+  text-wrap: pretty;
+}
+
+.message-prose > :first-child {
+  margin-top: 0;
+}
+
+.message-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.message-prose h1,
+.message-prose h2,
+.message-prose h3,
+.message-prose h4 {
+  max-width: 30ch;
+  margin: 1.65em 0 0.55em;
+  color: var(--zy-text);
+  font-family: var(--zy-font-display);
+  font-weight: 590;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+}
+
+.message-prose h1 {
+  font-size: 24px;
+}
+
+.message-prose h2 {
+  font-size: 19px;
+}
+
+.message-prose h3 {
+  font-size: 15.5px;
+}
+
+.message-prose h4 {
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+}
+
+.message-prose p,
+.message-prose ul,
+.message-prose ol,
+.message-prose blockquote,
+.message-prose pre,
+.message-prose .message-table-scroll {
+  margin: 0.8em 0;
+}
+
+.message-prose ul,
+.message-prose ol {
+  padding-left: 1.4em;
+}
+
+.message-prose li {
+  margin: 0.28em 0;
+  padding-left: 0.18em;
+}
+
+.message-prose li::marker {
+  color: var(--zy-accent);
+}
+
+.message-prose strong {
+  color: var(--zy-text);
+  font-weight: 620;
+}
+
+.message-prose code {
+  padding: 0.12em 0.34em;
+  border: 1px solid var(--zy-line);
+  border-radius: 4px;
+  background: var(--zy-panel);
+  color: var(--zy-accent);
+  font: 0.88em/1.5 var(--zy-font-data);
+}
+
+.message-prose pre {
+  max-width: 100%;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: 9px;
+  background: var(--zy-panel-soft);
+}
+
+.message-prose pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+}
+
+.message-prose blockquote {
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--zy-accent-line);
+  color: var(--zy-muted);
+}
+
+.message-prose hr {
+  margin: 1.7em 0;
+  border: 0;
+  border-top: 1px solid var(--zy-line);
+}
+
+/*
+ * The table sizes itself to its content and only scrolls when even the
+ * narrowest honest layout does not fit. `width: max-content` keeps a small
+ * table small; `max-width: 100%` hands wide ones back to the auto table
+ * algorithm, which allocates each column its min-content width first and
+ * shares what is left in proportion to how much more the column could use.
+ */
+.message-table-scroll {
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: 9px;
+}
+
+.message-prose table {
+  width: max-content;
+  max-width: 100%;
+  border-collapse: collapse;
+  background: var(--zy-wash-faint);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The thread sets `overflow-wrap: anywhere` so a pasted URL cannot push the
+ * conversation sideways. Inside a table that value is destructive: it counts
+ * every character as a wrap opportunity when computing min-content, so the
+ * column algorithm believes each column fits in one character and starves the
+ * short ones — "Q1" comes out stacked. `break-word` still breaks a word that
+ * genuinely cannot fit, but leaves min-content at the longest word, which is
+ * the width the column layout actually needs to reason with.
+ */
+.message-prose th,
+.message-prose td {
+  padding: 9px 11px;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+  text-wrap: pretty;
+  vertical-align: top;
+}
+
+.message-prose th {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.message-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+/*
+ * The exception to the rule above: a hash, path or URL carries no wrap
+ * opportunity of its own, and honouring its length would hand one column the
+ * whole table. These break anywhere, so the column can be as narrow as the
+ * text around it needs.
+ */
+.message-prose th code,
+.message-prose td code,
+.message-prose th .message-link__target,
+.message-prose td .message-link__target {
+  overflow-wrap: anywhere;
+}
+
+.message-link {
+  color: var(--zy-blue);
+}
+
+/* A cited document page: reads as part of the sentence, presses like a link. */
+.message-citation {
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: var(--zy-blue);
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.message-citation:hover {
+  text-decoration-thickness: 2px;
+}
+
+.message-citation:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+/* Present to a screen reader, absent to everyone else. */
+.message-citation__opens {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.message-link__target {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-data);
+  font-size: 0.82em;
+  overflow-wrap: anywhere;
+}
+
+.response-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* A retry is the same kind of status as "Working", with a clock for its dot. */
+.response-status--retry {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  line-height: 1.4;
+}
+
+.response-status--retry > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--zy-running);
+}
+
+.response-status__time {
+  margin-left: 2px;
+  color: var(--zy-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.response-status > span:first-child {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--zy-running);
+  box-shadow: 0 0 0 4px var(--zy-running-fill);
+  animation: response-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-turn__body > .work-trace {
+  width: min(540px, 100%);
+}
+
+.activity-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 9px;
+  border-radius: 7px;
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.activity-note svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--zy-running);
+}
+
+.new-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 610px;
+  text-align: center;
+}
+
+.new-view h1 {
+  margin: 0;
+  color: var(--zy-text);
+  font-family: var(--zy-font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 520;
+  letter-spacing: -0.045em;
+}
+
+.new-view > p {
+  max-width: 54ch;
+  margin: 12px auto 0;
+  color: var(--zy-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.prompt-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 27px;
+}
+
+.prompt-suggestions button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--zy-line);
+  border-radius: 24px;
+  background: var(--zy-panel);
+  color: var(--zy-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.prompt-suggestions button:hover {
+  border-color: var(--zy-line-strong);
+  color: var(--zy-text-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .response-status > span:first-child {
+    animation: none;
+  }
+}
+
+.reasoning-controls {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.reasoning-controls__bulb {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.reasoning-controls__bulb--on {
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.reasoning-controls__bulb:hover:not(:disabled),
+.reasoning-controls__bulb[aria-expanded="true"] {
+  background: var(--zy-wash-strong);
+}
+
+.reasoning-controls__bulb--on:hover:not(:disabled),
+.reasoning-controls__bulb--on[aria-expanded="true"] {
+  background: var(--zy-accent-soft-hover);
+}
+
+.reasoning-controls__bulb:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reasoning-controls__panel {
+  position: fixed;
+  z-index: 40;
+  bottom: 0;
+  left: 0;
+  width: 248px;
+  max-width: calc(100vw - 40px);
+  padding: 10px 12px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 16px;
+  background: var(--zy-panel-soft);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-muted);
+  font-family: var(--zy-font-body);
+}
+
+.reasoning-controls__heading {
+  display: grid;
+  grid-template-columns: 26px 1fr 26px;
+  align-items: center;
+  justify-items: center;
+  min-height: 26px;
+}
+
+.reasoning-controls__heading > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-faint);
+}
+
+.reasoning-controls__level {
+  color: var(--zy-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reasoning-controls__reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.reasoning-controls__reset:hover {
+  color: var(--zy-text);
+  background: var(--zy-wash-strong);
+}
+
+.reasoning-controls__reset svg {
+  width: 14px;
+  height: 14px;
+}
+
+.reasoning-controls__caption {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reasoning-controls__range {
+  position: relative;
+  height: 28px;
+}
+
+.reasoning-controls__track {
+  position: absolute;
+  inset: 3px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-radius: 20px;
+  background: linear-gradient(
+    to right,
+    var(--zy-accent-fill) var(--reasoning-fill),
+    var(--zy-line-strong) var(--reasoning-fill)
+  );
+  pointer-events: none;
+}
+
+.reasoning-controls__track i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--zy-text-soft);
+  opacity: 0.5;
+}
+
+.reasoning-controls__range input {
+  position: relative;
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  border-radius: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reasoning-controls__range input::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.reasoning-controls__range input::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--zy-on-accent);
+  box-shadow: 0 1px 4px var(--zy-inset);
+}
+
+.reasoning-controls__bulb:focus-visible,
+.reasoning-controls__panel button:focus-visible,
+.reasoning-controls__panel input:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 3px;
+}
+
+@keyframes composer-spin {
+  to {
+    --composer-spin: 360deg;
+  }
+}
+
+@keyframes composer-breathe {
+  0%,
+  100% {
+    border-color: var(--zy-line-strong);
+  }
+  50% {
+    border-color: var(--zy-running-line);
+  }
+}
+
+@keyframes welcome-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes response-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.78);
+  }
+}
+
+.context-ring svg {
+  width: 19px;
+  height: 19px;
+  transform: rotate(-90deg);
+}
+
+.context-ring__track,
+.context-ring__fill {
+  fill: none;
+  stroke-width: 2.25;
+}
+
+.context-ring__track {
+  stroke: var(--zy-line-strong);
+}
+
+/* Compacting: the track breathes in the running tint until it is done, light
+   enough that the arc still says how full the conversation is. */
+.context-ring[aria-busy="true"] .context-ring__track {
+  animation: context-ring-busy 1.5s ease-in-out infinite;
+}
+
+@keyframes context-ring-busy {
+  50% {
+    stroke: var(--zy-running-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-ring[aria-busy="true"] .context-ring__track {
+    animation: none;
+    stroke: var(--zy-running-line);
+  }
+}
+
+.context-ring__fill {
+  stroke: var(--zy-accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 240ms ease;
+}
+
+.context-ring__fill--over {
+  stroke: var(--zy-danger);
+}
+
+/*
+ * Unknown is the bare track with a point at its centre: never an arc, so it
+ * never reads as a share, and never moving, so it never reads as work.
+ */
+.context-ring__point {
+  fill: var(--zy-faint);
+}
+
+.context-ring__level--over {
+  color: var(--zy-danger);
+}
+
+.context-ring__level--unknown {
+  color: var(--zy-text-soft);
+}
+
+.reasoning-controls__reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Wide enough that what the budget means reads in two lines, not four. */
+.reasoning-controls__panel.context-ring__panel {
+  width: 300px;
+}
+
+.context-ring__panel .reasoning-controls__caption {
+  text-wrap: pretty;
+}
+
+/* The three budgets as one rounded control, as the effort slider is. */
+.context-ring__choices {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--zy-line-strong);
+}
+
+.context-ring__choices label {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 4px;
+  border-radius: 17px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    color 160ms;
+}
+
+.context-ring__choices label > span:last-child {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring__choices input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.context-ring__choices label:hover {
+  background: var(--zy-wash-strong);
+}
+
+.context-ring__choices label:has(input:checked) {
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.context-ring__choices label:has(input:checked) > span:last-child {
+  color: var(--zy-on-accent);
+  opacity: 0.8;
+}
+
+.context-ring__choices label:has(input:focus-visible) {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.context-ring__warning {
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  text-align: center;
+  border-radius: 8px;
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.context-ring__breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.context-ring__breakdown th,
+.context-ring__breakdown td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+}
+
+.context-ring__breakdown td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring__breakdown th {
+  font-weight: 500;
+}
+
+.context-ring__breakdown-total {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.context-ring__lowered {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.instruction-sources {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.instruction-sources h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__source {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+}
+
+.instruction-sources__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__head span,
+.instruction-sources__note {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.instruction-sources summary {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.instruction-sources pre {
+  max-height: 200px;
+  margin: 6px 0 0;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.instruction-sources__source :global(.button) {
+  justify-self: start;
+}
+
+.context-ring__about {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 3px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.context-ring__about:hover,
+.context-ring__about:focus-visible {
+  color: var(--zy-text);
+}
+
+/* Above the icon, centred on it, with a small arrow pointing down to it. */
+.context-ring__tip {
+  position: fixed;
+  z-index: 60;
+  width: max-content;
+  max-width: 240px;
+  padding: 8px 10px;
+  transform: translate(-50%, calc(-100% - 10px));
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 10px;
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  pointer-events: none;
+  animation: context-ring-tip 120ms ease-out;
+}
+
+.context-ring__tip::after {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  border-right: 1px solid var(--zy-line-strong);
+  border-bottom: 1px solid var(--zy-line-strong);
+  background: var(--zy-panel);
+  content: "";
+}
+
+@keyframes context-ring-tip {
+  from {
+    opacity: 0;
+    translate: 0 3px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-ring__tip {
+    animation: none;
+  }
+}
+
+/* Compact, in words: an icon here would read as "minimise this menu". */
+.context-ring__compact {
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.context-ring__compact:hover:not(:disabled) {
+  background: var(--zy-line-strong);
+}
+
+.context-ring__compact:disabled {
+  color: var(--zy-muted);
+  cursor: default;
+}
+
+.condensing-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.condensing-card__line,
+.condensing-card__toggle {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.condensing-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.condensing-card__toggle:hover {
+  background: var(--zy-wash-faint);
+}
+
+.condensing-card__toggle:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: -2px;
+}
+
+.condensing-card__chevron {
+  display: inline-flex;
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.condensing-card__chevron svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+}
+
+.condensing-card__chevron--open {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .condensing-card__chevron {
+    transition: none;
+  }
+}
+
+.condensing-card__why {
+  margin: -6px 0 0;
+  padding: 0 12px 10px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* A long summary scrolls inside the card instead of running on under the
+   composer, and its own headings read as headings. */
+.condensing-card__details {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.condensing-card__counts {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The summary's own headings sit under the card's, not above it. */
+.condensing-card__details :is(h1, h2) {
+  font-size: 15px;
+}
+
+.condensing-card__details h3 {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.condensing-card__details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.condensing-card__details code {
+  overflow-wrap: anywhere;
+}
+
+/*
+ * Condensed history reads as set aside: greyed to the muted text colour, which
+ * still meets contrast on every ground, rather than faded with opacity, which
+ * would not.
+ */
+.condensed-history {
+  position: relative;
+  display: grid;
+  gap: inherit;
+  color: var(--zy-muted);
+}
+
+/* Most of a long conversation can be in here, so its entries are drawn only
+   on screen, as the conversation's own are; see the thread's rule. */
+.condensed-history > :not(p) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+.condensed-history
+  > :has([aria-modal="true"], [aria-expanded="true"], :focus-within) {
+  content-visibility: visible;
+}
+
+/* Every piece of it, whatever colour its own component gives it: a person's
+   message or an action's title left at full strength would keep the history
+   from looking set aside. Code loses its accent for the same reason. */
+.condensed-history
+  :is(
+    div,
+    p,
+    li,
+    td,
+    th,
+    blockquote,
+    h1,
+    h2,
+    h3,
+    h4,
+    strong,
+    em,
+    span,
+    code,
+    a
+  ) {
+  color: var(--zy-muted) !important;
+}
+
+.condensed-history :is(svg, img) {
+  filter: saturate(0.3);
+}
+
+.condensed-history:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 4px;
+}
+
+.condensed-history__note {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.condensed-history:focus-visible > .condensed-history__note {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip-path: none;
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: normal;
+}

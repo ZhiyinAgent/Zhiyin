@@ -1,0 +1,49 @@
+appId: com.zhiyin.desktop
+productName: Zhiyin
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - third-party-licenses/**/*
+  - package.json
+  # The window sets its own icon, so the mark has to be readable at runtime and
+  # not only by the installer.
+  - build/icon.ico
+# A program cannot be started from inside the packed archive, so the bundled
+# ripgrep is unpacked beside it.
+asarUnpack:
+  - "**/node_modules/@vscode/ripgrep-*/bin/**"
+extraResources:
+  # The plugins shipped with the app are ordinary package folders, read by the
+  # same loader as a person's own.
+  - from: ../../packages/plugins/built-in
+    to: plugins
+  # The spelling dictionaries, fetched and verified against their checksums
+  # before the build, so every bundled language is spellchecked with nothing
+  # downloaded (ADR 0023).
+  - from: dictionaries
+    to: dictionaries
+    filter:
+      - "*.bdic"
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../THIRD_PARTY_LICENSES.md
+    to: THIRD_PARTY_LICENSES.md
+# The installed executable starts only as Zhiyin. Honouring
+# ELECTRON_RUN_AS_NODE or --inspect would let another program run its own code
+# as this executable. Nothing in Zhiyin starts itself either way.
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  # No spaces: GitHub turns them into dots in a release asset's name, and the
+  # checksum file must name the installer as it is downloaded.
+  artifactName: ${productName}-Setup-${version}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true

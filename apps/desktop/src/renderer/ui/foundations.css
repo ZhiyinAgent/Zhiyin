@@ -1,0 +1,408 @@
+/*
+ * Every colour in the app comes from here: this block is the dark theme, and
+ * the light theme below repaints the same tokens. A rule that writes a literal
+ * colour is a rule that cannot be re-themed, so there are none outside these
+ * two blocks — including the translucent washes, which have to invert with the
+ * ground.
+ *
+ * Which theme shows is the window's `prefers-color-scheme`. The main process
+ * sets it from the person's choice, or leaves it to Windows.
+ *
+ * Two reds, on purpose. `--zy-accent` is the foreground red: text, icons,
+ * borders, anything read against the dark ground. `--zy-accent-fill` is the
+ * solid red a control is painted with, and it is darker so that
+ * `--zy-on-accent` white sitting on it stays legible at body size. Using the
+ * foreground red as a fill is the mistake this split exists to prevent.
+ *
+ * Red is the brand, the primary action, and work in progress: `--zy-running`
+ * is the brand red under its own name, so a running marker can be told apart
+ * in the stylesheets. What a colour says when it marks a state:
+ *   running, in progress  brand red (`--zy-running`)
+ *   done, added           green
+ *   needs a look          amber
+ *   failed, removed       `--zy-danger`
+ *   inactive              grey
+ */
+:root {
+  color-scheme: dark;
+  --zy-canvas: #1b1c1e;
+  --zy-sidebar: #101113;
+  --zy-panel: #0a0a0b;
+  --zy-panel-raised: #121315;
+  --zy-panel-soft: #17181a;
+  --zy-line: #2a2c2f;
+  --zy-line-strong: #3b3e43;
+  --zy-text: #f2f2f3;
+  --zy-text-soft: #cfd1d4;
+  --zy-muted: #9b9da2;
+  --zy-faint: #909298;
+  --zy-accent: #ff5b4f;
+  --zy-accent-fill: #e01f13;
+  --zy-accent-fill-hover: #f4291b;
+  --zy-on-accent: #ffffff;
+  --zy-accent-soft: rgba(255, 91, 79, 0.14);
+  --zy-accent-soft-hover: rgba(255, 91, 79, 0.24);
+  --zy-accent-veil: rgba(255, 91, 79, 0.09);
+  --zy-accent-line: rgba(255, 91, 79, 0.45);
+  --zy-glow-accent: rgba(255, 91, 79, 0.16);
+  --zy-green: #5ed6a4;
+  --zy-green-line: rgba(94, 214, 164, 0.35);
+  --zy-green-fill: rgba(94, 214, 164, 0.12);
+  --zy-green-ring: rgba(94, 214, 164, 0.14);
+  --zy-amber: #e8b23a;
+  --zy-amber-line: rgba(232, 178, 58, 0.4);
+  --zy-amber-fill: rgba(232, 178, 58, 0.13);
+  --zy-running: #ff5b4f;
+  --zy-running-line: rgba(255, 91, 79, 0.45);
+  --zy-running-fill: rgba(255, 91, 79, 0.14);
+  --zy-blue: #6fb2ff;
+  --zy-orange: #f2903f;
+  --zy-danger: #ff6b6b;
+  --zy-code-punct: #6b6d73;
+  --zy-code-key: #86b4e3;
+  --zy-code-string: #cfd1d4;
+  --zy-code-number: #d0a06a;
+  --zy-code-literal: #a99bd6;
+  --zy-wash-faint: rgba(255, 255, 255, 0.03);
+  --zy-wash: rgba(255, 255, 255, 0.05);
+  --zy-wash-strong: rgba(255, 255, 255, 0.08);
+  --zy-chart-1: #f06b52;
+  --zy-chart-2: #76b7b0;
+  --zy-chart-3: #d8b56a;
+  --zy-chart-4: #8fa7d8;
+  --zy-chart-5: #bf8bd1;
+  --zy-chart-6: #7fc27f;
+  --zy-chart-7: #df8eac;
+  --zy-chart-8: #94a3a0;
+  /* The mark is a single-colour image, recoloured to the text colour. */
+  --zy-mark-filter: brightness(0) invert(1);
+  --zy-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+  --zy-shadow-pop: 0 8px 22px rgba(0, 0, 0, 0.45);
+  --zy-shadow-raised:
+    0 12px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --zy-shadow-menu: 0 16px 38px rgba(0, 0, 0, 0.62);
+  /* A document's page is white in either theme: it is what the document is
+     printed on, not part of the app. Only its shadow follows the ground. */
+  --zy-paper: #ffffff;
+  --zy-paper-ink: #57534e;
+  --zy-paper-placeholder: rgba(0, 0, 0, 0.06);
+  --zy-paper-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --zy-inset: rgba(0, 0, 0, 0.35);
+  --zy-scrim: rgba(0, 0, 0, 0.62);
+}
+
+/* Measurements and type, the same in either theme. */
+:root {
+  /*
+   * The app's own top bar: the mark, the conversation header, and the window
+   * controls Windows draws at the end of it.
+   *
+   * A caption button is exactly as tall as the bar it is given, and that is
+   * why this is one number and not two. Given a taller bar than the controls,
+   * everything the app puts beside them centres on the bar while they centre
+   * on themselves, and the two sit visibly off each other's line. One height
+   * means one centre line for the mark, the title, the app's own buttons and
+   * the window's alike. The main process is given this same number.
+   */
+  --zy-title-bar-height: 44px;
+  /* What the window controls take from the right-hand end of that bar. Nothing
+     of the app's may be drawn there. Windows tells the page how much of the
+     bar is left; on anything that is not this app, the whole of it is. */
+  --zy-window-controls: calc(100vw - env(titlebar-area-width, 100vw));
+  /* The navigation column, said once so the shell and anything that has to
+     line up with it cannot drift apart. */
+  --zy-sidebar-width: 242px;
+  --zy-radius-sm: 11px;
+  --zy-radius-md: 18px;
+  --zy-radius-lg: 24px;
+  --zy-font-display: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
+  --zy-font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --zy-font-instrument: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  --zy-font-data: "Cascadia Mono", Consolas, monospace;
+  font-family: var(--zy-font-body);
+  font-synthesis: none;
+}
+
+/*
+ * The light theme: the same tokens, for a light ground. The panels are the
+ * brightest surface and the window ground sits a step below them, so a card
+ * still reads as a card. Text colours keep at least 4.5:1 on every ground they
+ * are used on, chart colours at least 3:1.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --zy-canvas: #f4f4f2;
+    --zy-sidebar: #ebebe8;
+    --zy-panel: #ffffff;
+    --zy-panel-raised: #fbfbfa;
+    --zy-panel-soft: #f0f0ee;
+    --zy-line: #dededa;
+    --zy-line-strong: #c2c2bd;
+    --zy-text: #18191b;
+    --zy-text-soft: #3a3c40;
+    --zy-muted: #5f6268;
+    --zy-faint: #66696f;
+    --zy-accent: #c42619;
+    --zy-accent-fill: #c42619;
+    --zy-accent-fill-hover: #a81f14;
+    --zy-on-accent: #ffffff;
+    --zy-accent-soft: rgba(196, 38, 25, 0.1);
+    --zy-accent-soft-hover: rgba(196, 38, 25, 0.17);
+    --zy-accent-veil: rgba(196, 38, 25, 0.06);
+    --zy-accent-line: rgba(196, 38, 25, 0.42);
+    --zy-glow-accent: rgba(196, 38, 25, 0.12);
+    --zy-green: #10734b;
+    --zy-green-line: rgba(16, 115, 75, 0.35);
+    --zy-green-fill: rgba(16, 115, 75, 0.1);
+    --zy-green-ring: rgba(16, 115, 75, 0.14);
+    --zy-amber: #8a5d00;
+    --zy-amber-line: rgba(176, 120, 0, 0.42);
+    --zy-amber-fill: rgba(214, 150, 20, 0.14);
+    --zy-running: #c42619;
+    --zy-running-line: rgba(196, 38, 25, 0.42);
+    --zy-running-fill: rgba(196, 38, 25, 0.1);
+    --zy-blue: #1c5fbf;
+    --zy-orange: #a94c0c;
+    --zy-danger: #c0262d;
+    --zy-code-punct: #7c7f85;
+    --zy-code-key: #1f5aa0;
+    --zy-code-string: #3a3c40;
+    --zy-code-number: #8f5310;
+    --zy-code-literal: #6646b0;
+    --zy-wash-faint: rgba(0, 0, 0, 0.025);
+    --zy-wash: rgba(0, 0, 0, 0.045);
+    --zy-wash-strong: rgba(0, 0, 0, 0.07);
+    --zy-chart-1: #d24a32;
+    --zy-chart-2: #2f8a83;
+    --zy-chart-3: #a87a12;
+    --zy-chart-4: #4766b0;
+    --zy-chart-5: #9050a8;
+    --zy-chart-6: #3d8a3d;
+    --zy-chart-7: #c04a78;
+    --zy-chart-8: #647370;
+    --zy-mark-filter: brightness(0);
+    --zy-shadow: 0 18px 60px rgba(20, 22, 26, 0.16);
+    --zy-shadow-pop: 0 8px 22px rgba(20, 22, 26, 0.14);
+    --zy-shadow-raised:
+      0 12px 40px rgba(20, 22, 26, 0.14), 0 2px 6px rgba(20, 22, 26, 0.08);
+    --zy-shadow-menu: 0 16px 38px rgba(20, 22, 26, 0.18);
+    --zy-paper: #ffffff;
+    --zy-paper-ink: #57534e;
+    --zy-paper-placeholder: rgba(0, 0, 0, 0.06);
+    --zy-paper-shadow: 0 1px 3px rgba(20, 22, 26, 0.08);
+    --zy-inset: rgba(20, 22, 26, 0.14);
+    --zy-scrim: rgba(20, 22, 26, 0.38);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+/* Every checkbox and radio takes the app's accent, never the system's blue. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--zy-accent-fill);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+:root {
+  /* The gutter every scrollbar takes, for a rule that must leave it alone. */
+  --zy-scrollbar: 12px;
+}
+
+/*
+ * One scrollbar everywhere: a rounded thumb inset from the edges, with no
+ * arrows, long enough to find however long the content is, and wider and
+ * stronger under the pointer. Drawn with Chromium's scrollbar parts, which a
+ * standard scrollbar-color or scrollbar-width on an element would switch off
+ * for it, so no rule sets either.
+ */
+::-webkit-scrollbar {
+  width: var(--zy-scrollbar);
+  height: var(--zy-scrollbar);
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--zy-line-strong) padding-box;
+}
+
+::-webkit-scrollbar-thumb:vertical {
+  min-height: 48px;
+}
+
+::-webkit-scrollbar-thumb:horizontal {
+  min-width: 48px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  border-width: 2px;
+  background-color: var(--zy-faint);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--zy-muted);
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.13em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.button:hover {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button--accent {
+  border-color: var(--zy-accent-fill);
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+/*
+ * One look for every control that cannot be used yet, whatever it is when it
+ * can: a faded red would read as a darker red with a grey label, under 2:1.
+ * Its label stays readable, and what is missing is said on hover.
+ */
+.button:disabled,
+.button:disabled:hover {
+  border-color: var(--zy-line);
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button--accent:hover {
+  border-color: var(--zy-accent-fill-hover);
+  background: var(--zy-accent-fill-hover);
+  color: var(--zy-on-accent);
+}
+
+.button--quiet {
+  border-color: transparent;
+}
+
+/* A quiet button stays quiet when unavailable: boxed, it would read as more
+   of a button disabled than enabled. */
+.button--quiet:disabled,
+.button--quiet:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--small {
+  min-height: 30px;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 26px;
+  margin: 1px 0 0 -5px;
+  padding: 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--zy-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: var(--zy-text-soft);
+}
+
+.text-button svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms ease;
+}
+
+.text-button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.instrument-label {
+  display: block;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

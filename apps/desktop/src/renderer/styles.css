@@ -1,0 +1,21 @@
+@import "./ui/foundations.css";
+
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 320px;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--zy-canvas);
+  color: var(--zy-text);
+}
+
+/* Whatever the app draws at the top fills the window. */
+#root > * {
+  height: 100%;
+}

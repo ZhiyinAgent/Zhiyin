@@ -1,0 +1,20 @@
+{
+  "name": "@zhiyin/document-compiler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Typst and LaTeX compilation as a built-in connector, with readable diagnostics.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/process-ownership": "workspace:*",
+    "@zhiyin/workspace-containment": "workspace:*"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "research",
+  "version": "1.0.0",
+  "description": "Investigate a question across many sources, check the facts, and synthesize a balanced, cited report.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Deep Research & Synthesis",
+        "category": "Research",
+        "defaultPrompt": [
+          "Research this question and cite the strongest sources.",
+          "Compare these competitors on features and pricing.",
+          "Build a timeline of what happened, with sources for each event."
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "accessSummary": "Uses the sources you provide and, once connected, Tavily web search.",
+      "dataDestination": "Nothing goes to another service unless you connect Tavily; then searches go to mcp.tavily.com.",
+      "specialists": [
+        {
+          "id": "fact-checker",
+          "access": "read",
+          "name": "Fact-checker",
+          "description": "Verifies quantitative figures, dates, quotations, and attributions against primary sources.",
+          "instructions": "Check the factual claims in the material you are given.\n\n1. Extract every checkable claim: numbers, dates, names, titles, quotations, and attributions.\n2. For each, find the primary source. For a quotation, find the original transcript, recording, or text, and check the exact wording and its context.\n3. Compare precisely: units, time periods, rounding, and whether the source says what the claim implies.\n4. Classify each claim as correct, incorrect, misleading, or unverifiable.\n\nCite the source you checked for every classification other than unverifiable, and quote the relevant passage. Do not treat a secondary report as confirmation of what it attributes to someone else. Report each claim with its classification, evidence, and a suggested correction where needed. In limitations, list the claims you could not check and why."
+        },
+        {
+          "id": "report-synthesizer",
+          "name": "Report synthesizer",
+          "description": "Organizes raw research findings into a cohesive dossier with inline citations.",
+          "instructions": "Turn the research findings you are given into a cohesive report.\n\n1. Identify the question the report answers and the reader it serves, and outline a structure that answers it directly.\n2. Group findings by theme, merge overlapping findings, and keep every claim tied to its citation.\n3. Write the report: a summary of the answer first, then the supporting sections, with inline citations where each claim appears.\n4. Make uncertainty and disagreement visible: label contested claims, and explain conflicts between sources.\n\nDo not add claims the findings do not contain, and do not drop a citation while rewriting. Report the finished dossier, and in limitations list any gaps in the findings that the report could not fill."
+        }
+      ]
+    }
+  }
+}

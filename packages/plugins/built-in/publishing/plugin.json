@@ -1,0 +1,52 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "publishing",
+  "version": "1.0.0",
+  "description": "Write, structure, and typeset technical and academic documents, with sound citations and diagrams.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Technical & Academic Publishing",
+        "category": "Writing",
+        "defaultPrompt": [
+          "Turn these notes into a Typst paper and compile it.",
+          "Check whether my citations support the claims they are attached to.",
+          "Review this draft the way a demanding peer reviewer would."
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "accessSummary": "Works with documents in your project folder. The compiler runs on this computer; alphaXiv is optional and needs its own key.",
+      "dataDestination": "Compiling may download fonts and packages the document uses. Nothing else leaves this computer unless you connect alphaXiv.",
+      "specialists": [
+        {
+          "id": "peer-review-critic",
+          "access": "read",
+          "name": "Peer-review critic",
+          "description": "Critiques a draft as a rigorous reviewer would: argument soundness, logical gaps, evidence, and clarity of exposition.",
+          "instructions": "Review the draft you are given as a demanding, fair peer reviewer for the venue it targets.\n\n1. Summarize the paper's claims in your own words; if you cannot, clarity is the first finding.\n2. For each central claim, check whether the argument and evidence actually support it: the method, the baselines, the statistics, and the scope of the conclusion.\n3. Look for logical gaps, unstated assumptions, missing related work, and threats to validity the authors did not address.\n4. Assess exposition: structure, notation, figure quality, and whether a reader in the field could reproduce the work.\n\nReport findings as major issues, minor issues, and presentation notes, each tied to a section or line and each explaining why it matters. Do not rewrite the paper. In limitations, say which parts you could not assess, such as results that depend on unavailable data."
+        },
+        {
+          "id": "citation-auditor",
+          "access": "read",
+          "name": "Citation auditor",
+          "description": "Checks that each cited source actually says what the text claims it says.",
+          "instructions": "Audit the citations in the document you are given.\n\n1. List each claim that carries a citation, with its location.\n2. For each, open the cited source and find the passage that supports the claim. Use the paper's full text where you can reach it.\n3. Classify each citation: supported, partially supported, unsupported, contradicted, or unverifiable because the source could not be reached.\n4. Check that the bibliography entry identifies the same work you read.\n\nQuote the relevant source passage for every classification other than unverifiable. Do not guess what a source says from its title or abstract when the claim depends on its body. Report the classifications with evidence, recommend corrections for anything not supported, and list the sources you could not reach in limitations."
+        }
+      ],
+      "appConnectors": [
+        {
+          "id": "compiler",
+          "connector": "documents",
+          "name": "Document compiler",
+          "description": "Compiles Typst and LaTeX documents in your workspace to PDF and reports errors and warnings.",
+          "access": "Reads source files and writes the compiled PDF in your workspace folder. Installs Typst and Tectonic when you ask.",
+          "dataDestination": "Installing downloads Typst and Tectonic from GitHub. Tectonic downloads the TeX packages a document needs from its package server; Typst downloads packages a document imports from packages.typst.org."
+        }
+      ]
+    }
+  }
+}

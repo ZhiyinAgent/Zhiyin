@@ -1,0 +1,1208 @@
+/** What this module draws about an action: the decision, and the record. */
+
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { ApprovalPrompt } from "./ApprovalPrompt.js";
+import { ActionHistory } from "./ActionHistory.js";
+
+describe("ApprovalPrompt", () => {
+  it("confirms a precise conversation scope while shell approvals stay once only", () => {
+    const onDecision = vi.fn();
+    const { rerender } = render(
+      <ApprovalPrompt
+        key="write"
+        title="Write report"
+        target="reports/one.md"
+        command="write_file(...)"
+        conversationRule={{ label: "Changes to files in reports/" }}
+        onDecision={onDecision}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    );
+    expect(
+      screen.getByText("Allow this for the rest of the conversation?"),
+    ).toBeVisible();
+    expect(screen.getByText("Changes to files in reports/")).toBeVisible();
+    expect(
+      screen.getByText(/You can take this back from the conversation menu/),
+    ).toBeVisible();
+    expect(onDecision).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    );
+    expect(onDecision).toHaveBeenCalledWith("allow-conversation");
+
+    rerender(
+      <ApprovalPrompt
+        key="shell"
+        title="Run a command"
+        target="pwd"
+        command="bash(...)"
+        onDecision={onDecision}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: "Allow for this conversation" }),
+    ).toBeNull();
+  });
+  it("says what a conversation allowance covers on the button that offers it, apart from allowing once", () => {
+    render(
+      <ApprovalPrompt
+        title="Write report"
+        target="reports/one.md"
+        command="write_file(...)"
+        conversationRule={{ label: "Changes to files in reports/" }}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    ).toHaveAccessibleDescription("Changes to files in reports/");
+  });
+
+  it("shows a command to run as the command alone, without the tool's own name or field names", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        effect="Run a command"
+        claim="List the tables."
+        target="python parse.py"
+        command={'bash({"command":"python parse.py"})'}
+        invocation={{
+          name: "bash",
+          arguments: [
+            { name: "command", value: "python parse.py" },
+            { name: "explanation", value: "List the tables." },
+          ],
+        }}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("What will run")).toHaveTextContent(
+      /^python parse\.py$/,
+    );
+    expect(screen.queryByText("bash")).toBeNull();
+    expect(screen.queryByText("command")).toBeNull();
+  });
+
+  it("shows what a connector request sends, and keeps the tool's own name under Technical details", () => {
+    render(
+      <ApprovalPrompt
+        title="Search the web"
+        destination="Tavily"
+        claim="Find the total raised at ZEvent 2026."
+        target="tavily_search"
+        command={'tavily_search({"query":"ZEvent 2026 montant récolté"})'}
+        invocation={{
+          name: "tavily_search",
+          via: "Tavily",
+          arguments: [{ name: "query", value: "ZEvent 2026 montant récolté" }],
+        }}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("What will be sent")).toHaveTextContent(
+      "ZEvent 2026 montant récolté",
+    );
+    expect(screen.getByText("tavily_search")).not.toBeVisible();
+    fireEvent.click(screen.getByText("Technical details"));
+    expect(screen.getByText("tavily_search")).toBeVisible();
+  });
+
+  it("names the request a change review belongs to", () => {
+    render(
+      <ApprovalPrompt
+        title="Rewrite the project brief"
+        target="docs/brief.md"
+        command="write_file(...)"
+        changes={[
+          { path: "docs/brief.md", change: "updated", before: "a", after: "b" },
+        ]}
+        onDecision={() => undefined}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review this change to brief.md" }),
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "Review this change" }),
+    ).toHaveTextContent("Rewrite the project brief");
+  });
+
+  it("shows a named action once without an empty input box or raw call", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Read page"
+        target="Zhiyin’s browser"
+        detail="Uses Zhiyin’s isolated browser, without your personal browser sign-ins."
+        command="browser_snapshot({})"
+        invocation={{ name: "Read page", arguments: [] }}
+        onDecision={onDecision}
+      />,
+    );
+    expect(screen.getAllByText("Read page")).toHaveLength(1);
+    expect(screen.queryByText("No inputs.")).toBeNull();
+    expect(screen.queryByText("browser_snapshot({})")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(onDecision).toHaveBeenCalledWith("allow-once");
+  });
+
+  it("keeps named action inputs readable without repeating the approval title", () => {
+    render(
+      <ApprovalPrompt
+        title="Open page"
+        target="https://example.com/a-page"
+        command={'browser_navigate({"url":"https://example.com/a-page"})'}
+        invocation={{
+          name: "Open page",
+          arguments: [{ name: "Address", value: "https://example.com/a-page" }],
+        }}
+        onDecision={() => undefined}
+      />,
+    );
+    expect(screen.getAllByText("Open page")).toHaveLength(1);
+    expect(screen.getByText("Address")).toBeVisible();
+    expect(screen.getByText("https://example.com/a-page")).toBeVisible();
+  });
+
+  it("shows the command itself and returns an explicit decision", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Publish the release notes"
+        target="pnpm docs:publish --production"
+        description="This sends the reviewed draft to the public documentation site."
+        command="pnpm docs:publish --production"
+        onDecision={onDecision}
+      />,
+    );
+
+    expect(screen.getByText("Publish the release notes")).toBeInTheDocument();
+    expect(screen.queryByText(/needs your approval/i)).toBeNull();
+    expect(screen.getByText("pnpm docs:publish --production")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(onDecision).toHaveBeenCalledWith("allow-once");
+  });
+
+  /**
+   * The decision is made in this order, so the prompt is written in it: what
+   * the action is, what it can do, what Zhiyin claims it is for, and only then
+   * the exact text. Anything above the warning is something a person reads
+   * before they know the stakes.
+   */
+  it("reads in decision order, with the warning above Zhiyin's own account", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        effect="Run a command"
+        detail="This runs in TestZhiyin and can read, change, or delete files there."
+        claim="Check whether Python 3 with pandas is installed."
+        target="command -v python3"
+        command={'bash({"command":"command -v python3"})'}
+        onDecision={() => undefined}
+      />,
+    );
+
+    const prompt = screen.getByRole("region", { name: "Permission request" });
+    const readingOrder = [
+      "Run a command",
+      "This runs in TestZhiyin and can read, change, or delete files there.",
+      "Zhiyin says",
+      "Check whether Python 3 with pandas is installed.",
+      "command -v python3",
+    ].map((text) =>
+      (prompt.textContent ?? "").indexOf(
+        // The claim's label and the claim itself share an element.
+        text,
+      ),
+    );
+
+    expect(readingOrder).not.toContain(-1);
+    expect(readingOrder).toEqual([...readingOrder].sort((a, b) => a - b));
+  });
+
+  it("explains on hover and keyboard focus that the AI claim can deceive", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="rm report.txt"
+        command="bash({})"
+        claim="Clean up a draft."
+        onDecision={() => undefined}
+      />,
+    );
+    const about = screen.getByRole("button", {
+      name: "About this AI explanation",
+    });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.mouseEnter(about);
+    expect(screen.getByRole("tooltip").textContent).toContain(
+      "deliberately misleading",
+    );
+    fireEvent.mouseLeave(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    fireEvent.focus(about);
+    expect(screen.getByRole("tooltip")).toBeVisible();
+    fireEvent.blur(about);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.getByText("Clean up a draft.")).toBeVisible();
+  });
+
+  it("shows a long command whole rather than clipping what is consented to", () => {
+    const command = `python3 -c "import pandas, numpy; print('pandas', pandas.__version__, '| numpy', numpy.__version__)" && echo done && ls -la && git status --short && git log --oneline -20`;
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        detail="This runs in TestZhiyin and cannot be undone."
+        claim="Check the installed data libraries."
+        target={command}
+        command={`bash({"command":${JSON.stringify(command)}})`}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText(command)).toBeVisible();
+  });
+
+  it("says nothing at all when there is no specific reason to give", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        detail="This runs in TestZhiyin and cannot be undone."
+        target="git status --short"
+        command={'bash({"command":"git status --short"})'}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByText(/apply this action/i)).toBeNull();
+    expect(screen.queryByText(/for the current task/i)).toBeNull();
+  });
+
+  /**
+   * The difference is the reviewable thing. Presenting a file change as the
+   * call that would make it asks someone to consent to replacing a document by
+   * reading a JSON argument.
+   */
+  it("reviews a file change as a difference rather than as the call", () => {
+    render(
+      <ApprovalPrompt
+        title="Overwrite an existing workspace file"
+        target="brief.md"
+        detail="This replaces the current contents of brief.md."
+        command={'write_file({"path":"brief.md","text":"New draft.\n"})'}
+        changes={[
+          {
+            path: "brief.md",
+            change: "updated",
+            before: "Old draft.\nKept line.\n",
+            after: "New draft.\nKept line.\n",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Edited")).toBeVisible();
+    expect(
+      screen.queryByText("This replaces the current contents of brief.md."),
+    ).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Review this change/ }));
+
+    const review = screen.getByRole("dialog", { name: /Review this change/ });
+    const line = (text: string) =>
+      within(review).getByText(
+        (_, element) =>
+          element?.tagName === "CODE" && element.textContent === text,
+      );
+    expect(line("Old draft.")).toBeVisible();
+    expect(line("New draft.")).toBeVisible();
+    expect(within(review).getByText("+1")).toBeVisible();
+    expect(within(review).getByText("−1")).toBeVisible();
+  });
+
+  it("numbers each line by its place in the changed file, and marks the words that changed", () => {
+    render(
+      <ApprovalPrompt
+        title="Edit a workspace file"
+        target="theme.css"
+        command="edit_file(...)"
+        changes={[
+          {
+            path: "theme.css",
+            change: "updated",
+            before: "--or:#e0a03c;\n--gris:#6a7885;\n--bord:#e2ddd5;\n",
+            after:
+              "--or:#e0a03c;\n--or-texte:#9c5e14;\n--gris:#5a6673;\n--bord:#e2ddd5;\n",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Review this change/ }));
+    const review = screen.getByRole("dialog", { name: /Review this change/ });
+
+    const rows = within(review)
+      .getAllByRole("row")
+      .map((row) =>
+        within(row)
+          .getAllByRole("cell")
+          .map((cell) => cell.textContent),
+      );
+    expect(rows).toEqual([
+      ["1", " Unchanged: --or:#e0a03c;"],
+      ["", "−Removed: --gris:#6a7885;"],
+      ["2", "+Added: --or-texte:#9c5e14;"],
+      ["3", "+Added: --gris:#5a6673;"],
+      ["4", " Unchanged: --bord:#e2ddd5;"],
+    ]);
+    expect(
+      within(review)
+        .getAllByRole("mark")
+        .map((mark) => mark.textContent),
+    ).toEqual(["6a7885", "5a6673"]);
+  });
+
+  it("labels a new file and its new folder inside what will change", () => {
+    render(
+      <ApprovalPrompt
+        title="Create a workspace file"
+        target="reports/2026/brief.md"
+        detail="This creates a new file and the folder reports/2026. Nothing is replaced."
+        command={'write_file({"path":"reports/2026/brief.md"})'}
+        changes={[
+          {
+            path: "reports/2026/brief.md",
+            change: "created",
+            createdFolder: "reports/2026",
+            after: "A report.",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByRole("region", { name: "Permission request" });
+    expect(
+      within(prompt).getByRole("list", { name: "What will change" }),
+    ).toBeVisible();
+    expect(within(prompt).getByText("New file")).toBeVisible();
+    expect(within(prompt).getByText("brief.md")).toBeVisible();
+    expect(within(prompt).getByText("in reports/2026")).toBeVisible();
+    expect(
+      within(prompt).getByText("Also creates folder reports/2026"),
+    ).toBeVisible();
+    expect(within(prompt).queryByText(/Nothing is replaced/)).toBeNull();
+  });
+
+  it("shows each changed file by name, with its folder and how many lines change, and opens that file's review from it", () => {
+    render(
+      <ApprovalPrompt
+        title="Edit workspace files"
+        target="docs/brief.md, notes.md"
+        command="edit_files(…)"
+        changes={[
+          {
+            path: "docs/brief.md",
+            change: "updated",
+            before: "One.\nTwo.\nThree.\n",
+            after: "One.\n2.\nThree.\nFour.\n",
+          },
+          { path: "notes.md", change: "created", after: "A.\nB.\n" },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const files = within(
+      screen.getByRole("list", { name: "What will change" }),
+    ).getAllByRole("listitem");
+    expect(files[0]).toHaveTextContent("brief.md");
+    expect(files[0]).toHaveTextContent("in docs");
+    expect(files[0]).toHaveTextContent("+2");
+    expect(files[0]).toHaveTextContent("−1");
+    expect(files[1]).toHaveTextContent("notes.md");
+    expect(files[1]).toHaveTextContent("+2");
+    // No path set in a terminal face, and no raw call.
+    expect(files[0]?.querySelector("code")).toBeNull();
+    expect(screen.queryByText("edit_files(…)")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review this change to notes.md" }),
+    );
+    const review = screen.getByRole("dialog");
+    expect(within(review).getByText("A.")).toBeVisible();
+  });
+
+  it("states whether declared file changes are protected before approval", () => {
+    render(
+      <ApprovalPrompt
+        title="Update workspace files"
+        target="brief.md, archive.zip"
+        command="write_files(…)"
+        recovery={{
+          files: [
+            { path: "brief.md", status: "protected" },
+            {
+              path: "archive.zip",
+              status: "unprotected",
+              reason: "This file exceeds the recovery size limit.",
+            },
+          ],
+        }}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const prompt = screen.getByRole("region", { name: "Permission request" });
+    expect(prompt).toHaveTextContent(
+      "Some file changes cannot be restored after this action.",
+    );
+    expect(prompt).toHaveTextContent("archive.zip");
+    expect(prompt).toHaveTextContent(
+      "This file exceeds the recovery size limit.",
+    );
+  });
+
+  it("closes the review with Escape and leaves the decision unanswered", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Overwrite an existing workspace file"
+        target="brief.md"
+        command="write_file(…)"
+        changes={[
+          { path: "brief.md", change: "created", after: "One line.\n" },
+        ]}
+        onDecision={onDecision}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Review this change/ }));
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onDecision).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A change too large to carry must not look like a change with nothing in
+   * it. The person is told they are approving something they have not seen.
+   */
+  it("says when a change is too large to show instead of showing an empty diff", () => {
+    render(
+      <ApprovalPrompt
+        title="Overwrite an existing workspace file"
+        target="dump.csv"
+        command="write_file(…)"
+        changes={[
+          {
+            path: "dump.csv",
+            change: "updated",
+            omitted: "This change is too large to show here.",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Review this change/ }));
+
+    const review = screen.getByRole("dialog");
+    expect(review).toHaveTextContent("too large to show");
+    expect(review).toHaveTextContent("have not seen in full");
+  });
+
+  it("says which deletions go to the Recycle Bin and which are permanent, and why", () => {
+    render(
+      <ApprovalPrompt
+        title="Delete 2 items: 1 to the Recycle Bin, 1 permanently"
+        target="2 items"
+        detail="Deleted permanently; this cannot be restored from the Recycle Bin: disk.iso (4 GB). Windows would not move disk.iso to the Recycle Bin: it is too large for it, or on a drive without one."
+        command="delete_file(...)"
+        changes={[
+          { path: "notes/old.md", change: "recycled" },
+          { path: "disk.iso", change: "deleted" },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("To the Recycle Bin")).toBeVisible();
+    expect(screen.getByText("Deleted permanently")).toBeVisible();
+    expect(
+      screen.getByText(/Windows would not move disk.iso to the Recycle Bin/),
+    ).toBeVisible();
+  });
+
+  it("offers no review when the action changes no files it can name", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="git status --short"
+        command={'bash({"command":"git status --short"})'}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /Review/ })).toBeNull();
+  });
+
+  it("offers guidance only after Deny, while allowing a denial without text", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Publish the release notes"
+        target="docs.zhiyin.app"
+        description="This sends the reviewed draft to the public documentation site."
+        command="pnpm docs:publish --production"
+        onDecision={onDecision}
+      />,
+    );
+
+    expect(screen.queryByRole("textbox", { name: /Tell Zhiyin/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onDecision).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: /Tell Zhiyin/ })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onDecision).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox", { name: /Tell Zhiyin/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm denial" }));
+    expect(onDecision).toHaveBeenCalledWith("deny");
+  });
+
+  it("sends optional denial guidance to the agent", () => {
+    const onDecision = vi.fn();
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="echo hello"
+        command="echo hello"
+        onDecision={onDecision}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: /Tell Zhiyin what to do instead/ }),
+      {
+        target: { value: "Use the project script instead." },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm denial" }));
+    expect(onDecision).toHaveBeenCalledWith(
+      "deny",
+      "Use the project script instead.",
+    );
+  });
+
+  it("prevents duplicate decisions while the chosen response is pending", async () => {
+    let finishDecision: (() => void) | undefined;
+    const onDecision = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishDecision = resolve;
+        }),
+    );
+    render(
+      <ApprovalPrompt
+        title="Read project manifest"
+        target="package.json"
+        description="I need package.json to identify the project."
+        command={'read_file({"path":"package.json"})'}
+        onDecision={onDecision}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    fireEvent.click(screen.getByRole("button", { name: "Allowing…" }));
+
+    expect(onDecision).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Allowing…" })).toBeDisabled();
+
+    finishDecision?.();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Allow once" })).toBeEnabled(),
+    );
+  });
+});
+
+describe("ActionHistory", () => {
+  it("leads each action with why it was done, then what was done and on what", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "python",
+            action: "Run a command",
+            description: "Check whether Python 3 is installed.",
+            target: "command -v python3",
+            status: "completed",
+          },
+          {
+            sequence: 1,
+            id: "plain",
+            action: "Read notes.md",
+            target: "notes.md",
+            status: "completed",
+          },
+        ]}
+      />,
+    );
+
+    const [first, second] = screen.getAllByRole("listitem");
+    expect(within(first!).getByRole("strong")).toHaveTextContent(
+      "Check whether Python 3 is installed.",
+    );
+    expect(first).toHaveTextContent(
+      /installed\.Run a commandcommand -v python3$/,
+    );
+    expect(within(second!).getByRole("strong")).toHaveTextContent(
+      "Read notes.md",
+    );
+    expect(second).toHaveTextContent(/^Read notes\.md$/);
+  });
+
+  it("keeps repeated permission provenance in a small badge", () => {
+    const onOpenPermission = vi.fn();
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "edit-1",
+            action: "Edit report",
+            target: "reports/one.md",
+            status: "completed",
+            approval: {
+              by: "conversation-permission",
+              at: "2026-09-28T14:02:00.000Z",
+              permissionId: "permission-1",
+              label: "Changes to files in reports/",
+            },
+          },
+        ]}
+        onOpenPermission={onOpenPermission}
+      />,
+    );
+    expect(screen.queryByText(/Covered by your permission from/)).toBeNull();
+    expect(screen.queryByText(/Changes to files in reports/)).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Allowed for this conversation. Open permissions",
+      }),
+    );
+    expect(onOpenPermission).toHaveBeenCalledWith("permission-1");
+  });
+  it("keeps running, completed, failed, and denied actions in human-readable history", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "read-package",
+            action: "Read project manifest",
+            description: "Identify the project and package manager.",
+            target: "package.json",
+            status: "completed",
+          },
+          {
+            sequence: 1,
+            id: "read-readme",
+            action: "Read a workspace file",
+            target: "README.md",
+            status: "failed",
+            reason: "README.md was not found in this workspace.",
+          },
+          {
+            sequence: 1,
+            id: "publish",
+            action: "Publish the release notes",
+            target: "docs.zhiyin.app",
+            status: "denied",
+            reason: "The action was denied. No further work ran.",
+          },
+          {
+            sequence: 1,
+            id: "scan-source",
+            action: "Scan the source tree",
+            target: "packages",
+            status: "running",
+          },
+        ]}
+      />,
+    );
+
+    const history = screen.getByRole("region", { name: "Action history" });
+    expect(within(history).getAllByRole("listitem")).toHaveLength(4);
+    expect(within(history).queryByText("Completed")).toBeNull();
+    expect(
+      within(history).getByRole("img", { name: "Completed" }),
+    ).toBeVisible();
+    expect(
+      within(history).getByText("Identify the project and package manager."),
+    ).toBeVisible();
+    expect(within(history).getByText("Failed")).toBeVisible();
+    expect(within(history).getByText("Denied")).toBeVisible();
+    // Work still going on is neither a success nor a failure, and does not
+    // borrow the marker of one.
+    expect(within(history).getByText("Pending")).toBeVisible();
+    expect(
+      within(history).getByText("README.md was not found in this workspace."),
+    ).toBeVisible();
+    expect(within(history).queryByText(/read_file/i)).toBeNull();
+  });
+
+  /**
+   * Reviewing a change before it happens and checking afterwards what was done
+   * are the same question, answered the same way: not with the call and a blob
+   * of JSON, which is the tool's language rather than an account of what
+   * happened to a file.
+   */
+  it("shows the change an action made, as the difference it made", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "write-brief",
+            action: "Overwrite an existing workspace file",
+            target: "brief.md",
+            status: "completed",
+            command: 'write_file({"path":"brief.md","text":"New draft."})',
+            changes: [
+              {
+                path: "brief.md",
+                change: "updated",
+                before: "Old draft.\nKept.",
+                after: "New draft.\nKept.",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    const line = (text: string) =>
+      within(inspector).getByText(
+        (_, element) =>
+          element?.tagName === "CODE" && element.textContent === text,
+      );
+    expect(line("Old draft.")).toBeVisible();
+    expect(line("New draft.")).toBeVisible();
+    // The change is primary; raw syntax is available only on request.
+    expect(within(inspector).getByText(/write_file/)).not.toBeVisible();
+    fireEvent.click(within(inspector).getByText("Technical details"));
+    expect(within(inspector).getByText(/write_file/)).toBeVisible();
+  });
+
+  it("draws what a tool reported in the shapes the tool named", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "search",
+            action: "Search workspace files",
+            target: "budget",
+            status: "completed",
+            details: [
+              {
+                kind: "facts",
+                items: [
+                  { label: "Files read", value: "42" },
+                  { label: "Matches", value: "1" },
+                ],
+              },
+              {
+                kind: "matches",
+                items: [
+                  { path: "notes/budget.md", line: 3, text: "Q3 Budget total" },
+                ],
+                note: "Not searched: .git, node_modules.",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByText("Files read")).toBeVisible();
+    expect(within(inspector).getByText("42")).toBeVisible();
+    expect(within(inspector).getByText("notes/budget.md")).toBeVisible();
+    expect(within(inspector).getByText("Q3 Budget total")).toBeVisible();
+    expect(
+      within(inspector).getByText("Not searched: .git, node_modules."),
+    ).toBeVisible();
+  });
+
+  /**
+   * A shell command is the one case where the call itself is the thing worth
+   * reading, and it is what the tool puts in front of the reader.
+   */
+  it("puts a command's own output in front, not its call", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "shell",
+            action: "Run a command",
+            target: "command -v python3",
+            status: "reported",
+            reason: "The command exited with code 1.",
+            command: 'bash({"command":"command -v python3"})',
+            details: [
+              {
+                kind: "facts",
+                items: [
+                  { label: "Command", value: "command -v python3" },
+                  { label: "Exit code", value: "1" },
+                ],
+              },
+              { kind: "text", label: "Errors", text: "python3 not found" },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByText("python3 not found")).toBeVisible();
+    expect(within(inspector).getByText("Exit code")).toBeVisible();
+    expect(within(inspector).getByText(/bash\(/)).not.toBeVisible();
+    // And the target is not repeated above the command it duplicates.
+    expect(within(inspector).getAllByText("command -v python3")).toHaveLength(
+      1,
+    );
+  });
+
+  /**
+   * Going back to a shell command later should show what was agreed to, not
+   * just that something happened. The unverified claim stays attributed.
+   */
+  it("keeps what was agreed to with the record of what happened", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "shell",
+            action: "Run a command",
+            description: "Checks the installed data libraries.",
+            detail:
+              "This runs in TestZhiyin but is not confined to that folder.",
+            claim: "Check whether pandas is installed.",
+            target: 'python3 -c "import pandas"',
+            status: "reported",
+            reason: "The command exited with code 1.",
+            details: [
+              { kind: "facts", items: [{ label: "Exit code", value: "1" }] },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(
+      within(inspector).getByText("Checks the installed data libraries."),
+    ).toBeVisible();
+    expect(
+      within(inspector).getByText(
+        "This runs in TestZhiyin but is not confined to that folder.",
+      ),
+    ).toBeVisible();
+    expect(
+      within(inspector).getByText("Zhiyin said this was for"),
+    ).toBeVisible();
+    expect(
+      within(inspector).getByText("Check whether pandas is installed."),
+    ).toBeVisible();
+    // The status sentence is on the record it was opened from; repeating it
+    // above the exit code it restates is the same thing said twice.
+    expect(
+      within(inspector).queryByText("The command exited with code 1."),
+    ).toBeNull();
+  });
+
+  /**
+   * The other half of that rule. A skill's instructions never name the skill,
+   * so dropping the target here would leave a reader unable to tell which one
+   * was read.
+   */
+  it("keeps naming what was acted on when the answer does not", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "skill",
+            action: "Read skill instructions",
+            target: "builtin-analysis",
+            status: "completed",
+            command: 'load_skill({"id":"builtin-analysis"})',
+            details: [
+              {
+                kind: "text",
+                label: "Instructions",
+                text: "Inspect the available data before interpreting it.",
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByText("builtin-analysis")).toBeVisible();
+    expect(
+      within(inspector).getByText(
+        "Inspect the available data before interpreting it.",
+      ),
+    ).toBeVisible();
+    expect(within(inspector).getByText(/load_skill/)).not.toBeVisible();
+  });
+
+  it("closes the inspector with Escape", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "read",
+            action: "Read a workspace file",
+            target: "notes.md",
+            status: "completed",
+            details: [{ kind: "text", label: "Contents", text: "Hello." }],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+    expect(screen.getByRole("dialog")).toBeVisible();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /**
+   * A tool that described nothing — a remote one, or a built-in with no
+   * description of its own — still has to be inspectable. Its raw answer is then the only record
+   * there is, so it is shown rather than withheld.
+   */
+  it("shows what a remote tool was asked to do, not only that it was asked", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "remote",
+            action: "Use Tavily: tavily_search",
+            toolName: "mcp__tavily__tavily_search",
+            target: "Tavily",
+            status: "completed",
+            command:
+              'mcp__tavily__tavily_search({"max_results":8,"query":"ZEvent 2026"})',
+            evidence: '{"ok":true,"value":{"results":[]}}',
+            invocation: {
+              name: "tavily_search",
+              via: "https://mcp.tavily.com/mcp/",
+              arguments: [
+                { name: "max_results", value: "8" },
+                { name: "query", value: "ZEvent 2026" },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Tavily · Search")).toBeVisible();
+    expect(screen.queryByText("Use Tavily: tavily_search")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+    const inspector = screen.getByRole("dialog");
+    expect(
+      within(inspector).getByRole("heading", { name: "Tavily · Search" }),
+    ).toBeVisible();
+
+    // The arguments are readable in the open, not folded away inside a
+    // heading that says they are what the tool returned.
+    expect(within(inspector).getByText("query")).toBeVisible();
+    expect(within(inspector).getByText("ZEvent 2026")).toBeVisible();
+    expect(
+      within(inspector).getByText("https://mcp.tavily.com/mcp/"),
+    ).toBeVisible();
+    // The raw call stays available, behind the disclosure: present for anyone
+    // auditing it, not the lead.
+    const raw = within(inspector).getByText(/mcp__tavily__tavily_search\(/);
+    expect(raw).toBeInTheDocument();
+    expect(raw).not.toBeVisible();
+  });
+
+  it("lays a remote answer out instead of dumping it as one escaped line", () => {
+    const answer = JSON.stringify({
+      ok: true,
+      value: {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ query: "box office", results: [] }),
+          },
+        ],
+      },
+    });
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "remote",
+            action: "Use Tavily: tavily_search",
+            target: "Tavily",
+            status: "completed",
+            evidence: answer,
+            invocation: {
+              name: "tavily_search",
+              arguments: [{ name: "query", value: "box office" }],
+            },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+    const inspector = screen.getByRole("dialog");
+    const shown =
+      inspector.querySelector(".inspector__json")?.textContent ?? "";
+
+    // Indented, and the payload that arrived escaped inside a field is read
+    // as the structure it is.
+    expect(shown).toContain('"query": "box office"');
+    expect(shown).not.toContain('\\"query\\"');
+    expect(inspector.querySelector(".json-key")).not.toBeNull();
+  });
+
+  it("falls back to the raw answer for a tool that described nothing", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "remote",
+            action: "Search the web",
+            target: "current news",
+            status: "completed",
+            command: 'tavily_search({"query":"current news"})',
+            evidence: '{"ok":true,"value":{"results":[]}}',
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(within(inspector).getByText("Raw call and response")).toBeVisible();
+    // Present, behind the disclosure: the only record there is, not the lead.
+    expect(within(inspector).getByText(/tavily_search/)).toBeInTheDocument();
+  });
+
+  it("says why a call that never ran did not, and keeps the raw call and answer", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "refused",
+            action: "Load skill",
+            toolName: "load_skill",
+            target: "",
+            status: "failed",
+            description: "The requested action could not be inspected.",
+            reason: "No skill with the id “pdf” is available here.",
+            command: 'load_skill({"id":"pdf"})',
+            evidence:
+              '{"ok":false,"reason":"No skill with the id “pdf” is available here."}',
+            invocation: {
+              name: "load_skill",
+              arguments: [{ name: "id", value: "pdf" }],
+            },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+    const inspector = screen.getByRole("dialog");
+
+    expect(
+      within(inspector).getByText(
+        "No skill with the id “pdf” is available here.",
+      ),
+    ).toBeVisible();
+    expect(within(inspector).getByText("pdf")).toBeVisible();
+    expect(within(inspector).queryByText("Unavailable")).toBeNull();
+    expect(
+      within(inspector).getByText('load_skill({"id":"pdf"})'),
+    ).toBeInTheDocument();
+    // Once as the lead, once inside the raw answer.
+    expect(
+      within(inspector).getAllByText(/No skill with the id/).length,
+    ).toBeGreaterThan(1);
+  });
+
+  it("offers no inspection for an action with nothing recorded about it", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "denied",
+            action: "Publish the release notes",
+            target: "docs.zhiyin.app",
+            status: "denied",
+            reason: "The action was denied. No further work ran.",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Inspect action" })).toBeNull();
+  });
+});
