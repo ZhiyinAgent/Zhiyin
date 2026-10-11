@@ -6,6 +6,7 @@ import { ToolCallView } from "./ToolCallView.js";
 import { JsonBlock } from "./JsonBlock.js";
 import { ResultImage } from "./ResultImage.js";
 import styles from "./actions.module.css";
+import { WindowLayer } from "../shared/index.js";
 
 /**
  * What an action did, opened from the record of it having happened.
@@ -39,6 +40,14 @@ export function ActionInspector({
   const titleId = useId();
   const described = Boolean(action.changes?.length || action.details?.length);
   const repeated = alreadySays(action);
+  const named =
+    action.changes?.filter(
+      (change) =>
+        change.omitted !== undefined &&
+        (change.change === "created" || change.change === "updated"),
+    ) ?? [];
+  const shown =
+    action.changes?.filter((change) => !named.includes(change)) ?? [];
 
   useEffect(() => {
     const returnTo = document.activeElement;
@@ -56,135 +65,141 @@ export function ActionInspector({
   }, [onClose]);
 
   return (
-    <div
-      className={styles["diff-modal__scrim"]}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <WindowLayer>
       <div
-        className={styles["diff-modal"]}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        ref={dialog}
+        className={styles["diff-modal__scrim"]}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
-        <header className={styles["diff-modal__header"]}>
-          <h2 id={titleId}>{actionTitle(action)}</h2>
-          <button
-            className="button button--quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </header>
+        <div
+          className={styles["diff-modal"]}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          ref={dialog}
+        >
+          <header className={styles["diff-modal__header"]}>
+            <h2 id={titleId}>{actionTitle(action)}</h2>
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </header>
 
-        <div className={styles["diff-modal__body"]}>
-          {/*
+          <div className={styles["diff-modal__body"]}>
+            {/*
             The same three things the permission request led with, in the same
             order: what it would do, what it can reach, and what Zhiyin said it
             was for. Coming back to an action later should show what was agreed
             to, not just that something happened.
           */}
-          {action.description && (
-            <p className={styles.inspector__lead}>{action.description}</p>
-          )}
-          {action.detail && (
-            <p className={styles.inspector__consequence}>{action.detail}</p>
-          )}
-          {action.claim && (
-            <p className={styles.inspector__claim}>
-              <span>Zhiyin said this was for</span>
-              {action.claim}
-            </p>
-          )}
+            {action.description && (
+              <p className={styles.inspector__lead}>{action.description}</p>
+            )}
+            {action.detail && (
+              <p className={styles.inspector__consequence}>{action.detail}</p>
+            )}
+            {action.claim && (
+              <p className={styles.inspector__claim}>
+                <span>Zhiyin said this was for</span>
+                {action.claim}
+              </p>
+            )}
 
-          {/*
+            {/*
             Only when nothing below already says it. A shell command and a
             written file are named again by the tool's own account, and showing
             the target above that is the same string twice — at full length,
             for a command. A skill's instructions never name the skill, so
             there the row is the only thing identifying what was read.
           */}
-          {!repeated && action.target && (
-            <p className={styles["change-review__summary"]}>
-              <span className={styles["change-review__path"]}>
-                {action.target}
-              </span>
-            </p>
-          )}
+            {!repeated && action.target && (
+              <p className={styles["change-review__summary"]}>
+                <span className={styles["change-review__path"]}>
+                  {action.target}
+                </span>
+              </p>
+            )}
 
-          {action.changes?.map((change) => (
-            <ChangeReview
-              key={change.path}
-              change={change}
-              omittedNote="What it did is recorded, but its contents are not kept here."
-            />
-          ))}
+            {shown.map((change) => (
+              <ChangeReview
+                key={change.path}
+                change={change}
+                omittedNote="What it did is recorded, but its contents are not kept here."
+              />
+            ))}
 
-          {action.details?.map((detail, index) => (
-            <DetailBlock
-              key={index}
-              detail={detail}
-              {...(readPicture ? { readPicture } : {})}
-            />
-          ))}
+            {action.details?.map((detail, index) => (
+              <DetailBlock
+                key={index}
+                detail={detail}
+                {...(readPicture ? { readPicture } : {})}
+              />
+            ))}
 
-          {/*
+            {/*
+            Files whose contents were never going to be shown, such as a
+            picture or a binary scene: named once each, with what they are,
+            after what the action produced rather than in place of it.
+          */}
+            {named.length > 0 && (
+              <section className={styles.inspector__block} aria-label="Files">
+                <h3>Files</h3>
+                <ul className={styles.inspector__files}>
+                  {named.map((change) => (
+                    <li key={change.path}>
+                      <span className={styles["change-review__path"]}>
+                        {change.path}
+                      </span>
+                      <span className={styles.inspector__change}>
+                        {change.change === "created" ? "New" : "Changed"}
+                      </span>
+                      <span className={styles.inspector__note}>
+                        {change.omitted}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {/*
             Two things follow: why a call did not happen, when it did not, and
             what was asked for. What was asked for is always shown, whatever
             the tool, as its arguments rather than an encoded call: the
             arguments are what a reader most needs.
           */}
-          {/*
+            {/*
             Why it did not happen, for a call that stopped before or during the
             tool. The history row says it too, but the row is behind this
             dialog, and a dialog that only says "could not be inspected" leaves
             the one useful sentence unread.
           */}
-          {!described &&
-            action.reason &&
-            (action.status === "failed" || action.status === "blocked") && (
-              <p
-                className={`${styles.inspector__consequence} ${styles.inspector__reason}`}
-              >
-                {action.reason}
-              </p>
+            {!described &&
+              action.reason &&
+              (action.status === "failed" || action.status === "blocked") && (
+                <p
+                  className={`${styles.inspector__consequence} ${styles.inspector__reason}`}
+                >
+                  {action.reason}
+                </p>
+              )}
+
+            {action.invocation && (
+              <ToolCallView
+                invocation={action.invocation}
+                label="What was asked for"
+              />
             )}
 
-          {action.invocation && (
-            <ToolCallView
-              invocation={action.invocation}
-              label="What was asked for"
-            />
-          )}
-
-          {described && (action.evidence || action.command) && (
-            <details className={styles.inspector__raw}>
-              <summary>Technical details</summary>
-              {action.command && <pre>{action.command}</pre>}
-              {action.evidence && (
-                <JsonBlock
-                  text={action.evidence}
-                  className={styles.inspector__json}
-                />
-              )}
-            </details>
-          )}
-
-          {/*
-            The answer, kept separate from the request. Only for a tool that
-            described nothing in words — then this is the only record there is.
-
-            A denied or blocked action is recorded without its call, so its
-            rendered command is the only account of what was asked for.
-          */}
-          {!described &&
-            (action.evidence || (!action.invocation && action.command)) && (
+            {described && (action.evidence || action.command) && (
               <details className={styles.inspector__raw}>
-                <summary>Raw call and response</summary>
+                <summary>Technical details</summary>
                 {action.command && <pre>{action.command}</pre>}
                 {action.evidence && (
                   <JsonBlock
@@ -194,9 +209,31 @@ export function ActionInspector({
                 )}
               </details>
             )}
+
+            {/*
+            The answer, kept separate from the request. Only for a tool that
+            described nothing in words — then this is the only record there is.
+
+            A denied or blocked action is recorded without its call, so its
+            rendered command is the only account of what was asked for.
+          */}
+            {!described &&
+              (action.evidence || (!action.invocation && action.command)) && (
+                <details className={styles.inspector__raw}>
+                  <summary>Raw call and response</summary>
+                  {action.command && <pre>{action.command}</pre>}
+                  {action.evidence && (
+                    <JsonBlock
+                      text={action.evidence}
+                      className={styles.inspector__json}
+                    />
+                  )}
+                </details>
+              )}
+          </div>
         </div>
       </div>
-    </div>
+    </WindowLayer>
   );
 }
 

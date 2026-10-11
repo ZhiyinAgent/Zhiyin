@@ -108,6 +108,9 @@ importers:
       '@zhiyin/audit':
         specifier: workspace:*
         version: link:../../packages/audit
+      '@zhiyin/blender-studio':
+        specifier: workspace:*
+        version: link:../../packages/blender-studio
       '@zhiyin/capabilities':
         specifier: workspace:*
         version: link:../../packages/capabilities
@@ -262,8 +265,23 @@ importers:
 
   packages/audit: {}
 
+  packages/blender-studio:
+    dependencies:
+      '@zhiyin/contract':
+        specifier: workspace:*
+        version: link:../contract
+      '@zhiyin/process-ownership':
+        specifier: workspace:*
+        version: link:../process-ownership
+      '@zhiyin/workspace-containment':
+        specifier: workspace:*
+        version: link:../workspace-containment
+
   packages/capabilities:
     dependencies:
+      '@zhiyin/blender-studio':
+        specifier: workspace:*
+        version: link:../blender-studio
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
@@ -314,6 +332,9 @@ importers:
       '@zhiyin/artifacts':
         specifier: workspace:*
         version: link:../artifacts
+      '@zhiyin/blender-studio':
+        specifier: workspace:*
+        version: link:../blender-studio
       '@zhiyin/capabilities':
         specifier: workspace:*
         version: link:../capabilities

@@ -195,6 +195,9 @@ void app.whenReady().then(async () => {
     builtInPluginsDirectory: app.isPackaged
       ? join(process.resourcesPath, "plugins")
       : join(here, "../../../../packages/plugins/built-in"),
+    blenderSessionScript: app.isPackaged
+      ? join(process.resourcesPath, "blender-session", "start.py")
+      : join(here, "../../../../packages/blender-studio/src/session/start.py"),
     workspaceDirectory:
       process.env["ZHIYIN_WORKSPACE"] ??
       (process.env["ELECTRON_RENDERER_URL"]

@@ -18,6 +18,7 @@ import type {
   ArtifactPreview,
   AuthoredPluginContents,
   BrowserIntent,
+  SceneIntent,
   ComponentContent,
   ComponentContentDraft,
   ContextBudgetChoice,
@@ -53,6 +54,7 @@ import type { Sessions } from "@zhiyin/session";
 import type { Spelling } from "@zhiyin/spelling";
 import type { UsageTelemetry } from "@zhiyin/usage";
 import { BrowserFeed } from "./browser-feed.js";
+import { SceneFeed, type ScenesPort } from "./scene-feed.js";
 import { WorkspacePanel, type DocumentViewerPort } from "./workspace-panel.js";
 export type { DocumentViewerPort } from "./workspace-panel.js";
 import { ModelSettings } from "./model-settings.js";
@@ -97,6 +99,8 @@ export type WorkspaceDependencies = {
   /** Every provider, each set up on its own. */
   readonly modelProviders?: ProviderDirectory;
   readonly browsers: ConversationBrowsers;
+  /** Each conversation's 3D scene, which the person watches (ADR 0026). */
+  readonly scenes?: ScenesPort;
   /** The documents shown beside conversations (ADR 0018). */
   readonly documents: DocumentViewerPort;
   /** Each page's words of a PDF, or nothing when it cannot be read. */
@@ -144,6 +148,7 @@ export class Workspace {
   #plugins: PluginState[] = [];
   /** The browser panel a person watches, one per conversation. */
   readonly #browser: BrowserFeed;
+  readonly #scene: SceneFeed;
   /** What the space beside each conversation shows, and its document. */
   readonly #panel: WorkspacePanel;
   #usage: UsageState = startup.initialUsage;
@@ -193,6 +198,7 @@ export class Workspace {
       documents: deps.documents,
       emit: (event) => this.emit(event),
       browserOpen: (taskId) => this.#browser.panel(taskId).status !== "closed",
+      sceneShown: (taskId) => this.#scene.shown(taskId),
       folderOf: (taskId) =>
         this.#tasks.find((task) => task.id === taskId)?.workspace?.path ??
         this.#workspaceSelection?.path,
@@ -204,6 +210,14 @@ export class Workspace {
         opened: (taskId) => this.#panel.browserOpened(taskId),
         closed: (taskId) => this.#panel.browserClosed(taskId),
         agentActed: (taskId) => this.#panel.agentUsedBrowser(taskId),
+      },
+    );
+    this.#scene = new SceneFeed(
+      deps.scenes ?? { existing: () => undefined, onScene: () => () => true },
+      (event) => this.emit(event),
+      {
+        opened: (taskId) => this.#panel.sceneOpened(taskId),
+        agentActed: (taskId) => this.#panel.agentUsedScene(taskId),
       },
     );
     this.#rewinds = new WorkspaceRewinds({
@@ -364,6 +378,7 @@ export class Workspace {
       plugins: this.#plugins,
       mcpServers: this.#mcpServers,
       browser: this.#browser.panel(this.#selectedTaskId),
+      scene: this.#scene.panel(this.#selectedTaskId),
       document: this.#panel.document(this.#selectedTaskId),
       workspaceView: this.#panel.view(this.#selectedTaskId),
       usage: this.#usage,
@@ -425,6 +440,7 @@ export class Workspace {
       // the conversation would be, in place of whatever was shown before.
       this.#selectedTaskId = taskId;
       this.#browser.announce(taskId);
+      this.#scene.announce(taskId);
       this.#panel.announce(taskId);
       this.emit({ kind: "taskSelectionChanged", data: { taskId } });
       this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
@@ -435,6 +451,7 @@ export class Workspace {
     const moved = await this.#openTaskWorkspace(task);
     await this.#persistence.save();
     this.#browser.announce(taskId);
+    this.#scene.announce(taskId);
     this.#panel.announce(taskId);
     this.emit({
       kind: "taskSelectionChanged",
@@ -540,6 +557,7 @@ export class Workspace {
       );
     if (this.turns.running(taskId)) await this.turns.cancel(taskId);
     this.#browser.forget(taskId);
+    this.#scene.forget(taskId);
     this.#panel.forget(taskId);
     await this.#deps.capabilities.forgetConversation(taskId);
     this.#tasks = this.#tasks.filter((task) => task.id !== taskId);
@@ -554,6 +572,7 @@ export class Workspace {
     await this.#deps.sessions.forgetConversation(taskId).catch(() => {});
     if (this.#selectedTaskId) {
       this.#browser.announce(this.#selectedTaskId);
+      this.#scene.announce(this.#selectedTaskId);
       this.#panel.announce(this.#selectedTaskId);
     }
     this.emit({
@@ -576,6 +595,7 @@ export class Workspace {
       ["browsers and connections", () => this.#deps.capabilities.shutdown()],
     ]).finally(() => {
       this.#browser.stopWatching();
+      this.#scene.stopWatching();
       this.#panel.shutdown();
     });
   }
@@ -639,6 +659,14 @@ export class Workspace {
     if (!taskId)
       throw new Error("Open a conversation before using the browser.");
     await this.#browser.drive(taskId, intent);
+  }
+
+  /** The person turning or switching the open conversation's 3D view. */
+  async lookAtScene(intent: SceneIntent): Promise<void> {
+    const taskId = this.#selectedTaskId;
+    if (!taskId)
+      throw new Error("Open a conversation before using the 3D view.");
+    this.#scene.look(taskId, intent);
   }
 
   /** The person's choice of what the space beside a conversation shows. */

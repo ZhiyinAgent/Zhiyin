@@ -53,6 +53,27 @@ describe("ApprovalPrompt", () => {
       screen.queryByRole("button", { name: "Allow for this conversation" }),
     ).toBeNull();
   });
+  it("moves focus to the question it asks before allowing for the conversation, so a long card shows it", () => {
+    render(
+      <ApprovalPrompt
+        title="Add objects to a 3D scene"
+        target="mug.blend"
+        command="blender_add_objects(...)"
+        conversationRule={{ label: "3D studio · Changes to mug.blend" }}
+        onDecision={vi.fn()}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    );
+
+    expect(
+      screen.getByRole("group", {
+        name: "Allow this for the rest of the conversation?",
+      }),
+    ).toHaveFocus();
+  });
+
   it("says what a conversation allowance covers on the button that offers it, apart from allowing once", () => {
     render(
       <ApprovalPrompt
@@ -531,6 +552,41 @@ describe("ApprovalPrompt", () => {
     expect(review).toHaveTextContent("have not seen in full");
   });
 
+  it("shows what a call will do beside a file whose change cannot be shown, such as a binary scene", () => {
+    render(
+      <ApprovalPrompt
+        title="Set a material in a 3D scene"
+        target="mug.blend"
+        command="blender_set_material(…)"
+        invocation={{
+          name: "Set a material in a 3D scene",
+          arguments: [
+            { name: "Objects", value: "Mug, Handle", readable: true },
+            { name: "Colour", value: "#122a63", readable: true },
+            { name: "Clear coat", value: "0.6", readable: true },
+          ],
+        }}
+        changes={[
+          {
+            path: "mug.blend",
+            change: "updated",
+            omitted: "The scene, saved in Blender's own format.",
+          },
+        ]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    const request = screen.getByRole("region", { name: "Permission request" });
+    expect(within(request).getByText("Clear coat")).toBeVisible();
+    expect(within(request).getByText("0.6")).toBeVisible();
+    expect(
+      within(request).getByRole("list", { name: "What will change" }),
+    ).toHaveTextContent("mug.blend");
+    // Written in words: read as text, not shown as a block of code.
+    expect(within(request).getByText("Mug, Handle").closest("pre")).toBeNull();
+  });
+
   it("says which deletions go to the Recycle Bin and which are permanent, and why", () => {
     render(
       <ApprovalPrompt
@@ -819,6 +875,30 @@ describe("ActionHistory", () => {
     expect(within(inspector).getByText(/write_file/)).toBeVisible();
   });
 
+  it("opens an action's details over the whole window, not inside the conversation that lists it", () => {
+    // Inside the conversation, the conversation's fade would clip them and
+    // the browser, document or 3D view beside it would cover them.
+    const { container } = render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "write-brief",
+            action: "Overwrite an existing workspace file",
+            target: "brief.md",
+            status: "completed",
+            command: 'write_file({"path":"brief.md"})',
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    expect(container.contains(inspector)).toBe(false);
+  });
+
   it("draws what a tool reported in the shapes the tool named", () => {
     render(
       <ActionHistory
@@ -860,6 +940,73 @@ describe("ActionHistory", () => {
     expect(
       within(inspector).getByText("Not searched: .git, node_modules."),
     ).toBeVisible();
+  });
+
+  it("names each file whose contents it does not keep once, after what the action produced", () => {
+    render(
+      <ActionHistory
+        actions={[
+          {
+            sequence: 1,
+            id: "render",
+            action: "Final product render",
+            target: "renders/mug.png",
+            status: "completed",
+            changes: [
+              {
+                path: "renders/mug.png",
+                change: "created",
+                omitted: "The picture Blender renders.",
+              },
+              {
+                path: "mug.blend",
+                change: "updated",
+                omitted: "The scene, saved in Blender's own format.",
+              },
+            ],
+            details: [
+              {
+                kind: "facts",
+                items: [
+                  {
+                    label: "Blender",
+                    value:
+                      "Rendered mug.png, 2000×2000, with Cycles in 23.6 s.",
+                  },
+                ],
+              },
+            ],
+            invocation: {
+              name: "Render a 3D scene",
+              arguments: [
+                { name: "Engine", value: "Cycles", readable: true },
+                { name: "Size", value: "2000 × 2000 pixels", readable: true },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect action" }));
+
+    const inspector = screen.getByRole("dialog");
+    const files = within(inspector).getByRole("region", { name: "Files" });
+    expect(within(files).getByText("renders/mug.png")).toBeVisible();
+    expect(within(files).getByText("New")).toBeVisible();
+    expect(within(files).getByText("mug.blend")).toBeVisible();
+    expect(within(files).getByText("Changed")).toBeVisible();
+    expect(inspector).not.toHaveTextContent("its contents are not kept here");
+    expect(
+      within(inspector).getByText(/Rendered mug.png, 2000×2000/),
+    ).toBeVisible();
+    expect(within(inspector).getByText("2000 × 2000 pixels")).toBeVisible();
+    // What it produced comes before the list of files.
+    expect(
+      within(inspector)
+        .getByText(/Rendered mug.png/)
+        .compareDocumentPosition(files) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   /**

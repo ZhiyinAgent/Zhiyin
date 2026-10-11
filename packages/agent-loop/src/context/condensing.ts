@@ -20,6 +20,7 @@
 
 import type {
   CondensingFailure,
+  FileChange,
   TaskAction,
   ToolSpec,
   WorkspaceTask,
@@ -258,12 +259,17 @@ function pathsReadTogether(command: string | undefined): string[] {
 /**
  * The workspace files worth reading again, newest first: those changed, then
  * those only read. A file outside the workspace, or a saved output, is not
- * read again unasked.
+ * read again unasked. Nor is one whose latest change says its contents were
+ * left out and that was never read as text — a picture, a scene, a compiled
+ * document — which `read_file` would only refuse.
  */
 function filesToReadAgain(
   actions: readonly TaskAction[],
   inView: ReadonlySet<string>,
 ): string[] {
+  const latest = new Map<string, FileChange>();
+  for (const action of actions)
+    for (const change of action.changes ?? []) latest.set(change.path, change);
   const changed = actions.flatMap((action) =>
     (action.changes ?? []).map(({ path }) => path),
   );
@@ -276,9 +282,20 @@ function filesToReadAgain(
           ? pathsReadTogether(action.command)
           : [],
   );
+  const readAsText = new Set(read);
+  const notText = (path: string) => {
+    const change = latest.get(path);
+    return (
+      change?.omitted !== undefined &&
+      change.before === undefined &&
+      change.after === undefined &&
+      !readAsText.has(path)
+    );
+  };
   return [...new Set([...changed.reverse(), ...read.reverse()])]
     .filter(
       (path) =>
+        !notText(path) &&
         !inView.has(path) &&
         !/^[a-z]+:\/\//i.test(path) &&
         !/^([a-z]:)?[\\/]/i.test(path),
@@ -539,7 +556,7 @@ export class Condensing {
           }
         : {
             ok: false,
-            reason: `Not read again after condensing: ${result.reason} It may have been deleted.`,
+            reason: `Not read again after condensing: ${result.reason}`,
           };
       await history.result(
         { callId: calls[index]?.id ?? "", name: "read_file" },

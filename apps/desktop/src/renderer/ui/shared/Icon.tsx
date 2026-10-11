@@ -7,6 +7,7 @@ type IconName =
   | "chevron"
   | "clock"
   | "code"
+  | "cube"
   | "file"
   | "folder"
   | "globe"
@@ -48,6 +49,9 @@ const paths: Record<IconName, React.ReactNode> = {
     </>
   ),
   code: <path d="m8 9-3 3 3 3m8-6 3 3-3 3m-2-9-4 12" />,
+  cube: (
+    <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Zm0 9 8-4.5M12 12 4 7.5M12 12v9" />
+  ),
   file: <path d="M7 3h7l4 4v14H7V3Zm7 0v5h5" />,
   folder: <path d="M3 7h7l2 2h9v10H3V7Z" />,
   globe: (

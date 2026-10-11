@@ -103,7 +103,7 @@ beside its name to turn it **On** or **Off**. The cards you chose on the first
 screen turned on the matching plugins, and the others start off. A plugin that
 is on is used only when a task needs it.
 
-Zhiyin comes with four:
+Zhiyin comes with five:
 
 - **Full-Stack Software Engineering**: designs, builds, tests and reviews
   software, with Git, a browser for testing pages, and GitHub.
@@ -114,6 +114,9 @@ Zhiyin comes with four:
   data, in a Python environment of its own.
 - **Deep Research & Synthesis**: researches a question across many sources and
   writes a report with citations, using Tavily web search.
+- **3D & Rendering**: builds 3D scenes and renders them, such as product
+  pictures, rooms from a floor plan, or parts to 3D print, in a Blender that
+  Zhiyin installs. The scene appears beside the conversation as it changes.
 
 Under **Connectors**, a plugin lists the services and programs it uses. One
 that needs a program, such as the Python environment, shows **Set up**:
@@ -176,11 +179,13 @@ check what will run. You choose:
 - **Deny**: it does not run. You can tell Zhiyin what to do instead, then
   select **Confirm denial**.
 - **Allow for this conversation**, offered for changes to files in one
-  subfolder and for one connector tool: what it covers runs without asking
-  for the rest of the conversation. To take it back, select **•••** next to
+  subfolder, for one connector tool, and for changes to the scene open in the
+  3D studio: what it covers runs without asking for the rest of the
+  conversation. To take it back, select **•••** next to
   the conversation in the sidebar, then **Permissions**, then **Revoke**.
 
-Deleting a file, running a shell command and running Python always ask.
+Deleting a file, running a shell command, running Python and running a Blender
+script always ask.
 
 **Cost.** Select **•••** next to **Your preferences**, then **Usage**. The
 page shows what each request cost, by day and by conversation: the

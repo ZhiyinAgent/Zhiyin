@@ -86,9 +86,11 @@ export function ConversationPermissions({
                   <div>
                     <strong>{permission.label}</strong>
                     <p>
-                      {permission.kind === "connector-tool"
-                        ? "May use this tool version again in this conversation."
-                        : "May edit files in this folder again in this conversation."}
+                      {permission.kind !== "connector-tool"
+                        ? "May edit files in this folder again in this conversation."
+                        : permission.toolName.endsWith("__*")
+                          ? "May make these changes again in this conversation."
+                          : "May run again in this conversation while the tool stays the same."}
                     </p>
                   </div>
                   <button

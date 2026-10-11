@@ -9,7 +9,7 @@ const local = (ids: readonly { id: string }[]) =>
   ids.map((item) => item.id.slice(item.id.indexOf("/") + 1));
 
 describe("the catalog shipped with the application", () => {
-  it("offers the four verticals, each with exactly its planned skills, specialists, and connectors", async () => {
+  it("offers the five verticals, each with exactly its planned skills, specialists, and connectors", async () => {
     const plugins = await loadBuiltInPlugins(shipped);
 
     expect(
@@ -77,6 +77,18 @@ describe("the catalog shipped with the application", () => {
         ],
         specialists: ["fact-checker", "report-synthesizer"],
         connectors: ["tavily"],
+      },
+      {
+        name: "3d-rendering",
+        displayName: "3D & Rendering",
+        skills: [
+          "interiors-from-plans",
+          "printable-parts",
+          "product-renders",
+          "scene-building",
+        ],
+        specialists: [],
+        connectors: ["app:blender"],
       },
     ]);
   });

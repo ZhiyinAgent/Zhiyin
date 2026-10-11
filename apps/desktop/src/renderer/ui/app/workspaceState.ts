@@ -3,6 +3,7 @@ import type {
   BrowserPanelState,
   ConversationSummary,
   DocumentPanelState,
+  ScenePanelState,
   WorkspaceView,
   ProviderSettings as CoreProviderSettings,
   RunningCommand,
@@ -167,6 +168,8 @@ export type WorkspaceState = {
   browsers: Record<string, BrowserPanelState>;
   /** Each conversation's document, as the core last said. */
   documents: Record<string, DocumentPanelState>;
+  /** Each conversation's 3D scene, as the core last said. */
+  scenes: Record<string, ScenePanelState>;
   /** What each conversation's workspace shows, as the core last said. */
   workspaceViews: Record<string, WorkspaceView>;
   /** Each conversation's commands running as jobs, as the core last said. */
@@ -210,6 +213,7 @@ export type WorkspaceAction =
       taskId: string;
       document: DocumentPanelState;
     }
+  | { type: "sceneChanged"; taskId: string; scene: ScenePanelState }
   | { type: "workspaceViewChanged"; taskId: string; view: WorkspaceView }
   | {
       type: "commandsChanged";
@@ -224,6 +228,21 @@ export type WorkspaceAction =
     };
 
 /** The document beside the selected conversation; closed when it has none. */
+const closedScene: ScenePanelState = {
+  status: "closed",
+  view: "overview",
+  working: false,
+};
+
+/** The selected conversation's 3D scene, closed when it has none. */
+export function selectedScene(
+  state: Pick<WorkspaceState, "scenes" | "selectedTaskId">,
+): ScenePanelState {
+  return state.selectedTaskId
+    ? (state.scenes[state.selectedTaskId] ?? closedScene)
+    : closedScene;
+}
+
 export function selectedDocument(
   state: Pick<WorkspaceState, "documents" | "selectedTaskId">,
 ): DocumentPanelState {
@@ -306,6 +325,7 @@ export function createWorkspaceState(
     browser: input.browser ?? closedBrowser,
     browsers: input.browsers ?? {},
     documents: input.documents ?? {},
+    scenes: input.scenes ?? {},
     workspaceViews: input.workspaceViews ?? {},
     runningCommands: input.runningCommands ?? {},
     tasks: input.tasks ?? [],
@@ -463,6 +483,13 @@ export function workspaceReducer(
                 action.snapshot.document ?? closedDocument,
             }
           : state.documents,
+        scenes: action.snapshot.selectedTaskId
+          ? {
+              ...state.scenes,
+              [action.snapshot.selectedTaskId]:
+                action.snapshot.scene ?? closedScene,
+            }
+          : state.scenes,
         workspaceViews: action.snapshot.selectedTaskId
           ? {
               ...state.workspaceViews,
@@ -531,6 +558,11 @@ export function workspaceReducer(
             ? action.browser
             : state.browser,
       };
+    case "sceneChanged":
+      return {
+        ...state,
+        scenes: { ...state.scenes, [action.taskId]: action.scene },
+      };
     case "documentChanged":
       return {
         ...state,
@@ -581,6 +613,7 @@ export function workspaceReducer(
           : closedBrowser,
         browsers,
         documents: without(state.documents, action.taskId),
+        scenes: without(state.scenes, action.taskId),
         workspaceViews: without(state.workspaceViews, action.taskId),
       };
     }

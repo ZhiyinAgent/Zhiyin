@@ -182,11 +182,15 @@ described in the [component library](../../component-library.md).
   it can do (the app's own account, never the model's), what Zhiyin says it is
   for (attributed as a claim), then the exact command, the inputs, or the files
   it changes. A file change is reviewed as a difference, with line numbers and
-  changed words marked. A long approval scrolls inside itself, so its buttons
-  stay in view at the smallest window.
+  changed words marked. When no file change can be shown as a difference, such
+  as a binary scene's, the inputs are shown with the files. Inputs a built-in
+  tool wrote in words read as text, not code. A long approval scrolls inside
+  itself, so its buttons stay in view at the smallest window.
 - Deny offers optional guidance for the agent once it is chosen. "Allow for this
   conversation" appears only when the core proposes a rule for the rest of the
-  conversation, and says what that rule covers.
+  conversation, and says what that rule covers. Choosing it asks once more,
+  with the rule beside the buttons that answer, and focus moves to the
+  question.
 - A quiz lives in the conversation and grades an answer only once it is
   checked. Clarifying questions, the work checkpoint (Keep going, or Stop and
   summarise) and a folder's `AGENTS.md`, shown in full with Use and Ignore, sit
@@ -196,7 +200,8 @@ described in the [component library](../../component-library.md).
 
 - Each action leads with why it was done, then what was done and on what. Its
   inspector shows what it did in the shapes the tool reported, with the exact
-  call and result folded away.
+  call and result folded away. Files whose contents are not kept, such as a
+  render, are named once each after what the action produced.
 - Once a turn that changed files has ended, a panel counts the files and lines,
   opens each file's difference, and offers Undo after showing what goes back
   and what stays. A file a command changed with no copy kept is listed by name,

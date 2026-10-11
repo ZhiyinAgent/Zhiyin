@@ -40,6 +40,7 @@ export type WorkspaceCommands = Pick<
   | "recheckShell"
   | "openExternalUrl"
   | "driveBrowser"
+  | "lookAtScene"
   | "chooseWorkspaceView"
   | "showDocument"
   | "closeDocument"

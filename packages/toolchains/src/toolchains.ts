@@ -42,6 +42,16 @@ export type Download = (
   signal: AbortSignal,
 ) => Promise<AsyncIterable<Uint8Array>>;
 
+/**
+ * Makes an unpacked program ready to use, once, before it is moved into
+ * place: `executable` is where the program is now, `installed` where it
+ * will be. What it writes beside the program is installed with it.
+ */
+export type Ready = (
+  program: { readonly executable: string; readonly installed: string },
+  signal: AbortSignal,
+) => Promise<void>;
+
 /** Unpacks a zip archive into an empty directory. */
 export type Unpack = (archive: string, destination: string) => Promise<void>;
 
@@ -116,6 +126,7 @@ export class DownloadedToolchains implements Toolchains {
   readonly #specs: ReadonlyMap<string, ToolchainSpec>;
   readonly #download: Download;
   readonly #unpack: Unpack;
+  readonly #ready: Readonly<Record<string, Ready>>;
   readonly #installing = new Map<string, Promise<void>>();
   readonly #failures = new Map<string, string>();
 
@@ -124,11 +135,14 @@ export class DownloadedToolchains implements Toolchains {
     readonly specs: readonly ToolchainSpec[];
     readonly download?: Download;
     readonly unpack?: Unpack;
+    /** By program id: what readies each one, where its owner has something to. */
+    readonly ready?: Readonly<Record<string, Ready>>;
   }) {
     this.#root = join(options.directory, "toolchains");
     this.#specs = new Map(options.specs.map((spec) => [spec.id, spec]));
     this.#download = options.download ?? fetchDownload;
     this.#unpack = options.unpack ?? windowsTarUnpack;
+    this.#ready = options.ready ?? {};
   }
 
   async state(id: string): Promise<ToolchainState> {
@@ -187,15 +201,14 @@ export class DownloadedToolchains implements Toolchains {
 
   async #install(spec: ToolchainSpec, signal?: AbortSignal): Promise<void> {
     if (await this.executable(spec.id)) return;
-    const staging = join(this.#root, ".staging", randomUUID());
+    // Short, so the longest path in a large archive stays within Windows'
+    // 260-character limit where long paths are not enabled.
+    const staging = join(this.#root, ".staging", randomUUID().slice(0, 8));
     await mkdir(staging, { recursive: true });
+    const stopped = signal ?? new AbortController().signal;
     try {
       const archive = join(staging, "download.zip");
-      await this.#fetchVerified(
-        spec,
-        archive,
-        signal ?? new AbortController().signal,
-      );
+      await this.#fetchVerified(spec, archive, stopped);
       const files = join(staging, "files");
       await mkdir(files);
       await this.#unpack(archive, files);
@@ -204,6 +217,19 @@ export class DownloadedToolchains implements Toolchains {
       if (!(await lstat(program).catch(() => undefined))?.isFile())
         throw new Error(`The download does not contain ${spec.name}.`);
       await rm(archive);
+      const target = this.#installed(spec);
+      // The program works without it, so a readying that fails costs only
+      // what it would have saved; one that was stopped stops the install.
+      await this.#ready
+        [spec.id]?.(
+          {
+            executable: program,
+            installed: join(target, "files", ...spec.executable.split("/")),
+          },
+          stopped,
+        )
+        .catch(() => {});
+      stopped.throwIfAborted();
       await writeFile(
         join(staging, "installed.json"),
         JSON.stringify({
@@ -213,7 +239,6 @@ export class DownloadedToolchains implements Toolchains {
         } satisfies Marker),
         "utf8",
       );
-      const target = this.#installed(spec);
       await rm(target, { recursive: true, force: true });
       await mkdir(join(this.#root, spec.id), { recursive: true });
       await rename(staging, target);
@@ -273,7 +298,8 @@ export class DownloadedToolchains implements Toolchains {
 
 /**
  * The pinned releases this build installs. Versions, sizes, and digests are
- * those each project publishes on its GitHub release.
+ * those each project publishes with its release: on GitHub, and Blender on
+ * its own download site.
  */
 export const pinnedToolchains: readonly ToolchainSpec[] = [
   {
@@ -295,6 +321,16 @@ export const pinnedToolchains: readonly ToolchainSpec[] = [
     bytes: 21060223,
     source: "github.com/tectonic-typesetting/tectonic",
     executable: "tectonic.exe",
+  },
+  {
+    id: "blender",
+    name: "Blender",
+    version: "5.2.2",
+    url: "https://download.blender.org/release/Blender5.2/blender-5.2.2-windows-x64.zip",
+    sha256: "3849d17a682cba006075aaa3f3597ecb5c9c30ec31035b2e092c53e40679b535",
+    bytes: 404453484,
+    source: "download.blender.org",
+    executable: "blender-5.2.2-windows-x64/blender.exe",
   },
   {
     id: "uv",

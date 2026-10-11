@@ -240,6 +240,45 @@ function browserIntent(value: unknown): boolean {
 }
 
 /**
+ * The 3D view's turning and zooming arrive many times a second, so each is
+ * checked as data: finite numbers within what a drag or a window could give.
+ */
+function sceneIntent(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const intent = value as Record<string, unknown>;
+  const within = (key: string, limit: number) =>
+    typeof intent[key] === "number" &&
+    Number.isFinite(intent[key]) &&
+    Math.abs(intent[key]) <= limit;
+  const keys = Object.keys(intent).length;
+  switch (intent["kind"]) {
+    case "view":
+      return (
+        keys === 2 &&
+        (intent["view"] === "camera" || intent["view"] === "overview")
+      );
+    case "turn":
+      return keys === 3 && within("yaw", 3600) && within("pitch", 3600);
+    case "zoom":
+      return (
+        keys === 2 && within("factor", 100) && (intent["factor"] as number) > 0
+      );
+    case "reset":
+      return keys === 1;
+    case "size":
+      return (
+        keys === 3 &&
+        within("width", 16_384) &&
+        within("height", 16_384) &&
+        (intent["width"] as number) >= 1 &&
+        (intent["height"] as number) >= 1
+      );
+    default:
+      return false;
+  }
+}
+
+/**
  * An argument left out at the end arrives as `undefined` rather than absent, so
  * an optional one counts as given only when it carries something. A gap in the
  * middle is not an argument left out and is left where it is.
@@ -341,7 +380,9 @@ export function validateCommand(
       valid =
         args.length === 2 &&
         text(args[0]) &&
-        ["conversation", "browser", "document"].includes(args[1] as string);
+        ["conversation", "browser", "document", "scene"].includes(
+          args[1] as string,
+        );
       break;
     // A page counts from 1; the width is device pixels, at most what a page
     // is ever drawn at.
@@ -525,6 +566,9 @@ export function validateCommand(
       break;
     case CHANNEL.driveBrowser:
       valid = args.length === 1 && browserIntent(args[0]);
+      break;
+    case CHANNEL.lookAtScene:
+      valid = args.length === 1 && sceneIntent(args[0]);
       break;
     case CHANNEL.saveProviderApiKey:
       valid = withTarget(args, 1) && text(args[0], 4096);

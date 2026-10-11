@@ -6,6 +6,7 @@ import type {
 } from "@zhiyin/contract";
 import type { BrowserAutomation } from "@zhiyin/interactive-browser";
 import type { GitAutomation } from "@zhiyin/git-connector";
+import type { SceneAutomation } from "@zhiyin/blender-studio";
 import type { McpServers } from "@zhiyin/mcp";
 import type { PluginView, Plugins } from "@zhiyin/plugins";
 import {
@@ -13,6 +14,7 @@ import {
   browserConnection,
   declaredConnectionsOf,
   gitConnection,
+  sceneConnection,
   type CapabilityMembers,
 } from "../src/index.js";
 
@@ -1011,6 +1013,34 @@ describe("a call handed back", () => {
     ).toBeUndefined();
   });
 
+  it("closes a conversation's Blender with its browser, lets it go when the conversation is deleted, and closes every one at shutdown", async () => {
+    const asked: unknown[][] = [];
+    const note =
+      (name: string) =>
+      async (...args: unknown[]) => {
+        asked.push([name, ...args]);
+      };
+    const { capabilities } = membersRecording({
+      overrides: {
+        scenes: {
+          close: note("scenes.close"),
+          forget: note("scenes.forget"),
+          closeAll: note("scenes.closeAll"),
+        },
+      },
+    });
+
+    await capabilities.closeConversation("conversation-1");
+    await capabilities.forgetConversation("conversation-2");
+    await capabilities.shutdown();
+
+    expect(asked).toEqual([
+      ["scenes.close", "conversation-1"],
+      ["scenes.forget", "conversation-2"],
+      ["scenes.closeAll"],
+    ]);
+  });
+
   it("closes every browser and every connection at shutdown", async () => {
     const { capabilities, asked } = membersRecording();
 
@@ -1499,6 +1529,79 @@ describe("the browser as a built-in connection", () => {
   });
 
   it("starts a new automation for a conversation that was forgotten", async () => {
+    const { opened, server } = automationsOpened();
+
+    await server.open("conversation-1");
+    await server.forget?.("conversation-1");
+    await server.open("conversation-1");
+
+    expect(opened).toEqual(["conversation-1", "conversation-1"]);
+  });
+});
+
+describe("the 3D studio as a built-in connection", () => {
+  function automationsOpened() {
+    const opened: string[] = [];
+    const server = sceneConnection(
+      (conversationId) => {
+        opened.push(conversationId);
+        return {
+          produced: () => [
+            { path: `${conversationId}.png`, change: "created", bytes: 1 },
+          ],
+        } as unknown as SceneAutomation;
+      },
+      async () => [
+        {
+          name: "blender_render",
+          description: "Render.",
+          inputSchema: { type: "object" },
+        },
+      ],
+    );
+    return { opened, server };
+  }
+
+  it("gives each conversation its own studio and reuses it", async () => {
+    const { opened, server } = automationsOpened();
+
+    const first = await server.open("conversation-1");
+    const again = await server.open("conversation-1");
+    await server.open("conversation-2");
+
+    expect(again).toBe(first);
+    expect(opened).toEqual(["conversation-1", "conversation-2"]);
+  });
+
+  it("describes the studio without starting Blender for any conversation", async () => {
+    const { opened, server } = automationsOpened();
+
+    expect((await server.describe?.())?.map((tool) => tool.name)).toEqual([
+      "blender_render",
+    ]);
+    expect(opened).toEqual([]);
+  });
+
+  it("refuses to open or inspect the studio without a conversation", async () => {
+    const { server } = automationsOpened();
+
+    await expect(server.open()).rejects.toThrow("A conversation is required.");
+    expect(await server.inspect?.("blender_render", {})).toEqual({
+      ok: false,
+      reason: "A conversation is required.",
+    });
+  });
+
+  it("reports the files a call made from that conversation's own studio", () => {
+    const { server } = automationsOpened();
+
+    expect(
+      server.produced?.("blender_render", {}, {}, "conversation-1"),
+    ).toEqual([{ path: "conversation-1.png", change: "created", bytes: 1 }]);
+    expect(server.produced?.("blender_render", {}, {})).toEqual([]);
+  });
+
+  it("starts a new studio for a conversation that was forgotten", async () => {
     const { opened, server } = automationsOpened();
 
     await server.open("conversation-1");

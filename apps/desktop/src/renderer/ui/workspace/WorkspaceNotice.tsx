@@ -16,7 +16,7 @@ export function WorkspaceNotice({
   onShow,
 }: {
   text: string;
-  icon?: "globe" | "file";
+  icon?: "globe" | "file" | "cube";
   onShow: () => void;
 }) {
   return (

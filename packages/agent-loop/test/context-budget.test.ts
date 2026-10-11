@@ -673,6 +673,121 @@ describe("after condensing", () => {
     expect(after).toContain("Current text of d.txt");
   });
 
+  it("a picture the work made is not read as text, and a file that is gone is said in the reader's own words", async () => {
+    const requests: ModelRequest[] = [];
+    const readAgain: string[] = [];
+    let worked = 0;
+    const made = ["a.txt", "room.png", "gone.txt"];
+    const deps = stubDependencies(() => {});
+    const { host } = loopAndHost({
+      ...deps,
+      workLimits: endless,
+      modelWindow: {
+        model: "small",
+        contextWindow: 16_000,
+        maximumOutputTokens: 100,
+      },
+      tools: {
+        list: () =>
+          ["edit", "render", "read"].map((name) => ({
+            name,
+            description: `The ${name} tool.`,
+            inputSchema: { type: "object" },
+          })),
+        inspect: async (name, args) => {
+          const path = String((args as { path?: string }).path ?? "notes");
+          return {
+            ok: true,
+            action: name,
+            target: path,
+            command: `${name}(...)`,
+            access: name === "read" ? "read" : "change",
+            scope: "workspace",
+            ...(name === "edit"
+              ? { changes: [{ path, change: "updated" as const, after: "x" }] }
+              : name === "render"
+                ? {
+                    changes: [
+                      {
+                        path,
+                        change: "created" as const,
+                        omitted: "A picture of the room.",
+                      },
+                    ],
+                  }
+                : {}),
+          };
+        },
+        execute: async (name, args) => {
+          if (name !== "read_file")
+            return {
+              ok: true,
+              value: { text: name === "read" ? sized(800) : "ok" },
+            };
+          const { path } = args as { path: string };
+          readAgain.push(path);
+          return path === "gone.txt"
+            ? {
+                ok: false,
+                reason: "gone.txt was not found in this workspace.",
+              }
+            : path.endsWith(".png")
+              ? {
+                  ok: false,
+                  reason: `${path} is a PNG image. Read it with read_document.`,
+                }
+              : { ok: true, value: { text: `Current text of ${path}` } };
+        },
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Allowed" }),
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          requests.push(request);
+          if (condensingAsked(request)) {
+            yield {
+              kind: "textDelta" as const,
+              text: JSON.stringify({ summary: "The room was drawn." }),
+            };
+          } else if (++worked <= made.length)
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: `call-make-${worked}`,
+              name: made[worked - 1]?.endsWith(".png") ? "render" : "edit",
+              argumentsDelta: JSON.stringify({ path: made[worked - 1] }),
+            };
+          else if (worked <= 13)
+            for (let index = 0; index < 3; index += 1)
+              yield {
+                kind: "toolCallDelta" as const,
+                index,
+                callId: `call-read-${worked}-${index}`,
+                name: "read",
+                argumentsDelta: "{}",
+              };
+          else yield { kind: "textDelta" as const, text: "Done." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    const taskId = await host.app.createTask();
+
+    await host.app.start(taskId, "Draw the room");
+
+    const asked = requests.findIndex(condensingAsked);
+    expect(asked).toBeGreaterThan(0);
+    const after = JSON.stringify(requests[asked + 1]?.messages);
+    expect([...new Set(readAgain)].sort()).toEqual(["a.txt", "gone.txt"]);
+    expect(after).toContain("Current text of a.txt");
+    expect(after).toContain(
+      "Not read again after condensing: gone.txt was not found in this workspace.",
+    );
+    expect(after).not.toContain("deleted");
+  });
+
   it("the record keeps what was summarised, the summary, what was carried and the files read again, for the conversation to show", async () => {
     const requests: ModelRequest[] = [];
     let worked = 0;

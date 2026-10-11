@@ -104,7 +104,7 @@ export type DocumentShowOutcome =
  * What the space beside a conversation shows: nothing (the conversation has
  * the window), the browser, or a document. One at a time.
  */
-export type WorkspaceView = "conversation" | "browser" | "document";
+export type WorkspaceView = "conversation" | "browser" | "document" | "scene";
 
 export type ConversationWorkspaceView = {
   readonly taskId: string;

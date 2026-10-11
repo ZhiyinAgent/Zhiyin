@@ -54,6 +54,12 @@ export function App({
           taskId: event.data.taskId,
           browser: event.data.browser,
         });
+      else if (event.kind === "sceneChanged")
+        dispatch({
+          type: "sceneChanged",
+          taskId: event.data.taskId,
+          scene: event.data.scene,
+        });
       else if (event.kind === "documentChanged")
         dispatch({
           type: "documentChanged",

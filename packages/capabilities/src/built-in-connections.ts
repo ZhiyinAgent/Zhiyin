@@ -8,6 +8,7 @@ import type {
   AutomationTool,
   BrowserAutomation,
 } from "@zhiyin/interactive-browser";
+import type { SceneAutomation, StudioTool } from "@zhiyin/blender-studio";
 import type { GitAutomation } from "@zhiyin/git-connector";
 import type { CompilerAutomation } from "@zhiyin/document-compiler";
 import type { SandboxAutomation } from "@zhiyin/python-sandbox";
@@ -49,6 +50,52 @@ export function browserConnection(
     describeResult: (name, args, result, conversationId) =>
       conversationId
         ? automationFor(conversationId).describeResult(name, args, result)
+        : [],
+    forget: async (conversationId) => {
+      automations.delete(conversationId);
+    },
+  };
+}
+
+/**
+ * The 3D studio, offered to the model as a built-in connection. Like the
+ * browser, each conversation has its own Blender, so a conversation's tools
+ * never reach another's scene; what the studio offers is described without
+ * starting any.
+ */
+export function sceneConnection(
+  openAutomation: (conversationId: string) => SceneAutomation,
+  describe: () => Promise<readonly StudioTool[]>,
+): BuiltInMcpServer {
+  const automations = new Map<string, SceneAutomation>();
+  const automationFor = (conversationId: string): SceneAutomation => {
+    const existing = automations.get(conversationId);
+    if (existing) return existing;
+    const created = openAutomation(conversationId);
+    automations.set(conversationId, created);
+    return created;
+  };
+  return {
+    id: "blender",
+    name: "3D studio",
+    scope: "conversation",
+    describe,
+    open: async (conversationId) => {
+      if (!conversationId) throw new Error("A conversation is required.");
+      return automationFor(conversationId);
+    },
+    inspect: async (name, args, conversationId) => {
+      if (!conversationId)
+        return { ok: false, reason: "A conversation is required." };
+      return automationFor(conversationId).inspect(name, args);
+    },
+    describeResult: (name, args, result, conversationId) =>
+      conversationId
+        ? automationFor(conversationId).describeResult(name, args, result)
+        : [],
+    produced: (name, args, value, conversationId) =>
+      conversationId
+        ? automationFor(conversationId).produced(name, args, value)
         : [],
     forget: async (conversationId) => {
       automations.delete(conversationId);

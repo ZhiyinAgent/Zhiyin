@@ -16,5 +16,6 @@ export type {
   ProcessContainer,
 } from "./windows.js";
 export { containmentAvailability, openProcessContainer } from "./windows.js";
+export { openToLowIntegrity } from "./integrity.js";
 export type { HeldFile, HoldAttempt } from "./file-lock.js";
 export { holdExclusively } from "./file-lock.js";

@@ -10,6 +10,7 @@ import { artifactsEntries } from "./catalog/artifacts.js";
 import { modelEntries } from "./catalog/model.js";
 import { browserEntries } from "./catalog/browser.js";
 import { documentEntries } from "./catalog/documents.js";
+import { sceneEntries } from "./catalog/scene.js";
 
 export const componentCatalog = [
   ...conversationEntries,
@@ -24,4 +25,5 @@ export const componentCatalog = [
   ...modelEntries,
   ...browserEntries,
   ...documentEntries,
+  ...sceneEntries,
 ];

@@ -1,4 +1,5 @@
 import type { BrowserPanelState } from "./browser-state.js";
+import type { ScenePanelState } from "./scene-state.js";
 
 /** Light, dark, or whichever Windows is set to. */
 export type Appearance = "system" | "light" | "dark";
@@ -76,6 +77,8 @@ export type WorkspaceSnapshot = {
   readonly mcpServers: readonly McpServerState[];
   /** Browser owned by selectedTaskId; closed when no conversation is selected. */
   readonly browser?: BrowserPanelState;
+  /** 3D scene owned by selectedTaskId; closed when no conversation is selected. */
+  readonly scene?: ScenePanelState;
   /** Document owned by selectedTaskId; closed when no conversation is selected. */
   readonly document?: DocumentPanelState;
   /** What the space beside selectedTaskId shows. */

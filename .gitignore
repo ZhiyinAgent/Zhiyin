@@ -4,6 +4,7 @@ dist
 out
 release
 *.tsbuildinfo
+__pycache__
 
 # Spelling dictionaries, fetched by scripts/dictionaries.mjs when the app is built
 apps/desktop/dictionaries/

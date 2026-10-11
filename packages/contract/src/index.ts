@@ -12,6 +12,7 @@ export * from "./artifacts.js";
 export * from "./rewind.js";
 export * from "./mcp-state.js";
 export * from "./browser-state.js";
+export * from "./scene-state.js";
 export * from "./documents.js";
 export type * from "./command-jobs.js";
 export * from "./plugin-state.js";

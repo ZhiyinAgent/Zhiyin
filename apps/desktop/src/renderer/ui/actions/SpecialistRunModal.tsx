@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CoreApi, SpecialistRun, TaskAction } from "@zhiyin/contract";
 import { ActionHistory } from "./ActionHistory.js";
-import { Icon } from "../shared/index.js";
+import { Icon, WindowLayer } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 export const statusPresentation: Record<
@@ -72,109 +72,117 @@ export function SpecialistRunModal({
   const took = duration(run.startedAt, run.finishedAt);
 
   return (
-    <div
-      className={styles["diff-modal__scrim"]}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <WindowLayer>
       <div
-        className={`${styles["diff-modal"]} ${styles["specialist-modal"]}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        ref={dialog}
+        className={styles["diff-modal__scrim"]}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
-        <header className={styles["diff-modal__header"]}>
-          <div className={styles["specialist-modal__title"]}>
-            <p className="eyebrow">Specialist</p>
-            <h2 id={titleId}>{run.specialist.name}</h2>
-          </div>
-          <span
-            className={`${styles["specialist-run__status"]} ${styles[`specialist-run__status--${run.status}`]}`}
-          >
-            <Icon name={presentation.icon} />
-            {presentation.label}
-            {took && ` · ${took}`}
-          </span>
-          <button
-            className="button button--quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </header>
         <div
-          className={styles["specialist-modal__tabs"]}
-          role="tablist"
-          aria-label="Specialist run"
-          onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            event.preventDefault();
-            setTab((current) => (current === "report" ? "calls" : "report"));
-          }}
+          className={`${styles["diff-modal"]} ${styles["specialist-modal"]}`}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          ref={dialog}
         >
-          {tabs.map(([id, label, count]) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              aria-controls={panelId}
-              tabIndex={tab === id ? 0 : -1}
-              onClick={() => setTab(id)}
-            >
-              {label} {count !== undefined && <span>{count}</span>}
-            </button>
-          ))}
-        </div>
-        <div
-          className={styles["specialist-modal__panel"]}
-          id={panelId}
-          role="tabpanel"
-        >
-          {tab === "report" ? (
-            <div className={styles["specialist-report"]}>
-              <details className={styles["specialist-report__task"]}>
-                <summary>Task</summary>
-                <p>{run.task}</p>
-              </details>
-              {stopped && (
-                <p className={styles["specialist-run__reason"]}>{stopped}</p>
-              )}
-              {handoff && (
-                <>
-                  {paragraphs(handoff.summary).map((paragraph, index) => (
-                    <p key={index}>{paragraph}</p>
-                  ))}
-                  <ReportPart title="Findings" items={handoff.findings} />
-                  <ReportPart
-                    title="Recommendations"
-                    items={handoff.recommendations}
-                  />
-                  <ReportPart title="Limitations" items={handoff.limitations} />
-                </>
-              )}
-              {!hasReport && (
-                <p className={styles["specialist-report__empty"]}>
-                  No report yet. The specialist reports when it finishes.
-                </p>
-              )}
+          <header className={styles["diff-modal__header"]}>
+            <div className={styles["specialist-modal__title"]}>
+              <p className="eyebrow">Specialist</p>
+              <h2 id={titleId}>{run.specialist.name}</h2>
             </div>
-          ) : actions.length > 0 ? (
-            <ActionHistory
-              actions={actions}
-              {...(onOpenPermission ? { onOpenPermission } : {})}
-              {...(readPicture ? { readPicture } : {})}
-            />
-          ) : (
-            <p className={styles["specialist-report__empty"]}>No calls yet.</p>
-          )}
+            <span
+              className={`${styles["specialist-run__status"]} ${styles[`specialist-run__status--${run.status}`]}`}
+            >
+              <Icon name={presentation.icon} />
+              {presentation.label}
+              {took && ` · ${took}`}
+            </span>
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </header>
+          <div
+            className={styles["specialist-modal__tabs"]}
+            role="tablist"
+            aria-label="Specialist run"
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+                return;
+              event.preventDefault();
+              setTab((current) => (current === "report" ? "calls" : "report"));
+            }}
+          >
+            {tabs.map(([id, label, count]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                aria-controls={panelId}
+                tabIndex={tab === id ? 0 : -1}
+                onClick={() => setTab(id)}
+              >
+                {label} {count !== undefined && <span>{count}</span>}
+              </button>
+            ))}
+          </div>
+          <div
+            className={styles["specialist-modal__panel"]}
+            id={panelId}
+            role="tabpanel"
+          >
+            {tab === "report" ? (
+              <div className={styles["specialist-report"]}>
+                <details className={styles["specialist-report__task"]}>
+                  <summary>Task</summary>
+                  <p>{run.task}</p>
+                </details>
+                {stopped && (
+                  <p className={styles["specialist-run__reason"]}>{stopped}</p>
+                )}
+                {handoff && (
+                  <>
+                    {paragraphs(handoff.summary).map((paragraph, index) => (
+                      <p key={index}>{paragraph}</p>
+                    ))}
+                    <ReportPart title="Findings" items={handoff.findings} />
+                    <ReportPart
+                      title="Recommendations"
+                      items={handoff.recommendations}
+                    />
+                    <ReportPart
+                      title="Limitations"
+                      items={handoff.limitations}
+                    />
+                  </>
+                )}
+                {!hasReport && (
+                  <p className={styles["specialist-report__empty"]}>
+                    No report yet. The specialist reports when it finishes.
+                  </p>
+                )}
+              </div>
+            ) : actions.length > 0 ? (
+              <ActionHistory
+                actions={actions}
+                {...(onOpenPermission ? { onOpenPermission } : {})}
+                {...(readPicture ? { readPicture } : {})}
+              />
+            ) : (
+              <p className={styles["specialist-report__empty"]}>
+                No calls yet.
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </WindowLayer>
   );
 }
 

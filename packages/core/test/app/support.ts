@@ -95,6 +95,7 @@ export function loopFrom({
       toolchains,
       connectionToolchains,
       browsers: dependencies.browsers,
+      ...(dependencies.scenes ? { scenes: dependencies.scenes } : {}),
     }),
     rewind: new ComposedRewind({ conversation: rewind, recovery }),
   };

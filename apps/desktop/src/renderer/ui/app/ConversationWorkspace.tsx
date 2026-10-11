@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BrowserSurface } from "../browser/index.js";
 import { DocumentPanel, documentShape } from "../document/index.js";
+import { SceneSurface } from "../scene/index.js";
 import { SurfaceSwitch, WorkspaceSplit } from "../workspace/index.js";
 import type { useWorkspaceView } from "./useWorkspaceView.js";
 import type { WorkspaceCommands } from "./workspaceCommands.js";
@@ -9,12 +10,13 @@ type WorkspaceViewing = ReturnType<typeof useWorkspaceView>;
 
 /**
  * The conversation with the space beside it, drawing whichever surface the
- * view says: the agent's browser or a document. The modules that draw them do
+ * view says: the agent's browser, a document or the 3D view. The modules that draw them do
  * not know of each other; this is where they meet.
  */
 export function ConversationWorkspace({
   viewing,
   taskId,
+  agentWorking,
   id,
   commands,
   act,
@@ -22,10 +24,13 @@ export function ConversationWorkspace({
 }: {
   viewing: WorkspaceViewing;
   taskId: string | null;
+  /** Whether the agent is at work in the conversation now. */
+  agentWorking: boolean;
   id: string;
   commands: Pick<
     WorkspaceCommands,
     | "driveBrowser"
+    | "lookAtScene"
     | "showDocument"
     | "closeDocument"
     | "openDocument"
@@ -51,8 +56,9 @@ export function ConversationWorkspace({
       }
       shows={viewing.beside}
       switcher={
-        viewing.both && viewing.beside ? (
+        viewing.available.length > 1 && viewing.beside ? (
           <SurfaceSwitch
+            available={viewing.available}
             selected={viewing.beside.kind}
             onSelect={viewing.choose}
           />
@@ -64,6 +70,13 @@ export function ConversationWorkspace({
             browser={shown.browser}
             onReturn={viewing.toConversation}
             onDrive={(intent) => act(() => commands.driveBrowser(intent))}
+          />
+        ) : shown.kind === "scene" ? (
+          <SceneSurface
+            scene={shown.scene}
+            agentWorking={agentWorking}
+            onLook={(intent) => act(() => commands.lookAtScene(intent))}
+            onReturn={viewing.toConversation}
           />
         ) : (
           <DocumentPanel

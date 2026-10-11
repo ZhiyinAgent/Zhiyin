@@ -125,7 +125,7 @@ export class CallInputs {
     }
 
     call.arguments = "{}";
-    const result = unreadableInput(input.reason, input.cutOff);
+    const result = unreadableInput(input.reason, input.cutOff, raw.length);
     if (quietRetriesLeft > 0) {
       await this.#audit(taskId, call.name, "quiet-retry", input.reason, {
         before: raw,

@@ -10,11 +10,15 @@ export type ConversationPermission = {
   readonly label: string;
   readonly at: string;
   readonly kind: "file-folder" | "connector-tool";
+  /** A tool, or every tool of a connection, written `mcp__<server>__*`. */
   readonly toolName: string;
   /** Canonical workspace root and folder for app-owned file changes. */
   readonly workspaceRoot?: string;
   readonly folder?: string;
-  /** Server and schema identity for one connector tool version. */
+  /**
+   * Server and schema identity for one connector tool version; for every
+   * tool of a connection, the allowance key its calls share.
+   */
   readonly identity?: string;
 };
 

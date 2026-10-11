@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   BrowserPanelState,
   DocumentPanelState,
+  ScenePanelState,
   WorkspaceView,
 } from "@zhiyin/contract";
 import type { Surface } from "../workspace/index.js";
 import type { WorkspaceCommands } from "./workspaceCommands.js";
 import {
   selectedDocument,
+  selectedScene,
   selectedWorkspaceView,
   type WorkspaceState,
 } from "./workspaceState.js";
@@ -17,7 +19,13 @@ type OpenDocument = Exclude<DocumentPanelState, { status: "closed" }>;
 /** What the space beside the conversation would draw. */
 export type BesideConversation =
   | { readonly kind: "browser"; readonly browser: BrowserPanelState }
-  | { readonly kind: "document"; readonly document: OpenDocument };
+  | { readonly kind: "document"; readonly document: OpenDocument }
+  | { readonly kind: "scene"; readonly scene: ScenePanelState };
+
+/** In the order the switch offers them. */
+const surfaces: readonly Surface[] = ["browser", "document", "scene"];
+/** Which to show first when nothing was shown yet. */
+const preferred: readonly Surface[] = ["document", "browser", "scene"];
 
 /**
  * What the space beside the selected conversation shows, as the core decided
@@ -39,11 +47,18 @@ export function useWorkspaceView(
   const taskId = state.selectedTaskId;
   const browser = state.browser;
   const document = selectedDocument(state);
+  const scene = selectedScene(state);
   const view = selectedWorkspaceView(state);
   const has = (surface: Surface) =>
     surface === "browser"
       ? browser.status !== "closed"
-      : document.status !== "closed";
+      : surface === "scene"
+        ? // From the moment Blender starts, so starting is seen.
+          scene.status === "starting" ||
+          scene.file !== undefined ||
+          scene.preview !== undefined
+        : document.status !== "closed";
+  const available = surfaces.filter(has);
   const showing = view !== "conversation" && has(view) ? view : undefined;
 
   const [last, setLast] = useState<{
@@ -55,22 +70,18 @@ export function useWorkspaceView(
   const remembered = last?.taskId === taskId ? last.surface : undefined;
   const surface: Surface | undefined =
     showing ??
-    (remembered && has(remembered)
-      ? remembered
-      : has("document")
-        ? "document"
-        : has("browser")
-          ? "browser"
-          : undefined);
+    (remembered && has(remembered) ? remembered : preferred.find(has));
 
   const beside = useMemo<BesideConversation | undefined>(
     () =>
       surface === "browser"
         ? { kind: "browser", browser }
-        : surface === "document" && document.status !== "closed"
-          ? { kind: "document", document }
-          : undefined,
-    [surface, browser, document],
+        : surface === "scene"
+          ? { kind: "scene", scene }
+          : surface === "document" && document.status !== "closed"
+            ? { kind: "document", document }
+            : undefined,
+    [surface, browser, document, scene],
   );
 
   const choose = (next: WorkspaceView) => {
@@ -109,8 +120,8 @@ export function useWorkspaceView(
     beside,
     /** Whether the space is on screen. */
     open: showing !== undefined,
-    /** Both surfaces are available, so the person can choose between them. */
-    both: has("browser") && has("document"),
+    /** The surfaces this conversation has; a choice is offered when several. */
+    available,
     /** Shows the conversation alone. */
     toConversation: () => choose("conversation"),
     /** Shows the space, with the surface it showed last. */

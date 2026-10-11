@@ -13,12 +13,21 @@ import {
   browserConnection,
   declaredConnectionsOf,
   documentsConnection,
+  sceneConnection,
   gitConnection,
   pythonConnection,
 } from "@zhiyin/capabilities";
 import { gitAutomation } from "@zhiyin/git-connector";
 import { documentCompiler } from "@zhiyin/document-compiler";
 import { pythonSandbox } from "@zhiyin/python-sandbox";
+import {
+  ConversationScenes,
+  compiledBlenderPython,
+  containedSessionLaunch,
+  workspaceOpening,
+  describeSceneTools,
+  sceneAutomation,
+} from "@zhiyin/blender-studio";
 import { WorkspaceArtifacts } from "@zhiyin/artifacts";
 import { conversationExport } from "@zhiyin/conversation-export";
 import { FileAuditLog } from "@zhiyin/audit";
@@ -62,6 +71,7 @@ import {
 import {
   containmentAvailability,
   openProcessContainer,
+  openToLowIntegrity,
 } from "@zhiyin/process-ownership";
 import {
   BrowserSessions,
@@ -88,6 +98,8 @@ export type Surroundings = {
   readonly dataDirectory: string;
   /** Where the plugins shipped with the application are. */
   readonly builtInPluginsDirectory: string;
+  /** The script Blender runs for the 3D studio; without it there is no studio. */
+  readonly blenderSessionScript?: string;
   readonly workspaceDirectory: string | undefined;
   readonly version: string;
   /** Sends to the app's window while it is open. */
@@ -138,6 +150,7 @@ export type { SpellcheckEngine, TextMenuItem } from "@zhiyin/spelling";
 export function buildCore({
   dataDirectory,
   builtInPluginsDirectory,
+  blenderSessionScript,
   workspaceDirectory,
   version,
   send,
@@ -256,7 +269,21 @@ export function buildCore({
   const toolchains = new DownloadedToolchains({
     directory: dataDirectory,
     specs: pinnedToolchains,
+    // Blender arrives with its Python as source and, contained, can keep no
+    // compiled copy of it: it is compiled once, as it is installed.
+    ready: { blender: compiledBlenderPython({ containment }) },
   });
+  // Each conversation's own Blender, installed as a toolchain (ADR 0026).
+  const blender = () => toolchains.executable("blender");
+  const scenes = blenderSessionScript
+    ? new ConversationScenes({
+        blender,
+        directory: join(dataDirectory, "blender-studio"),
+        launch: containedSessionLaunch(containment, openToLowIntegrity),
+        script: blenderSessionScript,
+      })
+    : undefined;
+  const openToBlender = workspaceOpening(openToLowIntegrity);
   /** One installed program, named the way the compiler asks for it. */
   const executable = async (id: "typst" | "tectonic") => {
     const path = await toolchains.executable(id);
@@ -312,6 +339,20 @@ export function buildCore({
             containment,
           }),
         ),
+        ...(scenes
+          ? [
+              sceneConnection(
+                (conversationId) =>
+                  sceneAutomation(scenes.scene(conversationId), {
+                    workspaceRoot: () => workspace.workspaceRoot(),
+                    blender,
+                    directory: scenes.directory(conversationId),
+                    openToBlender,
+                  }),
+                () => describeSceneTools(blender),
+              ),
+            ]
+          : []),
       ],
       () => declaredConnectionsOf(plugins),
       Date.now,
@@ -324,10 +365,12 @@ export function buildCore({
     connectionToolchains: {
       documents: ["typst", "tectonic"],
       python: ["uv"],
+      blender: ["blender"],
     },
     // Stopping a turn, deleting a conversation and shutting down all let go of
     // what a conversation holds through this one group.
     browsers,
+    ...(scenes ? { scenes } : {}),
   });
   // A test's stand-in for a browser or connection that never finishes closing.
   if (connectionsNeverClose)
@@ -359,6 +402,8 @@ export function buildCore({
       // Each conversation gets an app-owned browser rather than access to the
       // person's browser or another conversation's page.
       browsers,
+      // Each conversation's 3D scene, which the person watches (ADR 0026).
+      ...(scenes ? { scenes } : {}),
       // Pages are drawn in a contained process of their own (ADR 0018).
       documents: new DocumentViewer({ start: startDrawing, containment }),
       pdfWords: (bytes) => pdfPages.words(bytes),

@@ -300,7 +300,7 @@ describe("a tool request whose input is not valid JSON", () => {
       [
         {
           name: "write_file",
-          args: '{"path":"note.md","text":"The first half',
+          args: `{"path":"note.md","text":"The first half ${"of a long note ".repeat(400)}`,
         },
       ],
     ]);
@@ -313,6 +313,35 @@ describe("a tool request whose input is not valid JSON", () => {
     expect(refusal.reason).toMatch(/cut off/);
     expect(refusal.next).toMatch(/shorter|split/);
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
+  });
+
+  it("tells the model a short call that stopped early was not cut for its length", async () => {
+    // What a provider sends when it could not turn a call the model wrote out
+    // back into arguments: the start of them, a few dozen characters long.
+    const { loop, main } = setUp([
+      [{ name: "write_file", args: '{"path":"note.md","text":' }],
+    ]);
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Write the note");
+
+    const refusal = unfenced(toolResults(main.requests[1])[0]?.content ?? "");
+    expect(refusal.reason).toMatch(/cut off/);
+    expect(refusal.next).toMatch(/not cut for its length/);
+    expect(refusal.next).not.toMatch(/shorter|split/);
+  });
+
+  it("names a connector's failed call by the tool, not by its routing", async () => {
+    const stopped: Call = {
+      name: "mcp__studio__set_camera",
+      args: '{"location":[0,-0.35,0.05],"look_at":',
+    };
+    const { loop } = setUp([[stopped], [stopped], [stopped], [stopped]]);
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Frame the mug");
+
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.action).toBe("Set camera");
   });
 
   it("records a repair that ran out of room as out of room", async () => {

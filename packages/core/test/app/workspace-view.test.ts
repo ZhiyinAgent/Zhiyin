@@ -1,6 +1,6 @@
 /**
- * What the space beside a conversation shows: nothing, the browser, or a
- * document. It follows the surface the agent used last, opens on
+ * What the space beside a conversation shows: nothing, the browser, a
+ * document, or its 3D scene. It follows the surface the agent used last, opens on
  * its own once for a conversation's first document, and a person's choice
  * holds until the turn ends.
  */
@@ -10,6 +10,8 @@ import type {
   AppEvent,
   BrowserPanelState,
   DocumentPanelState,
+  SceneIntent,
+  ScenePanelState,
 } from "@zhiyin/contract";
 import type { ModelEvent } from "@zhiyin/model-client";
 import {
@@ -137,6 +139,90 @@ function controllableBrowser() {
   };
 }
 
+/**
+ * Each conversation's 3D scene, which a test opens and changes as the
+ * agent's commands would, and the looking the person asked of it.
+ */
+function controllableScenes() {
+  const made = new Map<string, ReturnType<typeof scene>>();
+  const listeners = new Set<
+    (taskId: string, made: ReturnType<typeof scene>) => void
+  >();
+  const forgotten: string[] = [];
+  function scene() {
+    let state: ScenePanelState = {
+      status: "closed",
+      view: "camera",
+      working: false,
+    };
+    let sequence = 0;
+    const states = new Set<(state: ScenePanelState) => void>();
+    const publish = (change: Partial<ScenePanelState>) => {
+      state = { ...state, ...change };
+      states.forEach((listener) => listener(state));
+    };
+    const picture = () => ({
+      preview: {
+        data: "",
+        width: 640,
+        height: 360,
+        view: state.view,
+        sequence: ++sequence,
+      },
+    });
+    return {
+      looked: [] as SceneIntent[],
+      state: () => state,
+      onState(listener: (state: ScenePanelState) => void) {
+        states.add(listener);
+        return () => void states.delete(listener);
+      },
+      look(intent: SceneIntent) {
+        this.looked.push(intent);
+      },
+      /** The agent's first command: Blender starts and opens the file. */
+      opens(file: string) {
+        publish({ status: "starting" });
+        publish({ status: "open", file, working: true });
+        publish({ working: false, ...picture() });
+      },
+      /** A later command that changes the scene. */
+      changes() {
+        publish({ working: true });
+        publish({ working: false, ...picture() });
+      },
+    };
+  }
+  return {
+    forgotten,
+    /** The conversation's scene, made as its first 3D command makes it. */
+    of(taskId: string) {
+      let found = made.get(taskId);
+      if (!found) {
+        found = scene();
+        made.set(taskId, found);
+        for (const listener of listeners) listener(taskId, found);
+      }
+      return found;
+    },
+    port: {
+      existing: (taskId: string) => made.get(taskId),
+      onScene(
+        listener: (taskId: string, made: ReturnType<typeof scene>) => void,
+      ) {
+        listeners.add(listener);
+        return () => void listeners.delete(listener);
+      },
+      close: async () => {},
+      forget: async (taskId: string) => {
+        forgotten.push(taskId);
+        made.delete(taskId);
+      },
+      closeAll: async () => {},
+    },
+  };
+}
+
 type Request = readonly [string, Record<string, unknown>] | "answer";
 
 /**
@@ -170,6 +256,7 @@ function app(
   const deps = stubDependencies((event) => events.push(event));
   const browser = controllableBrowser();
   const documents = documentViewerStub();
+  const scenes = controllableScenes();
   let taskNumber = 0;
   const midTurn = { midTurn: async () => options.midTurn?.() };
   /** What the model was sent, request by request. */
@@ -183,6 +270,7 @@ function app(
     },
     tools: writingTools(midTurn),
     documents,
+    scenes: scenes.port,
     browsers: {
       browser: () => browser,
       close: async () => browser.close(),
@@ -201,7 +289,7 @@ function app(
       },
     },
   } satisfies LoopTestDependencies);
-  return { loop, browser, documents, events, sent };
+  return { loop, browser, documents, scenes, events, sent };
 }
 
 const view = (loop: TestApp) => loop.snapshot().workspaceView;
@@ -629,5 +717,177 @@ describe("a document the agent closes", () => {
     expect(sent.at(-1)).toContain(
       "No document was shown beside the conversation.",
     );
+  });
+});
+
+describe("a conversation's 3D scene", () => {
+  /** A turn in which the agent does one thing to the scene, then answers. */
+  function sceneApp(...steps: readonly Request[]) {
+    let act = async () => {};
+    const made = app({ steps, midTurn: () => act() });
+    return {
+      ...made,
+      /** What the agent's next tool call does, besides itself. */
+      during: (next: () => void | Promise<void>) => {
+        act = async () => {
+          act = async () => {};
+          await next();
+        };
+      },
+    };
+  }
+
+  it("is shown when it first appears, as the browser is", async () => {
+    const { loop, scenes, during } = sceneApp(["think", {}], "answer");
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    during(() => scenes.of(taskId).opens("shelf.blend"));
+    await loop.start(taskId, "Model a shelf");
+    expect(view(loop)).toBe("scene");
+    expect(loop.snapshot().scene).toMatchObject({
+      status: "open",
+      file: "shelf.blend",
+      working: false,
+    });
+  });
+
+  it("does not take the space when the person chose during the turn", async () => {
+    const { loop, scenes, during } = sceneApp(["think", {}], "answer");
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    during(async () => {
+      await loop.chooseWorkspaceView(taskId, "conversation");
+      scenes.of(taskId).opens("shelf.blend");
+    });
+    await loop.start(taskId, "Model a shelf");
+    expect(view(loop)).toBe("conversation");
+    expect(loop.snapshot().scene?.status).toBe("open");
+  });
+
+  it("follows the agent from a document to its scene, and never reopens a space the person put away", async () => {
+    const { loop, scenes, during } = sceneApp(
+      ["think", {}],
+      "answer",
+      ["write_file", { path: "plan.pdf" }],
+      "answer",
+      ["think", {}],
+      "answer",
+      ["think", {}],
+      "answer",
+    );
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    during(() => scenes.of(taskId).opens("flat.blend"));
+    await loop.start(taskId, "Build the flat");
+    await loop.start(taskId, "Write up the plan");
+    expect(view(loop)).toBe("document");
+
+    during(() => scenes.of(taskId).changes());
+    await loop.start(taskId, "Paint the walls");
+    expect(view(loop)).toBe("scene");
+
+    await loop.chooseWorkspaceView(taskId, "conversation");
+    during(() => scenes.of(taskId).changes());
+    await loop.start(taskId, "Add a sofa");
+    expect(view(loop)).toBe("conversation");
+  });
+
+  it("gives the space to a picture the agent writes while the scene shows", async () => {
+    const { loop, scenes, during } = sceneApp(
+      ["write_file", { path: "brief.pdf" }],
+      "answer",
+      ["think", {}],
+      "answer",
+      ["write_file", { path: "renders/can.png" }],
+      "answer",
+    );
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    await loop.start(taskId, "Read the brief");
+    during(() => scenes.of(taskId).opens("can.blend"));
+    await loop.start(taskId, "Model the can");
+    expect(view(loop)).toBe("scene");
+
+    await loop.start(taskId, "Render it");
+    expect(view(loop)).toBe("document");
+    expect(shownPath(loop)).toBe("renders/can.png");
+  });
+
+  it("takes the space back when the browser or a document closes", async () => {
+    const { loop, browser, scenes, during } = sceneApp(["think", {}], "answer");
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    during(() => scenes.of(taskId).opens("shelf.blend"));
+    await loop.start(taskId, "Model a shelf");
+    await browser.agentActs();
+    expect(view(loop)).toBe("browser");
+
+    await browser.close();
+    expect(view(loop)).toBe("scene");
+
+    await loop.showDocument(taskId, "brief.pdf");
+    expect(view(loop)).toBe("document");
+    await loop.closeDocument(taskId);
+    expect(view(loop)).toBe("scene");
+  });
+
+  it("refuses the 3D view, and looking at it, in a conversation without a scene", async () => {
+    const { loop } = sceneApp();
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    await expect(loop.chooseWorkspaceView(taskId, "scene")).rejects.toThrow(
+      "This conversation has no 3D scene.",
+    );
+    await expect(loop.lookAtScene({ kind: "reset" })).rejects.toThrow(
+      "This conversation has no 3D scene.",
+    );
+    expect(view(loop)).toBe("conversation");
+  });
+
+  it("passes the person's turning to the open conversation's own scene", async () => {
+    const { loop, scenes } = sceneApp();
+    await loop.selectWorkspace("C:/work");
+    const first = await loop.createTask();
+    scenes.of(first).opens("first.blend");
+    const second = await loop.createTask();
+    scenes.of(second).opens("second.blend");
+
+    await loop.selectTask(first);
+    await loop.lookAtScene({ kind: "turn", yaw: 15, pitch: 0 });
+    expect(scenes.of(first).looked).toEqual([
+      { kind: "turn", yaw: 15, pitch: 0 },
+    ]);
+    expect(scenes.of(second).looked).toEqual([]);
+  });
+
+  it("tells the window each change, and shows each conversation's own scene", async () => {
+    const { loop, scenes, events } = sceneApp();
+    await loop.selectWorkspace("C:/work");
+    const first = await loop.createTask();
+    events.length = 0;
+    scenes.of(first).opens("first.blend");
+    expect(events).toContainEqual({
+      kind: "sceneChanged",
+      data: { taskId: first, scene: scenes.of(first).state() },
+    });
+
+    await loop.createTask();
+    expect(loop.snapshot().scene?.status).toBe("closed");
+    await loop.selectTask(first);
+    expect(loop.snapshot().scene).toMatchObject({ file: "first.blend" });
+  });
+
+  it("lets go of a deleted conversation's scene", async () => {
+    const { loop, scenes, events } = sceneApp();
+    await loop.selectWorkspace("C:/work");
+    const taskId = await loop.createTask();
+    const scene = scenes.of(taskId);
+    scene.opens("shelf.blend");
+    await loop.deleteTask(taskId);
+    expect(scenes.forgotten).toEqual([taskId]);
+
+    events.length = 0;
+    scene.changes();
+    expect(events.some((event) => event.kind === "sceneChanged")).toBe(false);
   });
 });

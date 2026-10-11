@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { DocumentComparison, FileChange } from "@zhiyin/contract";
 import { ChangeReview } from "./ChangeReview.js";
 import { DocumentChangeReview } from "./DocumentChangeReview.js";
-import { Icon } from "../shared/index.js";
+import { Icon, WindowLayer } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 /**
@@ -60,76 +60,78 @@ export function DiffModal({
   }, [onClose]);
 
   return (
-    <div
-      className={styles["diff-modal__scrim"]}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
+    <WindowLayer>
       <div
-        className={styles["diff-modal"]}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        tabIndex={-1}
-        ref={dialog}
+        className={styles["diff-modal__scrim"]}
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) onClose();
+        }}
       >
-        <header className={styles["diff-modal__header"]}>
-          <div className={styles["diff-modal__title"]}>
-            <h2 id={titleId}>
-              {changes.length === 1
-                ? "Review this change"
-                : `Review ${changes.length} changes`}
-            </h2>
-            {about && <p>{about}</p>}
-          </div>
-          <button
-            className="button button--quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </header>
+        <div
+          className={styles["diff-modal"]}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          tabIndex={-1}
+          ref={dialog}
+        >
+          <header className={styles["diff-modal__header"]}>
+            <div className={styles["diff-modal__title"]}>
+              <h2 id={titleId}>
+                {changes.length === 1
+                  ? "Review this change"
+                  : `Review ${changes.length} changes`}
+              </h2>
+              {about && <p>{about}</p>}
+            </div>
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </header>
 
-        {changes.length > 1 && (
-          <div
-            className={styles["diff-modal__files"]}
-            role="tablist"
-            aria-label="Changed files"
-          >
-            {changes.map((change) => (
-              <button
-                key={change.path}
-                type="button"
-                role="tab"
-                aria-selected={change.path === openPath}
-                onClick={() => setOpenPath(change.path)}
-              >
-                <Icon name="file" />
-                <span>{change.path}</span>
-              </button>
-            ))}
-          </div>
-        )}
+          {changes.length > 1 && (
+            <div
+              className={styles["diff-modal__files"]}
+              role="tablist"
+              aria-label="Changed files"
+            >
+              {changes.map((change) => (
+                <button
+                  key={change.path}
+                  type="button"
+                  role="tab"
+                  aria-selected={change.path === openPath}
+                  onClick={() => setOpenPath(change.path)}
+                >
+                  <Icon name="file" />
+                  <span>{change.path}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
-        <div className={styles["diff-modal__body"]}>
-          {current &&
-            (compareDocument && comparable(current) ? (
-              <DocumentChangeReview
-                key={current.path}
-                path={current.path}
-                compare={compareDocument}
-              />
-            ) : (
-              <ChangeReview
-                change={current}
-                omittedNote="Approving it means approving a change you have not seen in full."
-              />
-            ))}
+          <div className={styles["diff-modal__body"]}>
+            {current &&
+              (compareDocument && comparable(current) ? (
+                <DocumentChangeReview
+                  key={current.path}
+                  path={current.path}
+                  compare={compareDocument}
+                />
+              ) : (
+                <ChangeReview
+                  change={current}
+                  omittedNote="Approving it means approving a change you have not seen in full."
+                />
+              ))}
+          </div>
         </div>
       </div>
-    </div>
+    </WindowLayer>
   );
 }
 

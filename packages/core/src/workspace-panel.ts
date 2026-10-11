@@ -1,9 +1,9 @@
 /**
  * What the space beside each conversation shows, and the document it holds.
- * One surface at a time: the browser or a document, or neither.
+ * One surface at a time: the browser, a document, the 3D view, or none.
  *
- * The space follows the surface the agent used last: a browser action, or a
- * document written or read (ADR 0018). It opens on its own the first time a
+ * The space follows the surface the agent used last: a browser action, a
+ * document written or read (ADR 0018), or a change to its 3D scene (ADR 0026). It opens on its own the first time a
  * conversation writes or reads a document; after that one is drawn but never
  * reopens a space the person closed. A choice the person makes holds until
  * the turn ends, so the agent never takes the view back from someone looking
@@ -44,6 +44,15 @@ type Followed = {
   documentOpened: boolean;
 };
 
+const surfaceName = (view: WorkspaceView) =>
+  view === "browser"
+    ? "the browser"
+    : view === "scene"
+      ? "the 3D view"
+      : view === "document"
+        ? "the document"
+        : "the conversation alone";
+
 const going: readonly TaskPhase["kind"][] = [
   "loading",
   "working",
@@ -56,6 +65,7 @@ export class WorkspacePanel {
   readonly #documents: DocumentViewerPort;
   readonly #emit: (event: AppEvent) => void;
   readonly #browserOpen: (taskId: string) => boolean;
+  readonly #sceneShown: (taskId: string) => boolean;
   readonly #folderOf: (taskId: string) => string | undefined;
   readonly #followed = new Map<string, Followed>();
   /** Whether each conversation had a turn under way when last announced. */
@@ -65,12 +75,15 @@ export class WorkspacePanel {
     readonly documents: DocumentViewerPort;
     readonly emit: (event: AppEvent) => void;
     readonly browserOpen: (taskId: string) => boolean;
+    /** Whether the conversation has a 3D scene to show. */
+    readonly sceneShown?: (taskId: string) => boolean;
     /** The folder a conversation works in, where its documents are. */
     readonly folderOf: (taskId: string) => string | undefined;
   }) {
     this.#documents = deps.documents;
     this.#emit = deps.emit;
     this.#browserOpen = deps.browserOpen;
+    this.#sceneShown = deps.sceneShown ?? (() => false);
     this.#folderOf = deps.folderOf;
     deps.documents.onChange((taskId, document) => {
       this.#emit({ kind: "documentChanged", data: { taskId, document } });
@@ -114,8 +127,27 @@ export class WorkspacePanel {
     if (this.view(taskId) === "browser")
       this.#show(
         taskId,
-        this.#documentOpen(taskId) ? "document" : "conversation",
+        this.#documentOpen(taskId)
+          ? "document"
+          : this.#sceneShown(taskId)
+            ? "scene"
+            : "conversation",
       );
+  }
+
+  /** A 3D scene appeared: shown, as the browser is, unless the person chose. */
+  sceneOpened(taskId: string): void {
+    if (!this.held(taskId)) this.#show(taskId, "scene");
+  }
+
+  /**
+   * The agent changed its 3D scene: the space follows it there from another
+   * surface, but never reopens a space the person put away.
+   */
+  agentUsedScene(taskId: string): void {
+    const view = this.view(taskId);
+    if (!this.held(taskId) && (view === "document" || view === "browser"))
+      this.#show(taskId, "scene");
   }
 
   /** The agent acted in the browser: the space follows it there if it is showing. */
@@ -141,7 +173,8 @@ export class WorkspacePanel {
     const first = !followed.documentOpened;
     followed.documentOpened = true;
     if (followed.held) return;
-    if (first || followed.view === "browser") this.#show(taskId, "document");
+    if (first || followed.view === "browser" || followed.view === "scene")
+      this.#show(taskId, "document");
   }
 
   /**
@@ -173,7 +206,7 @@ export class WorkspacePanel {
     if (followed.held)
       return followed.view === "document"
         ? shown
-        : `Not on screen: the person chose to look at ${followed.view === "browser" ? "the browser" : "the conversation alone"} during this turn. It stays as they chose.`;
+        : `Not on screen: the person chose to look at ${surfaceName(followed.view)} during this turn. It stays as they chose.`;
     if (!first && followed.view === "conversation")
       return "Not on screen: the person put the space beside the conversation away. It is there when they open it.";
     this.#show(taskId, "document");
@@ -223,8 +256,9 @@ export class WorkspacePanel {
       return "Not closed: the person chose to look at the document during this turn. It stays as they chose.";
     this.#documents.close(taskId);
     this.#documentClosed(taskId);
-    return this.view(taskId) === "browser"
-      ? "Closed. The space beside the conversation shows the browser."
+    const view = this.view(taskId);
+    return view === "browser" || view === "scene"
+      ? `Closed. The space beside the conversation shows ${surfaceName(view)}.`
       : "Closed. The person sees the conversation alone.";
   }
 
@@ -234,6 +268,8 @@ export class WorkspacePanel {
       throw new VisibleError("This conversation has no browser open.");
     if (view === "document" && !this.#documentOpen(taskId))
       throw new VisibleError("This conversation has no document open.");
+    if (view === "scene" && !this.#sceneShown(taskId))
+      throw new VisibleError("This conversation has no 3D scene.");
     this.#show(taskId, view);
     this.#follow(taskId).held = true;
   }
@@ -285,7 +321,11 @@ export class WorkspacePanel {
     if (this.view(taskId) === "document")
       this.#show(
         taskId,
-        this.#browserOpen(taskId) ? "browser" : "conversation",
+        this.#browserOpen(taskId)
+          ? "browser"
+          : this.#sceneShown(taskId)
+            ? "scene"
+            : "conversation",
       );
   }
 

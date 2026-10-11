@@ -201,6 +201,9 @@ export function demoCommands(
     driveBrowser: async () => {
       throw notInTheDemo("open a browser");
     },
+    lookAtScene: async () => {
+      throw notInTheDemo("turn a 3D scene");
+    },
     chooseWorkspaceView: async (taskId, view) =>
       dispatch({ type: "workspaceViewChanged", taskId, view }),
     showDocument: async (taskId, path, page) => {

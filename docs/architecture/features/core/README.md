@@ -6,8 +6,8 @@ The core stands between the app's window and everything behind it. Every
 command the window sends arrives here, is checked for shape, and goes to
 whoever answers it. Behind the core, the workspace holds the app's state
 outside a turn: the conversations and which one is open, the folder, the
-person's choices, issues, plugin and connection state, usage, and the browser
-and document shown beside each conversation. The workspace is the one path by
+person's choices, issues, plugin and connection state, usage, and the browser,
+document and 3D scene shown beside each conversation. The workspace is the one path by
 which that state is saved and the one route by which the window hears of it.
 Turns run in the agent loop, which reaches conversations only through the turn
 host the workspace hands it.
@@ -34,11 +34,12 @@ and carries messages; the decisions are made here.
   (artifacts, conversation export); the model catalogue and which model
   answers before one is chosen (model client).
 - **Talks to other features only through:** the interfaces of the agent loop,
-  artifacts, audit, capabilities, conversation export, document viewer,
-  interactive browser, model client, rewind, session, spelling and usage, and
-  the contract. A group's members are reached through the group, with one
-  exception: the core reaches the interactive browser directly for the panel
-  the person drives, which the capabilities group does not answer for.
+  artifacts, audit, blender studio, capabilities, conversation export,
+  document viewer, interactive browser, model client, rewind, session,
+  spelling and usage, and the contract. A group's members are reached through
+  the group, with two exceptions: the core reaches the interactive browser
+  directly for the panel the person drives, and the blender studio for the 3D
+  view the person turns. The capabilities group answers for neither.
 
 ## Public interface
 
@@ -79,7 +80,8 @@ answers every other command:
   callback that asks where to save. A conversation not yet opened is read from
   disk first, so its export holds the whole record (ADR 0020).
 - **The space beside a conversation,** plugins, connections, the shell's
-  availability, and the person's own browsing.
+  availability, the person's own browsing, and `lookAtScene`, the person
+  turning, zooming or switching the 3D view.
 - **Turns:** `turns` forwards to the agent loop starting, stopping and
   condensing a turn, the person's answers to approvals and questions, and
   revoking a permission granted for the conversation.
@@ -126,7 +128,7 @@ answers every other command:
   would have been at launch. A damaged one is reported and stays closed while
   every other opens; selecting it shows its report in its place. One whose
   last save was cut off by a crash opens without it, and the person is told.
-- **Quitting always finishes.** Turns, then browsers and connections, are
+- **Quitting always finishes.** Turns, then browsers, Blender and connections, are
   given until one deadline five seconds after quitting starts. Whatever has not
   closed is named and left. The data folder is given up either way, once the
   loop has stopped or the deadline has passed, so the next launch is never
@@ -223,10 +225,18 @@ answers every other command:
 
 ### The space beside a conversation (ADR 0018)
 
-- It shows one thing, nothing, the browser or a document, and follows the
-  surface the agent used last. A conversation's first document write or read
-  opens it once; later ones are drawn but never reopen a space the person put
-  away.
+- It shows one thing, nothing, the browser, a document or the 3D scene, and
+  follows the surface the agent used last. A conversation's first document
+  write or read opens it once; later ones are drawn but never reopen a space
+  the person put away.
+- A conversation's 3D scene opens the space when it first appears, as the
+  browser does (ADR 0026). The agent changing the scene brings the space to it
+  from a document or the browser; a document written while the scene shows,
+  such as a render, takes the space. When the browser or a document closes,
+  the space goes to the other of the two if it is open, then to the scene,
+  then to the conversation alone.
+- Turning and zooming the 3D view changes only its picture, never the scene,
+  and is refused for a conversation without one.
 - The person's choice of what it shows holds until the turn ends, and the
   agent cannot close a document the person chose to look at. The agent is
   always told what the person then sees.

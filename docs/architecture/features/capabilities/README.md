@@ -32,9 +32,10 @@ activating it.
   turn or a specialist (agent loop); permission decisions (permission engine);
   any management screen (renderer).
 - **Talks to other features only through:** the public interfaces of its
-  members (tools, MCP, plugins, toolchains, and the conversations' browsers)
-  and the automations of the git connector, document compiler and Python
-  environment, all of which the composition root constructs and hands in.
+  members (tools, MCP, plugins, toolchains, and the conversations' browsers
+  and 3D scenes) and the automations of the git connector, document compiler
+  and Python environment, all of which the composition root constructs and
+  hands in.
 
 ## Public interface
 
@@ -79,15 +80,16 @@ activating it.
   `onCommandEnded`, `onCommandsChanged`, `onJobChanges`) pass through to the
   tools member, for the core and the agent loop (ADR 0007).
 - `closeConversation`, `forgetConversation` and `shutdown` are the one place a
-  conversation's browser, connections and running commands are let go of.
+  conversation's browser, Blender, connections and running commands are let
+  go of.
 - `declaredConnectionsOf(plugins)` turns package declarations into what the
   MCP feature connects, with each connector's request rate and read-only
   tools. The composition root wires it, because the MCP feature is
   constructed before this group.
-- `browserConnection`, `gitConnection`, `documentsConnection` and
-  `pythonConnection` turn an application automation into a built-in
-  connection the MCP feature serves. The browser gets one automation per
-  conversation; the others share one.
+- `browserConnection`, `sceneConnection`, `gitConnection`,
+  `documentsConnection` and `pythonConnection` turn an application automation
+  into a built-in connection the MCP feature serves. The browser and the 3D
+  studio get one automation per conversation; the others share one.
 
 ## Invariants
 

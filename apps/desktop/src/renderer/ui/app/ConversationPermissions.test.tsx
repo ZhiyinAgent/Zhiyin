@@ -102,6 +102,76 @@ describe("conversation permissions panel", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("says a permission for a set of a connection's calls covers that set, not one tool", () => {
+    render(
+      <ConversationPermissions
+        task={{
+          id: "task-3",
+          title: "Mug",
+          updatedLabel: "Now",
+          updatedAt: "2026-10-10T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: { kind: "draft" },
+          conversationPermissions: [
+            {
+              id: "permission-3",
+              kind: "connector-tool",
+              toolName: "mcp__blender__*",
+              label:
+                "3D studio · Changes to mug.blend, and new files in the workspace",
+              at: "2026-10-10T09:00:00.000Z",
+              identity: JSON.stringify({
+                workspace: "C:/ws",
+                scene: "mug.blend",
+              }),
+            },
+          ],
+        }}
+        onClose={() => {}}
+        onRevoke={async () => {}}
+      />,
+    );
+    expect(
+      screen.getByText("May make these changes again in this conversation."),
+    ).toBeVisible();
+    expect(screen.queryByText(/tool version/)).toBeNull();
+  });
+
+  it("never says a permission for one exact call lets the tool run as it likes", () => {
+    render(
+      <ConversationPermissions
+        task={{
+          id: "task-4",
+          title: "Mug",
+          updatedLabel: "Now",
+          updatedAt: "2026-10-10T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: { kind: "draft" },
+          conversationPermissions: [
+            {
+              id: "permission-4",
+              kind: "connector-tool",
+              toolName: "mcp__blender__blender_render",
+              label: "3D studio · Render a 3D scene · only this exact call",
+              at: "2026-10-10T09:00:00.000Z",
+              identity: JSON.stringify({ server: "blender", action: "call" }),
+            },
+          ],
+        }}
+        onClose={() => {}}
+        onRevoke={async () => {}}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "May run again in this conversation while the tool stays the same.",
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText(/use this tool/)).toBeNull();
+  });
+
   it("has a clear empty state after every permission is revoked", () => {
     render(
       <ConversationPermissions

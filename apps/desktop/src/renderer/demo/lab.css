@@ -300,6 +300,23 @@ body {
   height: 260px;
 }
 
+/* The 3D view at the size the workspace gives it, and its states side by side. */
+.lab-scene-surface {
+  display: flex;
+  height: 460px;
+  padding: 12px;
+}
+
+.lab-scene-surface--state {
+  height: 300px;
+}
+
+.lab-scene-states {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
 .lab-document-states {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));

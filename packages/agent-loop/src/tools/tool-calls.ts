@@ -13,6 +13,7 @@ import {
   maximumRepairAttempts,
 } from "./tool-repair.js";
 import { type CallInput, CallInputs } from "./call-input.js";
+import { readableToolName } from "./invocation.js";
 import { correctableByModel, refusal, unknownTool } from "./refusals.js";
 import { closedForPerson, shownToPerson } from "./document-reads.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
@@ -698,10 +699,10 @@ export class ToolCalls {
   ): Promise<void> {
     // The call as it was made, so the record can be unfolded to what was asked
     // and what came back. Nothing about the tool is known here, and no target
-    // is invented for it.
+    // is invented for it. A connector's tool is named without its routing.
     const inspection = {
       ok: true as const,
-      action: this.#records.humanizeIdentifier(call.name),
+      action: this.#records.humanizeIdentifier(readableToolName(call.name)),
       target: "",
       command: `${call.name}(${call.arguments.trim() || "{}"})`,
     };

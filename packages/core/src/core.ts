@@ -60,6 +60,7 @@ export type CoreWorkspace = Pick<
   | "shellAvailability"
   | "recheckShell"
   | "driveBrowser"
+  | "lookAtScene"
   | "chooseWorkspaceView"
   | "showDocument"
   | "closeDocument"
@@ -274,6 +275,7 @@ export class Core {
       recheckShell: () => workspace.recheckShell(),
       openExternalUrl: (url) => openExternal(url),
       driveBrowser: (intent) => workspace.driveBrowser(intent),
+      lookAtScene: (intent) => workspace.lookAtScene(intent),
       chooseWorkspaceView: (taskId, view) =>
         workspace.chooseWorkspaceView(taskId, view),
       showDocument: (taskId, path, page) =>

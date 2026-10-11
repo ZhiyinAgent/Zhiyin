@@ -65,6 +65,7 @@ export const CHANNEL = {
   recheckShell: "zhiyin:recheck-shell",
   openExternalUrl: "zhiyin:open-external-url",
   driveBrowser: "zhiyin:drive-browser",
+  lookAtScene: "zhiyin:look-at-scene",
   chooseWorkspaceView: "zhiyin:choose-workspace-view",
   showDocument: "zhiyin:show-document",
   closeDocument: "zhiyin:close-document",

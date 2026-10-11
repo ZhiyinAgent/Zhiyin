@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { Dialog } from "./Dialog.js";
 
 describe("Dialog", () => {
+  it("opens over the whole window, not inside what opened it", () => {
+    const { container } = render(
+      <Dialog title="Picture" onClose={() => undefined}>
+        <p>Body</p>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Picture" });
+    expect(container.contains(dialog)).toBe(false);
+  });
+
   it("closes when the person clicks outside it, and not inside it", () => {
     const onClose = vi.fn();
     render(

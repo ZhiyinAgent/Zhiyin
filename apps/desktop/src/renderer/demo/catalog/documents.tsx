@@ -68,7 +68,11 @@ export const documentEntries: ComponentCatalogEntry[] = [
       "With a browser and a document both open, the workspace offers one or the other; choosing hides the other without closing it. When the workspace is put away, the conversation says what is in it.",
     render: () => (
       <div className="lab-stack">
-        <SurfaceSwitch selected="document" onSelect={() => undefined} />
+        <SurfaceSwitch
+          available={["browser", "document"]}
+          selected="document"
+          onSelect={() => undefined}
+        />
         <WorkspaceNotice
           text="q3-report.pdf is open in the workspace."
           icon="file"

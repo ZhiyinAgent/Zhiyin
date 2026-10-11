@@ -129,8 +129,12 @@ input and shows as the action's description and the approval's reason.
 - A workspace file that a built-in tool or built-in connection will change is
   backed up first, and the action records which files are protected.
 - The person may allow an inspected file edit in one folder, or one connector
-  tool, for the rest of a conversation; the grant can be revoked. Deletions,
-  shell commands and Python runs are asked for every time.
+  tool, for the rest of a conversation; the grant can be revoked. When the
+  connector's identity holds the call's own inputs, the grant is said to
+  cover only that exact call. When a built-in connection names a set of its
+  calls the call belongs to, the grant covers that set: every call of the
+  same connection that names it (ADR 0027). Deletions,
+  shell commands, Python runs and Blender scripts are asked for every time.
 - A built-in quiz or question, and a built-in view that passed validation, need
   no permission decision because they change nothing outside the conversation
   (ADR 0003).
@@ -203,8 +207,11 @@ input and shows as the action's description and the approval's reason.
   the cache. The summary quotes the person's instructions word for word. Beside
   it Zhiyin keeps the person's latest request, the two before it, the plan and
   the changed files; the newest rounds stay as they were, and up to five files
-  being worked on are read again. The person's transcript does not change, and
-  a title the person chose is never replaced.
+  being worked on are read again. Those are the files that are text: a picture,
+  a scene or a compiled document the work made is not read as text. One that
+  cannot be read again is said in the reader's own words, which say it is
+  missing only when it is. The person's transcript does not change, and a title
+  the person chose is never replaced.
 - After a failed condensing, or one that left the request over its target, none
   is tried until the request grows by a tenth, after a restart too. A
   conversation larger than the model's window is condensed a part at a time.
@@ -223,7 +230,10 @@ input and shows as the action's description and the approval's reason.
   progress report.
 - The plan holds at most eight items, an update is corrected rather than
   refused, and each turn the person starts begins with an empty plan. A turn
-  about to finish with items open is reminded of them once.
+  about to finish with items open is reminded of them once. After four rounds
+  with no update the model is asked whether its step has finished; each time it
+  carries on without one, the next question waits twice as long, and an update
+  starts the count again at four.
 - The answer is shown five seconds behind the model, so a provider restart
   before then is unseen. After it, the shown text is withdrawn openly and
   exactly one answer remains.
@@ -245,6 +255,10 @@ input and shows as the action's description and the approval's reason.
   The repair works from the tool's own input; a `purpose` it adds is taken off
   before the tool sees the call. Once the tool succeeds, the failed attempts
   are removed from the request.
+- Input that stops before it ends is never repaired. The model is told to send
+  less only when what arrived was long; a short call that stopped early was not
+  cut for its length, and it is told to send the whole call again. A failed
+  call is named by its tool, without a connector's routing.
 - A call to a tool not on offer fails without ending the turn. A name within
   two keystrokes of an offered one, or a remote tool's own name without its
   prefix, is answered with the name likely meant.

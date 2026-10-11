@@ -1,0 +1,37 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "3d-rendering",
+  "version": "1.0.0",
+  "description": "Build 3D scenes and render them: product pictures, rooms from a floor plan, parts to print.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "3D & Rendering",
+        "category": "Design",
+        "defaultPrompt": [
+          "Make studio pictures of our can for the online shop, using label.png.",
+          "Build this apartment from the floor plan and show me the living room.",
+          "Design a bracket I can 3D print to hold this shelf."
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "accessSummary": "Works with scenes, pictures and models in your project folder. Scenes are built and rendered in a Blender that Zhiyin installs and runs on this computer.",
+      "dataDestination": "Installing downloads Blender from download.blender.org. Nothing else leaves this computer.",
+      "specialists": [],
+      "appConnectors": [
+        {
+          "id": "studio",
+          "connector": "blender",
+          "name": "3D studio",
+          "description": "Opens Blender scenes in your workspace, adds and models objects, sets materials, camera and lighting, renders pictures and exports models, with a preview of every change beside the conversation.",
+          "access": "Reads pictures, fonts and models in your workspace folder, and writes the scene file, renders and exports there. Scripts run inside Blender with your own access. Installs Blender when you ask.",
+          "dataDestination": "Installing downloads Blender (404 MB) from download.blender.org."
+        }
+      ]
+    }
+  }
+}

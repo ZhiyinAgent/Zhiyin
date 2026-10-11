@@ -66,8 +66,15 @@ export function ToolCallView({
             </p>
           )}
           <dl className={styles["tool-call__arguments"]}>
-            {invocation.arguments.map((argument) => (
-              <div key={argument.name}>
+            {/* Rows can share a name, such as two objects left unnamed, so
+                each is known by its place. */}
+            {invocation.arguments.map((argument, index) => (
+              <div
+                key={`${index}-${argument.name}`}
+                {...(argument.readable
+                  ? { className: styles["tool-call__words"] }
+                  : {})}
+              >
                 <dt>{argument.name}</dt>
                 <dd>
                   {argument.described && (
@@ -78,12 +85,17 @@ export function ToolCallView({
                       {argument.described}
                     </p>
                   )}
-                  <ArgumentValue
-                    text={argument.value}
-                    {...(argument.omitted === undefined
-                      ? {}
-                      : { omitted: argument.omitted })}
-                  />
+                  {/* Written for a person already: read as text, not data. */}
+                  {argument.readable ? (
+                    <p>{argument.value}</p>
+                  ) : (
+                    <ArgumentValue
+                      text={argument.value}
+                      {...(argument.omitted === undefined
+                        ? {}
+                        : { omitted: argument.omitted })}
+                    />
+                  )}
                 </dd>
               </div>
             ))}

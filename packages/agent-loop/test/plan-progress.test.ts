@@ -212,18 +212,25 @@ describe("the plan across a turn", () => {
     Array.from({ length: 12 }, (_, index) => [`part-${index + 1}.md`, "text"]),
   );
 
-  it("asks after four rounds of work with no update whether the step in progress has finished, and again only four rounds later", async () => {
+  it("asks after four rounds of work with no update whether the step in progress has finished, then waits twice as long each time", async () => {
+    // A step that really takes many rounds is asked about less and less; a
+    // plan left behind is still caught.
     const fixture = withPlan({
-      files: parts,
+      files: Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => [
+          `part-${index + 1}.md`,
+          "text",
+        ]),
+      ),
       script: (request) =>
         request === 1
           ? update("set", [
               { title: "Read the parts", status: "in_progress" },
               { title: "Write the summary", status: "pending" },
             ])
-          : request <= 9
+          : request <= 17
             ? reads(request)
-            : request === 10
+            : request === 18
               ? update("close", [
                   { title: "Read the parts", status: "done" },
                   { title: "Write the summary", status: "done" },
@@ -244,9 +251,45 @@ describe("the plan across a turn", () => {
     expect(notices(fixture.requests[5], "plan").at(-1)?.content).toContain(
       "update_plan",
     );
-    // Not again for the next three rounds; again after four more.
-    expect(asked(9)).toBe(1);
-    expect(asked(10)).toBe(2);
+    // Not again for the next seven rounds; again after eight.
+    expect(asked(13)).toBe(1);
+    expect(asked(14)).toBe(2);
+  });
+
+  it("asks four rounds after an update again, however long it waited before", async () => {
+    const fixture = withPlan({
+      files: Object.fromEntries(
+        Array.from({ length: 20 }, (_, index) => [
+          `part-${index + 1}.md`,
+          "text",
+        ]),
+      ),
+      script: (request) =>
+        request === 1
+          ? update("set", [
+              { title: "Read the parts", status: "in_progress" },
+              { title: "Write the summary", status: "pending" },
+            ])
+          : request === 7
+            ? update("next", [
+                { title: "Read the parts", status: "done" },
+                { title: "Write the summary", status: "in_progress" },
+              ])
+            : request <= 12
+              ? reads(request)
+              : finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Summarise the parts");
+
+    const asked = (request: number) =>
+      notices(fixture.requests[request - 1], "plan").filter((notice) =>
+        notice.content.includes("Write the summary"),
+      ).length;
+    // Rounds 8-11 without an update: asked before request 12.
+    expect(asked(11)).toBe(0);
+    expect(asked(12)).toBe(1);
   });
 
   it("does not ask while the plan is kept current", async () => {

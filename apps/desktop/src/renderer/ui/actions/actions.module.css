@@ -11,6 +11,9 @@
   border-radius: var(--zy-radius-md);
   background: var(--zy-panel-raised);
   box-shadow: var(--zy-shadow-pop);
+  /* Laid out by its own width: beside an open workspace the conversation is a
+     narrow lane, whatever the window's width. */
+  container: approval / inline-size;
 }
 
 .approval h3 {
@@ -329,13 +332,12 @@
   color: var(--zy-text);
 }
 
+/* Said in full: its end, such as "only this exact call", is what it covers. */
 .approval__allowance small {
-  overflow: hidden;
   color: var(--zy-muted);
   font-size: 12px;
   font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* The connector's own names for what is sent, for whoever wants them. */
@@ -357,12 +359,14 @@
 }
 
 /* The rule being granted, set apart and wrapped whole: it is what the person
-   is agreeing to, so it is never cut or pushed out of the card. */
+   is agreeing to, so it sits beside the buttons that agree to it, never
+   scrolled out of view or cut. */
 .approval__scope-confirm {
   display: grid;
+  /* What is left beside the buttons, which keep their width. */
+  flex: 1 1 0;
   gap: 4px;
   min-width: 0;
-  margin: 10px 0 0 36px;
   padding: 10px 12px;
   border: 1px solid var(--zy-line);
   border-radius: 8px;
@@ -410,6 +414,31 @@
 
 .approval--compact {
   padding: 12px 14px 10px;
+}
+
+/* In a narrow lane the broader allowance, or the question it asks, takes its
+   own row, and the decision buttons share the next, side by side, each at
+   least as wide as its label; a pair too wide for one row stacks, each across
+   the card. A label never breaks inside a button. */
+@container approval (max-width: 460px) {
+  .approval__footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .approval__allowance {
+    margin-left: -8px;
+  }
+
+  .approval__actions {
+    margin-left: 0;
+  }
+
+  .approval__actions > button {
+    flex: 1 1 0;
+    white-space: nowrap;
+  }
 }
 
 /* One scroll region per decision. A request scrolls inside itself when it is
@@ -1017,6 +1046,20 @@
   margin: 0;
 }
 
+/* A row a built-in tool wrote in words: read as a sentence, not as data. */
+.tool-call__arguments > .tool-call__words dt {
+  font: 12.5px/1.55 var(--zy-font-body);
+}
+
+.tool-call__words dd p {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
 /* Says what is missing, in the place it is missing from. */
 .tool-call__omitted {
   color: var(--zy-amber);
@@ -1346,7 +1389,38 @@
 .inspector__facts dd {
   margin: 0;
   color: var(--zy-text);
+  white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+/* Files an action wrote whose contents are not shown: one line each. */
+.inspector__files {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector__files li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.inspector__files .change-review__path {
+  overflow-wrap: anywhere;
+}
+
+.inspector__change {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.inspector__files .inspector__note {
+  margin: 0;
 }
 
 .inspector__block {

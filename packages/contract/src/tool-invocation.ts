@@ -45,6 +45,11 @@ export type ToolArgument = {
   /** The value as JSON text. Formatted and coloured where it is drawn. */
   readonly value: string;
   /**
+   * The value is written in words for a person — "2000 × 2000 pixels" — by a
+   * tool Zhiyin ships, not passed on as data. Drawn as text, not as code.
+   */
+  readonly readable?: true;
+  /**
    * Characters removed from the middle of `value`, when it was too long to
    * carry whole. Both ends are kept: the start says what a value is, and the
    * end says where it stops.
@@ -202,6 +207,18 @@ export type ToolCallInspection =
        */
       readonly claim?: string;
       readonly identity?: string;
+      /**
+       * Said by the implementation that builds `identity`: it holds this
+       * call's own inputs, so allowing the call for the conversation allows
+       * only this same call again, not the tool.
+       */
+      readonly boundToCall?: true;
+      /**
+       * Said by a built-in connection: a set of its calls this one belongs to,
+       * which it vouches for, named by a key every call in the set carries.
+       * Allowing this call for the conversation then allows each of them.
+       */
+      readonly allowance?: Readonly<{ key: string; label: string }>;
       readonly destination?: string;
       /**
        * The connection a connector call belongs to, named by the app. Apart

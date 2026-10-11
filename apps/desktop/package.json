@@ -24,6 +24,7 @@
     "@zhiyin/agent-loop": "workspace:*",
     "@zhiyin/artifacts": "workspace:*",
     "@zhiyin/audit": "workspace:*",
+    "@zhiyin/blender-studio": "workspace:*",
     "@zhiyin/capabilities": "workspace:*",
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/conversation-export": "workspace:*",

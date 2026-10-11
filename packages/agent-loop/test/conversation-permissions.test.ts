@@ -113,6 +113,107 @@ describe("conversation permissions", () => {
     expect(scope?.label).toBe("Zhiyin’s browser · Resize browser");
   });
 
+  it("says a connector rule covers only the same call when its identity holds the call's inputs", async () => {
+    const scope = await offeredPermission(
+      "mcp",
+      "mcp__blender__blender_describe_scene",
+      {
+        ok: true as const,
+        action: "Describe a 3D scene",
+        target: "scene.blend",
+        connection: "3D studio",
+        command: "blender_describe_scene({})",
+        invocation: { name: "Describe a 3D scene", arguments: [] },
+        identity: "call-v1",
+        boundToCall: true,
+      },
+    );
+
+    expect(scope?.label).toBe(
+      "3D studio · Describe a 3D scene · only this exact call",
+    );
+  });
+
+  it("allows every call of a connection that shares the allowance its first call offered, and no other", async () => {
+    const call = (key: string | undefined, action: string) => ({
+      ok: true as const,
+      action,
+      target: "mug.blend",
+      connection: "3D studio",
+      command: `${action}(...)`,
+      identity: `${action}-call`,
+      boundToCall: true as const,
+      ...(key ? { allowance: { key, label: "Changes to mug.blend" } } : {}),
+    });
+    const offered = await offeredPermission(
+      "mcp",
+      "mcp__blender__blender_add_objects",
+      call("mug.blend", "Add objects"),
+    );
+    const rule = {
+      ...offered!,
+      id: "scene",
+      at: "2026-10-10T00:00:00.000Z",
+    };
+    const matches = (name: string, key: string | undefined) =>
+      matchingPermission([rule], "mcp", name, call(key, "Another"));
+
+    expect(offered?.label).toBe("3D studio · Changes to mug.blend");
+    // Another tool of the same connection, on the same scene.
+    expect(
+      await matches("mcp__blender__blender_set_material", "mug.blend"),
+    ).toMatchObject({ id: "scene" });
+    // Another scene, a call that offers no allowance, another connection, and
+    // a script, which is asked for every time.
+    expect(
+      await matches("mcp__blender__blender_set_material", "tea.blend"),
+    ).toBeUndefined();
+    expect(
+      await matches("mcp__blender__blender_render", undefined),
+    ).toBeUndefined();
+    expect(
+      await matches("mcp__python__python_read", "mug.blend"),
+    ).toBeUndefined();
+    expect(
+      await matches("mcp__blender__blender_run_script", "mug.blend"),
+    ).toBeUndefined();
+  });
+
+  it("tells apart two connections whose ids begin alike", async () => {
+    const call = {
+      ok: true as const,
+      action: "Add objects",
+      target: "mug.blend",
+      connection: "Studio",
+      command: "add(...)",
+      identity: "add-call",
+      allowance: { key: "mug.blend", label: "Changes to mug.blend" },
+    };
+    const offered = await offeredPermission(
+      "mcp",
+      "mcp__studio__blender__add",
+      call,
+    );
+    const rule = { ...offered!, id: "scene", at: "2026-10-10T00:00:00.000Z" };
+
+    expect(
+      await matchingPermission(
+        [rule],
+        "mcp",
+        "mcp__studio__blender__move",
+        call,
+      ),
+    ).toMatchObject({ id: "scene" });
+    expect(
+      await matchingPermission(
+        [rule],
+        "mcp",
+        "mcp__studio__python__move",
+        call,
+      ),
+    ).toBeUndefined();
+  });
+
   it("asks for every Python run, under the name the model calls it by", async () => {
     const run = {
       ok: true as const,
@@ -141,6 +242,25 @@ describe("conversation permissions", () => {
         "mcp",
         "mcp__python__run_python",
         run,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("asks for every Blender script, which can reach past the scene", async () => {
+    const script = {
+      ok: true as const,
+      action: "Run a Blender script in a 3D scene",
+      target: "scene.blend",
+      connection: "3D studio",
+      command: "blender_run_script(...)",
+      identity: "script-v1",
+    };
+
+    expect(
+      await offeredPermission(
+        "mcp",
+        "mcp__blender__blender_run_script",
+        script,
       ),
     ).toBeUndefined();
   });

@@ -32,6 +32,12 @@ export const interestOptions = [
     detail: "Find, check, and weigh the sources.",
     icon: "search",
   },
+  {
+    id: "3d-rendering",
+    title: "Make 3D scenes",
+    detail: "Model, light, and render products, rooms, and parts.",
+    icon: "cube",
+  },
 ] as const;
 
 export function Onboarding({

@@ -7,6 +7,12 @@
   gap: 14px;
 }
 
+/* With an odd number of interests, the last one takes the whole row rather
+   than standing alone in half of it. */
+.interest-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .interest-card {
   position: relative;
   display: flex;

@@ -468,6 +468,12 @@ export function WorkspaceShell({
               <ConversationWorkspace
                 viewing={viewing}
                 taskId={state.selectedTaskId}
+                agentWorking={
+                  selectedTask !== null &&
+                  ["working", "loading", "browser"].includes(
+                    selectedTask.phase.kind,
+                  )
+                }
                 id={workspaceViewId}
                 commands={commands}
                 act={act}
@@ -538,10 +544,15 @@ export function WorkspaceShell({
                       <WorkspaceNotice
                         {...(viewing.beside.kind === "browser"
                           ? { text: "Zhiyin opened a browser." }
-                          : {
-                              text: `${viewing.beside.document.name} is open in the workspace.`,
-                              icon: "file" as const,
-                            })}
+                          : viewing.beside.kind === "scene"
+                            ? {
+                                text: `${viewing.beside.scene.file?.split("/").pop() ?? "A 3D scene"} is open in the 3D view.`,
+                                icon: "cube" as const,
+                              }
+                            : {
+                                text: `${viewing.beside.document.name} is open in the workspace.`,
+                                icon: "file" as const,
+                              })}
                         onShow={viewing.toWorkspace}
                       />
                     )}

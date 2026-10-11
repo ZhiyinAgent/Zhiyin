@@ -93,6 +93,7 @@ const stubCommands: CoreApi = {
   settleSavedConversations: async () => ({ done: 0, failed: 0 }),
   openExternalUrl: async () => {},
   driveBrowser: async () => {},
+  lookAtScene: async () => {},
 
   chooseWorkspaceView: async () => {},
   showDocument: async () => ({ ok: true }),
@@ -187,6 +188,82 @@ describe("WorkspaceShell", () => {
     expect(
       screen.getByRole("log", { name: "Task conversation" }),
     ).toBeVisible();
+  });
+
+  it("shows the 3D view from the moment Blender starts, and says the agent is still at work on an empty scene", async () => {
+    // The window decodes pictures; jsdom does not.
+    Object.defineProperty(HTMLImageElement.prototype, "decode", {
+      configurable: true,
+      value: () => Promise.resolve(),
+    });
+    const task = {
+      id: "make",
+      title: "Make a bottle",
+      titleSource: "generated" as const,
+      updatedLabel: "Now",
+      updatedAt: "2026-10-10T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { id: "u", role: "user" as const, text: "Make a bottle", sequence: 0 },
+      ],
+      phase: { kind: "working" as const, steps: [] },
+    };
+    const window = besideConversation(
+      createWorkspaceState({
+        connection: "ready",
+        tasks: [task],
+        selectedTaskId: task.id,
+        scenes: {
+          make: { status: "starting", view: "overview", working: false },
+        },
+      }),
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Workspace" }));
+    expect(
+      within(screen.getByRole("complementary", { name: "3D view" })).getByRole(
+        "status",
+      ),
+    ).toHaveTextContent("Starting Blender…");
+
+    window.send({
+      type: "sceneChanged",
+      taskId: "make",
+      scene: {
+        status: "open",
+        file: "bottle.blend",
+        view: "overview",
+        working: false,
+        preview: {
+          data: "P1",
+          width: 640,
+          height: 360,
+          view: "overview",
+          sequence: 1,
+          empty: true,
+        },
+      },
+    });
+    await act(async () => {});
+    expect(
+      screen.getByText("Nothing in the scene yet. The agent is still working."),
+    ).toBeVisible();
+
+    window.send({
+      type: "taskReplaced",
+      task: {
+        ...task,
+        phase: {
+          kind: "completed",
+          outcome: { title: "Stopped", summary: "Nothing made" },
+        },
+      },
+    });
+    expect(
+      screen.getByText(
+        "The scene is empty. What the agent makes appears here.",
+      ),
+    ).toBeVisible();
+    delete (HTMLImageElement.prototype as { decode?: unknown }).decode;
   });
 
   it("shows task activity and lets the user stop work from the browser workspace", async () => {
@@ -1172,6 +1249,7 @@ describe("WorkspaceShell", () => {
           recheckShell: async () => ({ available: true }),
           openExternalUrl: async () => {},
           driveBrowser: async () => {},
+          lookAtScene: async () => {},
           chooseWorkspaceView: async () => {},
           showDocument: async () => ({ ok: true as const }),
           closeDocument: async () => {},
@@ -1742,6 +1820,7 @@ describe("WorkspaceShell", () => {
           recheckShell: async () => ({ available: true }),
           openExternalUrl: async () => {},
           driveBrowser: async () => {},
+          lookAtScene: async () => {},
           chooseWorkspaceView: async () => {},
           showDocument: async () => ({ ok: true as const }),
           closeDocument: async () => {},
@@ -2517,6 +2596,7 @@ describe("WorkspaceShell", () => {
           recheckShell: async () => ({ available: true }),
           openExternalUrl: async () => {},
           driveBrowser: async () => {},
+          lookAtScene: async () => {},
           chooseWorkspaceView: async () => {},
           showDocument: async () => ({ ok: true as const }),
           closeDocument: async () => {},

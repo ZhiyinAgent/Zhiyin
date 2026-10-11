@@ -8,7 +8,9 @@ import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import koffi from "koffi";
+import { createProcessAs, lowIntegrityToken } from "./integrity.js";
 import {
+  BELOW_NORMAL_PRIORITY_CLASS,
   CREATE_ALWAYS,
   CREATE_NO_WINDOW,
   CREATE_SUSPENDED,
@@ -72,6 +74,17 @@ export type ContainedProcessOptions = {
    * `arguments`.
    */
   readonly pipes?: (ends: ProcessPipeEnds) => readonly string[];
+  /**
+   * Below normal, the process and what it starts take the processor only
+   * when the person's own programs leave it free: for long, heavy work.
+   */
+  readonly priority?: "below-normal";
+  /**
+   * At low integrity, Windows refuses the process, and what it starts, every
+   * write outside the folders opened to low integrity; it reads what the
+   * person can read.
+   */
+  readonly integrity?: "low";
 };
 
 /** The process's own ends of its pipes, as handle values in decimal. */
@@ -302,7 +315,9 @@ export function openProcessContainer(
       let attributes: ReturnType<Win32["inheritOnly"]> | undefined;
       const information: Record<string, unknown> = {};
       let created = false;
+      let token: unknown;
       try {
+        if (options.integrity === "low") token = lowIntegrityToken();
         given.push(
           api.createFile(
             options.stdout,
@@ -349,7 +364,11 @@ export function openProcessContainer(
         // Inheritance is on, so without this list the process would also
         // receive every other inheritable handle Zhiyin holds.
         attributes = api.inheritOnly(given);
-        created = api.createProcess(
+        const create = token
+          ? (...given: Parameters<Win32["createProcess"]>) =>
+              createProcessAs(token, ...given)
+          : api.createProcess;
+        created = create(
           options.executable,
           writableCommandLine(options.executable, [
             ...options.arguments,
@@ -359,7 +378,10 @@ export function openProcessContainer(
           CREATE_SUSPENDED |
             CREATE_NO_WINDOW |
             CREATE_UNICODE_ENVIRONMENT |
-            EXTENDED_STARTUPINFO_PRESENT,
+            EXTENDED_STARTUPINFO_PRESENT |
+            (options.priority === "below-normal"
+              ? BELOW_NORMAL_PRIORITY_CLASS
+              : 0),
           options.environment ? environmentBlock(options.environment) : null,
           options.cwd,
           {
@@ -388,6 +410,7 @@ export function openProcessContainer(
           information,
         );
       } finally {
+        if (token) api.closeHandle(token);
         attributes?.release();
         closeEach(api, given);
         if (!created) closeEach(api, kept);

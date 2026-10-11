@@ -1,3 +1,9 @@
 {
-  "plugins": ["engineering", "publishing", "data-science", "research"]
+  "plugins": [
+    "engineering",
+    "publishing",
+    "data-science",
+    "research",
+    "3d-rendering"
+  ]
 }

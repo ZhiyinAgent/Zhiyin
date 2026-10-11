@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   ApprovalRequest,
@@ -74,6 +74,13 @@ export function ApprovalPrompt({
   const [confirmingScope, setConfirmingScope] = useState(false);
   const claimTipId = useId();
   const scopeId = useId();
+  const scopeQuestionId = useId();
+  const scopeConfirm = useRef<HTMLDivElement>(null);
+  // The question takes the place of the button that asked it, which is gone:
+  // focus moves to it, so the keyboard and a screen reader follow.
+  useEffect(() => {
+    if (confirmingScope) scopeConfirm.current?.focus();
+  }, [confirmingScope]);
   const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
   const showClaimTip = (target: HTMLElement) => {
     const box = target.getBoundingClientRect();
@@ -170,6 +177,18 @@ export function ApprovalPrompt({
               Sends this to <strong>{destination}</strong>:
             </p>
           )}
+          {/*
+            A file whose change cannot be shown as a difference, such as a
+            binary scene, says only that it changes. What the call will do is
+            then the only account of the change, so it is shown with the files.
+          */}
+          {changes?.length &&
+            changes.every((change) => change.omitted !== undefined) &&
+            invocation &&
+            !invocation.via &&
+            invocation.arguments.length > 0 && (
+              <ToolCallView invocation={invocation} hideName />
+            )}
           {changes?.length ? (
             <ul
               className={styles["approval__file-list"]}
@@ -272,17 +291,25 @@ export function ApprovalPrompt({
             </label>
           </div>
         )}
-        {confirmingScope && conversationRule && (
-          <div className={styles["approval__scope-confirm"]}>
-            <p>Allow this for the rest of the conversation?</p>
-            <strong>{conversationRule.label}</strong>
-            <p>
-              It will run without asking again. You can take this back from the
-              conversation menu.
-            </p>
-          </div>
-        )}
         <div className={styles.approval__footer}>
+          {confirmingScope && conversationRule && (
+            <div
+              ref={scopeConfirm}
+              className={styles["approval__scope-confirm"]}
+              role="group"
+              aria-labelledby={scopeQuestionId}
+              tabIndex={-1}
+            >
+              <p id={scopeQuestionId}>
+                Allow this for the rest of the conversation?
+              </p>
+              <strong>{conversationRule.label}</strong>
+              <p>
+                It will run without asking again. You can take this back from
+                the conversation menu.
+              </p>
+            </div>
+          )}
           {!denying && !confirmingScope && conversationRule && (
             <button
               className={styles.approval__allowance}

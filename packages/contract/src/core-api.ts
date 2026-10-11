@@ -8,6 +8,7 @@ import type {
   ConversationBrowserState,
 } from "./browser-state.js";
 import type { CommandOutput, RunningCommand } from "./command-jobs.js";
+import type { ConversationSceneState, SceneIntent } from "./scene-state.js";
 import type { ContextBudgetChoice } from "./context-budget.js";
 import type { CoreInfo } from "./core-info.js";
 import type {
@@ -89,6 +90,10 @@ export type AppEvent =
   | {
       readonly kind: "browserChanged";
       readonly data: ConversationBrowserState;
+    }
+  | {
+      readonly kind: "sceneChanged";
+      readonly data: ConversationSceneState;
     }
   | {
       readonly kind: "documentChanged";
@@ -390,6 +395,9 @@ export interface CoreApi extends DocumentCommands {
 
   /** Ask the agent's browser to do one thing. */
   driveBrowser(intent: BrowserIntent): Promise<void>;
+
+  /** Changes how the selected conversation's 3D view looks at its scene. */
+  lookAtScene(intent: SceneIntent): Promise<void>;
 
   /**
    * Every provider models can be reached through, with its regions, whether

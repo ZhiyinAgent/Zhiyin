@@ -31,7 +31,9 @@ const maximumPlanItems = 8;
 
 /**
  * Rounds of work without an update after which the model is asked whether its
- * step has finished. ADR 0013.
+ * step has finished. ADR 0013. Each time it carries on without one, the next
+ * question waits twice as long: a step that really takes many rounds is not
+ * asked about every few, and a plan left behind is still caught.
  */
 const roundsBeforeAsking = 4;
 
@@ -151,6 +153,8 @@ export class PlanProgress {
   readonly #since = new Map<string, number>();
   /** Running turns that updated the plan in the round under way. */
   readonly #updated = new Set<string>();
+  /** Rounds each running turn waits before it is next asked. */
+  readonly #wait = new Map<string, number>();
 
   constructor(records: TurnRecords) {
     this.#records = records;
@@ -166,6 +170,7 @@ export class PlanProgress {
     this.#reminded.delete(taskId);
     this.#since.set(taskId, 0);
     this.#updated.delete(taskId);
+    this.#wait.set(taskId, roundsBeforeAsking);
   }
 
   /**
@@ -174,15 +179,17 @@ export class PlanProgress {
    * a judgement: a step still under way needs no update.
    */
   async afterRound(taskId: string, history: ModelHistory): Promise<void> {
-    const since = this.#updated.delete(taskId)
-      ? 0
-      : (this.#since.get(taskId) ?? 0) + 1;
+    const updated = this.#updated.delete(taskId);
+    if (updated) this.#wait.set(taskId, roundsBeforeAsking);
+    const since = updated ? 0 : (this.#since.get(taskId) ?? 0) + 1;
+    const wait = this.#wait.get(taskId) ?? roundsBeforeAsking;
     const open = this.#records.task(taskId).plan.filter(isOpen);
-    if (since < roundsBeforeAsking || !open.length) {
+    if (since < wait || !open.length) {
       this.#since.set(taskId, since);
       return;
     }
     this.#since.set(taskId, 0);
+    this.#wait.set(taskId, wait * 2);
     const current =
       open.find((item) => item.status === "in_progress") ?? open[0]!;
     await history.notice(

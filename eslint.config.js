@@ -51,6 +51,7 @@ const PACKAGE_LAYERS = {
   "git-connector": "feature",
   "document-compiler": "feature",
   "python-sandbox": "feature",
+  "blender-studio": "feature",
   "document-viewer": "feature",
   "conversation-export": "feature",
   spelling: "feature",
@@ -71,6 +72,7 @@ const GROUP_MEMBERS = {
     "git-connector",
     "document-compiler",
     "python-sandbox",
+    "blender-studio",
   ],
   rewind: ["conversation-rewind", "recovery"],
 };
@@ -91,6 +93,8 @@ const MEMBER_IMPORTS_ALLOWED = {
   core: {
     "interactive-browser":
       "The browser panel a person watches and drives themselves. The capabilities group answers for what the model may call, and this is not that.",
+    "blender-studio":
+      "The 3D view a person watches and turns themselves. The capabilities group answers for what the model may call, and this is not that.",
   },
 };
 

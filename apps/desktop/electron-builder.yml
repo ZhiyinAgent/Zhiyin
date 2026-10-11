@@ -19,6 +19,11 @@ extraResources:
   # same loader as a person's own.
   - from: ../../packages/plugins/built-in
     to: plugins
+  # The script Blender runs for the 3D studio, run where it is (ADR 0026).
+  - from: ../../packages/blender-studio/src/session
+    to: blender-session
+    filter:
+      - "**/*.py"
   # The spelling dictionaries, fetched and verified against their checksums
   # before the build, so every bundled language is spellchecked with nothing
   # downloaded (ADR 0023).

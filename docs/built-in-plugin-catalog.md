@@ -1,6 +1,6 @@
 # Built-in plugins
 
-Zhiyin ships four plugins, each holding the skills, specialists and
+Zhiyin ships five plugins, each holding the skills, specialists and
 connectors for one kind of work. Each is an ordinary Agent Plugins package,
 the same format as a plugin a person makes, read by the same loader. On first
 launch, Zhiyin asks what the person plans to use it for and enables the
@@ -83,13 +83,25 @@ Specialists: `fact-checker` (read-only), `report-synthesizer`.
 
 Connector: Tavily, for web search and page extraction.
 
+## 3D & Rendering
+
+Skills: `scene-building`, `product-renders`, `interiors-from-plans`,
+`printable-parts`.
+
+Connector: the 3D studio, a Blender that Zhiyin installs on request and runs
+on its own, one per conversation, apart from any Blender the person uses. Its
+tools add and shape objects, cut holes, set materials, the camera and the
+lighting, render pictures and export models; a script tool covers the rest of
+Blender. The scene is a `.blend` file in the project folder, and a preview of
+it is drawn beside the conversation after every change (ADR 0026).
+
 ## What each connector needs
 
 - **An account**: GitHub, Tavily and alphaXiv each take a key or token the
   person creates on the service and pastes in. The connector's settings link
   to the page where it is made.
 - **A program**, downloaded on request and checked against a pinned SHA-256:
-  Typst and Tectonic for the compiler, and `uv` for the Python environment,
-  which then installs Python.
+  Typst and Tectonic for the compiler, `uv` for the Python environment,
+  which then installs Python, and Blender for the 3D studio.
 - **Nothing extra**: the browser uses Edge or Chrome, and Git uses the Git
   already installed. Each says so when its program is missing.

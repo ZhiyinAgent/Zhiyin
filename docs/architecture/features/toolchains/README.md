@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Installs the external programs some connectors need (Typst, Tectonic and `uv`)
+Installs the external programs some connectors need (Typst, Tectonic, Blender and `uv`)
 when the person asks, from a pinned address and checked against a pinned
 fingerprint. A connector says what it needs, the person agrees to the
 download, and only a complete, verified install is ever used (ADR 0016).
@@ -10,11 +10,11 @@ download, and only a complete, verified install is ever used (ADR 0016).
 ## Boundaries
 
 - **Owns:** the pinned release of each program, downloading it, verifying it,
-  unpacking it into the app's data folder, reporting its state, and answering
-  where the installed program is.
+  unpacking it into the app's data folder, when a program is made ready,
+  reporting its state, and answering where the installed program is.
 - **Does not own:** which connector needs which program (capabilities),
-  running a program (the connector that needs it), or the screen that manages
-  them (renderer).
+  running a program or knowing what readies it (the feature that uses it), or
+  the screen that manages them (renderer).
 - **Talks to other features only through:** `state`, `install` and
   `executable`.
 
@@ -26,9 +26,13 @@ download, and only a complete, verified install is ever used (ADR 0016).
 - `install(id, signal?)` downloads, verifies, unpacks and moves one program
   into place.
 - `executable(id)` answers the installed program's path, or nothing.
+- `ready`, given when the installer is built, names by program id a step
+  that makes an unpacked program ready to use. It is told where the program
+  is now and where it will be once installed.
 - `pinnedToolchains` is the shipped list: each program's version, URL,
   SHA-256, size, source, and the program's path inside its archive. Every
-  entry is an https GitHub release for Windows x64.
+  entry is an https download for Windows x64 from the source it names: the
+  project's GitHub releases, or for Blender its own download site.
 
 ## Invariants
 
@@ -42,6 +46,10 @@ download, and only a complete, verified install is ever used (ADR 0016).
   links of any kind, are refused. Archives are unpacked with the `tar.exe`
   that ships with Windows, called by its full path.
 - An archive that does not contain the expected program is refused.
+- A program with a readying step is readied once, after it is verified and
+  before it is in place, so what the step makes is installed with it. A step
+  that fails does not fail the install, since the program works without it; an
+  install stopped during the step leaves nothing.
 - A program is installed once, however many ask at the same time.
 - Only the pinned version is kept; installing it removes any other.
 - A program is verified when it is installed. After that it is found through a

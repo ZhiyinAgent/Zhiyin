@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ToolCallView } from "./ToolCallView.js";
 
 describe("ToolCallView", () => {
@@ -22,6 +22,29 @@ describe("ToolCallView", () => {
     expect(screen.getByText("query")).toBeVisible();
     expect(screen.getByText("ZEvent 2026 montant récolté")).toBeVisible();
     expect(screen.getByText("max_results")).toBeVisible();
+  });
+
+  it("shows every row when several share a name, as the rows the 3D tools name after objects do", () => {
+    // React says when rows cannot be told apart: what it then shows is unsupported.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rows = (...values: string[]) => ({
+      name: "blender_add_objects",
+      arguments: values.map((value) => ({ name: "Unnamed", value })),
+    });
+    const { rerender } = render(
+      <ToolCallView invocation={rows("a cube", "a sphere", "a cone")} />,
+    );
+    rerender(<ToolCallView invocation={rows("a torus", "a plane")} />);
+    const collisions = errors.mock.calls.filter((call) =>
+      String(call[0]).includes("same key"),
+    );
+    errors.mockRestore();
+
+    expect(collisions).toEqual([]);
+    expect(screen.getAllByText("Unnamed")).toHaveLength(2);
+    expect(screen.getByText("a torus")).toBeVisible();
+    expect(screen.getByText("a plane")).toBeVisible();
+    expect(screen.queryByText("a cone")).toBeNull();
   });
 
   it("names the block it is, so it reads like the rest of the request", () => {

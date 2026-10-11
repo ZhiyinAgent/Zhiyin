@@ -544,11 +544,43 @@ describe("privileged commands", () => {
     expect(() => validateCommand(CHANNEL.driveBrowser, [])).toThrow();
   });
 
+  it("accepts only well-formed 3D view intents", () => {
+    for (const intent of [
+      { kind: "view", view: "camera" },
+      { kind: "view", view: "overview" },
+      { kind: "turn", yaw: -12.5, pitch: 3 },
+      { kind: "zoom", factor: 1.15 },
+      { kind: "reset" },
+      { kind: "size", width: 1280, height: 720 },
+    ]) {
+      expect(() =>
+        validateCommand(CHANNEL.lookAtScene, [intent]),
+      ).not.toThrow();
+    }
+    for (const intent of [
+      {},
+      { kind: "spin" },
+      { kind: "view", view: "inside" },
+      { kind: "turn", yaw: 10 },
+      { kind: "turn", yaw: Number.NaN, pitch: 0 },
+      { kind: "turn", yaw: 1e9, pitch: 0 },
+      { kind: "zoom", factor: 0 },
+      { kind: "zoom", factor: -2 },
+      { kind: "reset", view: "camera" },
+      { kind: "size", width: 0, height: 720 },
+      { kind: "size", width: 100_000, height: 720 },
+    ]) {
+      expect(() => validateCommand(CHANNEL.lookAtScene, [intent])).toThrow();
+    }
+    expect(() => validateCommand(CHANNEL.lookAtScene, [])).toThrow();
+  });
+
   it("accepts only well-formed document commands", () => {
     const valid: [string, unknown[]][] = [
       [CHANNEL.chooseWorkspaceView, ["task", "conversation"]],
       [CHANNEL.chooseWorkspaceView, ["task", "browser"]],
       [CHANNEL.chooseWorkspaceView, ["task", "document"]],
+      [CHANNEL.chooseWorkspaceView, ["task", "scene"]],
       [CHANNEL.showDocument, ["task", "reports/q3.pdf"]],
       // A citation the person clicks names its page (ADR 0018).
       [CHANNEL.showDocument, ["task", "reports/q3.pdf", 24]],

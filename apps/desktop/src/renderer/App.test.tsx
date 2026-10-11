@@ -105,6 +105,7 @@ function fakeCore(version: string): CoreApi & {
     recheckShell: async () => ({ available: true }),
     openExternalUrl: async () => {},
     driveBrowser: async () => {},
+    lookAtScene: async () => {},
     chooseWorkspaceView: async () => {},
     showDocument: async () => ({ ok: true }),
     closeDocument: async () => {},

@@ -147,6 +147,47 @@ Tectonic downloads its TeX bundle from `relay.fullyjustified.net` on first use
 and caches it under `%LOCALAPPDATA%\TectonicProject`. Typst downloads nothing
 unless a document imports a package.
 
+**Blender 5.2.2.** _Verified 2026-10-10 against download.blender.org and
+by running it on Windows 11 with an RTX 4070 Ti SUPER._ The portable Windows
+x64 zip (404,453,484 bytes, 914 MB unpacked, 6,525 files) runs from any folder;
+its SHA-256 is in `blender-5.2.2.sha256` beside it. Its deepest file is 142
+characters below its folder. Blender is not long-path aware: installed where
+those paths pass 260 characters, it cannot load its own scripts and fonts,
+even with Windows long paths enabled. Started through a `\\?\` path it loads
+them, but Cycles then fails to find its OptiX and CUDA kernels and tries to
+compile them, which fails without the OptiX SDK. Git Bash's `unzip` silently drops
+files past 260 characters; Windows' `tar.exe` wrote them all with long paths
+enabled. Sources are GPL-2.0-or-later.
+`--background --factory-startup --disable-autoexec` ignores the person's
+settings and add-ons and runs no script saved in a .blend; the
+`BLENDER_USER_CONFIG`, `_SCRIPTS`, `_DATAFILES` and `_EXTENSIONS` variables
+move its own settings. Python inside it opens inherited pipe handles with
+`msvcrt.open_osfhandle`. A headless start takes about 2 s, the first EEVEE
+render about 10 s while shaders compile, later 960×540 previews 0.12 to
+0.38 s, and Cycles with OptiX about 2.5 s for a simple scene at 1280×720,
+at 16 or 64 samples alike, most of it setup. In 5.2,
+`save_version` defaults to 1 (a `.blend1` beside each save), Collada import
+is gone, `Mesh.set_sharp_from_angle` does not exist, Boolean solvers are
+`FLOAT`, `EXACT` and `MANIFOLD`, and sky types are `SINGLE_SCATTERING`,
+`MULTIPLE_SCATTERING`, `PREETHAM` and `HOSEK_WILKIE`. EEVEE draws glass and
+polished metal black unless ray tracing is on. ADR 0026.
+
+**Blender 5.2.2 where it writes.** _Verified 2026-10-12 by running it on
+Windows 11 (22631) with an RTX 4070 Ti SUPER._ A path with no drive letter
+that is not `//`-relative is taken from the root of the drive Windows is
+installed on, and Blender makes the folders it names there. At low integrity
+Blender starts, saves scenes, and renders with Cycles on OptiX and on CUDA
+and with EEVEE. Saving a scene tries to write a picture under `.thumbnails`
+in the person's user folder; refused, it is logged and the save succeeds. OptiX keeps its cache in the person's local
+application data, which a low process cannot write: without it every render
+builds its kernels again (1.1 s against 0.4 s for a cube), and with
+`OPTIX_CACHE_PATH` naming a folder it may write the times match. The zip
+ships no compiled Python:
+Blender writes `__pycache__` beside its scripts on its first run, and a
+start that can keep none takes 1.5 s against 0.7 s. Its bundled `python.exe`
+does not start by itself ("Failed to import encodings module"), so
+`sys.executable -m pip` fails from a script at any integrity. ADR 0028.
+
 **Windows' `tar.exe`.** _Verified 2026-09-17, version re-checked 2026-10-07._
 bsdtar 3.7.7 extracts zip archives and by default refuses entries with absolute
 paths or `..`, so installing a toolchain needs no zip library.
@@ -859,6 +900,24 @@ started during teardown. koffi's binary comes from `@koromix/koffi-win32-x64`,
 which pnpm does not hoist into the app, so it is a direct desktop dependency;
 after upgrading koffi, check for the `.node` file in `app.asar.unpacked`.
 ADR 0004 and [Windows recovery boundaries](windows-recovery-boundaries.md).
+
+**Low integrity through `koffi`.** _Verified 2026-10-12 on Windows 11
+(22631) by running probes; Microsoft's "Designing Applications to Run at a
+Low Integrity Level" re-read the same day._ A copy of Zhiyin's own token made
+with `DuplicateTokenEx`, lowered with `SetTokenInformation` to
+`S-1-16-4096`, starts a process through `CreateProcessAsUserW` with no
+privilege, suspended and with an inherited handle list as `CreateProcessW`
+takes them; pipes and files whose handles it inherits work as before. Such a
+process reads the person's files and is refused a write (`EPERM` in Node,
+`PermissionError` in Python) to anything not labelled low, the drive's root
+included. `SetNamedSecurityInfoW` with the label `S:(ML;OICI;NW;;;LW)` marks
+a folder and hands the mark on to everything in it, 20,000 files in 1.8 s,
+and to what is created in it later;
+`ConvertSecurityDescriptorToStringSecurityDescriptorW` reads a label back.
+In a folder labelled without `OICI`, a low process creates, deletes and
+renames files but cannot change one that was there or write in a folder that
+was there. A program whose own file is labelled low also starts at low
+integrity. ADR 0028.
 
 **A utility process in a Job Object.** _Verified 2026-10-03 against Electron
 44.1.1 by running a probe._ `utilityProcess.fork` reports the child's `pid`,

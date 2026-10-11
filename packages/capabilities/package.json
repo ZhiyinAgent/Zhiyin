@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@zhiyin/blender-studio": "workspace:*",
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/document-compiler": "workspace:*",
     "@zhiyin/git-connector": "workspace:*",

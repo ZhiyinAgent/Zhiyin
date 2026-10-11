@@ -133,7 +133,13 @@ describe("WorkspaceSplit", () => {
         id="workspace"
         shows={first}
         render={surface}
-        switcher={<SurfaceSwitch selected="document" onSelect={onSelect} />}
+        switcher={
+          <SurfaceSwitch
+            available={["browser", "document"]}
+            selected="document"
+            onSelect={onSelect}
+          />
+        }
       >
         <p>Conversation</p>
       </WorkspaceSplit>,

@@ -25,6 +25,7 @@ import type { ConversationBrowsers } from "@zhiyin/interactive-browser";
 import type { DeclaredMcpServer, McpServers } from "@zhiyin/mcp";
 import type { Plugins, PluginView } from "@zhiyin/plugins";
 import type { Toolchains } from "@zhiyin/toolchains";
+import type { ConversationScenes } from "@zhiyin/blender-studio";
 import type { ToolRegistry } from "@zhiyin/tools";
 import {
   activePlugins,
@@ -68,6 +69,8 @@ export type CapabilityMembers = {
    * shutting down each have one place to ask.
    */
   readonly browsers: ConversationBrowsers;
+  /** Each conversation's Blender, let go of the same way as its browser. */
+  readonly scenes?: Pick<ConversationScenes, "close" | "forget" | "closeAll">;
 };
 
 /** What one conversation's turn may call. */
@@ -525,28 +528,31 @@ export class ComposedCapabilities implements Capabilities {
   }
 
   async closeConversation(conversationId: string): Promise<void> {
-    const { browsers, mcp, tools } = this.#members;
+    const { browsers, mcp, tools, scenes } = this.#members;
     await Promise.all([
       browsers.close(conversationId),
+      scenes?.close(conversationId),
       mcp.shutdownScope(conversationId),
       tools.stopCommands?.(conversationId),
     ]);
   }
 
   async forgetConversation(conversationId: string): Promise<void> {
-    const { browsers, mcp } = this.#members;
+    const { browsers, mcp, scenes } = this.#members;
     this.#offered.delete(conversationId);
     await Promise.all([
       browsers.forget(conversationId),
+      scenes?.forget(conversationId),
       mcp.shutdownScope(conversationId),
       this.#members.tools.stopCommands?.(conversationId),
     ]);
   }
 
   async shutdown(): Promise<void> {
-    const { browsers, mcp, tools } = this.#members;
+    const { browsers, mcp, tools, scenes } = this.#members;
     await Promise.all([
       browsers.closeAll(),
+      scenes?.closeAll(),
       mcp.shutdownAll(),
       tools.stopAllCommands?.(),
     ]);

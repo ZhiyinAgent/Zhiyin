@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { constants, getPriority, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import koffi from "koffi";
@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   containmentAvailability,
   openProcessContainer,
+  openToLowIntegrity,
   runProcess,
 } from "../src/index.js";
 
@@ -301,6 +302,44 @@ describe.runIf(process.platform === "win32")("process containment", () => {
   );
 
   it(
+    "starts a process below normal priority when asked, so its heavy work leaves the person's own responsive",
+    { timeout: 30_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const container = openProcessContainer();
+      const priorityOf = async (priority?: "below-normal") => {
+        const name = `priority-${priority ?? "normal"}.txt`;
+        const child = container.launch({
+          executable: process.execPath,
+          arguments: [
+            "-e",
+            "process.stdout.write(String(require('node:os').getPriority()))",
+          ],
+          cwd: directory,
+          stdout: join(directory, name),
+          stderr: join(directory, "stderr.txt"),
+          ...(priority ? { priority } : {}),
+        });
+        expect(await child.wait()).toBe(0);
+        return Number(await readFile(join(directory, name), "utf8"));
+      };
+      try {
+        expect(await priorityOf("below-normal")).toBe(
+          constants.priority.PRIORITY_BELOW_NORMAL,
+        );
+        // One nobody asked anything of starts as Windows starts it: at
+        // normal priority, or at its parent's where that is lower, as on a
+        // build machine that runs its jobs below normal.
+        expect(await priorityOf()).toBe(
+          Math.max(getPriority(), constants.priority.PRIORITY_NORMAL),
+        );
+      } finally {
+        container.close();
+      }
+    },
+  );
+
+  it(
     "talks with a contained process over pipes of its own",
     { timeout: 30_000 },
     async () => {
@@ -396,3 +435,75 @@ function inheritableHandle(path: string): {
   if (handle <= 0n) throw new Error("The test could not open its own file.");
   return { value: handle, close: () => CloseHandle(handle) };
 }
+
+describe("a process started at low integrity", () => {
+  /** What the process could write and read of each file, in the order named. */
+  async function attempts(
+    directory: string,
+    files: readonly string[],
+    integrity?: "low",
+  ): Promise<{ wrote: string; read: string }[]> {
+    const container = openProcessContainer();
+    try {
+      const child = container.launch({
+        executable: process.execPath,
+        arguments: [join(fixtures, "writes.mjs"), ...files],
+        cwd: directory,
+        stdout: join(directory, "stdout.txt"),
+        stderr: join(directory, "stderr.txt"),
+        ...(integrity ? { integrity } : {}),
+      });
+      expect(await child.wait()).toBe(0);
+      return JSON.parse(
+        await readFile(join(directory, "stdout.txt"), "utf8"),
+      ) as { wrote: string; read: string }[];
+    } finally {
+      container.close();
+    }
+  }
+
+  it(
+    "writes in a folder opened to it, in what the folder held and in what it is given later, and in no other; it reads them all",
+    { timeout: 30_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const open = join(directory, "open");
+      const shut = join(directory, "shut");
+      await mkdir(join(open, "held before"), { recursive: true });
+      await mkdir(shut);
+      const before = join(open, "held before", "the person's.txt");
+      const beside = join(shut, "the person's.txt");
+      await writeFile(before, "the person's own");
+      await writeFile(beside, "the person's own");
+
+      await openToLowIntegrity(open);
+      await mkdir(join(open, "added later"));
+      const files = [
+        join(open, "new.txt"),
+        before,
+        join(open, "added later", "new.txt"),
+        join(shut, "new.txt"),
+        beside,
+      ];
+      const low = await attempts(directory, files, "low");
+
+      expect(low.slice(0, 3)).toEqual(
+        Array(3).fill({ wrote: "done", read: "written at low integrity" }),
+      );
+      expect(low[3]).toEqual({ wrote: "EPERM", read: "ENOENT" });
+      expect(low[4]).toEqual({ wrote: "EPERM", read: "the person's own" });
+      // Opening a folder a second time changes nothing and is no error.
+      await openToLowIntegrity(open);
+      // The same program, not asked for low integrity, writes where the person can.
+      expect((await attempts(directory, [beside]))[0]?.wrote).toBe("done");
+    },
+  );
+
+  it("says why a folder could not be opened to it", async () => {
+    const directory = await workingDirectory();
+
+    await expect(
+      openToLowIntegrity(join(directory, "not there")),
+    ).rejects.toThrow(/not there.*could not be opened to low integrity/s);
+  });
+});

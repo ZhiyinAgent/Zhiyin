@@ -26,14 +26,27 @@ export function refusal(
   return { ok: false, refusedBy, reason, next };
 }
 
+/**
+ * Input shorter than this that stops early was not cut for its length: no
+ * model's output limit is this small. A provider that fails to turn a call
+ * the model wrote out back into arguments stops them early too.
+ */
+const cutForLength = 2_000;
+
 /** A call whose input could not be read as one JSON object. */
-export function unreadableInput(reason: string, cutOff: boolean): Refusal {
+export function unreadableInput(
+  reason: string,
+  cutOff: boolean,
+  length: number,
+): Refusal {
   return refusal(
     "input-check",
     reason,
-    cutOff
-      ? "Send shorter content, or split the write into several calls."
-      : "Send the call again with its arguments as one JSON object, with quotes and line breaks inside text escaped.",
+    !cutOff
+      ? "Send the call again with its arguments as one JSON object, with quotes and line breaks inside text escaped."
+      : length >= cutForLength
+        ? "Send shorter content, or split the write into several calls."
+        : "It was short, so not cut for its length. Send the call again with all of its arguments, as a tool call rather than in your reply.",
   );
 }
 

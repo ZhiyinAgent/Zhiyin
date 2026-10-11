@@ -12,19 +12,22 @@ ADR 0004.
 This is a platform package below the features, because the guarantee has to
 hold for every process the app starts, and a leaked process is invisible from
 inside the feature that leaked it. It also gives features one way to run a
-program with a timeout, cancellation and bounded output.
+program with a timeout, cancellation and bounded output, and one way to start
+a process that may write only where it is let in (ADR 0028).
 
 ## Boundaries
 
 - **Owns:** the Job Object a process tree lives in and its lifetime, starting
-  a process inside one, the memory limit set on it, the shared way to run a
+  a process inside one, the memory limit set on it, starting it at low
+  integrity and opening a folder to such a process, the shared way to run a
   program with bounded output, and an exclusive file hold that Windows
   releases with its holder.
 - **Does not own:** which programs run, their arguments, timeouts or
   cancellation policy (the calling feature), or what a process may do
   (permission engine). Containment is about cleanup, not authority: beyond
   memory, run time and output size, nothing here limits what a contained
-  process does.
+  process does unless its caller starts it at low integrity, and which
+  folders are then opened to it is the caller's to say.
 - **Talks to other features only through:** the interface below. Callers get
   a container and never see how it is implemented.
 
@@ -40,7 +43,11 @@ program with a timeout, cancellation and bounded output.
     and environment are explicit, and standard input is empty. Given a `pipes`
     function, it also creates two pipes between Zhiyin and the process, passes
     the process's handle values to that function to build the arguments that
-    name them, and returns Zhiyin's ends as streams.
+    name them, and returns Zhiyin's ends as streams. Given
+    `priority: "below-normal"`, the process and what it starts run below
+    normal priority, for long, heavy work. Given `integrity: "low"`, the
+    process and what it starts run at Windows' low integrity level: they read
+    what the person can read and write only in folders opened to them.
   - `contain(pid)` puts a running process, and everything it starts
     afterwards, in the container. It throws if it cannot.
   - `close()` ends everything inside. Calling it again does nothing.
@@ -52,6 +59,9 @@ program with a timeout, cancellation and bounded output.
   ended early (`timeout`, `stopped`, `outputLimit`) or could not start
   (`containment`, `start`). `onStart` hands over a way to read what the
   program has printed so far; `keep` hands over each stream whole, as a file.
+- `openToLowIntegrity(folder)` opens a folder to processes started at low
+  integrity: they may write in it, in everything it holds and in everything
+  put in it later. It throws, with Windows' reason, when it cannot.
 - `holdExclusively(path)` opens a file only one holder can have, which Windows
   deletes when its holder goes. It answers the hold, `held-elsewhere`, or
   `unavailable` for any other reason.
@@ -74,6 +84,15 @@ program with a timeout, cancellation and bounded output.
 - **Its pipes are its own.** Each has an unguessable name, one instance and
   local clients only, and Zhiyin opens the process's end before the process
   exists. If that open fails, so does the launch.
+- **A process asked to run below normal priority does**, and one not asked
+  runs at normal priority.
+- **A process started at low integrity writes only where it is let in.** It
+  writes in a folder opened to it, in what the folder already held and in
+  what is added later, and Windows refuses it a write anywhere else. It reads
+  what the person can read. A process not asked for low integrity writes
+  where the person can.
+- **Opening a folder twice changes nothing**, and a folder that cannot be
+  opened is refused with Windows' reason.
 - **Arguments arrive exactly.** Each is quoted the way Windows splits a
   command line, so quotes, trailing backslashes, spaces and empty arguments
   arrive as given.

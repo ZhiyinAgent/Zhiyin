@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { crc32 } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -259,19 +259,101 @@ describe("installing a pinned program", () => {
       "1.2.3",
     ]);
   });
+
+  it("readies a program before it is in place, and installs what the readying made with it", async () => {
+    const directory = await temporaryRoot();
+    const during: unknown[] = [];
+    let promised: string | undefined;
+    const toolchains: DownloadedToolchains = new DownloadedToolchains({
+      directory,
+      specs: [specFor(program)],
+      download: serving(program),
+      ready: {
+        typst: async ({ executable, installed }) => {
+          promised = installed;
+          during.push({
+            unpacked: await readFile(executable, "utf8"),
+            inPlace: await toolchains.executable("typst"),
+            state: (await toolchains.state("typst")).status,
+          });
+          await writeFile(join(dirname(executable), "made.bin"), "made once");
+        },
+      },
+    });
+
+    await toolchains.install("typst");
+    await toolchains.install("typst");
+
+    expect(during).toEqual([
+      {
+        unpacked: "not really a program",
+        inPlace: undefined,
+        state: "installing",
+      },
+    ]);
+    const executable = await toolchains.executable("typst");
+    expect(executable).toBe(promised);
+    expect(await readFile(join(dirname(executable!), "made.bin"), "utf8")).toBe(
+      "made once",
+    );
+  });
+
+  it("installs a program whose readying failed: it works without", async () => {
+    const directory = await temporaryRoot();
+    const toolchains = new DownloadedToolchains({
+      directory,
+      specs: [specFor(program)],
+      download: serving(program),
+      ready: {
+        typst: async () => {
+          throw new Error("Nothing could be made ready.");
+        },
+      },
+    });
+
+    await toolchains.install("typst");
+
+    expect(await toolchains.state("typst")).toEqual({ status: "ready" });
+  });
+
+  it("leaves nothing usable behind when installation is stopped while a program is readied", async () => {
+    const directory = await temporaryRoot();
+    const stopping = new AbortController();
+    const toolchains = new DownloadedToolchains({
+      directory,
+      specs: [specFor(program)],
+      download: serving(program),
+      ready: {
+        typst: async (_program, signal) => {
+          stopping.abort();
+          signal.throwIfAborted();
+        },
+      },
+    });
+
+    await expect(
+      toolchains.install("typst", stopping.signal),
+    ).rejects.toThrow();
+
+    expect(await toolchains.executable("typst")).toBeUndefined();
+    expect(await readdir(join(directory, "toolchains", ".staging"))).toEqual(
+      [],
+    );
+  });
 });
 
 describe("the pinned releases", () => {
-  it("name an https GitHub release, a size, and a full SHA-256 digest", () => {
+  it("name an https download from the source they show, a size, and a full SHA-256 digest", () => {
     expect(pinnedToolchains.map((spec) => spec.id)).toEqual([
       "typst",
       "tectonic",
+      "blender",
       "uv",
     ]);
     for (const spec of pinnedToolchains) {
-      expect(spec.url).toMatch(
-        /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\//,
-      );
+      expect(spec.url.startsWith(`https://${spec.source}/`)).toBe(true);
+      if (spec.source.startsWith("github.com/"))
+        expect(spec.url).toContain("/releases/download/");
       expect(spec.sha256).toMatch(/^[0-9a-f]{64}$/);
       expect(spec.bytes).toBeGreaterThan(1_000_000);
       expect(spec.executable).toMatch(/\.exe$/);

@@ -319,6 +319,8 @@ describe("ManagedMcpServers", () => {
           }),
           inspect: async () => ({
             ok: true,
+            boundToCall: true,
+            allowance: { key: "pages", label: "Pages in this conversation" },
             action: "Open page",
             target: "https://example.test",
             command: "navigate()",
@@ -351,6 +353,10 @@ describe("ManagedMcpServers", () => {
       // built-in names as the call's target.
       target: "https://example.test",
       connection: "Browser",
+      // How far the built-in's identity reaches is its own word, and so is
+      // the set of its calls one allowance covers.
+      boundToCall: true,
+      allowance: { key: "pages", label: "Pages in this conversation" },
     });
     expect(
       await servers.execute(
