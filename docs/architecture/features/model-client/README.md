@@ -131,7 +131,10 @@ sends every request to another host.
 - **Capabilities come from the model's catalogue entry, never its name.** One
   lookup answers both the reasoning controls and whether the model accepts
   pictures; within one family the answers differ by version. A failed lookup
-  is not kept, so the next question asks again without a restart.
+  is not kept, so the next question asks again without a restart. An entry
+  that leaves out whether reasoning is on by default counts it as on when the
+  model requires reasoning or the entry names a default effort; with neither,
+  the reasoning controls are unavailable.
 
 - **A lab's models come from the list shipped in its provider folder**:
   for each model, its window, longest reply, pictures, reasoning controls, and

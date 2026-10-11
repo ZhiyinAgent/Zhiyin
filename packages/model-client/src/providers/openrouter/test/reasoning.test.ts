@@ -97,6 +97,53 @@ describe("reasoning", () => {
     });
   });
 
+  /**
+   * Some catalogue entries leave out whether reasoning is on by default. The
+   * shapes are as OpenRouter listed them on 2026-10-09: Claude Haiku 5.5 names
+   * a default effort, Step 5 Preview requires reasoning, and MiniMax M3 says
+   * only that reasoning is optional.
+   */
+  it("offers the efforts of an entry that leaves out whether reasoning is on by default", async () => {
+    const offered = async (reasoning: unknown) =>
+      (
+        await new OpenRouterModelClient({
+          model: "anthropic/claude-haiku-5.5",
+          apiKey: async () => "test",
+          modelInfo: async () => ({ reasoning }),
+        }).settings()
+      ).reasoning;
+
+    expect(
+      await offered({
+        mandatory: false,
+        supported_efforts: ["max", "xhigh", "high", "medium", "low"],
+        default_effort: "medium",
+      }),
+    ).toEqual({
+      status: "available",
+      required: false,
+      defaultEnabled: true,
+      defaultEffort: "medium",
+      efforts: ["max", "xhigh", "high", "medium", "low"],
+    });
+    expect(
+      await offered({
+        mandatory: true,
+        supported_efforts: ["high", "medium", "low"],
+        default_effort: "medium",
+      }),
+    ).toEqual({
+      status: "available",
+      required: true,
+      defaultEnabled: true,
+      defaultEffort: "medium",
+      efforts: ["high", "medium", "low"],
+    });
+    expect(await offered({ mandatory: false })).toMatchObject({
+      status: "unavailable",
+    });
+  });
+
   it("settles reasoning and picture support from one catalogue lookup", async () => {
     let lookups = 0;
     const client = new OpenRouterModelClient({
