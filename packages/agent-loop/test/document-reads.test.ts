@@ -302,7 +302,7 @@ describe("what the agent is told about the space beside the conversation", () =>
           if (text.includes("You are the Reader specialist")) {
             told.push({
               messages: text,
-              tools: request.tools.map((tool) => tool.name),
+              tools: (request.tools ?? []).map((tool) => tool.name),
             });
             yield call("finish-1", "finish_specialist", {
               summary: "Read it.",

@@ -513,7 +513,7 @@ describe("after condensing", () => {
           action: name,
           target: String((args as { path?: string }).path ?? "notes"),
           command: `${name}(...)`,
-          access: name === "edit" ? "write" : "read",
+          access: name === "edit" ? "change" : "read",
           scope: "workspace",
           ...(name === "edit"
             ? {
@@ -697,7 +697,7 @@ describe("after condensing", () => {
           action: name,
           target: String((args as { path?: string }).path ?? "notes"),
           command: `${name}(...)`,
-          access: name === "edit" ? "write" : "read",
+          access: name === "edit" ? "change" : "read",
           scope: "workspace",
           ...(name === "edit"
             ? {

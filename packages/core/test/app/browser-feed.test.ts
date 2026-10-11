@@ -17,7 +17,7 @@ describe("browser feed", () => {
       title: "",
       loading: false,
     };
-    const deps = stubDependencies((event) => events.push(event));
+    const deps = { ...stubDependencies((event) => events.push(event)) };
     const browser = {
       ...deps.browsers.browser("fixture"),
       state: () => state,
@@ -78,7 +78,7 @@ describe("browser feed", () => {
     const opened: string[] = [];
     const sessions = new Map<string, ReturnType<typeof makeBrowser>>();
     let taskNumber = 0;
-    const deps = stubDependencies((event) => events.push(event));
+    const deps = { ...stubDependencies((event) => events.push(event)) };
     deps.newTaskId = () => `task-${++taskNumber}`;
     deps.browsers = {
       browser: (taskId) => {

@@ -305,7 +305,6 @@ describe("AgentLoop silent repair", () => {
           throw new Error("disk full");
         },
         read: async () => [],
-        clear: async () => {},
       },
       tools: tool.registry,
       permissions: {

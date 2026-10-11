@@ -134,6 +134,7 @@ const full: WorkspaceSnapshot = {
   runtime: { tasks: "available", capabilities: "available" },
   selectedTaskId: "task-0",
   recentWorkspaces: [],
+  plugins: [],
   tasks: Array.from({ length: CONVERSATIONS }, (_, index) =>
     conversation(index),
   ),

@@ -29,6 +29,7 @@ function snapshot(title: string): WorkspaceSnapshot {
     runtime: { tasks: "available", capabilities: "available" },
     selectedTaskId: "task-1",
     recentWorkspaces: [],
+    plugins: [],
     tasks: [
       {
         id: "task-1",

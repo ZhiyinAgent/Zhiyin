@@ -4,12 +4,9 @@
  * loop's own package, against a stand-in for the app around it.
  */
 
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it } from "vitest";
-import {
-  emptyConversationLists,
-  type AppEvent,
-  type WorkspaceSnapshot,
-} from "@zhiyin/contract";
+import { emptyConversationLists, type AppEvent } from "@zhiyin/contract";
 import {
   loopFrom,
   pluginStore,
@@ -47,13 +44,13 @@ describe("the core and a turn together", () => {
   });
 
   it("renames a task with a non-empty trimmed title and persists it", async () => {
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const seen: AppEvent[] = [];
     const loop = loopFrom({
       ...stubDependencies((event) => seen.push(event)),
       sessions: {
         ...stubDependencies(() => {}).sessions,
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
       },
     });
     const taskId = await loop.createTask();
@@ -72,7 +69,7 @@ describe("the core and a turn together", () => {
   });
 
   it("saves what the model was sent, and never sends it to the window", async () => {
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const seen: AppEvent[] = [];
     const loop = loopFrom({
       ...stubDependencies(
@@ -81,7 +78,7 @@ describe("the core and a turn together", () => {
       ),
       sessions: {
         ...stubDependencies(() => {}).sessions,
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
       },
     });
     const taskId = await loop.createTask();
@@ -106,13 +103,13 @@ describe("the core and a turn together", () => {
 
   it("deletes a task and selects its nearest remaining conversation", async () => {
     let nextId = 0;
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const seen: AppEvent[] = [];
     const loop = loopFrom({
       ...stubDependencies((event) => seen.push(event)),
       sessions: {
         ...stubDependencies(() => {}).sessions,
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
       },
       newTaskId: () => `task-${(nextId += 1)}`,
     });
@@ -153,8 +150,8 @@ describe("the core and a turn together", () => {
   });
 
   it("rehydrates and updates the same workspace snapshot across a restart", async () => {
-    const restored: WorkspaceSnapshot = {
-      runtime: { tasks: "available", capabilities: "unavailable" },
+    const restored: SavedWorkspace = {
+      recentWorkspaces: [],
       selectedTaskId: "restored",
       tasks: [
         {
@@ -164,21 +161,20 @@ describe("the core and a turn together", () => {
           titleSource: "generated",
           updatedAt: "2026-10-05T09:00:00.000Z",
           ...emptyConversationLists,
-          messages: [{ id: "m1", role: "user", text: "Earlier message" }],
+          messages: [
+            { id: "m1", role: "user", text: "Earlier message", sequence: 0 },
+          ],
           phase: { kind: "interrupted" },
         },
       ],
-      skills: [],
-      subagents: [],
-      usage: { status: "unavailable", reason: "No usage yet." },
     };
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       sessions: {
         ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
         list: async () => [],
         undo: async () => {},
       },
@@ -196,8 +192,8 @@ describe("the core and a turn together", () => {
   });
 
   it("restores an unfinished permission request as interrupted instead of leaving a dead prompt", async () => {
-    const restored: WorkspaceSnapshot = {
-      runtime: { tasks: "available", capabilities: "available" },
+    const restored: SavedWorkspace = {
+      recentWorkspaces: [],
       selectedTaskId: "restored",
       tasks: [
         {
@@ -207,7 +203,9 @@ describe("the core and a turn together", () => {
           titleSource: "generated",
           updatedAt: "2026-10-05T09:00:00.000Z",
           ...emptyConversationLists,
-          messages: [{ id: "m1", role: "user", text: "Read the notes" }],
+          messages: [
+            { id: "m1", role: "user", text: "Read the notes", sequence: 0 },
+          ],
           phase: {
             kind: "approval",
             steps: [],
@@ -221,17 +219,14 @@ describe("the core and a turn together", () => {
           },
         },
       ],
-      skills: [],
-      subagents: [],
-      usage: { status: "unavailable", reason: "No usage yet." },
     };
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       sessions: {
         ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
         list: async () => [],
         undo: async () => {},
       },

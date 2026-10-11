@@ -187,7 +187,7 @@ function connection(
     toolCount: 1,
     credential: { status: "none" },
     ...overrides,
-  };
+  } as McpServerState;
 }
 
 /**
@@ -955,7 +955,12 @@ describe("a call handed back", () => {
   });
 
   it("shows a conversation's running commands, and stops one for the person", async () => {
-    const make = { id: "J1", command: "make", startedAt: 1_000 };
+    const make = {
+      id: "J1",
+      command: "make",
+      explanation: "Builds the project.",
+      startedAt: 1_000,
+    };
     const stopped: string[][] = [];
     let changed: ((conversationId: string) => void) | undefined;
     const { capabilities } = membersRecording({

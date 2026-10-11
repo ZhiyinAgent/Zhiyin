@@ -41,5 +41,7 @@ function fakeBrowser(): InteractiveBrowser & {
     lastFrame: () => undefined,
     onFrame: () => () => {},
     onState: () => () => {},
+    markAgentAction: () => {},
+    onAgentAction: () => () => {},
   };
 }

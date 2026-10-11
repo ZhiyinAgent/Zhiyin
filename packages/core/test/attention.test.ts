@@ -207,7 +207,7 @@ describe("clicking a notification", () => {
       enabled: () => true,
       open: (taskId) => opened.push(taskId),
     });
-    const task = {
+    const task: Omit<WorkspaceTask, "phase"> = {
       id: "task-7",
       title: "Trip",
       updatedLabel: "Now",

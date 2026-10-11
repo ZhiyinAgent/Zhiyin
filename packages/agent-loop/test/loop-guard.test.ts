@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import { notices, until, withPlan, type Step } from "./plan-fixture.js";
+import { defaultWorkLimits } from "../src/turn/work-limits.js";
 
 const same: Step = {
   calls: [{ name: "list_directory", args: { path: "reports" } }],
@@ -123,7 +124,7 @@ describe("the loop guard", () => {
   it("sends at most two notices in a turn", async () => {
     const fixture = withPlan({
       script: (request) => (request <= 12 ? same : finish),
-      workLimits: { maximumToolRounds: 30 },
+      workLimits: { ...defaultWorkLimits, maximumToolRounds: 30 },
     });
     const taskId = await fixture.loop.createTask();
 
@@ -139,7 +140,7 @@ describe("the loop guard", () => {
   it("gives the work-budget question the reason when a loop notice fired", async () => {
     const fixture = withPlan({
       script: (request) => (request <= 6 ? same : finish),
-      workLimits: { maximumToolRounds: 4 },
+      workLimits: { ...defaultWorkLimits, maximumToolRounds: 4 },
     });
     const taskId = await fixture.loop.createTask();
 

@@ -3,7 +3,11 @@ import {
   browserAutomation,
   describeBrowserAutomation,
 } from "../src/automation-server.js";
-import type { BrowserLauncher, InteractiveBrowser } from "../src/index.js";
+import type {
+  BrowserLauncher,
+  BrowserSessionState,
+  InteractiveBrowser,
+} from "../src/index.js";
 
 /**
  * A stand-in for the packaged Playwright server: it answers the two protocol
@@ -134,7 +138,7 @@ function fakeBrowser(context: unknown = { marker: "context" }) {
       opened.push(url ?? "");
     }),
     automation: () => context,
-    state: () => ({
+    state: (): BrowserSessionState => ({
       status: "open" as const,
       url: "",
       title: "",

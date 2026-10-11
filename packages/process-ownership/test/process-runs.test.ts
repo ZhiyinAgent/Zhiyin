@@ -158,7 +158,10 @@ describe.each(paths)("a %s run", (_, containment) => {
   it("gives the program exactly the environment it was handed", async () => {
     process.env["ZHIYIN_PARENT_ONLY"] = "parent";
     try {
-      const environment = { ...process.env, GIT_TERMINAL_PROMPT: "0" };
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+      };
       delete environment["ZHIYIN_PARENT_ONLY"];
 
       const run = await node(

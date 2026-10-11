@@ -72,16 +72,9 @@ function longConversation(): WorkspaceTask {
 
 function savedWorkspace(tasks: readonly WorkspaceTask[]) {
   return async () => ({
-    runtime: {
-      tasks: "available" as const,
-      capabilities: "available" as const,
-    },
+    recentWorkspaces: [],
     selectedTaskId: tasks[0]?.id ?? null,
     tasks: [...tasks],
-    skills: [],
-    subagents: [],
-    mcpServers: [],
-    usage: { status: "unavailable" as const, reason: "None." },
   });
 }
 

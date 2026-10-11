@@ -7,8 +7,8 @@
  * it.
  */
 
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it } from "vitest";
-import type { WorkspaceSnapshot } from "@zhiyin/contract";
 import {
   loopFrom,
   pluginStore,
@@ -35,7 +35,7 @@ function durableStores() {
     BUILT_IN.map((name) => pluginView({ name, enabled: false })),
     { failSwitch: (name) => failedSwitches.has(name) },
   );
-  let saved: WorkspaceSnapshot | undefined;
+  let saved: SavedWorkspace | undefined;
   let failSavesAfter = Number.POSITIVE_INFINITY;
   let failedSwitches = new Set<string>();
   let saves = 0;
@@ -187,7 +187,7 @@ describe("AgentLoop durable turn ownership", () => {
       sayStarted = resolve;
     });
     let heldOnce = false;
-    let saved: WorkspaceSnapshot | undefined;
+    let saved: SavedWorkspace | undefined;
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,

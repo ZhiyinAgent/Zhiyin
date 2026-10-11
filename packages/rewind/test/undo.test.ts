@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { TaskAction, WorkspaceTask } from "@zhiyin/contract";
+import {
+  emptyConversationLists,
+  type TaskAction,
+  type WorkspaceTask,
+} from "@zhiyin/contract";
 import type { RewindPlanner, UndoPlan } from "@zhiyin/conversation-rewind";
 import type { Recovery, RecoveryReview } from "@zhiyin/recovery";
 import { ComposedRewind, type RewindHost } from "../src/index.js";
@@ -15,8 +19,11 @@ const written: TaskAction = {
 
 function conversation(folder?: string): WorkspaceTask {
   return {
+    ...emptyConversationLists,
     id: "conversation-1",
     title: "Notes",
+    titleSource: "manual",
+    updatedAt: "2026-10-09T12:00:00.000Z",
     updatedLabel: "Now",
     messages: [
       { id: "u1", role: "user", text: "Write the notes", sequence: 0 },

@@ -25,6 +25,7 @@ import {
   type LoopTestDependencies,
 } from "./support.js";
 import { prefixBreaks, sharedPrefix } from "./request-prefix.js";
+import { defaultWorkLimits } from "../src/turn/work-limits.js";
 
 type Tool = {
   readonly inspect?: (
@@ -293,7 +294,7 @@ describe("earlier tool work in later requests", () => {
         callsThenAnswers("read_note", 2),
         requests,
         {
-          workLimits: { maximumToolRounds: 1 },
+          workLimits: { ...defaultWorkLimits, maximumToolRounds: 1 },
           newUserInputId: () => "budget-1",
         },
       ),

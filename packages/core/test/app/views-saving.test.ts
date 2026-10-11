@@ -5,8 +5,8 @@
  * together.
  */
 
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it, vi } from "vitest";
-import type { WorkspaceSnapshot } from "@zhiyin/contract";
 import { stubDependencies, loopFrom } from "./support.js";
 
 function modelRequestingDiagram() {
@@ -37,7 +37,7 @@ describe("a view that is saved", () => {
       reason: "must not run",
     }));
     const validate = vi.fn(async () => ({ ok: true as const }));
-    let saved: WorkspaceSnapshot | undefined;
+    let saved: SavedWorkspace | undefined;
     const view = {
       kind: "diagram" as const,
       title: "Release flow",

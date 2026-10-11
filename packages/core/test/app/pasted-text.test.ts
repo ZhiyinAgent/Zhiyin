@@ -41,6 +41,7 @@ async function coreKeepingPastes() {
   });
   const core = new Core({
     workspace,
+    dataFolder: "C:/data",
     ownership: { claim: async () => {}, release: async () => {} },
     viewChecks: { answer: () => {}, abandon: () => {} },
     commands: {

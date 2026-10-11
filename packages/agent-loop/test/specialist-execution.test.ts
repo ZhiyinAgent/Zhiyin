@@ -56,7 +56,7 @@ describe("specialist child execution", () => {
           },
         ],
         inspect,
-        execute: vi.fn(async () => ({ ok: true as const })),
+        execute: vi.fn(async () => ({ ok: true as const, value: "Written." })),
       },
       permissions: { decide: permission },
       model: {
@@ -164,7 +164,7 @@ describe("specialist child execution", () => {
         send: async function* (request) {
           const text = JSON.stringify(request.messages);
           if (text.includes("You are the Fact-checker specialist")) {
-            offered = request.tools.map((offer) => offer.name);
+            offered = (request.tools ?? []).map((offer) => offer.name);
             yield finishes("Checked.");
           } else if (!text.includes("Check the figures.")) {
             yield {
@@ -776,7 +776,7 @@ describe("specialist child execution", () => {
             specialistRound += 1;
             yield* options.specialist(
               specialistRound,
-              request.tools.map((tool) => tool.name),
+              (request.tools ?? []).map((tool) => tool.name),
               text,
             );
             yield { kind: "done" as const };

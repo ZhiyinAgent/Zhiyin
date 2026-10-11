@@ -21,7 +21,7 @@ const task: WorkspaceTask = {
   titleSource: "generated",
   updatedAt: "2026-10-05T09:00:00.000Z",
   ...emptyConversationLists,
-  contextBudget: "standard",
+  contextBudget: "medium",
   messages: [
     { id: "m1", role: "user", text: "Read the notes.", sequence: 0 },
     {
@@ -50,6 +50,7 @@ function workspace(tasks: readonly WorkspaceTask[]): WorkspaceSnapshot {
     runtime: { tasks: "available", capabilities: "available" },
     tasks,
     selectedTaskId: tasks[0]?.id ?? null,
+    recentWorkspaces: [],
     plugins: [],
     mcpServers: [],
     usage: { status: "unavailable", reason: "None." },
@@ -137,6 +138,7 @@ describe("a conversation sent as what changed in it", () => {
           kind: "diagram",
           title: "Steps",
           source: "flowchart LR\n  A --> B",
+          sequence: 4,
         },
       ],
       phase: { kind: "interrupted" },

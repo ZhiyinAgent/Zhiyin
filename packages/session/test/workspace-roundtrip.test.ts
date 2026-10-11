@@ -21,7 +21,7 @@ describe("saved reasoning", () => {
   it("restores reasoning and the conversation's selected effort", async () => {
     const root = await temporaryRoot();
     const task = {
-      ...snapshot.tasks[0]!,
+      ...withoutCompaction(snapshot.tasks[0]!),
       reasoning: { enabled: true as const, effort: "high" as const },
       messages: [
         {
@@ -32,7 +32,6 @@ describe("saved reasoning", () => {
           reasoning: { text: "Compared sources.", status: "complete" as const },
         },
       ],
-      compaction: undefined,
     };
     const saved = { ...snapshot, tasks: [task] };
     await new FileSessions(root).saveWorkspace(saved);
@@ -68,7 +67,7 @@ describe("saved reasoning", () => {
   it("restores when each response started, first answered and finished, what it used, and when each action ran", async () => {
     const root = await temporaryRoot();
     const task = {
-      ...snapshot.tasks[0]!,
+      ...withoutCompaction(snapshot.tasks[0]!),
       modelResponses: [
         {
           provider: "Fireworks",
@@ -87,7 +86,6 @@ describe("saved reasoning", () => {
           },
         },
       ],
-      compaction: undefined,
       actions: [
         {
           id: "action-1",
@@ -299,6 +297,7 @@ const snapshot: WorkspaceSnapshot = {
   runtime: { tasks: "available", capabilities: "unavailable" },
   selectedTaskId: "task-1",
   recentWorkspaces: [],
+  plugins: [],
   tasks: [
     {
       id: "task-1",
@@ -399,6 +398,8 @@ const snapshot: WorkspaceSnapshot = {
       enabled: true,
       status: "connected",
       toolCount: 4,
+      tools: [],
+      credential: { status: "none" },
     },
   ],
   usage: { status: "unavailable", reason: "No usage recorded." },
@@ -413,11 +414,16 @@ function taskWithActions(actions: WorkspaceTask["actions"]): WorkspaceSnapshot {
   return {
     ...snapshot,
     tasks: snapshot.tasks.map((task) => ({
-      ...task,
-      compaction: undefined,
+      ...withoutCompaction(task),
       actions,
     })),
   };
+}
+
+function withoutCompaction(task: WorkspaceTask): WorkspaceTask {
+  const { compaction, ...rest } = task;
+  void compaction;
+  return rest;
 }
 
 afterEach(async () => {
@@ -1349,7 +1355,8 @@ describe("FileSessions workspace persistence", () => {
   it("keeps history readable whatever state connections were in when it was saved", async () => {
     const root = await temporaryRoot();
 
-    await new FileSessions(root).saveWorkspace({
+    // The app hands over its whole snapshot, live connections included.
+    const withConnection: WorkspaceSnapshot = {
       ...snapshot,
       mcpServers: [
         {
@@ -1359,10 +1366,12 @@ describe("FileSessions workspace persistence", () => {
           enabled: true,
           status: "unauthorized",
           toolCount: 0,
+          tools: [],
           credential: { status: "saved" },
         },
       ],
-    });
+    };
+    await new FileSessions(root).saveWorkspace(withConnection);
 
     await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
       { tasks: [{ id: snapshot.tasks[0]!.id }] },
@@ -1395,6 +1404,6 @@ describe("FileSessions workspace persistence", () => {
 
 const plainResponse = {
   finishReason: "stop",
-  termination: "finishReason",
+  termination: "finishReason" as const,
   complete: true,
 };

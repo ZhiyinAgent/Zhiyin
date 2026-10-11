@@ -7,6 +7,11 @@ import type {
 import type { ModelClient, ProviderDirectory } from "@zhiyin/model-client";
 import { ModelSettings } from "../src/model-settings.js";
 
+/** Where a provider's keys and billing are, which only links need. */
+const pages = {
+  keys: "https://provider.example/keys",
+  billing: "https://provider.example/billing",
+};
 const listed = (model: string, providers: string[] = []): ProviderSettings => ({
   model,
   providers,
@@ -35,6 +40,7 @@ async function chosenSettings() {
             provider: {
               id: target.provider,
               name: target.provider,
+              pages,
               ...(target.region
                 ? { region: { id: target.region, name: target.region } }
                 : {}),
@@ -140,7 +146,7 @@ function providersSetUp() {
       selectModel: async (model: string, upstreams: readonly string[]) => {
         chosen = {
           ...listed(model, [...upstreams]),
-          provider: { id: at.provider, name: at.provider },
+          provider: { id: at.provider, name: at.provider, pages },
         };
       },
     }) as unknown as ModelClient;
@@ -150,7 +156,9 @@ function providersSetUp() {
       {
         id: "openrouter",
         name: "OpenRouter",
-        accounts: [{ credential: { status: "missing", source: "none" } }],
+        accounts: [
+          { credential: { status: "missing", source: "none" }, pages },
+        ],
       },
     ],
     for: target,
@@ -215,7 +223,7 @@ describe("setting up a provider other than the chosen one", () => {
       kind: "providerSettingsChanged",
       data: expect.objectContaining({
         model: "lab-model",
-        provider: { id: "lab", name: "lab" },
+        provider: { id: "lab", name: "lab", pages },
       }),
     });
   });
@@ -227,7 +235,9 @@ describe("setting up a provider other than the chosen one", () => {
       {
         id: "openrouter",
         name: "OpenRouter",
-        accounts: [{ credential: { status: "missing", source: "none" } }],
+        accounts: [
+          { credential: { status: "missing", source: "none" }, pages },
+        ],
       },
     ]);
   });

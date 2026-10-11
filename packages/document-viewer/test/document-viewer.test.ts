@@ -31,7 +31,7 @@ async function workspace() {
   return { parent, root };
 }
 
-function viewer(root: string, options: { redrawIntervalMs?: number } = {}) {
+function viewer(_root: string, options: { redrawIntervalMs?: number } = {}) {
   const started: DrawingProcess[] = [];
   const changes: DocumentPanelState[] = [];
   const documents = new DocumentViewer({
@@ -292,7 +292,18 @@ describe("the documents a conversation shows", () => {
       const image = await canvas.loadImage(
         Buffer.from(page.data.slice(page.data.indexOf(",") + 1), "base64"),
       );
-      const drawn = canvas.createCanvas(100, 100).getContext("2d");
+      // The drawing library's own context, which reads pixels back.
+      const drawn = canvas
+        .createCanvas(100, 100)
+        .getContext("2d") as unknown as {
+        drawImage(image: unknown, x: number, y: number): void;
+        getImageData(
+          x: number,
+          y: number,
+          width: number,
+          height: number,
+        ): { data: Uint8ClampedArray };
+      };
       drawn.drawImage(image, 0, 0);
       const pixels = drawn.getImageData(0, 0, 100, 100).data;
       let blue = 0;

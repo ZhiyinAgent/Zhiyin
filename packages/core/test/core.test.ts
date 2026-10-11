@@ -60,6 +60,7 @@ function recordingCore(
   } as unknown as CoreWorkspace;
   const core = new Core({
     workspace: loop,
+    dataFolder: "C:/data",
     ownership: {
       claim: note("claim") as () => Promise<void>,
       release: note("release") as () => Promise<void>,
@@ -76,6 +77,9 @@ function recordingCore(
       stopCommandForPerson: note("stopCommandForPerson") as () => Promise<void>,
       onCommandsChanged: () => {},
     },
+    openExternal: async () => {},
+    openPath: async () => {},
+    showInFolder: async () => {},
     version: "1.2.3",
     ...dependencies,
   });
@@ -212,6 +216,7 @@ describe("a conversation's running commands", () => {
   const build = {
     id: "J1",
     command: "npm run build",
+    explanation: "Builds the project.",
     startedAt: 1_000,
   };
 

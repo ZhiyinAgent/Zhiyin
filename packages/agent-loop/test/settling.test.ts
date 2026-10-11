@@ -7,7 +7,13 @@ import { AgentLoop, type AgentLoopDependencies } from "../src/index.js";
 // Settling reads a conversation and returns another; it reaches nothing.
 const loop = new AgentLoop({} as AgentLoopDependencies);
 
-const conversation = (task: Partial<WorkspaceTask>): WorkspaceTask =>
+/**
+ * A conversation as settling reads it: only the parts a case is about, which
+ * may be a record cut short, so each part is any value under a real name.
+ */
+type Recorded = { readonly [Part in keyof WorkspaceTask]?: unknown };
+
+const conversation = (task: Recorded): WorkspaceTask =>
   ({
     id: "task-1",
     title: "A conversation",
@@ -15,7 +21,7 @@ const conversation = (task: Partial<WorkspaceTask>): WorkspaceTask =>
     ...emptyConversationLists,
     phase: { kind: "idle" },
     ...task,
-  }) as WorkspaceTask;
+  }) as unknown as WorkspaceTask;
 
 describe("a turn that did not finish", () => {
   it("settles a turn the app closed on as interrupted", () => {
@@ -25,7 +31,7 @@ describe("a turn that did not finish", () => {
         actions: [
           { id: "1", status: "running" },
           { id: "2", status: "completed" },
-        ] as WorkspaceTask["actions"],
+        ],
         messages: [
           { id: "m1", role: "assistant", reasoning: { status: "streaming" } },
         ] as unknown as WorkspaceTask["messages"],
@@ -50,7 +56,7 @@ describe("a turn that did not finish", () => {
   it("leaves a conversation with nothing unfinished exactly as it was", () => {
     const finished = conversation({
       phase: { kind: "completed" },
-      actions: [{ id: "1", status: "completed" }] as WorkspaceTask["actions"],
+      actions: [{ id: "1", status: "completed" }],
     });
 
     expect(loop.settleAfterRestart(finished)).toBe(finished);

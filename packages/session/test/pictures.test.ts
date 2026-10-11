@@ -45,6 +45,7 @@ describe("pictures a conversation contains", () => {
       runtime: { tasks: "available", capabilities: "unavailable" },
       selectedTaskId: "task-1",
       recentWorkspaces: [],
+      plugins: [],
       tasks: [
         {
           id: "task-1",

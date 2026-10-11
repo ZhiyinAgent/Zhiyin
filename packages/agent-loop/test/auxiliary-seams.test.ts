@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
-import { stubDependencies, loopFrom } from "./support.js";
+import { stubDependencies, loopFrom, wordsOf } from "./support.js";
 
 function recorder(
   requests: ModelRequest[],
@@ -21,7 +21,7 @@ function recorder(
   return {
     send: async function* (request: ModelRequest): AsyncGenerator<ModelEvent> {
       requests.push(request);
-      const prompt = request.messages.at(-1)?.content ?? "";
+      const prompt = wordsOf(request.messages.at(-1));
       const match = Object.keys(answers).find((marker) =>
         prompt.includes(marker),
       );
@@ -152,7 +152,7 @@ describe("auxiliary model seams", () => {
     });
     expect(
       main.filter((request) =>
-        request.messages.at(-1)?.content.includes("about to be condensed"),
+        wordsOf(request.messages.at(-1)).includes("about to be condensed"),
       ),
     ).toHaveLength(1);
     expect(promptsOf(guidance)).not.toContain("Name this conversation");

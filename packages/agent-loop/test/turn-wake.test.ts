@@ -46,6 +46,7 @@ describe("waking a task after a background specialist settles", () => {
           },
           task: "Review the change",
           depth: 1,
+          sequence: 1,
           status: "completed" as const,
           startedAt: "2026-01-01T00:00:00.000Z",
           finishedAt: "2026-01-01T00:01:00.000Z",

@@ -411,14 +411,14 @@ describe("a turn stopped while its next model request is connecting", () => {
     expect(task?.actions.map((action) => action.status)).toEqual(["completed"]);
     expect(requests).toBe(2);
     expect(
-      seen.some(
-        (event) =>
-          event.kind === "taskChanged" &&
-          (event.data as WorkspaceTask).phase.kind === "working" &&
-          (event.data as WorkspaceTask).phase.note?.startsWith(
-            "Connection interrupted",
-          ),
-      ),
+      seen.some((event) => {
+        if (event.kind !== "taskChanged") return false;
+        const phase = (event.data as WorkspaceTask).phase;
+        return (
+          phase.kind === "working" &&
+          phase.note?.startsWith("Connection interrupted") === true
+        );
+      }),
     ).toBe(false);
   });
 });

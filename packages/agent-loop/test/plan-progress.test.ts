@@ -113,7 +113,7 @@ describe("update_plan", () => {
     expect(cut.length).toBeLessThanOrEqual(200);
     expect(cut).toBe("word ".repeat(40).trim());
     expect(cut).not.toMatch(/…|\.\.\.$/);
-    const tool = fixture.requests[0]?.tools.find(
+    const tool = fixture.requests[0]?.tools?.find(
       (item) => item.name === "update_plan",
     );
     expect(JSON.stringify(tool?.inputSchema)).toContain('"maxLength":200');
@@ -145,7 +145,7 @@ describe("update_plan", () => {
 
     await fixture.loop.start(taskId, "Summarise the reports");
 
-    const tool = fixture.requests[0]?.tools.find(
+    const tool = fixture.requests[0]?.tools?.find(
       (item) => item.name === "update_plan",
     );
     expect(tool).toBeDefined();

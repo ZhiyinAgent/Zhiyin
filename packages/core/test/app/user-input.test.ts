@@ -1,6 +1,6 @@
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it, vi } from "vitest";
 import type { ModelRequest, ModelToolCall } from "@zhiyin/model-client";
-import type { WorkspaceSnapshot } from "@zhiyin/contract";
 import { WorkspaceTools } from "@zhiyin/tools";
 import type { TestApp as AgentLoop } from "./support.js";
 import { stubDependencies, until, loopFrom } from "./support.js";
@@ -88,7 +88,7 @@ describe("AgentLoop user input", () => {
     const base = stubDependencies(() => {});
     const requests: ModelRequest[] = [];
     const decide = vi.fn(base.permissions.decide);
-    let saved: WorkspaceSnapshot | undefined;
+    let saved: SavedWorkspace | undefined;
     let inputNumber = 0;
     const loop = loopFrom({
       ...base,

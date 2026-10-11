@@ -7,7 +7,8 @@
  */
 
 import { describe, expect, it } from "vitest";
-import type { ModelRequest } from "@zhiyin/contract";
+import type { RunningCommand } from "@zhiyin/contract";
+import type { ModelRequest } from "@zhiyin/model-client";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
 type Announce = (
@@ -161,7 +162,7 @@ describe("a command that ends after its call returned", () => {
 
   it("keeps a conversation's running jobs with it while they run, so a restart can tell of them", async () => {
     const base = stubDependencies(() => {});
-    let running: { id: string; command: string; startedAt: number }[] = [];
+    let running: RunningCommand[] = [];
     let changed: ((conversationId: string) => void) | undefined;
     const loop = loopFrom({
       ...base,
@@ -176,7 +177,14 @@ describe("a command that ends after its call returned", () => {
     const taskId = await loop.createTask();
     await loop.start(taskId, "Build the project");
 
-    running = [{ id: "J1", command: "npm run build", startedAt: 1_000 }];
+    running = [
+      {
+        id: "J1",
+        command: "npm run build",
+        explanation: "Builds the project.",
+        startedAt: 1_000,
+      },
+    ];
     changed?.(taskId);
     await until(() => loop.snapshot().tasks[0]?.runningJobs.length === 1);
     expect(loop.snapshot().tasks[0]?.runningJobs).toEqual([
@@ -205,11 +213,12 @@ describe("a command that ends after its call returned", () => {
     const taskId = await loop.createTask();
     await loop.start(taskId, "Build the project");
     const saved = loop.snapshot().tasks[0]!;
-    const index = loop.tasks.findIndex((task) => task.id === taskId);
-    loop.tasks[index] = loop.settleAfterRestart({
-      ...saved,
-      runningJobs: [{ id: "J1", command: "npm run build" }],
-    });
+    loop.restore([
+      loop.settleAfterRestart({
+        ...saved,
+        runningJobs: [{ id: "J1", command: "npm run build" }],
+      }),
+    ]);
 
     await loop.start(taskId, "Is it built?");
 

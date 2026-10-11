@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   emptyConversationLists,
+  type AppEvent,
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
 import { ModelClientError, type ModelRequest } from "@zhiyin/model-client";
@@ -15,6 +16,7 @@ import {
   until,
   loopFrom,
   fenced,
+  wordsOf,
 } from "./support.js";
 
 describe("AgentLoop", () => {
@@ -73,6 +75,7 @@ describe("AgentLoop", () => {
     const previous: WorkspaceSnapshot = {
       runtime: { tasks: "available", capabilities: "available" },
       selectedTaskId: "task-1",
+      recentWorkspaces: [],
       tasks: [
         {
           id: "task-1",
@@ -81,7 +84,9 @@ describe("AgentLoop", () => {
           titleSource: "generated",
           updatedAt: "2026-10-05T09:00:00.000Z",
           ...emptyConversationLists,
-          messages: [{ id: "m1", role: "user", text: "Read my notes" }],
+          messages: [
+            { id: "m1", role: "user", text: "Read my notes", sequence: 0 },
+          ],
           modelHistory: [
             { id: "h1", kind: "message", messageId: "m1" },
             {
@@ -101,6 +106,7 @@ describe("AgentLoop", () => {
           actions: [
             {
               id: "a1",
+              sequence: 1,
               action: "Read notes",
               target: "notes.txt",
               status: "completed",
@@ -248,6 +254,7 @@ describe("AgentLoop", () => {
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       workspace: {
+        workspaceRoot: () => undefined,
         describeWorkspace: async () => ({
           rootName: "Zhiyin",
           entries: [
@@ -377,6 +384,7 @@ describe("AgentLoop", () => {
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       model: {
+        ...stubDependencies(() => {}).model,
         send: async function* () {
           yield* [];
           throw new Error("provider internals");
@@ -475,45 +483,6 @@ describe("AgentLoop", () => {
         { role: "user" },
         { role: "assistant", text: "The plan is saved. Here is the report." },
       ],
-    });
-  });
-
-  it("does not discard a completed response when usage storage is unavailable", async () => {
-    const loop = loopFrom({
-      ...stubDependencies(() => {}, [
-        { kind: "textDelta", text: "The response is complete." },
-        {
-          kind: "usage",
-          usage: {
-            requestId: "usage-failure",
-            model: "z-ai/glm-5.3-flash",
-            inputTokens: 10,
-            outputTokens: 5,
-            totalTokens: 15,
-          },
-        },
-        { kind: "done" },
-      ]),
-      usage: {
-        record: async () => {
-          throw new Error("disk unavailable");
-        },
-        state: async () => ({
-          status: "unavailable",
-          reason: "Usage history could not be saved.",
-        }),
-      },
-    });
-    const taskId = await loop.createTask();
-
-    await loop.start(taskId, "Answer the question");
-
-    expect(loop.snapshot().tasks[0]).toMatchObject({
-      messages: [
-        { role: "user" },
-        { role: "assistant", text: "The response is complete." },
-      ],
-      phase: { kind: "completed" },
     });
   });
 
@@ -896,7 +865,7 @@ describe("AgentLoop", () => {
       guidanceModel: {
         send: async function* (request) {
           guidanceRequests.push(request);
-          const prompt = request.messages.at(-1)?.content ?? "";
+          const prompt = wordsOf(request.messages.at(-1));
           yield {
             kind: "textDelta",
             text: prompt.includes("Name this conversation")

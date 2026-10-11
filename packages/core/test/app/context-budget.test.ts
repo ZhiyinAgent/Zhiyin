@@ -62,6 +62,7 @@ describe("the context budget a person chooses", () => {
     await app.initialize();
     const core = new Core({
       workspace: app,
+      dataFolder: "C:/data",
       ownership: { claim: async () => {}, release: async () => {} },
       viewChecks: { answer: () => {}, abandon: () => {} },
       commands: {
@@ -172,6 +173,7 @@ describe("the context budget a person chooses", () => {
     await app.initialize();
     const core = new Core({
       workspace: app,
+      dataFolder: "C:/data",
       ownership: { claim: async () => {}, release: async () => {} },
       viewChecks: { answer: () => {}, abandon: () => {} },
       commands: {

@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { RewindCommitResult, WorkspaceTask } from "@zhiyin/contract";
+import {
+  emptyConversationLists,
+  type RewindCommitResult,
+  type WorkspaceTask,
+} from "@zhiyin/contract";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery, RecoveryReview } from "@zhiyin/recovery";
 import {
@@ -12,15 +16,17 @@ import {
   type RewindJournal,
 } from "../src/index.js";
 
-const conversation = (id: string, folder?: string): WorkspaceTask =>
-  ({
-    id,
-    title: "A conversation",
-    updatedLabel: "Now",
-    messages: [{ id: "u1", role: "user", text: "Hello", sequence: 0 }],
-    phase: { kind: "completed", outcome: { title: "Done", summary: "" } },
-    ...(folder ? { workspace: { path: folder, name: "work" } } : {}),
-  }) as WorkspaceTask;
+const conversation = (id: string, folder?: string): WorkspaceTask => ({
+  ...emptyConversationLists,
+  id,
+  title: "A conversation",
+  titleSource: "manual",
+  updatedAt: "2026-10-09T12:00:00.000Z",
+  updatedLabel: "Now",
+  messages: [{ id: "u1", role: "user", text: "Hello", sequence: 0 }],
+  phase: { kind: "completed", outcome: { title: "Done", summary: "" } },
+  ...(folder ? { workspace: { path: folder, name: "work" } } : {}),
+});
 
 /** A planner that always agrees, unless a test says otherwise. */
 function planner(overrides: Partial<RewindPlanner> = {}): RewindPlanner {
@@ -51,7 +57,7 @@ function planner(overrides: Partial<RewindPlanner> = {}): RewindPlanner {
 /** File recovery that writes down what was asked of it. */
 function recoveryRecording(overrides: Partial<Recovery> = {}) {
   const asked: unknown[][] = [];
-  const recovery: Recovery = {
+  const recovery = {
     prepare: async (actionId, _root, changes) => ({
       actionId,
       files: changes.map((change) => ({
@@ -75,21 +81,9 @@ function recoveryRecording(overrides: Partial<Recovery> = {}) {
       asked.push(["restore", review.id]);
       return { files: [{ path: "notes.md", status: "restored" }] };
     },
-    storage: async () => ({
-      usedBytes: 0,
-      retainedFiles: 0,
-      excludedFiles: 0,
-      limits: {
-        totalBytes: 256 * 1024 * 1024,
-        fileBytes: 10 * 1024 * 1024,
-        versionsPerPath: 10,
-        maximumAgeDays: 30,
-      },
-    }),
-    clear: async () => {},
     cleanup: async () => {},
     ...overrides,
-  };
+  } as Recovery;
   return { asked, recovery };
 }
 

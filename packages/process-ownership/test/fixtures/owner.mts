@@ -14,6 +14,7 @@ const { openProcessContainer } = await import("../../src/windows.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const directory = process.argv[2];
+if (directory === undefined) throw new Error("no directory");
 const container = openProcessContainer();
 const child = spawn(process.execPath, [join(here, "child.mjs"), directory], {
   stdio: "ignore",

@@ -7,6 +7,7 @@ import {
 import type { ModelMessage, ModelRequest } from "@zhiyin/model-client";
 import { harnessNotice, noticeKinds, toolOutput } from "../src/turn/notices.js";
 import { loopFrom, stubDependencies, until } from "./support.js";
+import { defaultWorkLimits } from "../src/turn/work-limits.js";
 
 /**
  * The model has to tell three voices apart: the person's, Zhiyin's, and
@@ -146,7 +147,7 @@ describe("the notices of a turn", () => {
     let requestNumber = 0;
     return loopFrom({
       ...deps,
-      workLimits: { maximumToolRounds: 1 },
+      workLimits: { ...defaultWorkLimits, maximumToolRounds: 1 },
       tools: {
         list: () => [
           {
@@ -173,7 +174,7 @@ describe("the notices of a turn", () => {
         send: async function* (request) {
           requests.push(request);
           requestNumber += 1;
-          if (request.tools.length && requestNumber <= 2)
+          if (request.tools?.length && requestNumber <= 2)
             yield {
               kind: "toolCallDelta" as const,
               index: 0,
@@ -312,6 +313,8 @@ describe("the notices of a turn", () => {
       compaction: {
         revision: 1,
         throughMessageId: "m2",
+        // No history entry is named, so the message marks where it ends.
+        throughEntryId: "",
         summary: "Earlier work isolated the latency to startup.",
         retainedActionIds: [],
         createdAt: "2026-09-02T18:00:00.000Z",

@@ -170,6 +170,8 @@ describe("conversation context", () => {
       compaction: {
         revision: 2,
         throughMessageId: "m2",
+        // No history entry is named, so the message marks where it ends.
+        throughEntryId: "",
         summary: "Earlier work isolated the latency to startup.",
         retainedActionIds: [],
         createdAt: "2026-09-02T18:00:00.000Z",
@@ -220,6 +222,8 @@ describe("conversation context", () => {
       compaction: {
         revision: 1,
         throughMessageId: "m2",
+        // No history entry is named, so the message marks where it ends.
+        throughEntryId: "",
         summary: "The first exchange established the original question.",
         retainedActionIds: [],
         createdAt: "2026-09-02T18:00:00.000Z",
@@ -485,7 +489,8 @@ describe("a condensing", () => {
     const [condensed] = loop.snapshot().tasks[0]?.condensings ?? [];
     expect(condensed).toMatchObject({ outcome: "condensed", revision: 1 });
     expect(condensed?.reason).toBeUndefined();
-    expect(condensed?.tokensAfter).toBeLessThan(condensed?.tokensBefore ?? 0);
+    if (condensed?.outcome !== "condensed") throw new Error("Not condensed.");
+    expect(condensed.tokensAfter).toBeLessThan(condensed.tokensBefore);
   });
 
   it("asks for a summary in Markdown, with the person's words as quotes under their own heading", async () => {

@@ -46,6 +46,7 @@ const snapshot: WorkspaceSnapshot = {
   runtime: { tasks: "available", capabilities: "available" },
   selectedTaskId: null,
   recentWorkspaces: [],
+  plugins: [],
   tasks: [],
   mcpServers: [],
   usage: { status: "unavailable", reason: "No usage recorded." },

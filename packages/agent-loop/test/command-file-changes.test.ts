@@ -214,6 +214,7 @@ describe("what changed while a command ran", () => {
       actions: [
         {
           id: "bash-1",
+          sequence: 1,
           action: "Run a command",
           target: "python convert.py",
           status: "completed",

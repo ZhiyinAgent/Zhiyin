@@ -1,7 +1,7 @@
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it } from "vitest";
 import { emptyConversationLists, type AppEvent } from "@zhiyin/contract";
 import { OpenRouterModelClient } from "@zhiyin/model-client";
-import type { TestApp as AgentLoop } from "./support.js";
 import { stubDependencies, until, loopFrom } from "./support.js";
 
 describe("reasoning in a conversation", () => {
@@ -48,7 +48,7 @@ describe("reasoning in a conversation", () => {
         };
       },
     });
-    let saved: ReturnType<AgentLoop["snapshot"]> | undefined;
+    let saved: SavedWorkspace | undefined;
     const loop = loopFrom({
       ...deps,
       // About live and saved reasoning state, not how far the display trails
@@ -98,11 +98,8 @@ describe("reasoning in a conversation", () => {
       sessions: {
         ...deps.sessions,
         loadWorkspace: async () => ({
-          runtime: { tasks: "available", capabilities: "available" },
+          recentWorkspaces: [],
           selectedTaskId: "task-1",
-          skills: [],
-          subagents: [],
-          usage: { status: "unavailable", reason: "none" },
           tasks: [
             {
               id: "task-1",
@@ -117,6 +114,7 @@ describe("reasoning in a conversation", () => {
                   id: "a",
                   role: "assistant",
                   text: "",
+                  sequence: 0,
                   reasoning: { text: "Partial thought.", status: "streaming" },
                 },
               ],

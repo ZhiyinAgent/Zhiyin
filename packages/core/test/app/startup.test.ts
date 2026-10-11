@@ -7,12 +7,9 @@
  * own history hostage.
  */
 
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it } from "vitest";
-import {
-  emptyConversationLists,
-  type AppEvent,
-  type WorkspaceSnapshot,
-} from "@zhiyin/contract";
+import { emptyConversationLists, type AppEvent } from "@zhiyin/contract";
 import { stubDependencies, until, loopFrom } from "./support.js";
 
 function gate() {
@@ -50,16 +47,9 @@ function loopWaitingOnConnections(held: Promise<void>) {
     sessions: {
       ...deps.sessions,
       loadWorkspace: async () => ({
-        runtime: {
-          tasks: "available" as const,
-          capabilities: "available" as const,
-        },
+        recentWorkspaces: [],
         selectedTaskId: "task-1",
         tasks: [savedTask],
-        skills: [],
-        subagents: [],
-        mcpServers: [],
-        usage: { status: "unavailable" as const, reason: "None." },
       }),
     },
     mcp: {
@@ -74,6 +64,8 @@ function loopWaitingOnConnections(held: Promise<void>) {
             enabled: true,
             status: "connected" as const,
             toolCount: 3,
+            tools: [],
+            credential: { status: "none" as const },
           },
         ];
       },
@@ -104,16 +96,9 @@ function loopWaitingOnProviderSettings(held: Promise<void>) {
     sessions: {
       ...deps.sessions,
       loadWorkspace: async () => ({
-        runtime: {
-          tasks: "available" as const,
-          capabilities: "available" as const,
-        },
+        recentWorkspaces: [],
         selectedTaskId: "task-1",
         tasks: [savedTask],
-        skills: [],
-        subagents: [],
-        mcpServers: [],
-        usage: { status: "unavailable" as const, reason: "None." },
       }),
     },
     model: {
@@ -238,7 +223,7 @@ describe("AgentLoop damaged history", () => {
     let recovered = 0;
     let freshStart = false;
     let saved = 0;
-    let written: WorkspaceSnapshot | undefined;
+    let written: SavedWorkspace | undefined;
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
@@ -251,16 +236,9 @@ describe("AgentLoop damaged history", () => {
           if (freshStart) return undefined;
           if (recovered)
             return {
-              runtime: {
-                tasks: "available" as const,
-                capabilities: "available" as const,
-              },
+              recentWorkspaces: [],
               selectedTaskId: "keep-1",
               tasks: [savedTask],
-              skills: [],
-              subagents: [],
-              mcpServers: [],
-              usage: { status: "unavailable" as const, reason: "None." },
             };
           throw Object.assign(new Error("damaged"), { code: "corrupted" });
         },

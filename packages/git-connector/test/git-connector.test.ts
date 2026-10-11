@@ -82,7 +82,7 @@ withGit("gitAutomation against a real repository", () => {
   async function run(
     name: string,
     args: Record<string, unknown>,
-  ): Promise<{ isError?: boolean; text: string }> {
+  ): Promise<{ isError: boolean | undefined; text: string }> {
     const result = (await automation.callTool(name, args)) as {
       isError?: boolean;
       content: readonly { text: string }[];

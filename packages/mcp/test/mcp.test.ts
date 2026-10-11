@@ -18,6 +18,7 @@ import {
   type McpConnectionTool,
   type McpConnectionFactory,
 } from "../src/index.js";
+import type { McpCredentialStore } from "../src/credentials.js";
 import { managed } from "./declarations.js";
 
 /**
@@ -63,7 +64,9 @@ function index(id: string): string {
 }
 
 describe("connections come only from declarations", () => {
-  function engine(credentials = new InMemoryMcpCredentials()) {
+  function engine(
+    credentials: McpCredentialStore = new InMemoryMcpCredentials(),
+  ) {
     return mkdtemp(join(tmpdir(), "zhiyin-mcp-")).then((directory) =>
       managed(
         directory,

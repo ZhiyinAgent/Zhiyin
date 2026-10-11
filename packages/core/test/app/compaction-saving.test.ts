@@ -5,24 +5,14 @@
  * loop.
  */
 
+import type { SavedWorkspace } from "@zhiyin/session";
 import { describe, expect, it } from "vitest";
-import {
-  emptyConversationLists,
-  type WorkspaceSnapshot,
-  type WorkspaceTask,
-} from "@zhiyin/contract";
+import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import { stubDependencies, loopFrom, until } from "./support.js";
 
-function restored(task: WorkspaceTask): WorkspaceSnapshot {
-  return {
-    runtime: { tasks: "available", capabilities: "available" },
-    tasks: [task],
-    selectedTaskId: task.id,
-    skills: [],
-    subagents: [],
-    usage: { status: "unavailable", reason: "No usage yet." },
-  };
+function restored(task: WorkspaceTask): SavedWorkspace {
+  return { tasks: [task], selectedTaskId: task.id, recentWorkspaces: [] };
 }
 
 function settledTask(overrides: Partial<WorkspaceTask> = {}): WorkspaceTask {
@@ -73,14 +63,14 @@ describe("a compaction that is saved", () => {
       ],
     });
     const modelRequests: ModelRequest[] = [];
-    const saved: WorkspaceSnapshot[] = [];
+    const saved: SavedWorkspace[] = [];
     const deps = stubDependencies(() => {});
     const loop = loopFrom({
       ...deps,
       sessions: {
         ...deps.sessions,
         loadWorkspace: async () => restored(previous),
-        saveWorkspace: async (snapshot) => saved.push(snapshot),
+        saveWorkspace: async (snapshot) => void saved.push(snapshot),
       },
       ...guidanceFor({}, []),
       model: {

@@ -32,7 +32,11 @@ import { describe, expect, it } from "vitest";
 import type { AppEvent } from "@zhiyin/contract";
 import { FileAuditLog } from "@zhiyin/audit";
 import { WorkspaceArtifacts } from "@zhiyin/artifacts";
-import { ManagedMcpServers, connectHttpMcpServer } from "@zhiyin/mcp";
+import {
+  InMemoryMcpCredentials,
+  ManagedMcpServers,
+  connectHttpMcpServer,
+} from "@zhiyin/mcp";
 import {
   OpenRouterModelClient,
   ProviderCredentials,
@@ -76,13 +80,19 @@ async function realLoop(workspaceDirectory: string, data: string) {
   });
   const audit = new FileAuditLog(data);
   const events: AppEvent[] = [];
+  // Real parts where the turn reaches them; the shared stubs for the rest.
   const loop = loopFrom({
+    ...stubDependencies(() => {}),
     permissions: new AskPermissionEngine(),
     tools: workspace,
     workspace,
     artifacts: new WorkspaceArtifacts(() => workspace.workspaceRoot()),
     audit,
-    mcp: new ManagedMcpServers(data, connectHttpMcpServer),
+    mcp: new ManagedMcpServers(
+      data,
+      connectHttpMcpServer,
+      new InMemoryMcpCredentials(),
+    ),
     plugins,
     toolchains: new DownloadedToolchains({
       directory: data,
@@ -93,7 +103,6 @@ async function realLoop(workspaceDirectory: string, data: string) {
     sessions: new FileSessions(data),
     model,
     guidanceModel: model,
-    browsers: stubDependencies(() => {}).browsers,
     newTaskId: randomUUID,
     newApprovalId: randomUUID,
     now: () => new Date(),

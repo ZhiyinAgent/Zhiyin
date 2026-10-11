@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ToolCallInspection } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
-import type { TestApp as AgentLoop } from "./support.js";
+import type { LoopTestDependencies, TestApp as AgentLoop } from "./support.js";
 import { stubDependencies, loopFrom } from "./support.js";
 
 async function until(predicate: () => boolean, attempts = 500): Promise<void> {
@@ -12,7 +12,7 @@ async function until(predicate: () => boolean, attempts = 500): Promise<void> {
   throw new Error("Condition was not reached.");
 }
 
-function workTool(execute: ReturnType<typeof vi.fn>) {
+function workTool(execute: LoopTestDependencies["tools"]["execute"]) {
   return {
     list: () => [
       {
@@ -42,7 +42,7 @@ function repeatedWork(
   return async function* (request: ModelRequest) {
     requests.push(request);
     requestNumber += 1;
-    if (request.tools.length === 0) {
+    if (!request.tools?.length) {
       yield { kind: "textDelta" as const, text: report };
     } else if (requestNumber <= toolRequests) {
       yield {

@@ -25,7 +25,11 @@ import type { PluginView, Plugins } from "@zhiyin/plugins";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery } from "@zhiyin/recovery";
 import { ComposedRewind } from "@zhiyin/rewind";
-import type { ModelClient, ModelEvent } from "@zhiyin/model-client";
+import type {
+  ModelClient,
+  ModelEvent,
+  ModelMessage,
+} from "@zhiyin/model-client";
 import {
   AgentLoop,
   type AgentLoopDependencies,
@@ -330,6 +334,14 @@ export type LoopTestDependencies = Omit<
     readonly savesSlowly?: boolean;
   };
 
+/** A message's words as the model reads them, pictures left out. */
+export function wordsOf(message: ModelMessage | undefined): string {
+  const content = message?.content ?? "";
+  return typeof content === "string"
+    ? content
+    : content.map((part) => (part.kind === "text" ? part.text : "")).join("");
+}
+
 /** The loop as a test drives it, with the app around it answering beside. */
 export type TurnTestApp = AgentLoop &
   Pick<
@@ -477,6 +489,8 @@ export function stubDependencies(
     }),
     lastFrame: () => undefined,
     automation: () => undefined,
+    markAgentAction: () => {},
+    onAgentAction: () => () => {},
     onState: () => () => {},
     onFrame: () => () => {},
     open: async () => {},
@@ -574,6 +588,17 @@ export function stubDependencies(
         status: "missing" as const,
         reason: "This output is no longer stored with the conversation.",
       }),
+      keepPicture: async () => ({
+        status: "kept" as const,
+        id: `kept-${++keptNumber}`,
+        bytes: 0,
+      }),
+      readAttachedPicture: async () => ({
+        status: "missing" as const,
+        reason: "This picture is no longer stored with the conversation.",
+      }),
+      updateConversations: async () => ({ updated: [], failed: 0 }),
+      recycleOutdatedConversations: async () => ({ recycled: [], failed: 0 }),
       claimDrafts: async () => [],
       forgetConversation: async () => {},
       lastRead: async () => undefined,
@@ -598,6 +623,13 @@ export function stubDependencies(
       }),
       setApiKey: async () => {},
       clearApiKey: async () => {},
+      models: async () => ({ status: "ready", models: [] }),
+      modelProviders: async (model) => ({
+        status: "ready",
+        model,
+        providers: [],
+      }),
+      selectModel: async () => {},
     },
     workspace: {
       describeWorkspace: async () => ({
@@ -610,7 +642,6 @@ export function stubDependencies(
     audit: {
       record: async () => {},
       read: async () => [],
-      clear: async () => {},
     },
     artifacts: {
       record: (existing) => existing,
@@ -647,6 +678,10 @@ export function stubDependencies(
         targets: [],
       }),
       restore: async () => ({ files: [] }),
+      versions: async () => ({
+        ok: false,
+        reason: "No versions in this test.",
+      }),
       cleanup: async () => {},
     },
     guidanceModel: {
@@ -667,7 +702,7 @@ export function stubDependencies(
     newApprovalId: () => `approval-${++approvalNumber}`,
     newUserInputId: () => `input-${++approvalNumber}`,
     now: () => new Date("2026-09-02T19:00:00.000Z"),
-  } as unknown as LoopTestDependencies;
+  };
 }
 
 /** A plugin as a turn meets it: everything in it switched on. */

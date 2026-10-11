@@ -60,7 +60,7 @@ describe("TurnWaits prompt slot", () => {
     const first = waits.waitForApproval(
       "task-1",
       { ...inspection, target: "first.txt" },
-      { title: "Do it" },
+      { title: "Do it", description: "Writes the file." },
       undefined,
       controllerA.signal,
     );
@@ -70,7 +70,7 @@ describe("TurnWaits prompt slot", () => {
     const second = waits.waitForApproval(
       "task-1",
       { ...inspection, target: "second.txt" },
-      { title: "Do it" },
+      { title: "Do it", description: "Writes the file." },
       undefined,
       controllerB.signal,
     );

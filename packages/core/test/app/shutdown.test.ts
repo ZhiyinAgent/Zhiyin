@@ -20,6 +20,9 @@ function coreWith(shutdownAll: () => Promise<void>) {
       ...dependencies,
       mcp: { ...dependencies.mcp, shutdownAll },
     }),
+    dataFolder: "C:/data",
+    openPath: async () => {},
+    showInFolder: async () => {},
     ownership: {
       claim: async () => {},
       release: async () => void released.push("released"),

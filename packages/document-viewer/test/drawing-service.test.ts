@@ -8,6 +8,13 @@ import {
 import { hostilePdf, pdf, protectedPdf } from "./pdf-builder.js";
 
 /** The service as the contained process runs it, spoken to in this one. */
+/** A request as the client writes it; the service numbers it. */
+type Asked = DrawingRequest extends infer Request
+  ? Request extends DrawingRequest
+    ? Omit<Request, "id">
+    : never
+  : never;
+
 function service() {
   const waiting = new Map<number, (reply: DrawingReply) => void>();
   let deliver: ((request: DrawingRequest) => void) | undefined;
@@ -18,7 +25,7 @@ function service() {
     send: (reply) => waiting.get(reply.id)?.(structuredClone(reply)),
   });
   let next = 0;
-  return (request: Omit<DrawingRequest, "id">): Promise<DrawingReply> =>
+  return (request: Asked): Promise<DrawingReply> =>
     new Promise((resolve) => {
       const id = ++next;
       waiting.set(id, resolve);

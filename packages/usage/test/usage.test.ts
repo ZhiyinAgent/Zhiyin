@@ -45,7 +45,10 @@ describe("FileUsageTelemetry", () => {
     const state = await new FileUsageTelemetry(root).state(
       new Date("2026-09-05T12:00:00.000Z"),
     );
-    expect(state.ranges["7"].requests).toBe(12);
+    expect(state).toMatchObject({
+      status: "ready",
+      ranges: { "7": { requests: 12 } },
+    });
   });
   it("writes each request as one line in its month's file, with its conversation, purpose, upstream and tokens", async () => {
     const root = await temporaryRoot();

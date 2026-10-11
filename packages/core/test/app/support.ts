@@ -136,6 +136,7 @@ export function stubDependencies(
   let messageNumber = 0;
   let actionNumber = 0;
   let keptNumber = 0;
+  let specialistNumber = 0;
   const browser = {
     refresh: async () => {},
     availability: async () => ({
@@ -255,6 +256,17 @@ export function stubDependencies(
         status: "missing" as const,
         reason: "This output is no longer stored with the conversation.",
       }),
+      keepPicture: async () => ({
+        status: "kept" as const,
+        id: `kept-${++keptNumber}`,
+        bytes: 0,
+      }),
+      readAttachedPicture: async () => ({
+        status: "missing" as const,
+        reason: "This picture is no longer stored with the conversation.",
+      }),
+      updateConversations: async () => ({ updated: [], failed: 0 }),
+      recycleOutdatedConversations: async () => ({ recycled: [], failed: 0 }),
       claimDrafts: async () => [],
       forgetConversation: async () => {},
       lastRead: async () => undefined,
@@ -279,6 +291,13 @@ export function stubDependencies(
       }),
       setApiKey: async () => {},
       clearApiKey: async () => {},
+      models: async () => ({ status: "ready", models: [] }),
+      modelProviders: async (model) => ({
+        status: "ready",
+        model,
+        providers: [],
+      }),
+      selectModel: async () => {},
     },
     workspace: {
       describeWorkspace: async () => ({
@@ -291,7 +310,6 @@ export function stubDependencies(
     audit: {
       record: async () => {},
       read: async () => [],
-      clear: async () => {},
     },
     conversationExport: {
       save: async () => ({ status: "cancelled" }),
@@ -331,18 +349,10 @@ export function stubDependencies(
         targets: [],
       }),
       restore: async () => ({ files: [] }),
-      storage: async () => ({
-        usedBytes: 0,
-        retainedFiles: 0,
-        excludedFiles: 0,
-        limits: {
-          totalBytes: 256 * 1024 * 1024,
-          fileBytes: 10 * 1024 * 1024,
-          versionsPerPath: 10,
-          maximumAgeDays: 30,
-        },
+      versions: async () => ({
+        ok: false,
+        reason: "No versions in this test.",
       }),
-      clear: async () => {},
       cleanup: async () => {},
     },
     guidanceModel: {
@@ -359,6 +369,7 @@ export function stubDependencies(
       closeAll: async () => browser.close(),
     },
     newTaskId: () => "task-1",
+    newSpecialistRunId: () => `specialist-${++specialistNumber}`,
     newMessageId: () => `message-${++messageNumber}`,
     newActionId: () => `${++actionNumber}`,
     newApprovalId: () => `approval-${++approvalNumber}`,

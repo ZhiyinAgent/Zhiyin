@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  emptyConversationLists,
   WindowCopy,
   type TaskChange,
   type WorkspaceSnapshot,
@@ -7,8 +8,11 @@ import {
 } from "../src/index.js";
 
 const task: WorkspaceTask = {
+  ...emptyConversationLists,
   id: "task-1",
   title: "Notes",
+  titleSource: "manual",
+  updatedAt: "2026-10-09T12:00:00.000Z",
   updatedLabel: "Now",
   messages: [{ id: "m1", role: "assistant", text: "One", sequence: 0 }],
   phase: { kind: "interrupted" },
@@ -21,6 +25,7 @@ const snapshot: WorkspaceSnapshot = {
   plugins: [],
   mcpServers: [],
   usage: { status: "unavailable", reason: "None." },
+  recentWorkspaces: [],
 };
 
 function words(sequence: number, text: string): TaskChange {
