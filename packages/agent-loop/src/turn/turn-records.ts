@@ -24,6 +24,21 @@ import { type AssembledToolCall, type PresentedAction } from "./turn-shared.js";
 const progressEmitIntervalMs = 40;
 
 /**
+ * Whether the phase shows a question for the person: an approval or a request
+ * for input. Only its answer or a stop takes it off screen. Work going on
+ * beside it, a specialist's or the turn's, must not replace it, or the run that
+ * asked would wait for an answer nobody can give.
+ */
+export function showsPrompt(
+  phase: WorkspaceTask["phase"],
+): phase is Extract<
+  WorkspaceTask["phase"],
+  { readonly kind: "approval" | "input" }
+> {
+  return phase.kind === "approval" || phase.kind === "input";
+}
+
+/**
  * Writes what a turn does onto its conversation: the actions it takes, the
  * answers it is given, the pictures it keeps, and the progress a person watches.
  */
@@ -209,7 +224,9 @@ export class TurnRecords {
               },
             ],
         phase:
-          task.phase.kind === "working" || task.phase.kind === "browser"
+          task.phase.kind === "working" ||
+          task.phase.kind === "browser" ||
+          showsPrompt(task.phase)
             ? task.phase
             : { kind: "working", steps: [] },
       },
@@ -244,12 +261,15 @@ export class TurnRecords {
     const task = this.task(taskId);
     await this.replaceTask({
       ...task,
-      phase: {
-        kind: "working",
-        ...(note ? { note } : {}),
-        steps,
-        ...(retry ? { retry } : {}),
-      },
+      // Beside a question still waiting, the work shows as its steps.
+      phase: showsPrompt(task.phase)
+        ? { ...task.phase, steps }
+        : {
+            kind: "working",
+            ...(note ? { note } : {}),
+            steps,
+            ...(retry ? { retry } : {}),
+          },
     });
   }
 
@@ -362,7 +382,7 @@ export class TurnRecords {
     const task = this.task(taskId);
     const interactionId = `interaction-${call.callId}`;
     const sequence = this.nextTimelineSequence(task);
-    const steps = task.phase.kind === "input" ? task.phase.steps : [];
+    const steps = this.visibleSteps(taskId);
     await this.replaceTask({
       ...task,
       interactions: [
@@ -385,7 +405,7 @@ export class TurnRecords {
           sequence: sequence + 1,
         },
       ],
-      phase: { kind: "working", steps },
+      phase: showsPrompt(task.phase) ? task.phase : { kind: "working", steps },
     });
   }
 
@@ -604,15 +624,17 @@ export class TurnRecords {
         ]
       : task.views;
     const stepId = `tool-${call.callId}`;
+    const steps = this.visibleSteps(taskId).filter(
+      (step) => step.id !== stepId,
+    );
     await this.replaceTask({
       ...task,
       actions,
       artifacts,
       views,
-      phase: {
-        kind: "working",
-        steps: this.visibleSteps(taskId).filter((step) => step.id !== stepId),
-      },
+      phase: showsPrompt(task.phase)
+        ? { ...task.phase, steps }
+        : { kind: "working", steps },
     });
     await this.announceWritten(
       taskId,

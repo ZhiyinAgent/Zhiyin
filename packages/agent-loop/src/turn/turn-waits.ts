@@ -203,7 +203,9 @@ export class TurnWaits {
       void labelled
         ?.then((label) => label && this.#relabel(taskId, approvalId, label))
         .catch(() => undefined);
-      return await decision;
+      const answer = await decision;
+      if (answer !== "cancelled") await this.#answered(taskId, approvalId);
+      return answer;
     });
   }
 
@@ -265,7 +267,9 @@ export class TurnWaits {
           prompt: { ...request, id: requestId },
         },
       });
-      return await answer;
+      const outcome = await answer;
+      if (outcome.kind !== "cancelled") await this.#answered(taskId, requestId);
+      return outcome;
     });
   }
 
@@ -366,6 +370,25 @@ export class TurnWaits {
           reason: label.description,
         },
       },
+    });
+  }
+
+  /**
+   * Takes an answered question off screen. Work beside a question never
+   * replaces it, so its answer has to: the run that asked goes on working.
+   * A stop leaves the phase to the stop.
+   */
+  async #answered(taskId: string, promptId: string): Promise<void> {
+    const task = this.#records.task(taskId);
+    const { phase } = task;
+    if (
+      (phase.kind !== "approval" && phase.kind !== "input") ||
+      phase.prompt.id !== promptId
+    )
+      return;
+    await this.#records.replaceTask({
+      ...task,
+      phase: { kind: "working", steps: phase.steps },
     });
   }
 

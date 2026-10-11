@@ -120,6 +120,9 @@ input and shows as the action's description and the approval's reason.
   conversation; a stale or invalid answer leaves it as it was. One prompt shows
   per conversation at a time, and a second, from a concurrent specialist, waits
   for the first.
+- A prompt stays on screen until it is answered or the turn is stopped. Work
+  going on beside it, the turn's or a specialist's, does not replace it, and a
+  turn that ends while a specialist's prompt waits leaves that prompt showing.
 - After approval the action is inspected again. If it no longer matches what
   the person approved, such as a create that became an overwrite, it does not
   run. The model is told why and can propose it again for a fresh approval.

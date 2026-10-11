@@ -44,7 +44,7 @@ import {
 } from "../tools/plugin-activation.js";
 import { PendingHandoffs } from "../specialist/pending-handoffs.js";
 import type { CommandEndings } from "../tools/command-endings.js";
-import { TurnRecords } from "./turn-records.js";
+import { TurnRecords, showsPrompt } from "./turn-records.js";
 import { TurnWaits } from "./turn-waits.js";
 import { answerDeclinedCall } from "../tools/declined-call.js";
 import { TurnOwnership } from "./turn-ownership.js";
@@ -356,13 +356,17 @@ export class TurnLoop {
           const task = this.#records.task(taskId);
           await this.#records.replaceTask({
             ...task,
-            phase: completionPhase(
-              task,
-              assistantText,
-              reportOnly,
-              incomplete,
-              finishReason === "length",
-            ),
+            // A specialist still waiting on the person keeps its question on
+            // screen; its handoff starts the next turn once it finishes.
+            phase: showsPrompt(task.phase)
+              ? task.phase
+              : completionPhase(
+                  task,
+                  assistantText,
+                  reportOnly,
+                  incomplete,
+                  finishReason === "length",
+                ),
           });
           return;
         }
