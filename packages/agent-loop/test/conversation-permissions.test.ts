@@ -179,7 +179,10 @@ describe("conversation permissions", () => {
               index: 0,
               callId: `write-${index}`,
               name: "write_file",
-              argumentsDelta: JSON.stringify({ path, text: `Report ${index}` }),
+              argumentsDelta: JSON.stringify({
+                path,
+                content: `Report ${index}`,
+              }),
             };
           } else yield { kind: "textDelta" as const, text: "Done." };
           yield { kind: "done" as const };

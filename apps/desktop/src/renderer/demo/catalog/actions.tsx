@@ -271,7 +271,7 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           detail="This replaces the current contents of docs/brief.md (4.2 KB)."
           target="docs/brief.md"
           description="The rewritten brief replaces the draft you already have."
-          command={'write_file({"path":"docs/brief.md","text":"# Brief…"})'}
+          command={'write_file({"path":"docs/brief.md","content":"# Brief…"})'}
           changes={[
             {
               path: "docs/brief.md",
@@ -491,7 +491,8 @@ export const actionsEntries: ComponentCatalogEntry[] = [
               description: "Rewrite the brief with the agreed wording.",
               target: "docs/brief.md",
               status: "completed",
-              command: 'write_file({"path":"docs/brief.md","text":"# Brief…"})',
+              command:
+                'write_file({"path":"docs/brief.md","content":"# Brief…"})',
               changes: [
                 {
                   path: "docs/brief.md",

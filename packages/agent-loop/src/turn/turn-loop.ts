@@ -422,7 +422,7 @@ export class TurnLoop {
           get messages() {
             return requestMessages();
           },
-          tools: currentAdvertisedTools(),
+          tools: offeredTools(offering()),
         };
         const sizes = new RoundResults(
           (text) => this.#deps.sessions.keep("output", taskId, { text }),

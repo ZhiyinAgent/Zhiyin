@@ -21,6 +21,8 @@ import type { ToolCallInspection, ToolOwner, ToolSpec } from "@zhiyin/contract";
 import type { RepairRejection } from "@zhiyin/audit";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { recordRepairDecisionTool } from "../specialist/auxiliary-tools.js";
+import { selfDescription } from "../context/self-description.js";
+import { withSchemaProblems } from "./schema-problems.js";
 import {
   answerAllowance,
   keepsRawText,
@@ -71,7 +73,10 @@ export type RoundEvidence = {
   readonly reasoning: string;
   /** The request so far: the calls already made and what came back. */
   readonly messages: readonly ModelMessage[];
-  /** The tools on offer, for the schema of the one being repaired. */
+  /**
+   * The tools on offer, each as its own spec: the input a repaired call must
+   * meet, without the purpose every call may carry.
+   */
   readonly tools: readonly ToolSpec[];
 };
 
@@ -132,6 +137,7 @@ export class ToolCallRepair {
     let current = proposed;
     let currentRefusal = refusal;
     const seen = new Set([JSON.stringify(proposed)]);
+    const specification = round.tools.find((tool) => tool.name === call.name);
 
     for (let attempt = 0; attempt < maximumRepairAttempts; attempt += 1) {
       if (signal.aborted) return undefined;
@@ -151,7 +157,10 @@ export class ToolCallRepair {
         signal,
       );
       if (!decision) return undefined;
-      if (!preservesContent(current, decision.arguments, preserve)) {
+      // A repair may add the purpose every call may carry; as on any call, it
+      // is taken off before the tool sees the input.
+      const proposal = selfDescription(decision.arguments, specification).args;
+      if (!preservesContent(current, proposal, preserve)) {
         // The one rejection that is a finding rather than a shrug: something
         // tried to change what an approved action would write.
         await this.#reject(
@@ -160,12 +169,12 @@ export class ToolCallRepair {
           currentRefusal.reason,
           "content-changed",
           current,
-          decision.arguments,
+          proposal,
         );
         return undefined;
       }
 
-      const serialized = JSON.stringify(decision.arguments);
+      const serialized = JSON.stringify(proposal);
       // No progress: it has proposed something already refused.
       if (seen.has(serialized)) {
         await this.#reject(
@@ -174,17 +183,16 @@ export class ToolCallRepair {
           currentRefusal.reason,
           "no-progress",
           current,
-          decision.arguments,
+          proposal,
         );
         return undefined;
       }
       seen.add(serialized);
 
-      const inspection = await this.#inspect(
-        taskId,
-        owner,
-        call.name,
-        decision.arguments,
+      const inspection = withSchemaProblems(
+        await this.#inspect(taskId, owner, call.name, proposal),
+        proposal,
+        specification?.inputSchema,
       );
       if (inspection.ok) {
         await this.#audit(
@@ -192,9 +200,9 @@ export class ToolCallRepair {
           call.name,
           "repair-applied",
           currentRefusal.reason,
-          { before: current, after: decision.arguments },
+          { before: current, after: proposal },
         );
-        return { arguments: decision.arguments, inspection };
+        return { arguments: proposal, inspection };
       }
       // Only a refusal of the same kind is worth another attempt.
       if (!inspection.correctable) {
@@ -204,11 +212,11 @@ export class ToolCallRepair {
           inspection.reason,
           "still-refused",
           current,
-          decision.arguments,
+          proposal,
         );
         return undefined;
       }
-      current = decision.arguments;
+      current = proposal;
       currentRefusal = inspection;
     }
     await this.#reject(

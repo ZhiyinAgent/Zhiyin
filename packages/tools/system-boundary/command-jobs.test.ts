@@ -65,7 +65,7 @@ function run(
 ): Promise<ToolResult> {
   return workspace.execute(
     "bash",
-    { command, explanation: "A command for this test." },
+    { command, description: "A command for this test." },
     signal,
     conversationId,
   );

@@ -13,7 +13,7 @@ import styles from "./actions.module.css";
  * The same question the permission request asked, asked again afterwards, and
  * answered the same way: the difference a change made, the text a command
  * printed, the places a search found something. The call and the raw result
- * — `write_file({"path":…,"text":…})` and a blob of JSON — are the tool's own
+ * — `write_file({"path":…,"content":…})` and a blob of JSON — are the tool's own
  * language, not an account of what happened to somebody's files.
  *
  * The reason a status carries is not repeated here: the record it was opened

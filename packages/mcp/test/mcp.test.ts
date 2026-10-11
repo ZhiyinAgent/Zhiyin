@@ -604,6 +604,41 @@ describe("ManagedMcpServers", () => {
     });
     expect((await servers.manage())[0]?.status).toBe("connected");
   });
+  it("keeps the start and the end of a long failure, where a traceback ends", async () => {
+    const printed = Array.from({ length: 1000 }, (_, n) => `row ${n}`).join(
+      "\n",
+    );
+    const traceback =
+      "Traceback (most recent call last):\n  File \"<string>\", line 9\nKeyError: 'amount'";
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "run" }],
+        callTool: async () => ({
+          isError: true,
+          content: [{ type: "text", text: `${printed}\n${traceback}` }],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "python",
+      name: "Python",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const result = await servers.execute("mcp__python__run", {});
+
+    expect(result.ok).toBe(false);
+    const reason = result.ok ? "" : result.reason;
+    expect(reason.length).toBeLessThanOrEqual(4000);
+    expect(reason.startsWith("row 0\nrow 1\n")).toBe(true);
+    expect(reason.endsWith(traceback)).toBe(true);
+    expect(reason).toMatch(/… \d+ characters left out …/);
+  });
   it("rejects malformed and unsupported result content", async () => {
     const results: unknown[] = [
       { content: "not an array" },

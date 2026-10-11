@@ -78,11 +78,20 @@ const maximumExplanationLength = 400;
  * belongs to the display, which can wrap or clip it in context, not here.
  */
 const shownCommandLength = maximumCommandLength;
+/**
+ * Output is read as UTF-8. Python on Windows otherwise writes in the console's
+ * code page, garbling text or stopping at a character the page cannot hold.
+ */
+const commandEnvironment = () => ({
+  ...process.env,
+  PYTHONUTF8: "1",
+  PYTHONIOENCODING: "utf-8",
+});
 
 export const runCommandSpec: ToolSpec = {
   name: "bash",
   description:
-    "Run one bash command starting in the current workspace folder. Use it for work no other tool covers, such as running a build, a test suite, or a version-control command. It is not confined to the workspace: it can access anything the user's account can access, reach the network, and start programs, so it always requires a person's approval. A command still running after 30 seconds carries on as a job, such as J1: the answer shows what it printed so far, job_output shows more or waits for it, stop_job stops it, and you are told when it ends.",
+    "Run one bash command starting in the current workspace folder. Use it for work no other tool covers, such as running a build, a test suite, or a version-control command. It is not confined to the workspace: it can access anything the user's account can access, reach the network, and start programs, so it always requires a person's approval. A command still running after 30 seconds carries on as a job, such as J1: the answer shows what it printed so far, job_output shows more or waits for it, stop_job stops it, and you are told when it ends. Run Python with run_python when it is offered, not here. Python started from a command is whichever the account has, if any: first check which interpreters exist, and never install packages into or change a global Python environment.",
   inputSchema: {
     type: "object",
     properties: {
@@ -91,7 +100,7 @@ export const runCommandSpec: ToolSpec = {
         description:
           "The command to run, as a single bash line. The working directory is the workspace root.",
       },
-      explanation: {
+      description: {
         type: "string",
         description:
           "One plain sentence, for the person deciding whether to allow this: what the command does and what it changes. Write it for someone who does not read shell syntax. Do not claim it is safe.",
@@ -103,7 +112,7 @@ export const runCommandSpec: ToolSpec = {
         description: `How long to let it run in all, as a job included, before stopping it. Defaults to ${defaultTimeoutMs} ms.`,
       },
     },
-    required: ["command", "explanation"],
+    required: ["command", "description"],
     additionalProperties: false,
   },
 };
@@ -119,12 +128,12 @@ function commandArguments(args: unknown): CommandArguments | undefined {
   const source = args as Record<string, unknown>;
   if (
     Object.keys(source).some(
-      (key) => !["command", "explanation", "timeoutMs"].includes(key),
+      (key) => !["command", "description", "timeoutMs"].includes(key),
     )
   )
     return;
   const command = source["command"];
-  const explanation = source["explanation"];
+  const explanation = source["description"];
   if (
     typeof command !== "string" ||
     !command.trim() ||
@@ -298,6 +307,7 @@ export async function runShellCommand(
     executable: shell,
     arguments: ["-c", input.command],
     cwd: root,
+    environment: commandEnvironment(),
     timeoutMs: input.timeoutMs,
     signal: own.signal,
     ...(containment ? { containment } : {}),

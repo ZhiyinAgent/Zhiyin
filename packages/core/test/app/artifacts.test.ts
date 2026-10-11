@@ -75,7 +75,7 @@ describe("AgentLoop artifacts", () => {
         ...deps.model,
         send: requestsOneTool(
           "write_file",
-          '{"path":"reports/brief.md","text":"A brief."}',
+          '{"path":"reports/brief.md","content":"A brief."}',
         ),
       },
     };
@@ -122,7 +122,7 @@ describe("AgentLoop artifacts", () => {
         ...deps.model,
         send: requestsOneTool(
           "write_file",
-          '{"path":"brief.md","text":"A finished brief."}',
+          '{"path":"brief.md","content":"A finished brief."}',
         ),
       },
     });
@@ -190,7 +190,8 @@ describe("AgentLoop artifacts", () => {
               index: 0,
               callId: "call-1",
               name: "write_file",
-              argumentsDelta: '{"path":"brief.md","text":"Zhiyin wrote this."}',
+              argumentsDelta:
+                '{"path":"brief.md","content":"Zhiyin wrote this."}',
             };
           else {
             told = JSON.stringify(request.messages.at(-1));
@@ -258,7 +259,7 @@ describe("AgentLoop artifacts", () => {
         ...deps.model,
         send: requestsOneTool(
           "write_file",
-          '{"path":"brief.md","text":"The replacement."}',
+          '{"path":"brief.md","content":"The replacement."}',
         ),
       },
     });

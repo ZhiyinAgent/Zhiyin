@@ -230,11 +230,24 @@ input and shows as the action's description and the approval's reason.
 - When the connection drops after tools have completed and the client's retries
   are spent, the turn resumes once from the recorded results. Completed tools
   are not run again.
+- Input slips with one reading are fixed before the tool sees the call, and the
+  model is told: a code fence, a trailing comma, a raw control character in
+  text, an object sent as a string, or a field whose schema wants a list or an
+  object but never text, sent as the JSON text of one.
+- A correctable refusal also says how the input departs from the tool's
+  schema, wherever in the input it does: fields the tool does not define,
+  required ones left out, and values of the wrong kind, out of range or not
+  among the choices.
 - A refusal the tool marks correctable, including input that is not valid JSON,
   is answered to the model alone, at most three times per tool per turn. A
   separate repair request may first re-aim the call but never change its
   content fields, and a repaired call is inspected and approved like any other.
-  Once the tool succeeds, the failed attempts are removed from the request.
+  The repair works from the tool's own input; a `purpose` it adds is taken off
+  before the tool sees the call. Once the tool succeeds, the failed attempts
+  are removed from the request.
+- A call to a tool not on offer fails without ending the turn. A name within
+  two keystrokes of an offered one, or a remote tool's own name without its
+  prefix, is answered with the name likely meant.
 
 ### Specialists and handoffs (ADR 0015)
 

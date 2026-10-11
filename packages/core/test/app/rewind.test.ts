@@ -219,7 +219,7 @@ describe("conversation rewind composition", () => {
               name: "write_file",
               argumentsDelta: JSON.stringify({
                 path: "note.txt",
-                text: "agent result",
+                content: "agent result",
               }),
             };
           } else {
@@ -280,7 +280,7 @@ describe("conversation rewind composition", () => {
               name: "write_file",
               argumentsDelta: JSON.stringify({
                 path: "note.txt",
-                text: "agent note",
+                content: "agent note",
               }),
             };
             yield {
@@ -290,7 +290,7 @@ describe("conversation rewind composition", () => {
               name: "write_file",
               argumentsDelta: JSON.stringify({
                 path: "draft.txt",
-                text: "agent draft",
+                content: "agent draft",
               }),
             };
           } else {
@@ -364,7 +364,7 @@ describe("conversation rewind composition", () => {
               name: "write_file",
               argumentsDelta: JSON.stringify({
                 path: "note.txt",
-                text: "agent note",
+                content: "agent note",
               }),
             };
           else if (request === 3) await held;

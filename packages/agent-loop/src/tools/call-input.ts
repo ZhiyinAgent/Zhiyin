@@ -16,7 +16,7 @@ import type {
   RoundEvidence,
   ToolCallRepair,
 } from "./tool-repair.js";
-import { readToolInput } from "./tool-input.js";
+import { readEncodedValues, readToolInput } from "./tool-input.js";
 import { type Refusal, unreadableInput } from "./refusals.js";
 import type { AssembledToolCall } from "../turn/turn-shared.js";
 
@@ -78,9 +78,13 @@ export class CallInputs {
     const raw = call.arguments;
     const input = readToolInput(raw);
     if (input.ok) {
-      if (!input.corrections.length)
-        return { ok: true, arguments: input.arguments };
-      const fixed = input.corrections.join(", ");
+      const values = readEncodedValues(
+        input.arguments,
+        round.tools.find((tool) => tool.name === call.name)?.inputSchema,
+      );
+      const corrections = [...input.corrections, ...values.corrections];
+      if (!corrections.length) return { ok: true, arguments: input.arguments };
+      const fixed = corrections.join(", ");
       await this.#audit(
         taskId,
         call.name,
@@ -88,13 +92,13 @@ export class CallInputs {
         `Fixed ${fixed}.`,
         {
           before: raw,
-          after: input.arguments,
+          after: values.arguments,
         },
       );
-      call.arguments = JSON.stringify(input.arguments);
+      call.arguments = JSON.stringify(values.arguments);
       return {
         ok: true,
-        arguments: input.arguments,
+        arguments: values.arguments,
         note: `Zhiyin corrected this call's input (${fixed}).`,
       };
     }

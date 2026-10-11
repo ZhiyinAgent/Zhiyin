@@ -1102,6 +1102,56 @@ describe("AgentLoop", () => {
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
   });
 
+  it.each([
+    ["multi_edits", "multi_edit"],
+    ["run_python", "mcp__python__run_python"],
+  ])(
+    "names the tool on offer that %s was likely meant to be",
+    async (called, meant) => {
+      const requests: ModelRequest[] = [];
+      const deps = stubDependencies(() => {});
+      const spec = (name: string) => ({
+        name,
+        description: `The ${name} tool.`,
+        inputSchema: { type: "object" },
+      });
+      const loop = loopFrom({
+        ...deps,
+        tools: {
+          ...deps.tools,
+          list: () => [
+            spec("multi_edit"),
+            spec("read_file"),
+            spec("mcp__python__run_python"),
+          ],
+        },
+        model: {
+          ...deps.model,
+          send: async function* (request) {
+            requests.push(request);
+            if (requests.length === 1)
+              yield {
+                kind: "toolCallDelta",
+                index: 0,
+                callId: "call-near",
+                name: called,
+                argumentsDelta: "{}",
+              };
+            else yield { kind: "textDelta", text: "Done." };
+            yield { kind: "done" };
+          },
+        },
+      });
+      const taskId = await loop.createTask();
+
+      await loop.start(taskId, "Change the file");
+
+      expect(loop.snapshot().tasks[0]?.actions?.[0]?.reason).toBe(
+        `The tool “${called}” is not available. The closest on offer is “${meant}”.`,
+      );
+    },
+  );
+
   it("returns tool execution failures to the model instead of hanging", async () => {
     const requests: ModelRequest[] = [];
     const loop = loopFrom({

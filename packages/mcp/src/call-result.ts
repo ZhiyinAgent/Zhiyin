@@ -7,6 +7,9 @@ import type { ProducedFile, ToolInvocationResult } from "@zhiyin/contract";
 import { supportedResult } from "./result-validation.js";
 import { separateImages, shortened } from "./result-shaping.js";
 
+/** Characters of a refusal kept, as many as the action record holds. */
+const maximumReason = 4000;
+
 export function callResult(
   value: unknown,
   present: (result: ToolInvocationResult) => ToolInvocationResult,
@@ -35,11 +38,12 @@ export function callResult(
           typeof item.text === "string",
       )
       .map((item) => item.text)
-      .join("\n")
-      .slice(0, 4000);
+      .join("\n");
     return present({
       ok: false,
-      reason: reason || "The server could not complete this action.",
+      reason:
+        startAndEnd(reason, maximumReason) ||
+        "The server could not complete this action.",
     });
   }
   let files: readonly ProducedFile[];
@@ -54,4 +58,17 @@ export function callResult(
     ...(files.length ? { produced: files } : {}),
     ...(separated.images.length ? { images: separated.images } : {}),
   });
+}
+
+/**
+ * A failure is read for its end as much as its start: a script's traceback
+ * ends with the error that stopped it, after whatever it printed first.
+ */
+function startAndEnd(text: string, maximum: number): string {
+  if (text.length <= maximum) return text;
+  const start = Math.floor(maximum / 4);
+  // Sized for the most characters that could be left out, so the whole fits.
+  const marker = (left: number) => `\n… ${left} characters left out …\n`;
+  const end = maximum - start - marker(text.length).length;
+  return `${text.slice(0, start)}${marker(text.length - start - end)}${text.slice(-end)}`;
 }

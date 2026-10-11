@@ -195,7 +195,7 @@ describe("a call the model got wrong in shape", () => {
     });
     const outside = await tools.inspect("write_file", {
       path: "../outside.txt",
-      text: "x",
+      content: "x",
     });
     expect(outside.ok).toBe(false);
     expect((outside as { correctable?: boolean }).correctable).not.toBe(true);

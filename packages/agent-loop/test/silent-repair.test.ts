@@ -337,6 +337,100 @@ describe("AgentLoop silent repair", () => {
     );
   });
 
+  it("hands the tool a repaired call without the purpose every call may carry", async () => {
+    // A tool that, like the shell, refuses any field it does not define.
+    const seen: unknown[] = [];
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      tools: {
+        list: () => [
+          {
+            name: "bash",
+            description: "Run one shell command.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                command: { type: "string" },
+                description: { type: "string" },
+              },
+              required: ["command", "description"],
+            },
+          },
+        ],
+        inspect: async (
+          _name: string,
+          args: unknown,
+        ): Promise<ToolCallInspection> => {
+          seen.push(args);
+          const unknown = Object.keys(args as object).filter(
+            (key) => key !== "command" && key !== "description",
+          );
+          return unknown.length
+            ? {
+                ok: false,
+                correctable: true,
+                preserveOnRepair: ["command"],
+                reason: `Unknown fields: ${unknown.join(", ")}.`,
+              }
+            : {
+                ok: true,
+                action: "Run a command",
+                target: "workspace",
+                command: "dir",
+              };
+        },
+        execute: async () => ({ ok: true as const, value: { exitCode: 0 } }),
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Approved" }),
+      },
+      guidanceModel: {
+        send: answersOnce(
+          JSON.stringify({
+            action: "repair",
+            // The repairer was shown the call as offered, purpose and all.
+            arguments: {
+              command: "dir",
+              description: "List the folder.",
+              purpose: "See what is in the folder.",
+            },
+          }),
+        ),
+      },
+      model: {
+        ...deps.model,
+        send: (() => {
+          let turn = 0;
+          return async function* () {
+            turn += 1;
+            if (turn === 1)
+              yield {
+                kind: "toolCallDelta" as const,
+                index: 0,
+                callId: "call-1",
+                name: "bash",
+                argumentsDelta: '{"command":"dir","explanation":"List it."}',
+              };
+            else yield { kind: "textDelta" as const, text: "Listed." };
+            yield { kind: "done" as const };
+          };
+        })(),
+      },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "What is in this folder?");
+
+    expect(seen.at(-1)).toEqual({
+      command: "dir",
+      description: "List the folder.",
+    });
+    expect(
+      loop.snapshot().tasks[0]?.actions?.map((action) => action.status),
+    ).toEqual(["completed"]);
+  });
+
   it("carries on when the small model answers with nothing usable", async () => {
     const tool = pickyEditTool();
     const loop = loopWith(tool, answersOnce("not json at all"));

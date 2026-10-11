@@ -26,7 +26,7 @@ describe("an existing file the model intends to change", () => {
     const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
     await writeFile(join(root, "report.txt"), "Owner's draft.");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
-    const write = { path: "report.txt", text: "Assistant's draft." };
+    const write = { path: "report.txt", content: "Assistant's draft." };
 
     expect(
       await tools.inspect("write_file", write, "conversation-1"),
@@ -108,7 +108,7 @@ describe("an existing file the model intends to change", () => {
     expect(
       await tools.inspect(
         "write_file",
-        { path: "report.txt", text: "Final draft." },
+        { path: "report.txt", content: "Final draft." },
         "conversation-1",
       ),
     ).toMatchObject({ ok: false, correctable: true });
@@ -120,7 +120,7 @@ describe("an existing file the model intends to change", () => {
     expect(
       await tools.execute(
         "write_file",
-        { path: "new.txt", text: "First." },
+        { path: "new.txt", content: "First." },
         undefined,
         "conversation-1",
       ),
@@ -128,7 +128,7 @@ describe("an existing file the model intends to change", () => {
     expect(
       await tools.inspect(
         "write_file",
-        { path: "new.txt", text: "Revised." },
+        { path: "new.txt", content: "Revised." },
         "conversation-1",
       ),
     ).toMatchObject({ ok: true });
@@ -143,7 +143,7 @@ describe("an existing file the model intends to change", () => {
     ].join("\n");
     await tools.execute(
       "write_file",
-      { path: "card.typ", text },
+      { path: "card.typ", content: text },
       undefined,
       "conversation-1",
     );
@@ -189,7 +189,7 @@ describe("an existing file the model intends to change", () => {
     expect(
       await tools.inspect(
         "write_file",
-        { path: "long.txt", text: "Replacement" },
+        { path: "long.txt", content: "Replacement" },
         "conversation-1",
       ),
     ).toMatchObject({ ok: false, correctable: true });
@@ -202,7 +202,7 @@ describe("an existing file the model intends to change", () => {
     expect(
       await tools.inspect(
         "write_file",
-        { path: "long.txt", text: "Replacement" },
+        { path: "long.txt", content: "Replacement" },
         "conversation-1",
       ),
     ).toMatchObject({ ok: true });

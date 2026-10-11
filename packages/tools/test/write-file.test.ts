@@ -16,7 +16,7 @@ describe("write_file", () => {
     expect(
       await tools.inspect("write_file", {
         path: "brief.md",
-        text: "A one-page brief.",
+        content: "A one-page brief.",
       }),
     ).toEqual({
       ok: true,
@@ -30,13 +30,13 @@ describe("write_file", () => {
       changes: [
         { path: "brief.md", change: "created", after: "A one-page brief." },
       ],
-      command: 'write_file({"path":"brief.md","text":"A one-page brief."})',
+      command: 'write_file({"path":"brief.md","content":"A one-page brief."})',
     });
 
     await expect(
       tools.execute("write_file", {
         path: "brief.md",
-        text: "A one-page brief.",
+        content: "A one-page brief.",
       }),
     ).resolves.toEqual({
       ok: true,
@@ -66,7 +66,7 @@ describe("write_file", () => {
     expect(
       await tools.inspect("write_file", {
         path: "brief.md",
-        text: "New.",
+        content: "New.",
       }),
     ).toEqual({
       ok: true,
@@ -84,11 +84,11 @@ describe("write_file", () => {
           after: "New.",
         },
       ],
-      command: 'write_file({"path":"brief.md","text":"New."})',
+      command: 'write_file({"path":"brief.md","content":"New."})',
     });
 
     await expect(
-      tools.execute("write_file", { path: "brief.md", text: "New." }),
+      tools.execute("write_file", { path: "brief.md", content: "New." }),
     ).resolves.toEqual({
       ok: true,
       value: { path: "brief.md", bytes: 4, change: "updated" },
@@ -113,7 +113,7 @@ describe("write_file", () => {
     expect(
       await tools.inspect("write_file", {
         path: "reports/2026/brief.md",
-        text: "Body",
+        content: "Body",
       }),
     ).toMatchObject({
       ok: true,
@@ -124,7 +124,7 @@ describe("write_file", () => {
     await expect(
       tools.execute("write_file", {
         path: "reports/2026/brief.md",
-        text: "Body",
+        content: "Body",
       }),
     ).resolves.toMatchObject({ ok: true });
     await expect(
@@ -145,7 +145,7 @@ describe("write_file", () => {
       tools.execute("write_file", {
         path: "brief.md",
         // The model writes Unix endings and no mark, as models do.
-        text: "New first\nNew second\n",
+        content: "New first\nNew second\n",
       }),
     ).resolves.toMatchObject({ ok: true });
 
@@ -161,7 +161,7 @@ describe("write_file", () => {
     await expect(
       tools.execute("write_file", {
         path: "fresh.md",
-        text: "One\nTwo\n",
+        content: "One\nTwo\n",
       }),
     ).resolves.toMatchObject({ ok: true });
 
@@ -177,12 +177,14 @@ describe("write_file", () => {
     const tools = new WorkspaceTools(root);
 
     for (const path of ["../escape.md", join(parent, "escape.md")]) {
-      expect(await tools.inspect("write_file", { path, text: "x" })).toEqual({
-        ok: false,
-        reason: "The file must stay inside the current workspace.",
-      });
+      expect(await tools.inspect("write_file", { path, content: "x" })).toEqual(
+        {
+          ok: false,
+          reason: "The file must stay inside the current workspace.",
+        },
+      );
       await expect(
-        tools.execute("write_file", { path, text: "x" }),
+        tools.execute("write_file", { path, content: "x" }),
       ).resolves.toEqual({
         ok: false,
         reason: "The file must stay inside the current workspace.",
@@ -196,16 +198,27 @@ describe("write_file", () => {
     const tools = new WorkspaceTools(root);
 
     expect(
-      await tools.inspect("write_file", { path: "reports", text: "x" }),
+      await tools.inspect("write_file", { path: "reports", content: "x" }),
     ).toEqual({
       ok: false,
       reason: "reports is a folder in this workspace, not a file.",
     });
     await expect(
-      tools.execute("write_file", { path: "reports", text: "x" }),
+      tools.execute("write_file", { path: "reports", content: "x" }),
     ).resolves.toEqual({
       ok: false,
       reason: "reports is a folder in this workspace, not a file.",
     });
+  });
+
+  it("takes the contents as content, and refuses them under any other name", async () => {
+    const tools = new WorkspaceTools(await workspace());
+
+    expect(
+      await tools.inspect("write_file", { path: "a.md", content: "A." }),
+    ).toMatchObject({ ok: true, target: "a.md" });
+    expect(
+      await tools.inspect("write_file", { path: "a.md", text: "A." }),
+    ).toMatchObject({ ok: false, correctable: true });
   });
 });

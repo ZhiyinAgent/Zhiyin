@@ -15,7 +15,7 @@ const tools = new WorkspaceTools(process.cwd(), { shell: "bash" });
 function inspect(command: string) {
   return tools.inspect("bash", {
     command,
-    explanation: "A command for this test.",
+    description: "A command for this test.",
   });
 }
 
@@ -69,7 +69,7 @@ describe("a shell command that deletes", () => {
     expect(
       await tools.execute("bash", {
         command: "rm notes.md",
-        explanation: "A command for this test.",
+        description: "A command for this test.",
       }),
     ).toMatchObject({ ok: false, correctable: true });
   });

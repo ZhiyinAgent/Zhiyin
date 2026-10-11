@@ -169,6 +169,9 @@ says about itself is shown as its claim.
   left in the text. A result over 8,000,000 characters has its text cut; this
   protects memory, and how much the model sees is decided where every tool's
   result is sized.
+- A tool's failure is read in its own words, at most 4,000 characters of them.
+  A longer one keeps its start and its end, where a traceback names the error,
+  and says how much was left out.
 
 ## Testing notes
 

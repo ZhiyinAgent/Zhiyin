@@ -428,6 +428,22 @@ describe("a refusal the model receives", () => {
     expect(tool?.["next"]).toEqual(expect.any(String));
     expect(inputCheck?.["next"]).not.toBe(tool?.["next"]);
   });
+
+  it("adds to the tool's refusal how the input departs from the tool's schema", async () => {
+    const { loop, main } = setUp([
+      [{ name: "write_file", args: '{"path":"note.md","content":"Hi."}' }],
+    ]);
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Write the note");
+
+    const [answer] = toolResults(main.requests[1]).map((message) =>
+      unfenced(message.content),
+    );
+    expect(answer?.["reason"]).toBe(
+      "Choose a workspace-relative file path and the text to write. The input does not match the tool's schema: “text” is missing.",
+    );
+  });
 });
 
 describe("a tool request streamed without its id or name", () => {
@@ -458,5 +474,80 @@ describe("a tool request streamed without its id or name", () => {
       { path: "c.md" },
     ]);
     expect(loop.snapshot().tasks[0]?.phase).toMatchObject({ kind: "failed" });
+  });
+});
+
+describe("a tool request whose list arrives as the JSON text of one", () => {
+  it("runs with the list its schema asks for, and the model is told", async () => {
+    const ran: unknown[] = [];
+    const deps = stubDependencies(() => {});
+    const main = mainModel([
+      [
+        {
+          name: "multi_edit",
+          args: JSON.stringify({
+            path: "note.md",
+            edits: JSON.stringify([{ find: "Dana", replace: "Kim" }]),
+          }),
+        },
+      ],
+    ]);
+    const repair = repairModel();
+    const loop = loopFrom({
+      ...deps,
+      tools: {
+        list: () => [
+          {
+            name: "multi_edit",
+            description: "Replace exact text in a file.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                path: { type: "string" },
+                edits: { type: "array", items: { type: "object" } },
+              },
+              required: ["path", "edits"],
+            },
+          },
+        ],
+        inspect: async (
+          _name: string,
+          args: unknown,
+        ): Promise<ToolCallInspection> =>
+          Array.isArray((args as { edits?: unknown }).edits)
+            ? {
+                ok: true,
+                action: "Edit a file",
+                target: "note.md",
+                command: "multi_edit",
+              }
+            : {
+                ok: false,
+                correctable: true,
+                reason: "edits must be a list.",
+              },
+        execute: async (_name: string, args: unknown) => {
+          ran.push(args);
+          return { ok: true as const, value: { edited: true } };
+        },
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Approved" }),
+      },
+      guidanceModel: { send: repair.send },
+      model: { ...deps.model, send: main.send },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Change the owner to Kim");
+
+    expect(repair.requests).toEqual([]);
+    expect(ran).toEqual([
+      { path: "note.md", edits: [{ find: "Dana", replace: "Kim" }] },
+    ]);
+    const result = unfenced(toolResults(main.requests[1])[0]?.content ?? "");
+    expect(result.note).toBe(
+      "Zhiyin corrected this call's input (edits sent as text).",
+    );
   });
 });

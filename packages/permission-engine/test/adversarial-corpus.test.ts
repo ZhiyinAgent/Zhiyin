@@ -137,7 +137,7 @@ const corpus: readonly CorpusCase[] = [
     action: action(
       "built-in",
       "bash",
-      { command: "rm -- notes.tmp", explanation: "Delete one temporary file." },
+      { command: "rm -- notes.tmp", description: "Delete one temporary file." },
       "rm -- notes.tmp",
     ),
     outcome: "ask",
@@ -151,7 +151,7 @@ const corpus: readonly CorpusCase[] = [
       "bash",
       {
         command: "rm -rf -- /",
-        explanation: "List the current folder.",
+        description: "List the current folder.",
       },
       "rm -rf -- /",
     ),
@@ -166,7 +166,7 @@ const corpus: readonly CorpusCase[] = [
       "bash",
       {
         command: "git status && rm -rf -- .git",
-        explanation: "Show repository status.",
+        description: "Show repository status.",
       },
       "git status && rm -rf -- .git",
     ),
@@ -181,7 +181,7 @@ const corpus: readonly CorpusCase[] = [
       "bash",
       {
         command: "node -e \"require('fs').rmSync('data',{recursive:true})\"",
-        explanation: "Run a Node helper.",
+        description: "Run a Node helper.",
       },
       "node -e \"require('fs').rmSync('data',{recursive:true})\"",
     ),

@@ -113,12 +113,12 @@ describe("approval binding", () => {
               index: 0,
               callId: "escape",
               name: "write_file",
-              // `text`, not `content`: with the wrong field name this call is
+              // `content`, not `text`: with the wrong field name this call is
               // refused for its shape before the path is ever examined, and
               // the test passes without exercising the boundary it names.
               argumentsDelta: JSON.stringify({
                 path: "../outside-authority.txt",
-                text: "escaped",
+                content: "escaped",
               }),
             };
           } else {
@@ -276,7 +276,7 @@ describe("what an action is recorded as having changed", () => {
               name: "write_file",
               argumentsDelta: JSON.stringify({
                 path: "answer.md",
-                text: "answer",
+                content: "answer",
               }),
             };
             yield {

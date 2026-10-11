@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readToolInput } from "../src/tools/tool-input.js";
+import { readEncodedValues, readToolInput } from "../src/tools/tool-input.js";
 
 describe("reading a tool call's input", () => {
   it("reads a well-formed object as it is, with nothing corrected", () => {
@@ -76,6 +76,52 @@ describe("reading a tool call's input", () => {
     expect(readToolInput('"just text"')).toMatchObject({
       ok: false,
       cutOff: false,
+    });
+  });
+});
+
+describe("a list or an object sent as the JSON text of one", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      path: { type: "string" },
+      edits: { type: "array" },
+      options: { type: "object" },
+      label: { type: ["string", "array"] },
+    },
+  };
+
+  it("is read as the list or object its schema asks for, and the field is named", () => {
+    expect(
+      readEncodedValues(
+        {
+          path: "a.md",
+          edits: '[{"find":"a","replace":"b"}]',
+          options: '{"dryRun":true}',
+        },
+        schema,
+      ),
+    ).toEqual({
+      arguments: {
+        path: "a.md",
+        edits: [{ find: "a", replace: "b" }],
+        options: { dryRun: true },
+      },
+      corrections: ["edits sent as text", "options sent as text"],
+    });
+  });
+
+  it("is left alone where text is allowed, or where the text holds anything else", () => {
+    const args = {
+      path: "[1]",
+      edits: "find a, replace b",
+      options: "[1,2]",
+      label: "[1]",
+    };
+
+    expect(readEncodedValues(args, schema)).toEqual({
+      arguments: args,
+      corrections: [],
     });
   });
 });

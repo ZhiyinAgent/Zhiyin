@@ -29,7 +29,7 @@ async function folder(files: Record<string, string> = {}): Promise<string> {
 function run(tools: WorkspaceTools, command: string): Promise<ToolResult> {
   return tools.execute(
     "bash",
-    { command, explanation: "A command for this test." },
+    { command, description: "A command for this test." },
     undefined,
     "conversation-1",
   );

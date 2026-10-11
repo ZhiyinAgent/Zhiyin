@@ -129,7 +129,7 @@ describe("read_files", () => {
     expect(
       await tools.inspect(
         "write_file",
-        { path: "b.md", text: "Bravo, revised." },
+        { path: "b.md", content: "Bravo, revised." },
         "conversation-1",
       ),
     ).toMatchObject({ ok: true });

@@ -37,6 +37,54 @@ export function unreadableInput(reason: string, cutOff: boolean): Refusal {
   );
 }
 
+/**
+ * A call to a tool that is not on offer. A name one or two keystrokes from an
+ * offered one, or a remote tool's own name without its routing prefix, is
+ * named as the one likely meant.
+ */
+export function unknownTool(name: string, offered: readonly string[]): Refusal {
+  const near = closestName(name, offered);
+  return refusal(
+    "input-check",
+    `The tool “${name}” is not available.${near ? ` The closest on offer is “${near}”.` : ""}`,
+    "Use one of the tools on offer.",
+  );
+}
+
+function closestName(
+  name: string,
+  offered: readonly string[],
+): string | undefined {
+  const allowed = Math.min(2, Math.floor(name.length / 4));
+  let best: { readonly name: string; readonly distance: number } | undefined;
+  for (const candidate of offered) {
+    const prefix = candidate.lastIndexOf("__");
+    const distance = Math.min(
+      editDistance(name, candidate),
+      prefix < 0 ? Infinity : editDistance(name, candidate.slice(prefix + 2)),
+    );
+    if (distance <= allowed && (!best || distance < best.distance))
+      best = { name: candidate, distance };
+  }
+  return best?.name;
+}
+
+/** Characters inserted, removed or replaced to turn one name into the other. */
+function editDistance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1)
+      current[j] = Math.min(
+        previous[j]! + 1,
+        current[j - 1]! + 1,
+        previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    previous = current;
+  }
+  return previous[b.length]!;
+}
+
 /** A tool refused the call, and said the model can put it right. */
 export function correctableByModel(reason: string): Refusal {
   return refusal(

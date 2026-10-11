@@ -90,6 +90,44 @@ export function readToolInput(raw: string): ToolInput {
   return { ok: true, arguments: parsed, corrections };
 }
 
+/**
+ * A field whose schema accepts a list or an object but never text, sent as
+ * the JSON text of one. Where it stands the text can never be valid, and it
+ * has one reading: the value it spells.
+ */
+export function readEncodedValues(
+  args: Record<string, unknown>,
+  schema: unknown,
+): {
+  readonly arguments: Record<string, unknown>;
+  readonly corrections: readonly string[];
+} {
+  const properties = isObject(schema) ? schema["properties"] : undefined;
+  if (!isObject(properties)) return { arguments: args, corrections: [] };
+  const read = { ...args };
+  const corrections: string[] = [];
+  for (const [name, value] of Object.entries(args)) {
+    const property = properties[name];
+    if (typeof value !== "string" || !isObject(property)) continue;
+    const accepted = [property["type"]].flat();
+    if (accepted.includes("string")) continue;
+    let inner: unknown;
+    try {
+      inner = JSON.parse(value);
+    } catch {
+      continue;
+    }
+    if (
+      (Array.isArray(inner) && accepted.includes("array")) ||
+      (isObject(inner) && accepted.includes("object"))
+    ) {
+      read[name] = inner;
+      corrections.push(`${name} sent as text`);
+    }
+  }
+  return { arguments: corrections.length ? read : args, corrections };
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

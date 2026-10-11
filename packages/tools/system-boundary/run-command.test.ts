@@ -51,7 +51,7 @@ withShell("bash", () => {
     const tools = new WorkspaceTools(await workspace(), { shell });
     const result = await tools.execute("bash", {
       command: "__zhiyin_missing_command__ || true",
-      explanation: "Probe a missing executable.",
+      description: "Probe a missing executable.",
     });
     expect(result).toMatchObject({
       ok: false,
@@ -72,7 +72,7 @@ withShell("bash", () => {
     expect(
       await tools.execute("bash", {
         command: "echo 'Working...' >&2",
-        explanation: "Print progress.",
+        description: "Print progress.",
       }),
     ).toMatchObject({ ok: true, value: { exitCode: 0 } });
   });
@@ -87,7 +87,7 @@ withShell("bash", () => {
       "bash",
       {
         command: `echo leaked > ${bashPath(sentinel)}`,
-        explanation: "Writes a sentinel, for the purpose of this test.",
+        description: "Writes a sentinel, for the purpose of this test.",
       },
       controller.signal,
     );
@@ -105,7 +105,7 @@ withShell("bash", () => {
 
     const inspection = await tools.inspect("bash", {
       command: "git status --short",
-      explanation: "Lists which files in the project have been changed.",
+      description: "Lists which files in the project have been changed.",
     });
     expect(inspection).toMatchObject({
       ok: true,
@@ -126,7 +126,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: "cat note.txt",
-      explanation: "Shows the contents of the note.",
+      description: "Shows the contents of the note.",
     });
 
     expect(result).toMatchObject({
@@ -146,7 +146,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: "echo problem >&2; exit 3",
-      explanation: "Exits with an error on purpose.",
+      description: "Exits with an error on purpose.",
     });
 
     expect(result).toMatchObject({
@@ -165,7 +165,7 @@ withShell("bash", () => {
       "bash",
       {
         command: "sleep 30",
-        explanation: "Waits, for the purpose of this test.",
+        description: "Waits, for the purpose of this test.",
       },
       controller.signal,
     );
@@ -179,7 +179,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: "sleep 30",
-      explanation: "Waits, for the purpose of this test.",
+      description: "Waits, for the purpose of this test.",
       timeoutMs: 1000,
     });
 
@@ -201,7 +201,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: "yes",
-      explanation: "Prints without end, for the purpose of this test.",
+      description: "Prints without end, for the purpose of this test.",
       timeoutMs: 60_000,
     });
 
@@ -235,7 +235,7 @@ withShell("bash", () => {
       "bash",
       {
         command: `${bashPath(process.execPath)} -e ${JSON.stringify(script)} ${bashPath(pidFile)} & wait`,
-        explanation:
+        description:
           "Starts a long-running helper, for the purpose of this test.",
         timeoutMs: 60_000,
       },
@@ -267,7 +267,7 @@ withShell("bash", () => {
         "bash",
         {
           command: `${bashPath(process.execPath)} -e ${JSON.stringify(script)} ${bashPath(pidFile)} & wait`,
-          explanation:
+          description:
             "Starts one long-running helper, for the purpose of this test.",
           timeoutMs: 60_000,
         },
@@ -310,7 +310,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: `touch ${bashPath(marker)}`,
-      explanation: "Prove whether the command ran at all.",
+      description: "Prove whether the command ran at all.",
     });
 
     expect(result).toMatchObject({
@@ -344,7 +344,7 @@ withShell("bash", () => {
 
     const result = await tools.execute("bash", {
       command: "echo contained",
-      explanation: "An ordinary command still succeeds.",
+      description: "An ordinary command still succeeds.",
     });
 
     expect(result).toMatchObject({ ok: true });

@@ -58,7 +58,7 @@ describe.skipIf(!shell)("a command's output", () => {
       "bash",
       {
         command: `"${node}" print.mjs`,
-        explanation: "Prints a long numbered output.",
+        description: "Prints a long numbered output.",
       },
       undefined,
       "task-1",
@@ -91,7 +91,7 @@ describe.skipIf(!shell)("a command's output", () => {
     const value = valueOf(
       await tools.execute(
         "bash",
-        { command: "echo short", explanation: "Prints one word." },
+        { command: "echo short", description: "Prints one word." },
         undefined,
         "task-1",
       ),
@@ -100,4 +100,45 @@ describe.skipIf(!shell)("a command's output", () => {
     expect(value["stdout"]).toBe("short\n");
     expect(value).not.toHaveProperty("fullOutput");
   }, 60_000);
+
+  it("tells Python it starts to read and write UTF-8, as its output is read", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-command-"));
+    const tools = new WorkspaceTools(root, { shell });
+
+    const value = valueOf(
+      await tools.execute(
+        "bash",
+        {
+          command: 'echo "$PYTHONUTF8 $PYTHONIOENCODING"',
+          description: "Prints two settings.",
+        },
+        undefined,
+        "task-1",
+      ),
+    );
+
+    expect(value["stdout"]).toBe("1 utf-8\n");
+  }, 60_000);
+});
+
+describe("a command call's input", () => {
+  const tools = new WorkspaceTools(process.cwd(), { shell: "bash" });
+
+  it("takes the command and a description, shown as the model's claim", async () => {
+    expect(
+      await tools.inspect("bash", {
+        command: "git status",
+        description: "Shows which files have changed.",
+      }),
+    ).toMatchObject({ ok: true, claim: "Shows which files have changed." });
+  });
+
+  it("refuses the description under any other name", async () => {
+    expect(
+      await tools.inspect("bash", {
+        command: "git status",
+        explanation: "Shows which files have changed.",
+      }),
+    ).toMatchObject({ ok: false, correctable: true });
+  });
 });

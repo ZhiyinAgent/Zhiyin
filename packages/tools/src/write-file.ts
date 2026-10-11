@@ -58,27 +58,27 @@ export const writeFileSpec: ToolSpec = {
         type: "string",
         description: "Workspace-relative path of the file to write.",
       },
-      text: {
+      content: {
         type: "string",
         description: "The complete contents of the file.",
       },
     },
-    required: ["path", "text"],
+    required: ["path", "content"],
     additionalProperties: false,
   },
 };
 
-type WriteArguments = { readonly path: string; readonly text: string };
+type WriteArguments = { readonly path: string; readonly content: string };
 
 function writeArguments(args: unknown): WriteArguments | undefined {
   if (!args || typeof args !== "object" || Array.isArray(args)) return;
   const source = args as Record<string, unknown>;
   const keys = Object.keys(source);
-  if (keys.length !== 2 || !keys.includes("path") || !keys.includes("text"))
+  if (keys.length !== 2 || !keys.includes("path") || !keys.includes("content"))
     return;
   if (typeof source["path"] !== "string" || !source["path"].trim()) return;
-  if (typeof source["text"] !== "string") return;
-  return { path: normalizePath(source["path"]), text: source["text"] };
+  if (typeof source["content"] !== "string") return;
+  return { path: normalizePath(source["path"]), content: source["content"] };
 }
 
 type Target =
@@ -186,7 +186,7 @@ async function planWrite(
       reason: "The file must stay inside the current workspace.",
     };
   }
-  if (Buffer.byteLength(input.text, "utf8") > maximumBytes) {
+  if (Buffer.byteLength(input.content, "utf8") > maximumBytes) {
     return {
       ok: false,
       reason: "The text is too large to write in one action.",
@@ -217,7 +217,7 @@ async function planWrite(
     return {
       input,
       change: "updated",
-      contents: encodeText(target.conventions, normalizeEndings(input.text)),
+      contents: encodeText(target.conventions, normalizeEndings(input.content)),
       inspection: {
         ok: true,
         action: "Overwrite an existing workspace file",
@@ -230,7 +230,7 @@ async function planWrite(
           describeChange(
             input.path,
             "updated",
-            normalizeEndings(input.text),
+            normalizeEndings(input.content),
             target.conventions.text,
           ),
         ],
@@ -246,7 +246,7 @@ async function planWrite(
     change: "created",
     // A new file is written exactly as the model wrote it: there is no existing
     // convention to respect, and inventing one would be a guess.
-    contents: input.text,
+    contents: input.content,
     inspection: {
       ok: true,
       action: "Create a workspace file",
@@ -255,7 +255,7 @@ async function planWrite(
       scope: "workspace",
       changes: [
         {
-          ...describeChange(input.path, "created", input.text),
+          ...describeChange(input.path, "created", input.content),
           ...(target.createsFolder
             ? { createdFolder: target.createsFolder }
             : {}),

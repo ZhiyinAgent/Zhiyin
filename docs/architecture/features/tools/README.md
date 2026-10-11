@@ -118,6 +118,8 @@ installs, and, in the app, where process containment is available.
   writing, and a file that changed since is refused, correctably, with a
   request to read it again. The conversation's own writes keep what it knows
   current, so it can edit again without re-reading.
+- `write_file` takes the file's complete contents as `content`; under another
+  name they are refused, correctably.
 - A write says before approval whether it creates or replaces a file. A file
   that appears while the request waits changes the inspection, and the
   earlier approval does not match it.
@@ -148,9 +150,11 @@ installs, and, in the app, where process containment is available.
 
 ### Commands (ADR 0007)
 
-- `bash` requires the model to say, in one plain sentence, what the command
-  does. That sentence travels as `claim` beside the exact command, which
-  reaches the interface whole.
+- `bash` requires the model to say, in one plain sentence given as
+  `description`, what the command does; a field under another name is refused.
+  That sentence travels as `claim` beside the exact command, which reaches the
+  interface whole.
+- Python started from a command reads and writes UTF-8, as its output is read.
 - A command is not sandboxed: it starts in the folder and can reach whatever
   the person's account can, including the network. Its process tree runs in a
   Job Object, so stopping a command, or Zhiyin ending, ends everything it

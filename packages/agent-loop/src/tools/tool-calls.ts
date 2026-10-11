@@ -13,7 +13,7 @@ import {
   maximumRepairAttempts,
 } from "./tool-repair.js";
 import { type CallInput, CallInputs } from "./call-input.js";
-import { correctableByModel, refusal } from "./refusals.js";
+import { correctableByModel, refusal, unknownTool } from "./refusals.js";
 import { closedForPerson, shownToPerson } from "./document-reads.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 import type { TurnRecords } from "../turn/turn-records.js";
@@ -26,6 +26,7 @@ import type {
 import type { SelfDescription } from "../context/self-description.js";
 import { factsLabel } from "../context/task-guidance.js";
 import { approvalRecord, decideToolPermission } from "./tool-permission.js";
+import { withSchemaProblems } from "./schema-problems.js";
 
 /**
  * What a tool call produced, and whether the person was ever told about it. A
@@ -164,10 +165,9 @@ export class ToolCalls {
     specialistRunId?: string,
   ): Promise<ToolCallOutcome> {
     if (!owner) {
-      const result = refusal(
-        "input-check",
-        `The tool “${call.name}” is not available.`,
-        "Use one of the tools on offer.",
+      const result = unknownTool(
+        call.name,
+        round.tools.map((tool) => tool.name),
       );
       await this.recordFailedProposal(
         taskId,
@@ -182,7 +182,11 @@ export class ToolCalls {
     }
 
     let args = proposedArguments;
-    let inspection = await this.#inspectTool(taskId, owner, call.name, args);
+    let inspection = withSchemaProblems(
+      await this.#inspectTool(taskId, owner, call.name, args),
+      args,
+      round.tools.find((tool) => tool.name === call.name)?.inputSchema,
+    );
     controller.signal.throwIfAborted();
 
     // Before the main model is troubled with it, a small model is given the
