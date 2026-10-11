@@ -90,6 +90,22 @@ async function sandboxWith(
   };
 }
 
+describe("the environment the sandbox builds", () => {
+  it("can read and write Excel workbooks, the format most data arrives in", async () => {
+    const { sandbox, calls } = await sandboxWith({
+      output: { exitCode: 0, stdout: "" },
+    });
+
+    await sandbox.callTool("run_python", { code: "print(1)" });
+
+    // pandas reads and writes .xlsx through openpyxl, which it does not
+    // install itself.
+    expect(calls[1]?.arguments).toEqual(
+      expect.arrayContaining(["pandas", "openpyxl"]),
+    );
+  });
+});
+
 describe("running Python in the sandbox", () => {
   it("prepares the environment once, then runs the script in the workspace folder", async () => {
     const { sandbox, calls, workspace, directory, interpreter } =

@@ -40,7 +40,7 @@
           "id": "python-sandbox",
           "connector": "python",
           "name": "Python environment",
-          "description": "Runs Python scripts for one-off data work in a separate environment with pandas, polars, NumPy, SciPy, Matplotlib, seaborn, and statsmodels, and can add packages or be reset.",
+          "description": "Runs Python scripts for one-off data work in a separate environment with pandas, polars, NumPy, SciPy, Matplotlib, seaborn, statsmodels, and openpyxl for Excel workbooks, and can add packages or be reset.",
           "access": "Runs scripts that read and write files in your workspace folder, in an environment kept apart from your own projects. Installs uv and Python when you ask.",
           "dataDestination": "Installing downloads uv and Python from GitHub. Adding a package downloads it from pypi.org."
         }

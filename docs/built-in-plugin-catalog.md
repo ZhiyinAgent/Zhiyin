@@ -70,8 +70,8 @@ Skills: `exploratory-data-analysis`, `sql-optimization`, `statistical-testing`,
 Specialists: `data-cleansing-specialist`, `insights-synthesizer`.
 
 Connector: the Python environment, a `uv`-managed environment for one-off
-data work, with pandas, polars, NumPy, SciPy, Matplotlib, seaborn and
-statsmodels. It is kept apart from the person's own projects, which keep their
+data work, with pandas, polars, NumPy, SciPy, Matplotlib, seaborn,
+statsmodels, and openpyxl for Excel workbooks. It is kept apart from the person's own projects, which keep their
 own environments.
 
 ## Deep Research & Synthesis

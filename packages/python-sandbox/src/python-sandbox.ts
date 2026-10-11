@@ -63,6 +63,8 @@ export const defaultPackages = [
   "matplotlib",
   "seaborn",
   "statsmodels",
+  // pandas reads and writes Excel workbooks through it.
+  "openpyxl",
 ] as const;
 
 const notInstalled =

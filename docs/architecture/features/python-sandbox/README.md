@@ -31,7 +31,8 @@ and every call needs the person's approval.
   file, with arguments), `install_python_package`, and
   `reset_python_environment`.
 - `defaultPackages` is what a fresh environment holds: pandas, polars, NumPy,
-  SciPy, Matplotlib, seaborn and statsmodels. The default Python is 3.13.
+  SciPy, Matplotlib, seaborn, statsmodels, and openpyxl for Excel workbooks.
+  The default Python is 3.13.
 - Programs run through the process-ownership mechanism (ADR 0004). A script
   may run for five minutes, and building the environment for fifteen. Tests
   may replace the runner.
