@@ -273,11 +273,13 @@ export class ContextGuard {
   }
 
   #parts(plan: RequestPlan, history: readonly ModelMessage[]) {
+    const window = this.#deps.host.modelWindow();
     return {
-      model: this.#deps.host.modelWindow().model,
+      model: window.model,
       fixed: plan.fixed,
       history,
       tools: plan.tools as readonly ModelTool[],
+      counting: { reasoning: window.reasoningSentBack === true },
     };
   }
 
@@ -339,6 +341,9 @@ export class ContextGuard {
         conversation: estimatedRequestTokens(
           rest.filter((message) => message.role !== "tool"),
           [],
+          {
+            reasoning: this.#deps.host.modelWindow().reasoningSentBack === true,
+          },
         ),
         toolResults: results.length ? estimatedRequestTokens(results, []) : 0,
       },

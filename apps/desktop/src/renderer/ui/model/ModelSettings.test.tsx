@@ -10,10 +10,22 @@ import type {
   ModelCatalog,
   ModelProviderList,
   ProviderSettings,
+  ProviderSummary,
 } from "@zhiyin/contract";
 import { ModelSettings } from "./ModelSettings.js";
 
+const openRouterPages = {
+  keys: "https://openrouter.ai/settings/keys",
+  billing: "https://openrouter.ai/settings/credits",
+};
+
 const connected: ProviderSettings = {
+  provider: {
+    id: "openrouter",
+    name: "OpenRouter",
+    upstreams: true,
+    pages: openRouterPages,
+  },
   model: "z-ai/glm-5.3-flash",
   providers: [],
   endpoint: "https://openrouter.ai/api/v1/chat/completions",
@@ -122,6 +134,58 @@ const tiered: ModelProviderList = {
   })),
 };
 
+/** OpenRouter, with its key stored, and two labs not yet usable or usable. */
+const shipped: readonly ProviderSummary[] = [
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    upstreams: true,
+    accounts: [
+      {
+        credential: { status: "configured", source: "credentialStore" },
+        pages: openRouterPages,
+      },
+    ],
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    accounts: [
+      {
+        region: { id: "international", name: "International" },
+        credential: { status: "missing", source: "none" },
+        pages: {
+          keys: "https://platform.deepseek.com/api_keys",
+          billing: "https://platform.deepseek.com/",
+        },
+      },
+      {
+        region: { id: "mainland", name: "Mainland China" },
+        credential: { status: "configured", source: "credentialStore" },
+        pages: {
+          keys: "https://platform.deepseek.com/api_keys",
+          billing: "https://platform.deepseek.com/",
+        },
+      },
+    ],
+  },
+  {
+    id: "mistral",
+    name: "Mistral",
+    unavailable:
+      "Zhiyin has not yet been checked against this lab's live service.",
+    accounts: [
+      {
+        credential: { status: "missing", source: "none" },
+        pages: {
+          keys: "https://console.mistral.ai/api-keys",
+          billing: "https://admin.mistral.ai/organization/billing",
+        },
+      },
+    ],
+  },
+];
+
 function renderPanel(
   overrides: Partial<Parameters<typeof ModelSettings>[0]> = {},
 ) {
@@ -129,6 +193,7 @@ function renderPanel(
   const props = {
     settings: connected,
     onClose: () => undefined,
+    onListProviders: async () => shipped,
     onListModels: async () => catalog,
     onListModelProviders: async () => providers,
     onSelectModel,
@@ -165,6 +230,43 @@ describe("ModelSettings", () => {
     expect(screen.queryByRole("radio", { name: /GLM 5.3 Flash/ })).toBeNull();
   });
 
+  it("shows a lab's own price in its own currency, and says when none is listed", async () => {
+    renderPanel({
+      onListModels: async () => ({
+        status: "ready",
+        models: [
+          {
+            id: "deepseek-v4-pro",
+            name: "DeepSeek V4 Pro",
+            contextWindow: 1_000_000,
+            acceptsImages: false,
+            reasoning: true,
+            price: {
+              currency: "CNY",
+              input: 4,
+              output: 16,
+              checked: "2026-10-09",
+            },
+          },
+          {
+            id: "lab-unpriced",
+            name: "Lab Unpriced",
+            contextWindow: 128_000,
+            acceptsImages: false,
+            reasoning: false,
+          },
+        ],
+      }),
+    });
+
+    expect(
+      await screen.findByRole("radio", { name: /DeepSeek V4 Pro/ }),
+    ).toHaveTextContent("¥4.00 in / ¥16.00 out");
+    expect(
+      screen.getByRole("radio", { name: /Lab Unpriced/ }),
+    ).toHaveTextContent("Price not listed");
+  });
+
   it("keeps a model readable by name while its matched characters are emphasised", async () => {
     renderPanel();
     await screen.findByRole("radio", { name: /Claude Sonnet 5/ });
@@ -191,10 +293,11 @@ describe("ModelSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() =>
-      expect(onSelectModel).toHaveBeenCalledWith("z-ai/glm-5.3-flash", [
-        "crusoe/fp4",
-        "relace/fp4",
-      ]),
+      expect(onSelectModel).toHaveBeenCalledWith(
+        "z-ai/glm-5.3-flash",
+        ["crusoe/fp4", "relace/fp4"],
+        { provider: "openrouter" },
+      ),
     );
   });
 
@@ -302,6 +405,7 @@ describe("ModelSettings", () => {
       expect(onSelectModel).toHaveBeenCalledWith(
         "anthropic/claude-sonnet-5",
         [],
+        { provider: "openrouter" },
       ),
     );
   });
@@ -344,7 +448,7 @@ describe("ModelSettings", () => {
     expect(screen.getAllByRole("button", { name: "Add a key" })).toHaveLength(
       1,
     );
-    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Models" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByLabelText("Search models")).toBeNull();
 
@@ -385,7 +489,9 @@ describe("ModelSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save key" }));
 
     await waitFor(() =>
-      expect(onSaveApiKey).toHaveBeenCalledWith("sk-or-v1-secret"),
+      expect(onSaveApiKey).toHaveBeenCalledWith("sk-or-v1-secret", {
+        provider: "openrouter",
+      }),
     );
     expect(screen.queryByDisplayValue("sk-or-v1-secret")).toBeNull();
   });
@@ -466,13 +572,238 @@ describe("ModelSettings", () => {
       },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "API key" }));
+    expect(await screen.findByText("Key from the environment")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Change key" }));
 
     expect(
       await screen.findByText(
-        "The key comes from the development environment, so it cannot be changed here.",
+        "This key was set for an automated run, by a variable whose name starts with ZHIYIN_. Remove the variable and restart Zhiyin to save a key here.",
       ),
     ).toBeVisible();
     expect(screen.queryByLabelText("Paste your key")).toBeNull();
+  });
+});
+
+/** DeepSeek's own list, as its provider ships it. */
+const deepSeekCatalog: ModelCatalog = {
+  status: "ready",
+  models: [
+    {
+      id: "deepseek-v4-pro",
+      name: "DeepSeek V4 Pro",
+      contextWindow: 1_048_576,
+      acceptsImages: false,
+      reasoning: true,
+      price: {
+        currency: "CNY",
+        input: 4.5,
+        cacheRead: 0.15,
+        output: 13.5,
+        peak: {
+          weekdaysUtc: [1, 2, 3, 4, 5],
+          hoursUtc: [
+            [1, 4],
+            [6, 10],
+          ],
+          input: 9,
+          cacheRead: 0.3,
+          output: 27,
+        },
+        checked: "2026-10-09",
+      },
+    },
+  ],
+};
+
+describe("choosing the provider", () => {
+  it("lists every provider by name, and one that cannot be used yet unchosen, with why", async () => {
+    renderPanel();
+
+    const providers = await screen.findByRole("radiogroup", {
+      name: "Provider",
+    });
+    expect(
+      within(providers)
+        .getAllByRole("radio")
+        .map((option) => option.textContent),
+    ).toEqual(["OpenRouter", "DeepSeek", "MistralNot available yet"]);
+    expect(
+      within(providers).getByRole("radio", { name: "OpenRouter" }),
+    ).toBeChecked();
+
+    const mistral = within(providers).getByRole("radio", { name: /Mistral/ });
+    expect(mistral).toHaveAttribute("aria-disabled", "true");
+    expect(mistral).toHaveAttribute(
+      "data-tip",
+      "Zhiyin has not yet been checked against this lab's live service.",
+    );
+    fireEvent.click(mistral);
+    expect(mistral).not.toBeChecked();
+  });
+
+  it("says when the providers could not be listed, and keeps the stored one's models", async () => {
+    renderPanel({
+      onListProviders: async () => {
+        throw new Error("The core did not answer.");
+      },
+    });
+
+    expect(
+      await screen.findByText("The providers could not be listed."),
+    ).toBeVisible();
+    expect(
+      await screen.findByRole("radio", { name: /Anthropic: Claude Sonnet 5/ }),
+    ).toBeVisible();
+  });
+
+  it("shows a lab's models on the platform chosen, without upstreams, and saves the lab with its platform", async () => {
+    const onListModels = vi.fn(async (target?: { provider: string }) =>
+      target?.provider === "deepseek" ? deepSeekCatalog : catalog,
+    );
+    const { onSelectModel } = renderPanel({ onListModels });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "DeepSeek" }));
+
+    // The first platform has no key yet: its models wait for one.
+    expect(screen.getByText("Add a DeepSeek key")).toBeVisible();
+    const platforms = screen.getByRole("radiogroup", {
+      name: "DeepSeek platform",
+    });
+    fireEvent.click(
+      within(platforms).getByRole("radio", { name: "Mainland China" }),
+    );
+
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /DeepSeek V4 Pro/ }),
+    );
+    expect(onListModels).toHaveBeenLastCalledWith({
+      provider: "deepseek",
+      region: "mainland",
+    });
+    // Upstreams are OpenRouter's alone.
+    expect(screen.queryByText(/^Providers for/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSelectModel).toHaveBeenCalledWith("deepseek-v4-pro", [], {
+        provider: "deepseek",
+        region: "mainland",
+      }),
+    );
+  });
+
+  it("details the lab model chosen: its prices on that platform, in their currency, busy hours included, and its window", async () => {
+    renderPanel({
+      onListModels: async (target) =>
+        target?.provider === "deepseek" ? deepSeekCatalog : catalog,
+    });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "DeepSeek" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Mainland China" }));
+    const details = await screen.findByRole("region", {
+      name: "Model details",
+    });
+    expect(within(details).getByText("No model selected")).toBeVisible();
+
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /DeepSeek V4 Pro/ }),
+    );
+
+    expect(
+      within(details).getByRole("heading", { name: "DeepSeek V4 Pro" }),
+    ).toBeVisible();
+    expect(
+      within(details).getByText("Price per million tokens, CNY"),
+    ).toBeVisible();
+    const row = (label: string) =>
+      within(details).getByRole("row", { name: new RegExp(`^${label}`) });
+    // Off-peak first, then the busy-hour price beside it.
+    expect(row("Input")).toHaveTextContent("¥4.50¥9.00");
+    expect(row("Cached input")).toHaveTextContent("¥0.15¥0.30");
+    expect(row("Output")).toHaveTextContent("¥13.50¥27.00");
+    // In the person's own time zone, whichever the test runs in.
+    expect(
+      within(details).getByText(/^Busy hours, your time \(.+\): \w+day/),
+    ).toBeVisible();
+    expect(within(details).getByText(/checked October 9, 2026/)).toBeVisible();
+    expect(within(details).getByText("1M tokens")).toBeVisible();
+  });
+
+  it("saves nothing for another provider until a model is chosen on it", async () => {
+    renderPanel({
+      onListModels: async (target) =>
+        target?.provider === "deepseek" ? deepSeekCatalog : catalog,
+    });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "DeepSeek" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Mainland China" }));
+    await screen.findByRole("radio", { name: /DeepSeek V4 Pro/ });
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(save).toHaveAttribute("data-tip", "Choose a model first");
+  });
+
+  it("keeps a key for the lab's platform shown, and reads the list of keys again", async () => {
+    const onSaveApiKey = vi.fn(async () => ({ status: "accepted" as const }));
+    const onListProviders = vi.fn(async () => shipped);
+    renderPanel({ onSaveApiKey, onListProviders });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "DeepSeek" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a key" }));
+    expect(
+      await screen.findByRole("dialog", {
+        name: "DeepSeek API key · International",
+      }),
+    ).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Paste your key"), {
+      target: { value: "sk-deepseek" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save key" }));
+
+    await waitFor(() =>
+      expect(onSaveApiKey).toHaveBeenCalledWith("sk-deepseek", {
+        provider: "deepseek",
+        region: "international",
+      }),
+    );
+    await waitFor(() => expect(onListProviders).toHaveBeenCalledTimes(2));
+  });
+
+  it("opens the billing page of the platform a key belongs to, alike for every provider and without reading a balance", async () => {
+    const onOpenExternalUrl = vi.fn(async () => {});
+    renderPanel({ onOpenExternalUrl });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Billing" }));
+    expect(onOpenExternalUrl).toHaveBeenLastCalledWith(
+      "https://openrouter.ai/settings/credits",
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "DeepSeek" }));
+    // No key on this platform yet, so no account to see the balance of.
+    expect(screen.queryByRole("button", { name: "Billing" })).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Mainland China" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Billing" }));
+    expect(onOpenExternalUrl).toHaveBeenLastCalledWith(
+      "https://platform.deepseek.com/",
+    );
+    expect(screen.queryByText(/balance/i)).toBeNull();
+  });
+
+  it("returns to the stored provider and its choice on Discard", async () => {
+    const onListModels = vi.fn(async (target?: { provider: string }) =>
+      target?.provider === "deepseek" ? deepSeekCatalog : catalog,
+    );
+    renderPanel({ onListModels });
+
+    fireEvent.click(await screen.findByRole("radio", { name: "DeepSeek" }));
+    expect(screen.getByText("Not saved yet")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(screen.getByRole("radio", { name: "OpenRouter" })).toBeChecked();
+    expect(
+      await screen.findByRole("radio", { name: /GLM 5.3 Flash/ }),
+    ).toBeChecked();
+    expect(screen.queryByText("Not saved yet")).toBeNull();
   });
 });

@@ -43,8 +43,10 @@ Zhiyin is for.
 
 ## What it does
 
-- **Works in the folder you choose**, through a model you choose on
-  OpenRouter, with your own key kept in Windows Credential Manager.
+- **Works in the folder you choose**, through a model you choose, on
+  OpenRouter or on its lab's own platform: Anthropic, OpenAI, Mistral,
+  DeepSeek, Kimi, Qwen, Z.ai, MiniMax or Xiaomi MiMo, international or
+  mainland China. Your own key is kept in Windows Credential Manager.
 - **Asks before it changes anything.** You see each file change line by line
   before you decide. You can deny an action, allow it once, or, for edits
   inside one subfolder or one connector tool, allow it for the rest of the
@@ -63,8 +65,8 @@ Zhiyin is for.
   including remote MCP servers you reach with a pasted key or the service's
   own sign-in. Four come built in, for software engineering, technical
   publishing, data analysis and research, and you can make your own.
-- **Shows what it cost**, from the provider's own figures, conversation by
-  conversation.
+- **Shows what it cost**, conversation by conversation: the provider's own
+  figure, or an estimate from the lab's price list, in the lab's currency.
 - **Exports a conversation** as a page to read or a record to analyse.
 - **Checks your spelling** as you type, in the languages you choose from 47,
   with every dictionary included.
@@ -112,8 +114,8 @@ pnpm dev
 ```
 
 `pnpm install` does not download Electron's runtime; the `install:electron`
-step does. Run it again whenever `node_modules` has been deleted. Add your
-OpenRouter key on the Model page. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has
+step does. Run it again whenever `node_modules` has been deleted. Add a key
+on the Model page, OpenRouter's or a lab's. [CONTRIBUTING.md](.github/CONTRIBUTING.md) has
 the rest.
 
 ## Verification

@@ -100,6 +100,7 @@ const stubCommands: CoreApi = {
   drawDocumentPage: async () => ({ ok: false, reason: "Not drawn here." }),
   openDocument: async () => {},
   showDocumentInFolder: async () => {},
+  listProviders: async () => [],
   saveProviderApiKey: async () => ({ status: "accepted" as const }),
   clearProviderApiKey: async () => {},
   listModels: async () => ({ status: "ready" as const, models: [] }),
@@ -1182,6 +1183,7 @@ describe("WorkspaceShell", () => {
           showDocumentInFolder: async () => {},
           saveProviderApiKey: async () => ({ status: "accepted" as const }),
           clearProviderApiKey: async () => {},
+          listProviders: async () => [],
           listModels: async () => ({ status: "ready", models: [] }),
           listModelProviders: async () => ({
             status: "unavailable",
@@ -1751,6 +1753,7 @@ describe("WorkspaceShell", () => {
           showDocumentInFolder: async () => {},
           saveProviderApiKey: async () => ({ status: "accepted" as const }),
           clearProviderApiKey: async () => {},
+          listProviders: async () => [],
           listModels: async () => ({ status: "ready", models: [] }),
           listModelProviders: async () => ({
             status: "unavailable",
@@ -2525,6 +2528,7 @@ describe("WorkspaceShell", () => {
           showDocumentInFolder: async () => {},
           saveProviderApiKey: async () => ({ status: "accepted" as const }),
           clearProviderApiKey: async () => {},
+          listProviders: async () => [],
           listModels: async () => ({ status: "ready", models: [] }),
           listModelProviders: async () => ({
             status: "unavailable",
@@ -3262,6 +3266,39 @@ describe("a failed turn", () => {
     );
   });
 
+  it("sends a person to the billing of the provider requests go to", () => {
+    const openExternalUrl = vi.fn(async () => {});
+    render(
+      <WorkspaceShell
+        state={{
+          ...failed(["addCredits", "tryAgain"]),
+          provider: {
+            provider: {
+              id: "deepseek",
+              name: "DeepSeek",
+              pages: {
+                keys: "https://platform.deepseek.com/api_keys",
+                billing: "https://platform.deepseek.com/",
+              },
+            },
+            endpoint: "https://api.deepseek.com/chat/completions",
+            credential: { status: "configured", source: "credentialStore" },
+          },
+        }}
+        dispatch={() => undefined}
+        commands={{ ...stubCommands, openExternalUrl }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add DeepSeek credits" }),
+    );
+
+    expect(openExternalUrl).toHaveBeenCalledWith(
+      "https://platform.deepseek.com/",
+    );
+  });
+
   it("edits the message where it is", async () => {
     render(
       <WorkspaceShell
@@ -3544,6 +3581,60 @@ describe("the app's settings", () => {
     await waitFor(() => expect(selectTask).toHaveBeenCalledWith("task-2"));
     expect(
       screen.queryByRole("region", { name: "Usage overview" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names a conversation on the Usage page that has not been opened since Zhiyin started", () => {
+    const range = (days: 7 | 30) => ({
+      days,
+      requests: 2,
+      inputTokens: 20,
+      outputTokens: 4,
+      costUsd: 0.25,
+      pricedRequests: 2,
+      activity: [],
+      models: [],
+      conversations: [
+        {
+          conversationId: "budget",
+          requests: 2,
+          pricedRequests: 2,
+          costUsd: 0.25,
+        },
+      ],
+    });
+    render(
+      <Live
+        initial={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          conversations: [
+            {
+              id: "budget",
+              title: "Budget 2026",
+              titleSource: "generated",
+              updatedAt: "2026-10-05T09:00:00.000Z",
+              updatedLabel: "9m",
+            },
+          ],
+          usage: {
+            status: "ready",
+            costSource: "provider-reported",
+            ranges: { "7": range(7), "30": range(30) },
+          },
+        })}
+        commands={stubCommands}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Usage" }));
+
+    expect(
+      screen.getByRole("button", { name: "Open Budget 2026" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("A deleted conversation"),
     ).not.toBeInTheDocument();
   });
 

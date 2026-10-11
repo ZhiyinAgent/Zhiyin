@@ -107,9 +107,17 @@ describe("reasoning in a conversation", () => {
           request.reasoning?.enabled && request.reasoning.effort === "high",
       ),
     ).toBe(true);
-    expect(JSON.stringify(requests[1]?.messages)).not.toContain(
-      "Compare the sources.",
-    );
+    // Reasoning travels beside the answer, never in any message's words; each
+    // provider decides whether to send it back (ADR 0024).
+    expect(
+      JSON.stringify(requests[1]?.messages.map((message) => message.content)),
+    ).not.toContain("Compare the sources.");
+    expect(
+      requests[1]?.messages.find((message) => message.role === "assistant"),
+    ).toMatchObject({
+      content: "The answer.",
+      reasoning: "Compare the sources.",
+    });
     expect(loop.snapshot().tasks[0]?.reasoning).toEqual({
       enabled: true,
       effort: "high",

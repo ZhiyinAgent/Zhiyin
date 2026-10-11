@@ -10,6 +10,7 @@
  */
 
 import type {
+  ModelReplay,
   ModelResponseRecord,
   ModelResponseUsage,
   ModelRetryRecord,
@@ -52,6 +53,8 @@ export type RoundResult = {
   readonly reasoning: string;
   readonly finishReason?: string;
   readonly response?: ModelResponseRecord;
+  /** What the provider needs back with this round, to keep with it. */
+  readonly replay?: ModelReplay;
   /** The provider's count of the request, when it gave one. */
   readonly usage?: ModelUsage;
   readonly assistantId: string;
@@ -74,6 +77,9 @@ function usageOf(usage: ModelUsage): ModelResponseUsage {
       ? {}
       : { cacheWriteTokens: usage.cacheWriteTokens }),
     ...(usage.costUsd === undefined ? {} : { costUsd: usage.costUsd }),
+    ...(usage.estimatedCost === undefined
+      ? {}
+      : { estimatedCost: usage.estimatedCost }),
   };
 }
 
@@ -84,6 +90,7 @@ class Attempt {
   reasoning = "";
   finishReason: string | undefined;
   response: ModelResponseRecord | undefined;
+  replay: ModelReplay | undefined;
   reportedUsage = false;
   usage: ModelUsage | undefined;
   composingSaidAt = 0;
@@ -217,6 +224,7 @@ export class ModelRound {
       ),
       text: attempt.text,
       reasoning: attempt.reasoning,
+      ...(attempt.replay ? { replay: attempt.replay } : {}),
       ...(attempt.finishReason === undefined
         ? {}
         : { finishReason: attempt.finishReason }),
@@ -285,6 +293,7 @@ export class ModelRound {
     } else if (event.kind === "done") {
       attempt.finishReason = event.finishReason;
       attempt.response = event.response;
+      attempt.replay = event.replay;
     }
   }
 

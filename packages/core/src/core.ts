@@ -87,6 +87,7 @@ export type CoreWorkspace = Pick<
     | "models"
     | "modelProviders"
     | "selectModel"
+    | "providers"
   >;
 };
 
@@ -293,11 +294,15 @@ export class Core {
         if (!found.ok) throw new VisibleError(found.reason);
         return deps.showInFolder(found.path);
       },
-      saveProviderApiKey: (apiKey) => settings.saveApiKey(apiKey),
-      clearProviderApiKey: () => settings.clearApiKey(),
-      listModels: () => settings.models(),
-      listModelProviders: (model) => settings.modelProviders(model),
-      selectModel: (model, providers) => settings.selectModel(model, providers),
+      listProviders: () => settings.providers(),
+      saveProviderApiKey: (apiKey, target) =>
+        settings.saveApiKey(apiKey, target),
+      clearProviderApiKey: (target) => settings.clearApiKey(target),
+      listModels: (target) => settings.models(target),
+      listModelProviders: (model, target) =>
+        settings.modelProviders(model, target),
+      selectModel: (model, providers, target) =>
+        settings.selectModel(model, providers, target),
       readPicture: (source) => workspace.kept.readPicture(source),
       previewArtifact: (taskId, path) =>
         workspace.previewArtifact(taskId, path),

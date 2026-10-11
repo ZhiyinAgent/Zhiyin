@@ -1,8 +1,9 @@
 /**
  * Where the real implementations are chosen and handed to the agent loop.
  *
- * The model client talks to OpenRouter; its key comes from the environment or
- * from the operating system's credential store.
+ * The model client talks to the provider the person chose, OpenRouter or a
+ * lab's own API; each key comes from the environment or from the operating
+ * system's credential store.
  */
 
 import { join } from "node:path";
@@ -30,10 +31,8 @@ import {
 } from "@zhiyin/core";
 import {
   FileModelChoice,
-  OpenRouterModelClient,
-  ProviderCredentials,
+  ModelProviders,
   type CredentialEntry,
-  fetchOpenRouterModelInfo,
 } from "@zhiyin/model-client";
 import { FileSessions } from "@zhiyin/session";
 import {
@@ -114,7 +113,8 @@ export type Surroundings = {
     /** Windows' languages, most preferred first. */
     readonly systemLanguages: readonly string[];
   };
-  readonly credentialEntry?: CredentialEntry;
+  /** The credential store's entry for one provider account. Tests only. */
+  readonly credentialEntry?: (account: string) => CredentialEntry;
   /** Tests only: closing browsers and connections never finishes. */
   readonly connectionsNeverClose?: boolean;
   /** Starts a process that draws document pages, before it is contained. */
@@ -166,28 +166,35 @@ export function buildCore({
       : {}),
   });
   const audit = new FileAuditLog(dataDirectory);
-  const credentials = new ProviderCredentials({
-    environment: () => process.env["OPENROUTER_API_KEY"],
-    ...(credentialEntry ? { entry: credentialEntry } : {}),
-  });
   /*
-   * Which model answers is the person's choice, kept on disk; until they make
-   * it, nothing is sent. Routing starts unrestricted: a single upstream has no
-   * recovery when it is busy. ADR 0010.
+   * Which provider and model answer is the person's choice, kept on disk;
+   * until they make it, nothing is sent. Routing starts unrestricted: a single
+   * upstream has no recovery when it is busy. ADR 0010, ADR 0024.
+   *
+   * For a test run or the benchmark, ZHIYIN_MODEL fixes the model, on the
+   * provider and region ZHIYIN_PROVIDER and ZHIYIN_REGION name (OpenRouter
+   * when unnamed), and ZHIYIN_MODEL_ENDPOINT sends every request elsewhere.
    */
-  const choice = new FileModelChoice(dataDirectory);
-  const model = new OpenRouterModelClient({
-    credentials,
-    ...(process.env["ZHIYIN_MODEL"] ? {} : { choice }),
-    ...(!process.env["ZHIYIN_MODEL_ENDPOINT"]
-      ? { modelInfo: fetchOpenRouterModelInfo }
-      : {}),
-    ...(process.env["ZHIYIN_MODEL"]
-      ? { model: process.env["ZHIYIN_MODEL"] }
-      : {}),
+  const fixedModel = process.env["ZHIYIN_MODEL"];
+  const model = new ModelProviders({
+    environment: (variable) => process.env[variable],
+    ...(fixedModel
+      ? {
+          fixed: {
+            model: fixedModel,
+            ...(process.env["ZHIYIN_PROVIDER"]
+              ? { provider: process.env["ZHIYIN_PROVIDER"] }
+              : {}),
+            ...(process.env["ZHIYIN_REGION"]
+              ? { region: process.env["ZHIYIN_REGION"] }
+              : {}),
+          },
+        }
+      : { choice: new FileModelChoice(dataDirectory) }),
     ...(process.env["ZHIYIN_MODEL_ENDPOINT"]
       ? { endpoint: process.env["ZHIYIN_MODEL_ENDPOINT"] }
       : {}),
+    ...(credentialEntry ? { credentialEntry } : {}),
   });
   const containment = { open: openProcessContainer };
   const containmentState = containmentAvailability();
@@ -348,6 +355,7 @@ export function buildCore({
       audit,
       usage: new FileUsageTelemetry(dataDirectory),
       model,
+      modelProviders: model,
       // Each conversation gets an app-owned browser rather than access to the
       // person's browser or another conversation's page.
       browsers,

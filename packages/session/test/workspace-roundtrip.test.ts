@@ -142,6 +142,52 @@ describe("saved reasoning", () => {
     }
   });
 
+  it("keeps a response's estimated cost with its currency and price list, and rejects one that is not", async () => {
+    const estimated = {
+      ...plainResponse,
+      usage: {
+        inputTokens: 100,
+        outputTokens: 20,
+        estimatedCost: {
+          amount: 0.004,
+          currency: "CNY",
+          priceList: "2026-10-09",
+        },
+      },
+    };
+    const root = await temporaryRoot();
+    const task = { ...snapshot.tasks[0]!, modelResponses: [estimated] };
+    await new FileSessions(root).saveWorkspace({ ...snapshot, tasks: [task] });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ modelResponses: [estimated] }] },
+    );
+
+    for (const estimatedCost of [
+      { amount: -1, currency: "CNY", priceList: "2026-10-09" },
+      { amount: 0.004, priceList: "2026-10-09" },
+      { amount: 0.004, currency: "CNY" },
+      0.004,
+    ]) {
+      const damaged = await temporaryRoot();
+      await plantHistory(damaged, {
+        ...snapshot,
+        tasks: [
+          {
+            ...snapshot.tasks[0],
+            modelResponses: [
+              { ...estimated, usage: { ...estimated.usage, estimatedCost } },
+            ],
+          },
+        ],
+      });
+
+      await expect(
+        new FileSessions(damaged).loadWorkspace(),
+      ).rejects.toMatchObject({ code: "corrupted" });
+    }
+  });
+
   it("restores the failed attempts recorded before a model response", async () => {
     const root = await temporaryRoot();
     const task = {
@@ -958,6 +1004,75 @@ describe("FileSessions workspace persistence", () => {
       { elapsedMs: -1 },
       { costUsd: "10" },
       { allowance: { toolRounds: 24 } },
+    ]) {
+      const root = await temporaryRoot();
+      await plantHistory(root, waiting(wrong));
+      await expect(
+        new FileSessions(root).loadWorkspace(),
+      ).rejects.toBeInstanceOf(SessionStoreError);
+    }
+  });
+
+  it("keeps a work-budget question's estimated costs and limits in other currencies, and rejects malformed ones", async () => {
+    const waiting = (prompt: Record<string, unknown>) => ({
+      ...snapshot,
+      tasks: snapshot.tasks.map((task) => ({
+        ...task,
+        phase: {
+          kind: "input" as const,
+          steps: [],
+          prompt: {
+            id: "budget-1",
+            kind: "workBudget" as const,
+            title: "Keep working on this?",
+            completedRounds: 0,
+            reached: ["elapsed", "providerCost"],
+            elapsedMs: 1_800_000,
+            estimatedCosts: [{ currency: "CNY", amount: 75 }],
+            allowance: {
+              toolRounds: 24,
+              elapsedMs: 1_800_000,
+              providerCostUsd: 10,
+              providerCosts: [{ currency: "CNY", amount: 70 }],
+            },
+            ...prompt,
+          },
+        },
+      })),
+    });
+    const kept = await temporaryRoot();
+    await new FileSessions(kept).saveWorkspace(
+      waiting({}) as WorkspaceSnapshot,
+    );
+    await expect(new FileSessions(kept).loadWorkspace()).resolves.toMatchObject(
+      {
+        tasks: [
+          {
+            phase: {
+              prompt: {
+                estimatedCosts: [{ currency: "CNY", amount: 75 }],
+                allowance: {
+                  providerCosts: [{ currency: "CNY", amount: 70 }],
+                },
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    for (const wrong of [
+      { estimatedCosts: [{ currency: "CNY", amount: -1 }] },
+      { estimatedCosts: [{ amount: 75 }] },
+      { estimatedCosts: { currency: "CNY", amount: 75 } },
+      {
+        allowance: {
+          toolRounds: 24,
+          elapsedMs: 1_800_000,
+          providerCostUsd: 10,
+          providerCosts: [{ currency: "yuan", amount: 70 }],
+        },
+      },
     ]) {
       const root = await temporaryRoot();
       await plantHistory(root, waiting(wrong));

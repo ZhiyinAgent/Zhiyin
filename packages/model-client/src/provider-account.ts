@@ -10,17 +10,15 @@ import type {
   ProviderSettings,
   ReasoningCapabilities,
 } from "@zhiyin/contract";
-import {
-  fetchOpenRouterCatalog,
-  fetchOpenRouterModelProviders,
-  requestWindow,
-  type CatalogFetch,
-  type CatalogOptions,
-} from "./catalog.js";
 import type { ModelChoice, ModelChoiceValue } from "./choice.js";
 import type { ProviderCredentials } from "./credentials.js";
-import { classifyFailure, ModelClientError } from "./failures.js";
-import { acceptsImages, reasoningCapabilities } from "./reasoning.js";
+import { ModelClientError } from "./failures.js";
+import {
+  refuseUnavailable,
+  type CatalogFetch,
+  type CatalogOptions,
+  type Provider,
+} from "./provider.js";
 
 export type ProviderAccountOptions = {
   readonly modelInfo?: (model: string) => Promise<unknown>;
@@ -41,24 +39,21 @@ export type ProviderAccountOptions = {
     ): Promise<ModelProviderList>;
   };
   /**
-   * Which OpenRouter upstreams may serve requests. An empty list lets
-   * OpenRouter choose from all of them.
+   * Which upstreams may serve requests, where the provider routes between
+   * several. An empty list lets the provider choose from all of them.
    */
   readonly providers?: readonly string[];
-  /** How a key is checked before it is kept. Replaced wholesale in tests. */
+  /** How a key is checked and lists are read. Replaced wholesale in tests. */
   readonly catalogFetch?: CatalogFetch;
+  /** The platform the account is on, where the provider runs two. */
+  readonly region?: string;
 };
-
-/**
- * The account behind a key. Chosen for this because it is the endpoint that
- * actually refuses a bad key: the catalogue answers one normally, verified
- * against the live provider.
- */
-const keyUrl = "https://openrouter.ai/api/v1/key";
 
 const defaultCatalogFetch: CatalogFetch = (url, init) =>
   fetch(url, {
     headers: init.headers,
+    ...(init.method ? { method: init.method } : {}),
+    ...(init.body === undefined ? {} : { body: init.body }),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -74,11 +69,18 @@ export class ProviderAccount {
   readonly #catalog: NonNullable<ProviderAccountOptions["catalog"]>;
   /** Cleared when the model changes: both answers are about one model. */
   #describedModel: string | undefined;
+  readonly #provider: Provider;
   /** Where requests go, for Settings to say. */
   readonly #endpoint: string;
   readonly #catalogFetch: CatalogFetch | undefined;
+  readonly #region: string | undefined;
 
-  constructor(options: ProviderAccountOptions, endpoint: string) {
+  constructor(
+    options: ProviderAccountOptions,
+    provider: Provider,
+    endpoint: string,
+  ) {
+    this.#provider = provider;
     this.#modelInfo = options.modelInfo;
     this.#apiKey = options.apiKey;
     this.#credentials = options.credentials;
@@ -92,12 +94,10 @@ export class ProviderAccount {
      */
     this.#providers = options.providers ?? [];
     this.#choice = options.choice;
-    this.#catalog = options.catalog ?? {
-      models: fetchOpenRouterCatalog,
-      providers: fetchOpenRouterModelProviders,
-    };
+    this.#catalog = options.catalog ?? provider.catalogue;
     this.#endpoint = endpoint;
     this.#catalogFetch = options.catalogFetch;
+    this.#region = options.region;
   }
 
   /** The key requests are sent with, wherever it is kept. */
@@ -127,6 +127,8 @@ export class ProviderAccount {
     return {
       apiKey: async () =>
         this.#credentials ? this.#credentials.get() : this.#apiKey?.(),
+      ...(this.#region ? { region: this.#region } : {}),
+      ...(this.#catalogFetch ? { fetcher: this.#catalogFetch } : {}),
     };
   }
 
@@ -142,6 +144,7 @@ export class ProviderAccount {
     model: string,
     providers: readonly string[],
   ): Promise<void> {
+    refuseUnavailable(this.#provider);
     if (!this.#choice) {
       throw new ModelClientError(
         "modelUnavailable",
@@ -162,14 +165,14 @@ export class ProviderAccount {
    */
   async #acceptsImages(): Promise<boolean> {
     const description = await this.#describe();
-    return description.ok && acceptsImages(description.value);
+    return description.ok && this.#provider.acceptsImages(description.value);
   }
 
   async reasoning(): Promise<ReasoningCapabilities | undefined> {
     if (!this.#modelInfo || !(await this.current())) return undefined;
     const description = await this.#describe();
     return description.ok
-      ? reasoningCapabilities(description.value)
+      ? this.#provider.reasoning(description.value)
       : {
           status: "unavailable" as const,
           /*
@@ -205,7 +208,7 @@ export class ProviderAccount {
   /** What the catalogue lists of the size of a request to the chosen model. */
   async #window(chosen: ModelChoiceValue) {
     const described = await this.#describe();
-    return requestWindow(
+    return this.#provider.window(
       await this.#catalog
         .providers(chosen.model, this.#catalogOptions())
         .catch(() => undefined),
@@ -227,6 +230,7 @@ export class ProviderAccount {
       ...(reasoning ? { reasoning } : {}),
       acceptsImages: await this.#acceptsImages(),
       ...window,
+      ...(this.#provider.reasoningSentBack ? { reasoningSentBack: true } : {}),
       ...(chosen ? { model: chosen.model } : {}),
       providers: [...(chosen?.providers ?? [])],
       endpoint: this.#endpoint,
@@ -235,13 +239,11 @@ export class ProviderAccount {
   }
 
   /**
-   * Checks a key with the provider before keeping it.
-   *
-   * The catalogue cannot answer this question - it serves a rejected key the
-   * same as any other - so the account endpoint is asked instead. A key that is
-   * refused is never stored: storing it would turn one mistake at setup into a
-   * failure somewhere else later, saying something else, with nothing pointing
-   * back at the key.
+   * Checks a key with the provider before keeping it, in whatever way the
+   * provider actually refuses a bad key. A key that is refused is never
+   * stored: storing it would turn one mistake at setup into a failure
+   * somewhere else later, saying something else, with nothing pointing back at
+   * the key.
    *
    * A check that could not be made is not a refusal. Somebody offline has not
    * typed the wrong key and must not be told they have, so the key is kept and
@@ -266,31 +268,13 @@ export class ProviderAccount {
   }> {
     const fetcher = this.#catalogFetch ?? defaultCatalogFetch;
     try {
-      const response = await fetcher(keyUrl, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (response.ok) return { accepted: true };
-      /*
-       * The account endpoint refuses nothing but the key, so any refusal here
-       * is about the key - including a 403 that on a model request would be a
-       * moderation block.
-       */
-      return {
-        accepted: false,
-        error:
-          response.status === 401 || response.status === 403
-            ? new ModelClientError(
-                "unauthorized",
-                "OpenRouter rejected the API key.",
-              )
-            : classifyFailure({ status: response.status }),
-      };
+      return await this.#provider.checkKey(apiKey, fetcher, this.#region);
     } catch (error) {
       return {
         accepted: true,
         error: new ModelClientError(
           "networkFailure",
-          "The key was saved but could not be checked with OpenRouter. If it turns out to be wrong, requests will say so.",
+          `The key was saved but could not be checked with ${this.#provider.name}. If it turns out to be wrong, requests will say so.`,
           { cause: error },
         ),
       };

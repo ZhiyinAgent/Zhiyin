@@ -12,6 +12,8 @@ describe("what an API key is", () => {
     const onOpenExternalUrl = vi.fn(async () => undefined);
     render(
       <ApiKeyDialog
+        providerName="OpenRouter"
+        keysPage={OPENROUTER_KEYS_URL}
         credential={{ status: "missing", source: "none" }}
         onSaveApiKey={vi.fn()}
         onClearApiKey={vi.fn()}
@@ -40,6 +42,8 @@ describe("what an API key is", () => {
   it("says beside a saved key where it is kept, and how to stop it working anywhere", () => {
     render(
       <ApiKeyDialog
+        providerName="OpenRouter"
+        keysPage={OPENROUTER_KEYS_URL}
         credential={{ status: "configured", source: "credentialStore" }}
         onSaveApiKey={vi.fn()}
         onClearApiKey={vi.fn()}
@@ -58,5 +62,37 @@ describe("what an API key is", () => {
         "Remove only makes Zhiyin forget it. To stop it working anywhere, delete it on OpenRouter's keys page.",
       ),
     ).toBeVisible();
+  });
+
+  it("names a lab's platform, and sends the person to that lab's own page", () => {
+    const onOpenExternalUrl = vi.fn(async () => undefined);
+    render(
+      <ApiKeyDialog
+        providerName="DeepSeek"
+        platformName="Mainland China"
+        keysPage="https://platform.deepseek.com/api_keys"
+        credential={{ status: "missing", source: "none" }}
+        onSaveApiKey={vi.fn()}
+        onClearApiKey={vi.fn()}
+        onClose={vi.fn()}
+        onOpenExternalUrl={onOpenExternalUrl}
+      />,
+    );
+
+    expect(
+      screen.getByRole("dialog", { name: "DeepSeek API key · Mainland China" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Zhiyin keeps the key in Windows Credential Manager and sends it only to DeepSeek.",
+      ),
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get a key on DeepSeek" }),
+    );
+
+    expect(onOpenExternalUrl).toHaveBeenCalledWith(
+      "https://platform.deepseek.com/api_keys",
+    );
   });
 });

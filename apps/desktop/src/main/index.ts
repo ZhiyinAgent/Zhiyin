@@ -272,7 +272,7 @@ void app.whenReady().then(async () => {
         : screen.getDisplayMatching(window.getBounds()).scaleFactor,
     ...(process.env["ZHIYIN_TEST_CREDENTIALS_UNAVAILABLE"] === "1"
       ? {
-          credentialEntry: {
+          credentialEntry: () => ({
             getPassword: async () => {
               throw new Error("Credential storage unavailable in this test.");
             },
@@ -282,7 +282,7 @@ void app.whenReady().then(async () => {
             deletePassword: async () => {
               throw new Error("Credential storage unavailable in this test.");
             },
-          },
+          }),
         }
       : {}),
   });

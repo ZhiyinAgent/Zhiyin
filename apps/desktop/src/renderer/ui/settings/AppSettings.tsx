@@ -4,7 +4,7 @@ import type {
   SpellingChoice,
   SpellingState,
 } from "@zhiyin/contract";
-import { CloseButton } from "../shared/index.js";
+import { ChoiceSwitch, CloseButton } from "../shared/index.js";
 import { SpellingLanguages } from "./SpellingLanguages.js";
 import styles from "./settings.module.css";
 
@@ -48,7 +48,6 @@ export function AppSettings({
   onClose: () => void;
 }) {
   const [failure, setFailure] = useState("");
-  const choiceName = useId();
 
   async function change(save: () => Promise<void>) {
     setFailure("");
@@ -84,27 +83,13 @@ export function AppSettings({
               title="Appearance"
               description="Match Windows follows the light or dark mode set in Windows, and changes when it does."
               control={(label, description) => (
-                <div
-                  role="radiogroup"
+                <ChoiceSwitch
                   aria-labelledby={label}
                   aria-describedby={description}
-                  className={styles["setting-choices"]}
-                >
-                  {appearances.map((choice) => (
-                    <label key={choice.value}>
-                      <input
-                        type="radio"
-                        name={choiceName}
-                        value={choice.value}
-                        checked={appearance === choice.value}
-                        onChange={() =>
-                          void change(() => onAppearance(choice.value))
-                        }
-                      />
-                      <span>{choice.label}</span>
-                    </label>
-                  ))}
-                </div>
+                  choices={appearances}
+                  value={appearance}
+                  onChange={(value) => void change(() => onAppearance(value))}
+                />
               )}
             />
           </SettingsGroup>

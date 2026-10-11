@@ -181,6 +181,37 @@ describe("privileged commands", () => {
     }
   });
 
+  it("names a provider, and its region where it has two, for any model or key command", () => {
+    const mainland = { provider: "deepseek", region: "mainland" };
+    const openRouter = { provider: "openrouter" };
+    for (const [channel, before] of [
+      [CHANNEL.saveProviderApiKey, ["sk-key"]],
+      [CHANNEL.clearProviderApiKey, []],
+      [CHANNEL.listModels, []],
+      [CHANNEL.listModelProviders, ["deepseek-chat"]],
+      [CHANNEL.selectModel, ["deepseek-chat", []]],
+    ] as const) {
+      for (const target of [mainland, openRouter])
+        expect(() =>
+          validateCommand(channel, [...before, target]),
+        ).not.toThrow();
+      for (const wrong of [
+        "deepseek",
+        {},
+        { provider: "" },
+        { provider: "x".repeat(65) },
+        { provider: "deepseek", region: "" },
+        { provider: "deepseek", region: 1 },
+        { provider: "deepseek", host: "elsewhere.test" },
+      ])
+        expect(() => validateCommand(channel, [...before, wrong])).toThrow();
+    }
+    expect(() => validateCommand(CHANNEL.listProviders, [])).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.listProviders, [openRouter]),
+    ).toThrow();
+  });
+
   it("accepts one model name when asking who serves it", () => {
     expect(() =>
       validateCommand(CHANNEL.listModelProviders, ["z-ai/glm-5.3-flash"]),

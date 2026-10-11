@@ -1,6 +1,7 @@
 # 0019. Data stays on this computer: keys in Credential Manager, the rest bounded in one folder and described plainly
 
-Status: accepted
+Status: partly superseded by 0025, under which only an automated run supplies a
+key, under Zhiyin's own names. The rest holds.
 
 ## Decision
 

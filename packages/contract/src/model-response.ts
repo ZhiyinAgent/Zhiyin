@@ -1,5 +1,7 @@
 /** Evidence of how one model request ended, and of the attempts before it. */
 
+import type { EstimatedCost } from "./models.js";
+
 /** Provider-neutral evidence about how one model request ended. */
 export type ModelResponseRecord = {
   readonly requestId?: string;
@@ -27,7 +29,10 @@ export type ModelResponseUsage = {
   readonly reasoningTokens?: number;
   readonly cacheReadTokens?: number;
   readonly cacheWriteTokens?: number;
+  /** What the provider reported it cost, in US dollars. */
   readonly costUsd?: number;
+  /** Where it reported none: what it cost by the shipped price list. */
+  readonly estimatedCost?: EstimatedCost;
 };
 
 /** One failed attempt at a model request, and what was done about it. */

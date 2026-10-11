@@ -1,4 +1,9 @@
-import type { WorkBudgetRequest, WorkLimit } from "@zhiyin/contract";
+import type {
+  EstimatedCost,
+  MoneyAmount,
+  WorkBudgetRequest,
+  WorkLimit,
+} from "@zhiyin/contract";
 
 /**
  * There is no limit on tokens. A request is counted whole, so every round of a
@@ -8,13 +13,24 @@ import type { WorkBudgetRequest, WorkLimit } from "@zhiyin/contract";
  */
 export type WorkLimits = {
   readonly maximumElapsedMs: number;
+  /** Reported and estimated costs in dollars count toward it. */
   readonly maximumProviderCostUsd: number;
+  /**
+   * Limits for costs in other currencies, by ISO 4217 code. A cost is never
+   * converted to meet another currency's limit, and a currency without a
+   * limit never stops the work.
+   */
+  readonly maximumProviderCosts?: Readonly<Record<string, number>>;
   readonly maximumToolRounds?: number;
 };
+
+/** Close to the dollar limit, for work billed by a mainland China platform. */
+const otherCurrencyLimits = { CNY: 70 };
 
 export const defaultWorkLimits: WorkLimits = {
   maximumElapsedMs: 30 * 60 * 1_000,
   maximumProviderCostUsd: 10,
+  maximumProviderCosts: otherCurrencyLimits,
   // A runaway guard, not a work budget: it leaves room for ordinary analysis
   // (look around, read, run, write, chart) to finish.
   maximumToolRounds: 24,
@@ -29,6 +45,7 @@ export const defaultWorkLimits: WorkLimits = {
 export const defaultSpecialistWorkLimits: WorkLimits = {
   maximumElapsedMs: 30 * 60 * 1_000,
   maximumProviderCostUsd: 10,
+  maximumProviderCosts: otherCurrencyLimits,
   maximumToolRounds: 40,
 };
 
@@ -37,14 +54,28 @@ export type WorkLimitKind = WorkLimit;
 /** Where a stretch of work stands, as the work-budget question shows it. */
 export type WorkCheckpoint = Pick<
   WorkBudgetRequest,
-  "completedRounds" | "reached" | "elapsedMs" | "costUsd" | "allowance"
+  | "completedRounds"
+  | "reached"
+  | "elapsedMs"
+  | "costUsd"
+  | "estimatedCosts"
+  | "allowance"
 >;
 
 type Usage = {
   readonly requestId: string;
   readonly totalTokens: number;
   readonly costUsd?: number;
+  readonly estimatedCost?: EstimatedCost;
 };
+
+const currencySymbols: Readonly<Record<string, string>> = {
+  USD: "$",
+  CNY: "¥",
+};
+
+const money = ({ amount, currency }: MoneyAmount) =>
+  `${currencySymbols[currency] ?? `${currency} `}${amount.toFixed(4)}`;
 
 /**
  * What one stretch of work has spent, renewed when the person chooses
@@ -56,8 +87,12 @@ export class WorkLedger {
   #startedAt: number;
   #measuredTokens = 0;
   #estimatedTokens = 0;
+  /** What providers reported, in dollars. */
   #providerCostUsd = 0;
+  /** What price lists estimate where no cost was reported, by currency. */
+  #estimatedCosts = new Map<string, number>();
   #pricedRequests = 0;
+  #reportedRequests = 0;
   #unpricedRequests = 0;
   #completedToolRounds = 0;
   /** The rounds this stretch may take; each renewal doubles it. ADR 0013. */
@@ -74,11 +109,19 @@ export class WorkLedger {
       return;
     if (usage.requestId !== "unknown") this.#requests.add(usage.requestId);
     this.#measuredTokens += Math.max(0, usage.totalTokens);
-    if (usage.costUsd === undefined) this.#unpricedRequests += 1;
-    else {
+    const estimate = usage.estimatedCost;
+    if (usage.costUsd !== undefined) {
       this.#pricedRequests += 1;
+      this.#reportedRequests += 1;
       this.#providerCostUsd += Math.max(0, usage.costUsd);
-    }
+    } else if (estimate) {
+      this.#pricedRequests += 1;
+      this.#estimatedCosts.set(
+        estimate.currency,
+        (this.#estimatedCosts.get(estimate.currency) ?? 0) +
+          Math.max(0, estimate.amount),
+      );
+    } else this.#unpricedRequests += 1;
   }
 
   estimate(tokens: number): void {
@@ -104,9 +147,30 @@ export class WorkLedger {
       reached.push("toolRounds");
     if (now.getTime() - this.#startedAt >= this.#limits.maximumElapsedMs)
       reached.push("elapsed");
-    if (this.#providerCostUsd >= this.#limits.maximumProviderCostUsd)
-      reached.push("providerCost");
+    if (this.#costLimitReached()) reached.push("providerCost");
     return reached;
+  }
+
+  /** Each currency against its own limit; dollars reported and estimated. */
+  #costLimitReached(): boolean {
+    const dollars =
+      this.#providerCostUsd + (this.#estimatedCosts.get("USD") ?? 0);
+    if (dollars >= this.#limits.maximumProviderCostUsd) return true;
+    return Object.entries(this.#limits.maximumProviderCosts ?? {}).some(
+      ([currency, limit]) => (this.#estimatedCosts.get(currency) ?? 0) >= limit,
+    );
+  }
+
+  #estimates(): MoneyAmount[] {
+    return [...this.#estimatedCosts]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([currency, amount]) => ({ currency, amount }));
+  }
+
+  #otherLimits(): MoneyAmount[] {
+    return Object.entries(this.#limits.maximumProviderCosts ?? {}).map(
+      ([currency, amount]) => ({ currency, amount }),
+    );
   }
 
   checkpoint(now: Date): WorkCheckpoint {
@@ -114,11 +178,17 @@ export class WorkLedger {
       completedRounds: this.#completedToolRounds,
       reached: this.reached(now),
       elapsedMs: Math.max(0, now.getTime() - this.#startedAt),
-      ...(this.#pricedRequests > 0 ? { costUsd: this.#providerCostUsd } : {}),
+      ...(this.#reportedRequests > 0 ? { costUsd: this.#providerCostUsd } : {}),
+      ...(this.#estimatedCosts.size > 0
+        ? { estimatedCosts: this.#estimates() }
+        : {}),
       allowance: {
         toolRounds: this.maximumToolRounds() * 2,
         elapsedMs: this.#limits.maximumElapsedMs,
         providerCostUsd: this.#limits.maximumProviderCostUsd,
+        ...(this.#otherLimits().length > 0
+          ? { providerCosts: this.#otherLimits() }
+          : {}),
       },
     };
   }
@@ -132,10 +202,18 @@ export class WorkLedger {
         : this.#measuredTokens === 0
           ? `${this.#estimatedTokens.toLocaleString("en")} estimated tokens`
           : `${this.#measuredTokens.toLocaleString("en")} measured and ${this.#estimatedTokens.toLocaleString("en")} estimated tokens`;
+    const estimated =
+      this.#estimatedCosts.size > 0
+        ? ` Where none was reported, estimated from price lists: ${this.#estimates().map(money).join(" and ")}.`
+        : "";
     const cost =
       this.#pricedRequests > 0
-        ? `Provider-reported cost is $${this.#providerCostUsd.toFixed(4)}; ${this.#unpricedRequests} request${this.#unpricedRequests === 1 ? " had" : "s had"} no reported cost.`
+        ? `Provider-reported cost is ${this.#providerCostUsd.toFixed(4)}.${estimated} ${this.#unpricedRequests} request${this.#unpricedRequests === 1 ? " had" : "s had"} no known cost.`
         : "Provider cost was unavailable for these requests; the tool-round and elapsed-time limits still apply.";
+    const limits = [
+      `${this.#limits.maximumProviderCostUsd.toFixed(4)}`,
+      ...this.#otherLimits().map(money),
+    ].join(", or ");
     const labels = kinds.map((kind) =>
       kind === "providerCost"
         ? "provider-cost"
@@ -143,7 +221,7 @@ export class WorkLedger {
           ? "tool-round"
           : kind,
     );
-    return `The task reached its ${labels.join(" and ")} limit after ${this.#completedToolRounds} tool rounds. So far: ${tokens}; ${elapsedSeconds} seconds elapsed (limit ${Math.floor(this.#limits.maximumElapsedMs / 1_000)}); ${cost} The provider-cost limit is $${this.#limits.maximumProviderCostUsd.toFixed(4)}. Continue with renewed reached limits, or pause after a progress report.`;
+    return `The task reached its ${labels.join(" and ")} limit after ${this.#completedToolRounds} tool rounds. So far: ${tokens}; ${elapsedSeconds} seconds elapsed (limit ${Math.floor(this.#limits.maximumElapsedMs / 1_000)}); ${cost} The provider-cost limit is ${limits}. Continue with renewed reached limits, or pause after a progress report.`;
   }
 
   /**
@@ -158,7 +236,9 @@ export class WorkLedger {
     this.#measuredTokens = 0;
     this.#estimatedTokens = 0;
     this.#providerCostUsd = 0;
+    this.#estimatedCosts = new Map();
     this.#pricedRequests = 0;
+    this.#reportedRequests = 0;
     this.#unpricedRequests = 0;
     this.#completedToolRounds = 0;
   }

@@ -118,6 +118,33 @@ export const userInputEntries: ComponentCatalogEntry[] = [
     ),
   },
   {
+    id: "work-budget-yuan",
+    title: "Work checkpoint at the yuan limit",
+    description:
+      "A mainland platform reports no cost; the estimate from its price list reached the yuan limit.",
+    render: () => (
+      <UserInputPrompt
+        prompt={{
+          id: "catalog-work-budget-yuan",
+          kind: "workBudget",
+          title: "Keep working on this?",
+          completedRounds: 19,
+          reached: ["providerCost"],
+          elapsedMs: 22 * 60_000,
+          estimatedCosts: [{ currency: "CNY", amount: 71.35 }],
+          allowance: {
+            toolRounds: 48,
+            elapsedMs: 30 * 60_000,
+            providerCostUsd: 10,
+            providerCosts: [{ currency: "CNY", amount: 70 }],
+          },
+        }}
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />
+    ),
+  },
+  {
     id: "work-budget-looping",
     title: "Work checkpoint after repeated calls",
     description:

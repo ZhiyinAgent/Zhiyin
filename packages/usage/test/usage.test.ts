@@ -277,6 +277,116 @@ describe("FileUsageTelemetry", () => {
     });
   });
 
+  it("adds up estimated costs apart from reported ones, each in its own currency, and counts them as priced", async () => {
+    const root = await temporaryRoot();
+    const usage = new FileUsageTelemetry(root);
+    const at = "2026-09-05T08:00:00.000Z";
+    const estimate = (amount: number, currency: string) => ({
+      estimatedCost: { amount, currency, priceList: "2026-09-01" },
+    });
+    await usage.record({
+      ...request("reported", at),
+      model: "openrouter/model",
+      conversationId: "on-openrouter",
+      costUsd: 0.2,
+    });
+    await usage.record({
+      ...request("mainland-1", at),
+      model: "deepseek-v4-pro",
+      conversationId: "on-mainland",
+      ...estimate(1.5, "CNY"),
+    });
+    await usage.record({
+      ...request("mainland-2", at),
+      model: "deepseek-v4-pro",
+      conversationId: "on-mainland",
+      ...estimate(0.5, "CNY"),
+    });
+    await usage.record({
+      ...request("international", at),
+      model: "gpt-6.1-sol",
+      conversationId: "on-openai",
+      ...estimate(0.1, "USD"),
+    });
+    await usage.record({ ...request("unpriced", at), model: "unlisted" });
+
+    const state = await new FileUsageTelemetry(root).state(
+      new Date("2026-09-05T12:00:00.000Z"),
+    );
+
+    if (state.status !== "ready") throw new Error("Expected usage data");
+    const week = state.ranges["7"];
+    expect(week).toMatchObject({
+      requests: 5,
+      pricedRequests: 4,
+      costUsd: 0.2,
+      estimatedCosts: [
+        { currency: "CNY", amount: 2 },
+        { currency: "USD", amount: 0.1 },
+      ],
+    });
+    expect(week.activity.at(-1)).toMatchObject({
+      costUsd: 0.2,
+      estimatedCosts: [
+        { currency: "CNY", amount: 2 },
+        { currency: "USD", amount: 0.1 },
+      ],
+    });
+    expect(
+      week.models.find((model) => model.model === "deepseek-v4-pro"),
+    ).toMatchObject({
+      costUsd: 0,
+      estimatedCosts: [{ currency: "CNY", amount: 2 }],
+    });
+    // Dollars, reported or estimated, order the costliest first; a cost in
+    // another currency is never converted to compare with them.
+    expect(week.conversations).toEqual([
+      {
+        conversationId: "on-openrouter",
+        requests: 1,
+        pricedRequests: 1,
+        costUsd: 0.2,
+      },
+      {
+        conversationId: "on-openai",
+        requests: 1,
+        pricedRequests: 1,
+        costUsd: 0,
+        estimatedCosts: [{ currency: "USD", amount: 0.1 }],
+      },
+      {
+        conversationId: "on-mainland",
+        requests: 2,
+        pricedRequests: 2,
+        costUsd: 0,
+        estimatedCosts: [{ currency: "CNY", amount: 2 }],
+      },
+      { requests: 1, pricedRequests: 0, costUsd: 0 },
+    ]);
+  });
+
+  it("skips a line whose estimated cost is malformed", async () => {
+    const root = await temporaryRoot();
+    const usage = new FileUsageTelemetry(root);
+    await usage.record({
+      ...request("kept", "2026-09-05T08:00:00.000Z"),
+    });
+    await appendFile(
+      join(root, "usage", "2026-09.jsonl"),
+      `${JSON.stringify({
+        ...request("damaged", "2026-09-05T09:00:00.000Z"),
+        estimatedCost: { amount: "lots", currency: "CNY" },
+      })}\n`,
+      "utf8",
+    );
+
+    const state = await new FileUsageTelemetry(root).state(
+      new Date("2026-09-05T12:00:00.000Z"),
+    );
+
+    expect(state).toMatchObject({ ranges: { "7": { requests: 1 } } });
+  });
+
   it("returns a clear empty state before the first request", async () => {
     const usage = new FileUsageTelemetry(await temporaryRoot());
 

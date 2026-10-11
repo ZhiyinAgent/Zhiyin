@@ -46,6 +46,7 @@ export type WorkspaceCommands = Pick<
   | "drawDocumentPage"
   | "openDocument"
   | "showDocumentInFolder"
+  | "listProviders"
   | "saveProviderApiKey"
   | "clearProviderApiKey"
   | "listModels"

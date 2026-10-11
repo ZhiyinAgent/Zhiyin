@@ -82,7 +82,31 @@ function validResponseUsage(value: unknown): boolean {
       value.cacheReadTokens,
       value.cacheWriteTokens,
       value.costUsd,
-    ].every((item) => item === undefined || count(item))
+    ].every((item) => item === undefined || count(item)) &&
+    (value.estimatedCost === undefined ||
+      (validAmountIn(value.estimatedCost) &&
+        isRecord(value.estimatedCost) &&
+        typeof value.estimatedCost.priceList === "string" &&
+        value.estimatedCost.priceList !== ""))
+  );
+}
+
+/** Absent, or amounts each in their own currency. */
+function optionalAmounts(value: unknown): boolean {
+  return (
+    value === undefined || (Array.isArray(value) && value.every(validAmountIn))
+  );
+}
+
+/** An amount in one currency, named by its ISO 4217 code. */
+function validAmountIn(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.amount === "number" &&
+    Number.isFinite(value.amount) &&
+    value.amount >= 0 &&
+    typeof value.currency === "string" &&
+    /^[A-Z]{3}$/.test(value.currency)
   );
 }
 
@@ -406,10 +430,12 @@ function validPendingUserInputRequest(value: unknown): boolean {
       value.reached.every((limit) => workLimits.has(limit)) &&
       amount(value.elapsedMs) &&
       (value.costUsd === undefined || amount(value.costUsd)) &&
+      optionalAmounts(value.estimatedCosts) &&
       isRecord(value.allowance) &&
       count(value.allowance.toolRounds) &&
       amount(value.allowance.elapsedMs) &&
       amount(value.allowance.providerCostUsd) &&
+      optionalAmounts(value.allowance.providerCosts) &&
       optionalText(value.reason))
   );
 }

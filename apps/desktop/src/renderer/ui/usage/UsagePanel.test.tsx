@@ -244,6 +244,95 @@ describe("UsagePanel", () => {
     );
   });
 
+  describe("with costs estimated from price lists", () => {
+    const ready = usage.status === "ready" ? usage.ranges["7"] : undefined;
+    const estimated = (
+      amount: number,
+      currency: string,
+    ): { currency: string; amount: number } => ({ currency, amount });
+    const week = {
+      ...ready!,
+      costUsd: 0.2,
+      estimatedCosts: [estimated(2, "CNY"), estimated(0.1, "USD")],
+      activity: ready!.activity.map((point, index) =>
+        index === 0
+          ? {
+              ...point,
+              costUsd: 0.2,
+              estimatedCosts: [estimated(2, "CNY"), estimated(0.1, "USD")],
+            }
+          : { ...point, costUsd: 0 },
+      ),
+      conversations: [
+        {
+          conversationId: "on-openrouter",
+          requests: 1,
+          pricedRequests: 1,
+          costUsd: 0.2,
+        },
+        {
+          conversationId: "on-mainland",
+          requests: 2,
+          pricedRequests: 2,
+          costUsd: 0,
+          estimatedCosts: [estimated(2, "CNY")],
+        },
+      ],
+    };
+    const show = () =>
+      render(
+        <UsagePanel
+          availability={{
+            status: "ready",
+            costSource: "provider-reported",
+            ranges: { "7": week, "30": ready! },
+          }}
+          onClose={() => undefined}
+        />,
+      );
+
+    it("adds estimated dollars to reported ones, keeps yuan apart, and says which are estimated", () => {
+      show();
+
+      const metrics = screen.getByText("Provider cost").closest("article")!;
+      expect(metrics).toHaveTextContent(/\$0\.30\s*estimated/);
+      expect(metrics).toHaveTextContent(/¥2\.00\s*estimated/);
+      expect(metrics).toHaveTextContent(
+        "Reported or estimated for every request",
+      );
+    });
+
+    it("marks a conversation's estimated cost as estimated, in its own currency", () => {
+      show();
+
+      const list = screen.getByRole("list", { name: "Cost by conversation" });
+      expect(
+        within(list)
+          .getAllByRole("listitem")
+          .map(
+            (row) => row.textContent?.match(/[$¥][\d.]+( estimated)?$/)?.[0],
+          ),
+      ).toEqual(["$0.20", "¥2.00 estimated"]);
+    });
+
+    it("charts one currency at a time, never converting one into another", () => {
+      show();
+
+      const costs = screen.getByRole("list", { name: "Cost by day" });
+      expect(within(costs).getAllByRole("listitem")[0]).toHaveAccessibleName(
+        "Tue 1 Sep: $0.30",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Yuan" }));
+
+      expect(
+        within(screen.getByRole("list", { name: "Cost by day" })).getAllByRole(
+          "listitem",
+        )[0],
+      ).toHaveAccessibleName("Tue 1 Sep: ¥2.00");
+    });
+  });
+
   it("puts each total in the figures above the charts, not again in the charts", () => {
     render(<UsagePanel availability={usage} onClose={() => undefined} />);
 

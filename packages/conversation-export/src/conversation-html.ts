@@ -45,6 +45,34 @@ ${timeline(shown)}
 `;
 }
 
+const currencySymbols: Readonly<Record<string, string>> = {
+  USD: "$",
+  CNY: "¥",
+};
+
+/**
+ * What price lists estimate for the requests whose provider reported no
+ * cost: each currency apart, never converted, with the lists' dates.
+ */
+function estimatedCosts(task: WorkspaceTask): string[] {
+  const byCurrency = new Map<string, { amount: number; lists: Set<string> }>();
+  for (const response of task.modelResponses) {
+    const cost = response.usage?.estimatedCost;
+    if (!cost) continue;
+    const spent = byCurrency.get(cost.currency) ?? {
+      amount: 0,
+      lists: new Set<string>(),
+    };
+    spent.amount += cost.amount;
+    spent.lists.add(cost.priceList);
+    byCurrency.set(cost.currency, spent);
+  }
+  return [...byCurrency].map(([currency, { amount, lists }]) => {
+    const dates = [...lists].sort();
+    return `${currencySymbols[currency] ?? `${currency} `}${amount.toFixed(4)}, from the price list${dates.length > 1 ? "s" : ""} of ${dates.join(" and ")}`;
+  });
+}
+
 function summary(task: WorkspaceTask): string {
   const files = new Set(
     task.actions
@@ -54,6 +82,7 @@ function summary(task: WorkspaceTask): string {
   const costs = task.modelResponses.flatMap((response) =>
     response.usage?.costUsd === undefined ? [] : [response.usage.costUsd],
   );
+  const estimates = estimatedCosts(task);
   const models = [
     ...new Set(task.modelResponses.flatMap((response) => response.model ?? [])),
   ];
@@ -68,6 +97,9 @@ function summary(task: WorkspaceTask): string {
             `$${costs.reduce((total, cost) => total + cost, 0).toFixed(4)}`,
           ] as [string, string],
         ]
+      : []),
+    ...(estimates.length
+      ? [["Estimated cost", estimates.join("; ")] as [string, string]]
       : []),
     ...(models.length
       ? [["Model", models.join(", ")] as [string, string]]

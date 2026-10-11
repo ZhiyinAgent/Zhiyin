@@ -130,57 +130,9 @@
   transform: translateX(16px);
 }
 
-/* Three choices side by side, the chosen one raised: a segmented control. */
-.setting-choices {
-  display: inline-flex;
-  flex: none;
-  padding: 3px;
-  border: 1px solid var(--zy-line);
-  border-radius: var(--zy-radius-sm);
-  background: var(--zy-panel-soft);
-}
-
-.setting-choices label {
-  position: relative;
-  display: block;
-}
-
-.setting-choices input {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.setting-choices span {
-  display: block;
-  padding: 6px 12px;
-  border-radius: calc(var(--zy-radius-sm) - 3px);
-  color: var(--zy-muted);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.setting-choices input:checked + span {
-  background: var(--zy-panel-raised);
-  color: var(--zy-text);
-  box-shadow: 0 1px 3px var(--zy-inset);
-}
-
-.setting-choices input:focus-visible + span {
-  outline: 2px solid var(--zy-accent);
-  outline-offset: 1px;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .setting-switch,
-  .setting-switch span,
-  .setting-choices span {
+  .setting-switch span {
     transition: none;
   }
 }

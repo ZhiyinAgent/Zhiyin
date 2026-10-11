@@ -1,0 +1,142 @@
+/**
+ * Xiaomi MiMo: Xiaomi's own API for its MiMo models, over Chat Completions.
+ * Pay-as-you-go accounts on either platform use one host; the region the
+ * person chooses says whether the account is billed in yuan (mainland China)
+ * or US dollars (overseas), and so which price list estimates its costs.
+ * Thinking is on unless turned off, and earlier turns go back with their
+ * `reasoning_content`, without which Xiaomi refuses a conversation that holds
+ * tool calls (API reference and deep-thinking guide, checked 2026-10-09).
+ */
+
+import type { ModelChoiceValue } from "../../choice.js";
+import { ModelClientError } from "../../failures.js";
+import type { ModelRequest } from "../../model-client.js";
+import { fromModelList, type ListedByApi } from "../../model-list.js";
+import type { CatalogFetch, KeyCheck, Provider } from "../../provider.js";
+import {
+  chatMessages,
+  chatTools,
+} from "../../wires/chat-completions/messages.js";
+import {
+  sendChatCompletions,
+  type ChatCompletionsDialect,
+} from "../../wires/chat-completions/send.js";
+import { classifyFailure } from "./failures.js";
+import { xiaomiModels } from "./models.js";
+
+const host = "https://api.xiaomimimo.com/v1";
+const endpoint = `${host}/chat/completions`;
+
+/** One console serves both platforms' accounts. */
+const pages = {
+  keys: "https://platform.xiaomimimo.com/#/console/api-keys",
+  billing: "https://platform.xiaomimimo.com/#/console/recharge",
+};
+const modelsUrl = `${host}/models`;
+
+/** Xiaomi takes the key in an `api-key` header, or as a bearer token. */
+const keyHeader = (apiKey: string) => ({ "api-key": apiKey });
+
+function reasoningFields(request: ModelRequest) {
+  if (!request.reasoning) return {};
+  return {
+    thinking: { type: request.reasoning.enabled ? "enabled" : "disabled" },
+  };
+}
+
+const dialect: ChatCompletionsDialect = {
+  name: "Xiaomi MiMo",
+  headers: (apiKey) => ({
+    ...keyHeader(apiKey),
+    "Content-Type": "application/json",
+  }),
+  // Usage arrives on the last chunk unasked, as Xiaomi's streamed example shows.
+  body: (chosen: ModelChoiceValue, request: ModelRequest) => ({
+    model: chosen.model,
+    stream: true,
+    ...(request.maximumOutputTokens !== undefined
+      ? { max_completion_tokens: request.maximumOutputTokens }
+      : {}),
+    ...reasoningFields(request),
+    messages: chatMessages(request.messages, [], {
+      reasoning: "reasoning_content",
+      toolName: false,
+    }),
+    ...(request.tools?.length ? { tools: chatTools(request.tools) } : {}),
+  }),
+  classify: classifyFailure,
+};
+
+/**
+ * The model listing proves the key: Xiaomi documents no balance or account
+ * endpoint, and bills by tokens, which a listing generates none of.
+ */
+async function checkKey(
+  apiKey: string,
+  fetcher: CatalogFetch,
+): Promise<KeyCheck> {
+  const response = await fetcher(modelsUrl, { headers: keyHeader(apiKey) });
+  if (response.ok) return { accepted: true };
+  return {
+    accepted: false,
+    error:
+      response.status === 401
+        ? new ModelClientError(
+            "unauthorized",
+            "Xiaomi MiMo rejected the API key.",
+          )
+        : classifyFailure({ status: response.status }),
+  };
+}
+
+/** The models the account can use now, by Xiaomi's own listing. */
+const listedByApi: ListedByApi = async (options) => {
+  const apiKey = await options.apiKey?.();
+  const fetcher: CatalogFetch =
+    options.fetcher ??
+    ((url, init) =>
+      fetch(url, {
+        headers: init.headers,
+        signal: AbortSignal.timeout(15_000),
+      }));
+  const response = await fetcher(modelsUrl, {
+    headers: apiKey ? keyHeader(apiKey) : {},
+  });
+  if (!response.ok)
+    throw new Error("Xiaomi MiMo's model listing is unavailable.");
+  const listing = (await response.json()) as { data?: unknown };
+  if (!Array.isArray(listing.data))
+    throw new Error("Xiaomi MiMo's model listing is unreadable.");
+  return new Set(
+    listing.data.flatMap((model: unknown) =>
+      model &&
+      typeof model === "object" &&
+      "id" in model &&
+      typeof model.id === "string"
+        ? [model.id]
+        : [],
+    ),
+  );
+};
+
+export const xiaomi: Provider = {
+  id: "xiaomi",
+  name: "Xiaomi MiMo",
+  keyName: "a Xiaomi MiMo API key",
+  // The variable Xiaomi's own examples read the key from.
+  keyVariable: "ZHIYIN_XIAOMI_API_KEY",
+  reasoningSentBack: true,
+  regions: [
+    { id: "international", name: "International", endpoint, pages },
+    {
+      id: "mainland",
+      name: "Mainland China",
+      keyVariable: "ZHIYIN_XIAOMI_CN_API_KEY",
+      endpoint,
+      pages,
+    },
+  ],
+  send: (input) => sendChatCompletions(dialect, input),
+  ...fromModelList(xiaomiModels, listedByApi),
+  checkKey,
+};

@@ -19,13 +19,17 @@ export {
   type ProviderFailureDetail,
   type TokenLimitDetail,
 } from "./failures.js";
-export { fetchOpenRouterModelInfo } from "./reasoning.js";
+export type { CatalogFetch, CatalogOptions } from "./provider.js";
 export {
   fetchOpenRouterCatalog,
   fetchOpenRouterModelProviders,
-  type CatalogFetch,
-  type CatalogOptions,
-} from "./catalog.js";
+  OpenRouterModelClient,
+  type OpenRouterModelClientOptions,
+} from "./providers/index.js";
+export {
+  ModelProviders,
+  type ModelProvidersOptions,
+} from "./model-providers.js";
 export {
   FileModelChoice,
   ModelChoiceError,

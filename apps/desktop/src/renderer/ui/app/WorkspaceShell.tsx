@@ -221,6 +221,9 @@ export function WorkspaceShell({
           openNavigationSurface("settings");
           setKeyFirst(opening === "apiKey");
         },
+        ...(state.provider.provider
+          ? { provider: state.provider.provider }
+          : {}),
       },
       () => permissions.open(task.id),
     );

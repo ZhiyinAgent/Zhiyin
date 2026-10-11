@@ -14,6 +14,8 @@ import { ModelClientError } from "./failures.js";
 export async function* withoutStalling(
   body: AsyncIterable<Uint8Array>,
   stallTimeoutMs: number,
+  /** The provider, as the person reads its name. */
+  provider: string,
 ): AsyncIterable<Uint8Array> {
   const iterator = body[Symbol.asyncIterator]();
   try {
@@ -31,7 +33,7 @@ export async function* withoutStalling(
       if (step === "stalled") {
         throw new ModelClientError(
           "networkFailure",
-          "OpenRouter stopped responding partway through. Try again.",
+          `${provider} stopped responding partway through. Try again.`,
         );
       }
       if (step.done) return;

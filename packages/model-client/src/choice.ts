@@ -1,16 +1,24 @@
 /**
- * Which model answers, and which upstreams may serve it, kept across restarts.
+ * Which provider and model answer, and which upstreams may serve it, kept
+ * across restarts.
  *
- * The pair is written as one document because a provider list belongs to the
- * model it was chosen for. Writes are serialized on a single promise chain and
- * land through a temporary file, so two saves in flight cannot interleave into
- * a half-applied choice (ADR 0005).
+ * They are written as one document because a model belongs to the provider it
+ * was chosen on, and an upstream list to the model. Writes are serialized on a
+ * single promise chain and land through a temporary file, so two saves in
+ * flight cannot interleave into a half-applied choice (ADR 0005).
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export type ModelChoiceValue = {
+  /**
+   * Who the model is reached through. Absent in a choice saved before
+   * providers were named, which was made on OpenRouter.
+   */
+  readonly provider?: string;
+  /** The platform the person holds an account on, where the provider has two. */
+  readonly region?: string;
   readonly model: string;
   /** Empty means unrestricted routing, which is the default. */
   readonly providers: readonly string[];
@@ -38,7 +46,13 @@ function stored(value: unknown): ModelChoiceValue | undefined {
   if (typeof item["model"] !== "string" || item["model"] === "")
     return undefined;
   const providers = item["providers"];
+  const named = (field: "provider" | "region") =>
+    typeof item[field] === "string" && item[field] !== ""
+      ? { [field]: item[field] }
+      : {};
   return {
+    ...named("provider"),
+    ...named("region"),
     model: item["model"],
     providers: Array.isArray(providers)
       ? providers.filter((slug): slug is string => typeof slug === "string")
@@ -77,6 +91,8 @@ export class FileModelChoice implements ModelChoice {
     const model = value.model.trim();
     if (!model) throw new ModelChoiceError("Choose a model before saving.");
     const next: ModelChoiceValue = {
+      ...(value.provider ? { provider: value.provider } : {}),
+      ...(value.region ? { region: value.region } : {}),
       model,
       providers: [...new Set(value.providers.filter((slug) => slug.trim()))],
     };

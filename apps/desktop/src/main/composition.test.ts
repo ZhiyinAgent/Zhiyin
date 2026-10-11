@@ -57,9 +57,11 @@ const png = Buffer.from(
 );
 
 const environment = [
-  "OPENROUTER_API_KEY",
+  "ZHIYIN_OPENROUTER_API_KEY",
   "ZHIYIN_MODEL",
   "ZHIYIN_MODEL_ENDPOINT",
+  "ZHIYIN_PROVIDER",
+  "ZHIYIN_REGION",
 ] as const;
 
 async function eventually(check: () => boolean): Promise<void> {
@@ -87,7 +89,7 @@ describe("the application's composition", () => {
     }
     // A key from the environment keeps the test away from the machine's own
     // credential store.
-    process.env["OPENROUTER_API_KEY"] = "test-key";
+    process.env["ZHIYIN_OPENROUTER_API_KEY"] = "test-key";
     answered = [];
     vi.stubGlobal(
       "fetch",

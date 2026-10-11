@@ -2,6 +2,8 @@
  * The questions a turn can stop and put to the person, and their answers.
  */
 
+import type { MoneyAmount } from "./models.js";
+
 export type ClarificationOption = {
   readonly id: string;
   readonly label: string;
@@ -46,6 +48,11 @@ export type WorkAllowance = {
   readonly toolRounds: number;
   readonly elapsedMs: number;
   readonly providerCostUsd: number;
+  /**
+   * The cost limits in other currencies, such as yuan on a mainland China
+   * platform. A cost is never converted to meet the dollar limit.
+   */
+  readonly providerCosts?: readonly MoneyAmount[];
 };
 
 /**
@@ -62,6 +69,11 @@ export type WorkBudgetRequest = {
   readonly elapsedMs: number;
   /** Absent when no request of this stretch reported a cost. */
   readonly costUsd?: number;
+  /**
+   * What the requests whose provider reported no cost came to by the shipped
+   * price lists, in each currency apart. Absent when none was estimated.
+   */
+  readonly estimatedCosts?: readonly MoneyAmount[];
   /**
    * What Continue grants: the same time and cost again, and twice the rounds
    * of the stretch that just ended (ADR 0013).

@@ -1,5 +1,55 @@
 import type { ReasoningCapabilities } from "./reasoning.js";
 
+/** Prices per million tokens, in the currency of the list they belong to. */
+export type TokenPrices = {
+  /** Input the provider did not read from its cache. */
+  readonly input: number;
+  readonly cacheRead?: number;
+  readonly cacheWrite?: number;
+  readonly output: number;
+};
+
+/**
+ * A lab's own price for a model on one of its platforms, from the list shipped
+ * with the app. A token kind with no price is unknown, never free.
+ */
+export type ModelPrice = TokenPrices & {
+  /** ISO 4217: `USD`, or `CNY` on a mainland China platform. */
+  readonly currency: string;
+  /**
+   * Higher prices for a request whose input passes a size. The whole request
+   * pays the highest tier it passes.
+   */
+  readonly tiers?: readonly (TokenPrices & {
+    readonly aboveInputTokens: number;
+  })[];
+  /**
+   * Prices during the lab's busy hours: on these days (0 is Sunday), from the
+   * first hour up to the second, both in UTC. They replace any tier.
+   */
+  readonly peak?: TokenPrices & {
+    readonly weekdaysUtc: readonly number[];
+    readonly hoursUtc: readonly (readonly [number, number])[];
+  };
+  /** The day the price list was checked against the lab's own page. */
+  readonly checked: string;
+};
+
+/** An amount of money in one currency, named by its ISO 4217 code. */
+export type MoneyAmount = {
+  readonly amount: number;
+  readonly currency: string;
+};
+
+/**
+ * What a request is estimated to have cost, from the shipped price list,
+ * where the provider reported no cost. Never converted to another currency.
+ */
+export type EstimatedCost = MoneyAmount & {
+  /** The day the price list it came from was checked. */
+  readonly priceList: string;
+};
+
 /**
  * One model the provider offers. Only models that can call tools are ever
  * listed: an agent that cannot call a tool cannot run this app, so a model
@@ -9,8 +59,11 @@ export type ModelCatalogEntry = {
   readonly id: string;
   readonly name: string;
   readonly contextWindow: number;
-  readonly inputUsdPerMillion: number;
-  readonly outputUsdPerMillion: number;
+  /** OpenRouter's listed price, in US dollars per million tokens. */
+  readonly inputUsdPerMillion?: number;
+  readonly outputUsdPerMillion?: number;
+  /** A lab's own price on the account's platform, where its list states one. */
+  readonly price?: ModelPrice;
   readonly acceptsImages: boolean;
   readonly reasoning: boolean;
 };
@@ -69,7 +122,66 @@ export type ApiKeySaveOutcome =
   | { readonly status: "refused"; readonly reason: string }
   | { readonly status: "unverified"; readonly reason: string };
 
+/**
+ * Where requests go: OpenRouter or a lab's own API, and the region of the
+ * lab's platform where it runs an international and a mainland China one.
+ */
+export type ProviderTarget = {
+  readonly provider: string;
+  readonly region?: string;
+};
+
+export type ProviderRegion = { readonly id: string; readonly name: string };
+
+/** Where a person manages their account on a provider's platform. */
+export type ProviderPages = {
+  /** Where its keys are made and deleted. */
+  readonly keys: string;
+  /** Where its balance is topped up or its billing kept. */
+  readonly billing: string;
+};
+
+export type ProviderCredential =
+  | {
+      readonly status: "configured";
+      readonly source: "environment" | "credentialStore";
+    }
+  | { readonly status: "missing"; readonly source: "none" }
+  | {
+      readonly status: "unavailable";
+      readonly source: "credentialStore";
+      readonly reason: string;
+    };
+
+/** One provider the person may reach models through, and their keys for it. */
+export type ProviderSummary = {
+  readonly id: string;
+  readonly name: string;
+  /** Why it cannot be used yet. Absent once its path works. */
+  readonly unavailable?: string;
+  /** It routes each model to upstreams the person may choose between. */
+  readonly upstreams?: true;
+  /**
+   * One per platform a person holds an account on, each with its own key:
+   * a region each where the lab runs two, otherwise one without a region.
+   */
+  readonly accounts: readonly {
+    readonly region?: ProviderRegion;
+    readonly credential: ProviderCredential;
+    readonly pages: ProviderPages;
+  }[];
+};
+
 export type ProviderSettings = {
+  /** Who requests go to, and the region of its platform where it has two. */
+  readonly provider?: {
+    readonly id: string;
+    readonly name: string;
+    readonly region?: ProviderRegion;
+    readonly pages: ProviderPages;
+    /** It routes each model to upstreams the person may choose between. */
+    readonly upstreams?: true;
+  };
   readonly reasoning?: ReasoningCapabilities;
   /**
    * Whether this model can be shown a picture. False when unknown: an action
@@ -88,6 +200,11 @@ export type ProviderSettings = {
   readonly contextWindow?: number;
   readonly maximumOutputTokens?: number;
   /**
+   * Earlier turns go back to this provider with their reasoning, which then
+   * counts toward each request's size.
+   */
+  readonly reasoningSentBack?: boolean;
+  /**
    * Set when the window was lowered below the catalogue's because the provider
    * refused a request this large as too long.
    */
@@ -98,15 +215,5 @@ export type ProviderSettings = {
    */
   readonly providers?: readonly string[];
   readonly endpoint: string;
-  readonly credential:
-    | {
-        readonly status: "configured";
-        readonly source: "environment" | "credentialStore";
-      }
-    | { readonly status: "missing"; readonly source: "none" }
-    | {
-        readonly status: "unavailable";
-        readonly source: "credentialStore";
-        readonly reason: string;
-      };
+  readonly credential: ProviderCredential;
 };

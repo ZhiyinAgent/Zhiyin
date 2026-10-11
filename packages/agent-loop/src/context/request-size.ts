@@ -14,7 +14,10 @@
 
 import { createHash } from "node:crypto";
 import type { ModelMessage, ModelTool, ModelUsage } from "@zhiyin/model-client";
-import { estimatedRequestTokens } from "./conversation-context.js";
+import {
+  estimatedRequestTokens,
+  type Counting,
+} from "./conversation-context.js";
 
 type Anchor = {
   readonly start: string;
@@ -28,6 +31,8 @@ export type RequestParts = {
   readonly fixed: readonly ModelMessage[];
   readonly history: readonly ModelMessage[];
   readonly tools: readonly ModelTool[];
+  /** What the provider receives back beside each turn, counted with it. */
+  readonly counting?: Counting;
 };
 
 function fingerprint(value: unknown): string {
@@ -69,7 +74,11 @@ export class RequestSize {
         tokens:
           anchor.tokens +
           (anchor.count < parts.history.length
-            ? estimatedRequestTokens(parts.history.slice(anchor.count), [])
+            ? estimatedRequestTokens(
+                parts.history.slice(anchor.count),
+                [],
+                parts.counting,
+              )
             : 0),
         measured: true,
       };
@@ -77,6 +86,7 @@ export class RequestSize {
       tokens: estimatedRequestTokens(
         [...parts.fixed, ...parts.history],
         parts.tools,
+        parts.counting,
       ),
       measured: false,
     };

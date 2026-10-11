@@ -52,6 +52,36 @@ export const ALLOWED_EXTERNAL_URLS = [
   RELEASES_URL,
   OPENROUTER_CREDITS_URL,
   OPENROUTER_KEYS_URL,
+  // Where each lab's keys are made and its billing kept, per platform, as the
+  // lab's own documentation names them, or the platform's console where it
+  // names no billing page. A provider names its pages; they open only once
+  // they are listed here too.
+  "https://platform.claude.com/settings/keys",
+  "https://platform.claude.com/settings/billing",
+  "https://platform.openai.com/settings/organization/api-keys",
+  "https://platform.openai.com/settings/organization/billing",
+  "https://z.ai/manage-apikey/apikey-list",
+  "https://z.ai/manage-apikey/billing",
+  "https://bigmodel.cn/usercenter/proj-mgmt/apikeys",
+  "https://bigmodel.cn/",
+  "https://platform.deepseek.com/api_keys",
+  "https://platform.deepseek.com/",
+  "https://platform.kimi.ai/console/api-keys",
+  "https://platform.kimi.ai/docs/guide/account-and-payments",
+  "https://platform.kimi.com/console/api-keys",
+  "https://platform.kimi.com/docs/guide/account-and-payments",
+  "https://platform.minimax.io/user-center/basic-information/interface-key",
+  "https://platform.minimax.io/user-center/payment/balance",
+  "https://platform.minimax.cn/user-center/basic-information/interface-key",
+  "https://platform.minimax.cn/user-center/payment/balance",
+  "https://platform.xiaomimimo.com/#/console/api-keys",
+  "https://platform.xiaomimimo.com/#/console/recharge",
+  "https://home.qwencloud.com/api-keys",
+  "https://home.qwencloud.com/billing/overview",
+  "https://platform.qianwenai.com/home/api-keys",
+  "https://platform.qianwenai.com/home/",
+  "https://console.mistral.ai/api-keys",
+  "https://admin.mistral.ai/organization/billing",
   // Where each shipped connector's key is made, as the service's own setup
   // guide names it. A connector package names its page; it opens only once it
   // is listed here too.

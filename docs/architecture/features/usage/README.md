@@ -2,10 +2,10 @@
 
 ## Purpose
 
-Records how many tokens each model request used and what the provider said it
-cost, and summarizes that for the seven- and thirty-day usage views. It is
-separate from sessions because request accounting has its own retention and
-failure behavior.
+Records how many tokens each model request used and what it cost, as the
+provider reported it or as estimated from a price list, and summarizes that
+for the seven- and thirty-day usage views. It is separate from sessions
+because request accounting has its own retention and failure behavior.
 
 ## Boundaries
 
@@ -19,10 +19,10 @@ failure behavior.
 ## Public interface
 
 - `record(usage)` stores one request: its id, model, token counts (cache and
-  reasoning tokens when the provider reports them), the provider-reported cost
-  if any, the upstream that served it, the conversation and purpose it was
-  made for (`turn`, `condensing`, `specialist` or `background`), and when it
-  was recorded.
+  reasoning tokens when the provider reports them), the provider-reported or
+  estimated cost if any, the upstream that served it, the conversation and
+  purpose it was made for (`turn`, `condensing`, `specialist` or
+  `background`), and when it was recorded.
 - `state(now)` returns seven- and thirty-day summaries by UTC day, or an
   `unavailable` state with a reason before the first request.
 
@@ -38,9 +38,13 @@ failure behavior.
 - A request id recorded twice counts once, as last recorded.
 - Each conversation's cost is the sum of its requests, costliest first.
   Requests made outside any conversation are counted apart.
-- Cost is what the provider reported, never computed from a local price table.
-  Requests without a cost still count, and the summary says how many were
-  priced.
+- A reported cost is kept in dollars as the provider gave it. Where a
+  provider reports none, the record keeps the model client's estimate from
+  the shipped price list: its currency and the list's date. Summaries add up
+  reported dollars and each currency's estimates apart, never converting one
+  into another, and order conversations by dollars, then by each other
+  currency. A request with either is priced; one with neither still counts,
+  and the summary says how many were priced.
 - A failure to save usage never fails the request it describes. The usage view
   says the history could not be saved.
 

@@ -264,6 +264,41 @@ describe("the page for people", () => {
     expect(page).toContain("provider/model-a");
   });
 
+  it("says a cost estimated from price lists is estimated, in its own currency and with the list's date", () => {
+    const task = conversation();
+    const estimated = (amount: number) => ({
+      model: "deepseek-v4-pro",
+      finishReason: "stop",
+      termination: "finishReason" as const,
+      complete: true,
+      usage: {
+        inputTokens: 1200,
+        outputTokens: 80,
+        estimatedCost: {
+          amount,
+          currency: "CNY",
+          priceList: "2026-10-09",
+        },
+      },
+    });
+    const page = conversationHtml(
+      {
+        ...task,
+        modelResponses: [
+          ...task.modelResponses,
+          estimated(0.5),
+          estimated(0.25),
+        ],
+      },
+      about,
+    );
+
+    expect(page).toMatch(/<dt>Cost<\/dt><dd>\$0\.0123<\/dd>/);
+    expect(page).toMatch(
+      /<dt>Estimated cost<\/dt><dd>¥0\.7500, from the price list of 2026-10-09<\/dd>/,
+    );
+  });
+
   it("loads nothing from outside the file and runs no code", () => {
     const page = conversationHtml(
       {

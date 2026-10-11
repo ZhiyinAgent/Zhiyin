@@ -268,6 +268,7 @@ export class TurnLoop {
           calls,
           text: roundText,
           reasoning: roundReasoning,
+          replay: roundReplay,
           finishReason,
           response: modelResponse,
           usage,
@@ -323,6 +324,14 @@ export class TurnLoop {
             assistantParts.join("\n\n"),
           );
         if (calls.length === 0) {
+          const answer = this.#records
+            .task(taskId)
+            .messages.find((message) => message.id === assistantId);
+          if (answer)
+            await history.answer(answer, {
+              reasoning: roundReasoning,
+              ...(roundReplay ? { replay: roundReplay } : {}),
+            });
           if (
             this.#records
               .task(taskId)
@@ -398,6 +407,10 @@ export class TurnLoop {
             .messages.some((message) => message.id === assistantId)
             ? assistantId
             : undefined,
+          {
+            reasoning: roundReasoning,
+            ...(roundReplay ? { replay: roundReplay } : {}),
+          },
         );
         const round = {
           text: roundText,

@@ -74,6 +74,15 @@
   --zy-chart-6: #7fc27f;
   --zy-chart-7: #df8eac;
   --zy-chart-8: #94a3a0;
+  /* Each provider's own colour, for its name. Labs whose mark is black or
+     white have none and use the text colour. */
+  --zy-provider-openrouter: #a772f8;
+  --zy-provider-anthropic: #d97757;
+  --zy-provider-deepseek: #6b84fe;
+  --zy-provider-moonshot: #238eff;
+  --zy-provider-minimax: #ff4770;
+  --zy-provider-qwen: #6e84ff;
+  --zy-provider-mistral: #fa5415;
   /* The mark is a single-colour image, recoloured to the text colour. */
   --zy-mark-filter: brightness(0) invert(1);
   --zy-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
@@ -181,6 +190,13 @@
     --zy-chart-6: #3d8a3d;
     --zy-chart-7: #c04a78;
     --zy-chart-8: #647370;
+    --zy-provider-openrouter: #7624f4;
+    --zy-provider-anthropic: #ab4727;
+    --zy-provider-deepseek: #2b4efe;
+    --zy-provider-moonshot: #0063cc;
+    --zy-provider-minimax: #c8002c;
+    --zy-provider-qwen: #082dff;
+    --zy-provider-mistral: #ba3604;
     --zy-mark-filter: brightness(0);
     --zy-shadow: 0 18px 60px rgba(20, 22, 26, 0.16);
     --zy-shadow-pop: 0 8px 22px rgba(20, 22, 26, 0.14);

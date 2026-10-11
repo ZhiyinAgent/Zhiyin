@@ -328,6 +328,100 @@ describe("the size of a request", () => {
     };
   }
 
+  it("counts a turn's words and calls, not the reasoning and replay record kept beside them", () => {
+    const words: ModelMessage[] = [
+      { role: "user", content: "Read the notes." },
+      {
+        role: "assistant",
+        content: "Reading them.",
+        toolCalls: [{ id: "call-1", name: "read_file", arguments: "{}" }],
+      },
+    ];
+    const kept: ModelMessage[] = [
+      words[0]!,
+      {
+        ...(words[1] as Extract<ModelMessage, { role: "assistant" }>),
+        reasoning: "A long chain of thought. ".repeat(400),
+        replay: {
+          provider: "a-provider",
+          format: "a-format",
+          data: { signature: "x".repeat(4_000) },
+        },
+      },
+    ];
+
+    expect(estimatedRequestTokens(kept, [])).toBe(
+      estimatedRequestTokens(words, []),
+    );
+  });
+
+  it("counts the reasoning kept beside a turn when the provider receives it back, never the replay record", () => {
+    const thought = "A long chain of thought. ".repeat(400);
+    const turn = (
+      kept: Partial<Extract<ModelMessage, { role: "assistant" }>>,
+    ) =>
+      [
+        { role: "user", content: "Read the notes." },
+        { role: "assistant", content: "Reading them.", ...kept },
+      ] as ModelMessage[];
+    const replay = {
+      provider: "a-provider",
+      format: "a-format",
+      data: { signature: "x".repeat(4_000) },
+    };
+
+    const counted = estimatedRequestTokens(
+      turn({ reasoning: thought, replay }),
+      [],
+      { reasoning: true },
+    );
+
+    expect(counted).toBe(
+      estimatedRequestTokens(turn({ reasoning: thought }), [], {
+        reasoning: true,
+      }),
+    );
+    expect(counted).toBeGreaterThan(
+      estimatedRequestTokens(turn({}), []) + 2_000,
+    );
+  });
+
+  it("includes earlier turns' reasoning in the size shown when the provider receives it back", async () => {
+    const sizeOfSecondRequest = async (reasoningSentBack: boolean) => {
+      const work = working(1, 1, []);
+      const thinking = (request: ModelRequest): AsyncIterable<ModelEvent> =>
+        (async function* () {
+          yield { kind: "reasoningDelta", text: sized(3_000, "thought ") };
+          yield* work(request);
+        })();
+      const seen: (WorkspaceTask["contextUsage"] | undefined)[] = [];
+      const { host } = loopAndHost(
+        withReads(
+          () => ({ ok: true, value: { text: "short" } }),
+          (request) => {
+            seen.push(host.find("task-1")?.contextUsage);
+            return thinking(request);
+          },
+          {
+            modelWindow: {
+              model: "thinking",
+              contextWindow: 1_000_000,
+              reasoningSentBack,
+            },
+          },
+        ),
+      );
+      host.restore([settled([])]);
+      await host.app.start("task-1", "Read it");
+      return seen[1]?.totalTokens ?? 0;
+    };
+
+    const withReasoning = await sizeOfSecondRequest(true);
+    const without = await sizeOfSecondRequest(false);
+
+    expect(withReasoning - without).toBeGreaterThan(2_500);
+  });
+
   it("is the provider's count, with only what was added since estimated", async () => {
     const seen: (WorkspaceTask["contextUsage"] | undefined)[] = [];
     const requests: ModelRequest[] = [];

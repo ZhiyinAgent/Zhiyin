@@ -11,7 +11,7 @@
  * Skipped without a credential, and never given one by default: it costs money
  * and needs a network, so the gate does not run it. Run it deliberately:
  *
- *   $env:OPENROUTER_API_KEY = "..."; npx vitest run --project installed many-views
+ *   $env:ZHIYIN_OPENROUTER_API_KEY = "..."; npx vitest run --project installed many-views
  */
 
 import { writeFile } from "node:fs/promises";
@@ -30,7 +30,7 @@ import {
 
 const record = join(tmpdir(), "zhiyin-many-views.json");
 
-const key = process.env["OPENROUTER_API_KEY"];
+const key = process.env["ZHIYIN_OPENROUTER_API_KEY"];
 
 afterEach(closeEverything);
 

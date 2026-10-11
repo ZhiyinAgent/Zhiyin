@@ -26,7 +26,10 @@ import type {
 } from "@zhiyin/contract";
 import { estimatedTokens } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
-import { conversationTitleFrom } from "./conversation-context.js";
+import {
+  conversationTitleFrom,
+  countedMessages,
+} from "./conversation-context.js";
 import type { ModelHistory } from "./model-history.js";
 import { harnessNotice, toolOutput } from "../turn/notices.js";
 import { RoundResults } from "./result-size.js";
@@ -316,7 +319,14 @@ export class Condensing {
       const keptFrom =
         boundaries.find(
           (index) =>
-            estimatedTokens(JSON.stringify(messages.slice(index))) <=
+            estimatedTokens(
+              JSON.stringify(
+                countedMessages(messages.slice(index), {
+                  reasoning:
+                    this.#deps.host.modelWindow().reasoningSentBack === true,
+                }),
+              ),
+            ) <=
             request.targetTokens * keptShare,
         ) ?? boundaries.at(-1);
       const kept =

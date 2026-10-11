@@ -9,6 +9,11 @@ export type ContextBudgetChoice = "low" | "medium" | "ultra";
 export type ModelWindow = {
   readonly contextWindow?: number;
   readonly maximumOutputTokens?: number;
+  /**
+   * Earlier turns go back to this provider with their reasoning, which then
+   * counts toward each request's size.
+   */
+  readonly reasoningSentBack?: boolean;
 };
 
 /**

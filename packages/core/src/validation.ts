@@ -49,6 +49,29 @@ function text(value: unknown, maximum = 1000): value is string {
   );
 }
 
+/**
+ * A provider, and its region where it has two. Names, not hosts: where
+ * requests go is decided by the model client from the provider's own profile.
+ */
+function providerTarget(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return false;
+  const item = value as Record<string, unknown>;
+  return (
+    Object.keys(item).every((key) => key === "provider" || key === "region") &&
+    text(item["provider"], 64) &&
+    (item["region"] === undefined || text(item["region"], 64))
+  );
+}
+
+/** Arguments that end with an optional provider target. */
+function withTarget(args: readonly unknown[], required: number): boolean {
+  return (
+    args.length === required ||
+    (args.length === required + 1 && providerTarget(args[required]))
+  );
+}
+
 /** A 12 MB picture is 16 MB of base64; the store refuses anything larger. */
 const pictureCharacters = 16 * 1024 * 1024;
 
@@ -241,8 +264,7 @@ export function validateCommand(
     case CHANNEL.frontendReady:
     case CHANNEL.openDataFolder:
     case CHANNEL.createTask:
-    case CHANNEL.clearProviderApiKey:
-    case CHANNEL.listModels:
+    case CHANNEL.listProviders:
     case CHANNEL.chooseWorkspace:
     case CHANNEL.selectNothing:
     case CHANNEL.shellAvailability:
@@ -274,12 +296,16 @@ export function validateCommand(
     // A model id, and the upstream slugs routing may use. Both are provider
     // names rather than application identifiers, so the shape is all that can
     // be decided here; the provider refuses anything it does not serve.
+    case CHANNEL.clearProviderApiKey:
+    case CHANNEL.listModels:
+      valid = withTarget(args, 0);
+      break;
     case CHANNEL.listModelProviders:
-      valid = args.length === 1 && text(args[0], 200);
+      valid = withTarget(args, 1) && text(args[0], 200);
       break;
     case CHANNEL.selectModel:
       valid =
-        args.length === 2 &&
+        withTarget(args, 2) &&
         text(args[0], 200) &&
         Array.isArray(args[1]) &&
         args[1].length <= 64 &&
@@ -501,7 +527,7 @@ export function validateCommand(
       valid = args.length === 1 && browserIntent(args[0]);
       break;
     case CHANNEL.saveProviderApiKey:
-      valid = args.length === 1 && text(args[0], 4096);
+      valid = withTarget(args, 1) && text(args[0], 4096);
       break;
     case CHANNEL.configureProfile:
       valid =

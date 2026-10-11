@@ -146,6 +146,38 @@ describe("a saved conversation's shape", () => {
     });
   });
 
+  it("restores the reasoning and replay record kept with the model's turns", async () => {
+    const replay = {
+      provider: "deepseek",
+      format: "chat-completions",
+      data: { signature: "abc" },
+    };
+    const withReasoning = {
+      ...conversation,
+      modelHistory: [
+        {
+          id: "entry-1",
+          kind: "message",
+          messageId: "message-1",
+          reasoning: "The person wants a short plan.",
+          replay,
+        },
+        {
+          id: "entry-2",
+          kind: "calls",
+          text: "",
+          calls: [{ id: "call-1", name: "read_file", arguments: "{}" }],
+          reasoning: "Read the notes first.",
+          replay,
+        },
+      ],
+    };
+
+    await expect(loads(withReasoning)).resolves.toMatchObject({
+      tasks: [withReasoning],
+    });
+  });
+
   it.each(Object.keys(emptyConversationLists))(
     "refuses a conversation saved without its %s list",
     async (list) => {
@@ -174,6 +206,26 @@ describe("a saved conversation's shape", () => {
   it.each([
     ["modelHistory", { id: "entry-1", kind: "summary", content: "?" }],
     ["modelHistory", { id: "entry-1", kind: "message" }],
+    [
+      "modelHistory",
+      {
+        id: "entry-1",
+        kind: "calls",
+        text: "",
+        calls: [],
+        replay: "not a record",
+      },
+    ],
+    [
+      "modelHistory",
+      {
+        id: "entry-1",
+        kind: "calls",
+        text: "",
+        calls: [],
+        reasoning: 7,
+      },
+    ],
     ["guidance", { id: "guidance-1", text: "Keep it short.", status: "sent" }],
     [
       "conversationPermissions",

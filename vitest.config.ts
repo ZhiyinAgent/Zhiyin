@@ -18,7 +18,11 @@ export default defineConfig({
         test: {
           name: "packages",
           ...parallelLimits,
-          include: ["packages/*/test/**/*.test.ts"],
+          include: [
+            "packages/*/test/**/*.test.ts",
+            // Each model provider keeps its tests in its own folder (ADR 0024).
+            "packages/model-client/src/providers/*/test/**/*.test.ts",
+          ],
           environment: "node",
           sequence: { groupOrder: 0 },
         },

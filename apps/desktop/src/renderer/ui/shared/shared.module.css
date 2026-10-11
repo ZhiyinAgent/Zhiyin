@@ -662,3 +662,56 @@
 .path-name__tail {
   flex: none;
 }
+
+/* A few choices side by side, one of them on. */
+.choice-switch {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.choice-switch label {
+  position: relative;
+  display: block;
+}
+
+.choice-switch input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.choice-switch span {
+  display: block;
+  padding: 6px 12px;
+  border-radius: calc(var(--zy-radius-sm) - 3px);
+  color: var(--zy-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.choice-switch input:checked + span {
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  box-shadow: 0 1px 3px var(--zy-inset);
+}
+
+.choice-switch input:focus-visible + span {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-switch span {
+    transition: none;
+  }
+}

@@ -35,9 +35,12 @@ the desktop package that declares Electron. Run it again after deleting
 `node_modules`; an ordinary install keeps the runtime already there.
 
 Until you choose a folder, `pnpm dev` works in the repository itself, or in
-`ZHIYIN_WORKSPACE` when that is set. Save the OpenRouter key on the Model page,
-or set `OPENROUTER_API_KEY`, which the Model page then shows as the key's
-source.
+`ZHIYIN_WORKSPACE` when that is set. Save a key on the Model page, OpenRouter's
+or a lab's. An automated run can supply one instead through the platform's
+variable, which the Model page then shows as the key's source:
+`ZHIYIN_OPENROUTER_API_KEY`, or a lab's such as `ZHIYIN_DEEPSEEK_API_KEY`, with
+`_CN_` before `API_KEY` for its mainland China platform. Zhiyin never reads a
+variable another tool uses, such as `OPENROUTER_API_KEY`. ADR 0025.
 
 CI installs with `pnpm install --frozen-lockfile`; use the same command to
 reproduce a CI install. Change `pnpm-lock.yaml` only with an intended
@@ -92,8 +95,10 @@ credit on a real account:
 $env:ZHIYIN_SMOKE = "1"; pnpm exec vitest run --project packages packages/core/test/app/live-smoke.test.ts
 ```
 
-It needs `OPENROUTER_API_KEY`. Pull-request CI holds no credentials; never
-add one to a workflow.
+It needs `ZHIYIN_OPENROUTER_API_KEY`. Each lab's own live check runs with
+`pnpm test:live`, which reads the labs' keys from a gitignored `.env.local`,
+one variable per platform, and checks only the platforms that have one.
+Pull-request CI holds no credentials; never add one to a workflow.
 
 ## Pull requests
 

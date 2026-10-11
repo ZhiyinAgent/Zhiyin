@@ -1,6 +1,14 @@
 /* Styles owned by the usage module. Class names here are local to it;
    anything written :global() is one of the shared basics. */
 
+/*
+ * The layout answers to the page's own width, not the window's: the page
+ * sits beside the sidebar, so the window says little about the room it has.
+ */
+.usage {
+  container: usage / inline-size;
+}
+
 .range-control {
   display: flex;
   padding: 3px;
@@ -84,9 +92,10 @@
 
 .usage-instruments figcaption {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 8px 16px;
   min-height: 38px;
 }
 
@@ -398,7 +407,8 @@
   line-height: 1.5;
 }
 
-@media (max-width: 880px) {
+/* Below this two charts side by side would crowd their days and controls. */
+@container usage (max-width: 760px) {
   .usage-instruments {
     grid-template-columns: 1fr;
   }
@@ -416,7 +426,8 @@
   }
 }
 
-@media (max-width: 620px) {
+/* Below this three figures, or the ring beside its list, would not fit. */
+@container usage (max-width: 520px) {
   .usage-metrics {
     grid-template-columns: 1fr;
   }
@@ -503,4 +514,27 @@ button.conversation-costs__row:hover {
 .conversation-costs strong.conversation-costs__gone {
   color: var(--zy-muted);
   font-weight: 450;
+}
+
+/* One currency per line in a headline figure; costs are never converted. */
+.spent--stacked {
+  display: block;
+}
+
+.spent--stacked + .spent--stacked {
+  margin-top: 6px;
+}
+
+/* Says an estimate is counted, without competing with the figure. */
+.spent--stacked .spent__estimated {
+  display: block;
+  margin-top: 3px;
+  line-height: 1.2;
+}
+
+.spent__estimated {
+  color: var(--zy-muted);
+  font-family: var(--zy-font-body);
+  font-size: 12px;
+  letter-spacing: normal;
 }

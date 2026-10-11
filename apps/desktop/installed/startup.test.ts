@@ -260,7 +260,7 @@ describe("the installed app on ordinary data", () => {
     });
     await window.getByRole("button", { name: "Open app menu" }).click();
     await window.getByRole("menuitem", { name: "Model" }).click();
-    await window.getByRole("button", { name: "API key" }).click();
+    await window.getByRole("button", { name: "Add a key" }).click();
 
     await shows(
       window.getByText("Secure key storage is unavailable."),

@@ -31,6 +31,23 @@ const filters: readonly {
 const largeContextWindow = 200_000;
 const lowerCostPerMillion = 1;
 
+/**
+ * What a model costs per million tokens: OpenRouter's price in US dollars, or
+ * a lab's own price in its own currency. Absent where neither is listed.
+ */
+function listedPrice(model: ModelCatalogEntry) {
+  if (
+    model.inputUsdPerMillion !== undefined &&
+    model.outputUsdPerMillion !== undefined
+  )
+    return {
+      currency: "USD",
+      input: model.inputUsdPerMillion,
+      output: model.outputUsdPerMillion,
+    };
+  return model.price;
+}
+
 type Row = {
   readonly model: ModelCatalogEntry;
   readonly score: number;
@@ -67,8 +84,14 @@ function rows(
             return row.model.reasoning;
           case "large":
             return row.model.contextWindow >= largeContextWindow;
-          case "cheap":
-            return row.model.inputUsdPerMillion < lowerCostPerMillion;
+          // The threshold is in US dollars; another currency is never
+          // converted to meet it.
+          case "cheap": {
+            const price = listedPrice(row.model);
+            return (
+              price?.currency === "USD" && price.input < lowerCostPerMillion
+            );
+          }
         }
       }),
     );
@@ -76,9 +99,17 @@ function rows(
   const byName = (a: Row, b: Row) => a.model.name.localeCompare(b.model.name);
   switch (order) {
     case "price":
-      return [...matched].sort(
-        (a, b) => a.model.inputUsdPerMillion - b.model.inputUsdPerMillion,
-      );
+      // Prices in one currency are compared with each other, and a model
+      // with no listed price comes last.
+      return [...matched].sort((a, b) => {
+        const left = listedPrice(a.model);
+        const right = listedPrice(b.model);
+        if (!left || !right) return (left ? 0 : 1) - (right ? 0 : 1);
+        return (
+          left.currency.localeCompare(right.currency) ||
+          left.input - right.input
+        );
+      });
     case "context":
       return [...matched].sort(
         (a, b) => b.model.contextWindow - a.model.contextWindow,
@@ -88,6 +119,17 @@ function rows(
     case "match":
       return [...matched].sort((a, b) => b.score - a.score || byName(a, b));
   }
+}
+
+function ListedPrice({ model }: { model: ModelCatalogEntry }) {
+  const price = listedPrice(model);
+  if (!price) return <>Price not listed</>;
+  return (
+    <>
+      {perMillion(price.input, price.currency)} in /{" "}
+      {perMillion(price.output, price.currency)} out
+    </>
+  );
 }
 
 function Emphasised({ text, hits }: { text: string; hits: readonly number[] }) {
@@ -245,8 +287,7 @@ export function ModelList({
                   <Emphasised text={model.name} hits={nameHits} />
                 </strong>
                 <span className={styles["model-row__price"]}>
-                  {perMillion(model.inputUsdPerMillion)} in /{" "}
-                  {perMillion(model.outputUsdPerMillion)} out
+                  <ListedPrice model={model} />
                 </span>
               </span>
               <span className={styles["model-row__id"]}>

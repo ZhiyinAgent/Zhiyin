@@ -191,6 +191,59 @@ const packageLayerRules = workspacePackages.map((name) => ({
 }));
 
 /*
+ * Inside the model client each provider is a folder of its own (ADR 0024). A
+ * provider uses the wire formats and the shared client, never another
+ * provider, so it can be read, changed or removed alone; and the shared code
+ * reaches providers only through their one list, so none of it is written for
+ * one provider. Built from the folders present, so a new provider is held to
+ * this the day it appears.
+ */
+const modelProviders = "packages/model-client/src/providers";
+const modelProviderRules = [
+  ...foldersIn(modelProviders).map((provider) => ({
+    files: [`${modelProviders}/${provider}/**/*.ts`],
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: repositoryRoot,
+          zones: [
+            {
+              target: `${modelProviders}/${provider}`,
+              from: modelProviders,
+              except: [`./${provider}`],
+              message:
+                "A provider uses the wire formats and the shared client, never another provider or the list of providers (ADR 0024).",
+            },
+          ],
+        },
+      ],
+    },
+  })),
+  {
+    files: ["packages/model-client/src/**/*.ts"],
+    ignores: [`${modelProviders}/**`],
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: repositoryRoot,
+          zones: [
+            {
+              target: "packages/model-client/src",
+              from: modelProviders,
+              except: ["./index.ts"],
+              message:
+                "The shared model client reaches providers only through their list in providers/index.ts (ADR 0024).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+];
+
+/*
  * A length backstop, not a target. Structure comes from what a file is
  * responsible for; passing the backstop is a prompt to look at that, never an
  * instruction to split.
@@ -406,6 +459,8 @@ export default tseslint.config(
   },
 
   ...packageLayerRules,
+
+  ...modelProviderRules,
 
   {
     /*

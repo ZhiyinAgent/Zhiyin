@@ -163,6 +163,13 @@ input and shows as the action's description and the approval's reason.
   system prompt changing, a condensing, older results cleared, older pictures
   dropped, or a quietly corrected proposal taken out once its tool succeeds.
   Each is an expected cache miss, made in one step rather than many.
+- The model's answer enters the conversation as it is given, so whatever
+  follows in the same turn, such as a plan reminder, comes after it.
+- Each turn the model wrote keeps its reasoning and its provider's replay
+  record beside its words, never in them, after a restart too (ADR 0024).
+  Which of the kept parts is sent back is the model client's to decide. The
+  size of a request counts the words and calls, and the reasoning too where
+  the model's settings say it goes back; the replay record is never counted.
 - Each request names its conversation as the session, so it stays with the
   provider holding its cache, and marks where the fixed start, the previous
   request and the newest message end.
@@ -205,8 +212,10 @@ input and shows as the action's description and the approval's reason.
 ### Long work (ADR 0011, ADR 0013, ADR 0014)
 
 - Before the next action, work stops at a checkpoint after 24 rounds, 30
-  minutes or USD 10 of provider-reported cost. Tokens are not limited, because
-  every request is counted whole. Continue starts the time and cost again and
+  minutes, USD 10 of cost or CNY 70 of cost. A cost counts whether the
+  provider reported it or the model client estimated it from a price list,
+  each currency against its own limit and never converted. Tokens are not
+  limited, because every request is counted whole. Continue starts the time and cost again and
   doubles the rounds; Pause runs nothing more and asks for one tool-free
   progress report.
 - The plan holds at most eight items, an update is corrected rather than

@@ -21,6 +21,7 @@
 
 import type {
   ModelHistoryEntry,
+  ModelReplay,
   StoredPicture,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -59,6 +60,23 @@ export type SentPicture = {
   /** Where the picture is stored; empty when it could not be. */
   readonly source: string;
 };
+
+/**
+ * What a model's turn keeps beside its words (ADR 0024): its reasoning, and
+ * what its provider needs back to continue from it.
+ */
+export type TurnKept = {
+  readonly reasoning?: string;
+  readonly replay?: ModelReplay;
+};
+
+/** The kept parts that are there, as fields beside the turn's words. */
+function keptWith(kept: TurnKept): TurnKept {
+  return {
+    ...(kept.reasoning ? { reasoning: kept.reasoning } : {}),
+    ...(kept.replay ? { replay: kept.replay } : {}),
+  };
+}
 
 export type HistoryOptions = {
   readonly newId: () => string;
@@ -265,12 +283,23 @@ export class ModelHistory {
   }
 
   /**
-   * The model's words and calls in one round. Stored with the first result
-   * that is, so a call is never kept without its answer.
+   * The model's words and calls in one round, with what it kept beside them.
+   * Stored with the first result that is, so a call is never kept without its
+   * answer.
    */
-  round(text: string, calls: readonly ModelToolCall[], messageId?: string) {
+  round(
+    text: string,
+    calls: readonly ModelToolCall[],
+    messageId?: string,
+    kept: TurnKept = {},
+  ) {
     const item: Item = {
-      message: { role: "assistant", content: text, toolCalls: [...calls] },
+      message: {
+        role: "assistant",
+        content: text,
+        toolCalls: [...calls],
+        ...keptWith(kept),
+      },
     };
     this.#items.push(item);
     this.#round = {
@@ -279,6 +308,37 @@ export class ModelHistory {
       messageId,
       stored: false,
     };
+  }
+
+  /**
+   * The model's answer, sent from now on as a reopened conversation sends it:
+   * kept when it is given, so whatever follows in the same turn comes after
+   * it, with the reasoning and replay record that only this moment knows.
+   */
+  async answer(
+    message: WorkspaceTask["messages"][number],
+    kept: TurnKept,
+  ): Promise<void> {
+    if (message.role !== "assistant" || !message.text.trim()) return;
+    if (
+      this.#entries.some(
+        (entry) => "messageId" in entry && entry.messageId === message.id,
+      )
+    )
+      return;
+    await this.#add(
+      {
+        role: "assistant",
+        content: modelText(message),
+        ...keptWith(kept),
+      },
+      (id) => ({
+        id,
+        kind: "message",
+        messageId: message.id,
+        ...keptWith(kept),
+      }),
+    );
   }
 
   /** The arguments that ran, in place of the draft the model wrote. */
@@ -459,6 +519,7 @@ export class ModelHistory {
       calls: (message.toolCalls ?? []).filter((call) =>
         this.#kept.has(call.id),
       ),
+      ...keptWith(message),
     };
     const index = this.#entries.findIndex((item) => item.id === round.entryId);
     if (index >= 0) this.#entries[index] = entry;
@@ -531,8 +592,14 @@ async function sentMessage(
       const message = messages.get(entry.messageId);
       if (!message) return undefined;
       const pictures = attachedPictures(message);
-      if (message.role !== "user" || !pictures.length)
-        return { role: message.role, content: modelText(message) };
+      if (message.role === "assistant")
+        return {
+          role: "assistant",
+          content: modelText(message),
+          ...keptWith(entry),
+        };
+      if (!pictures.length)
+        return { role: "user", content: modelText(message) };
       if (entry.picturesLetGo)
         return { role: "user", content: [personalLetGo(message)] };
       return {
@@ -574,6 +641,7 @@ async function sentMessage(
           name,
           arguments: args,
         })),
+        ...keptWith(entry),
       };
     case "result":
       return {

@@ -4,7 +4,7 @@ import type {
   UserInputResponse,
   WorkBudgetRequest,
 } from "@zhiyin/contract";
-import { Icon } from "../shared/index.js";
+import { formatMoney, Icon } from "../shared/index.js";
 import styles from "./user-input.module.css";
 
 /**
@@ -87,10 +87,26 @@ function headline(prompt: WorkBudgetRequest): string {
     case "elapsed":
       return `Zhiyin has been working for ${duration(prompt.elapsedMs)}.`;
     case "providerCost":
-      return `This task has cost $${(prompt.costUsd ?? prompt.allowance.providerCostUsd).toFixed(2)} so far.`;
+      return `This task has cost ${prompt.estimatedCosts?.length ? "an estimated " : ""}${spent(prompt)} so far.`;
     default:
       return `Zhiyin has taken ${prompt.completedRounds} ${prompt.completedRounds === 1 ? "step" : "steps"}.`;
   }
+}
+
+/**
+ * What the stretch cost, each currency apart: reported dollars, with any
+ * estimate from price lists added to its own currency, never converted.
+ */
+function spent(prompt: WorkBudgetRequest): string {
+  const amounts = new Map<string, number>();
+  if (prompt.costUsd !== undefined) amounts.set("USD", prompt.costUsd);
+  for (const { currency, amount } of prompt.estimatedCosts ?? [])
+    amounts.set(currency, (amounts.get(currency) ?? 0) + amount);
+  if (amounts.size === 0)
+    return formatMoney(prompt.allowance.providerCostUsd, "USD");
+  return [...amounts]
+    .map(([currency, amount]) => formatMoney(amount, currency))
+    .join(" and ");
 }
 
 function duration(ms: number): string {

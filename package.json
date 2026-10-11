@@ -17,7 +17,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run --project packages --project desktop --project repository --project system-boundary",
-    "test:installed": "vitest run --project installed"
+    "test:installed": "vitest run --project installed",
+    "test:live": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --project packages live.test"
   },
   "devDependencies": {
     "@electron/fuses": "1.8.0",

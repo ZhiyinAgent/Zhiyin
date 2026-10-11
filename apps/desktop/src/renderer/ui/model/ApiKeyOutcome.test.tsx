@@ -15,6 +15,7 @@ function open(
 ) {
   render(
     <ApiKeyDialog
+      providerName="OpenRouter"
       credential={{ status: "missing", source: "none" }}
       onSaveApiKey={onSaveApiKey}
       onClearApiKey={vi.fn()}

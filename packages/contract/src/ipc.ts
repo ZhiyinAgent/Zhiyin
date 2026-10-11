@@ -71,6 +71,7 @@ export const CHANNEL = {
   drawDocumentPage: "zhiyin:draw-document-page",
   openDocument: "zhiyin:open-document",
   showDocumentInFolder: "zhiyin:show-document-in-folder",
+  listProviders: "zhiyin:list-providers",
   saveProviderApiKey: "zhiyin:save-provider-api-key",
   clearProviderApiKey: "zhiyin:clear-provider-api-key",
   listModels: "zhiyin:list-models",

@@ -245,3 +245,57 @@ describe("package layers", { timeout: 60_000 }, () => {
     );
   });
 });
+
+/** What the path rules said about one import inside the model client. */
+async function pathRefusals(source, filePath) {
+  const [result] = await eslint.lintText(source, { filePath });
+  return (result?.messages ?? [])
+    .filter((message) => message.ruleId === "import-x/no-restricted-paths")
+    .map((message) => message.message);
+}
+
+const modelClient = "packages/model-client/src";
+
+describe("model providers", { timeout: 60_000 }, () => {
+  it("keeps a provider from reaching the list of every provider", async () => {
+    const found = await pathRefusals(
+      'import { OpenRouterModelClient } from "../index.js"; void OpenRouterModelClient;',
+      `${modelClient}/providers/openrouter/violation.ts`,
+    );
+    expect(includes(found, "never another provider")).toBe(true);
+  });
+
+  it("keeps one provider from reaching another", async () => {
+    const found = await pathRefusals(
+      'import { openRouter } from "../openrouter/provider.js"; void openRouter;',
+      `${modelClient}/providers/deepseek/violation.ts`,
+    );
+    expect(includes(found, "never another provider")).toBe(true);
+  });
+
+  it("lets a provider use the wire formats and the shared client", async () => {
+    expect(
+      await pathRefusals(
+        'import { sendChatCompletions } from "../../wires/chat-completions/send.js"; import { ModelClientError } from "../../failures.js"; void sendChatCompletions; void ModelClientError;',
+        `${modelClient}/providers/openrouter/allowed.ts`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("keeps the shared client from reaching into a provider", async () => {
+    const found = await pathRefusals(
+      'import { openRouter } from "./providers/openrouter/provider.js"; void openRouter;',
+      `${modelClient}/violation.ts`,
+    );
+    expect(includes(found, "only through their list")).toBe(true);
+  });
+
+  it("lets the shared client reach providers through their list", async () => {
+    expect(
+      await pathRefusals(
+        'import { OpenRouterModelClient } from "./providers/index.js"; void OpenRouterModelClient;',
+        `${modelClient}/allowed.ts`,
+      ),
+    ).toEqual([]);
+  });
+});

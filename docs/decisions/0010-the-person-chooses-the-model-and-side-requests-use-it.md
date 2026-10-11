@@ -1,6 +1,8 @@
 # 0010. The person chooses the model on OpenRouter, and side requests use the same model
 
-Status: accepted
+Status: partly superseded by 0024, which reaches models through each lab's own
+API as well as OpenRouter, and by 0025, under which only an automated run
+supplies a key, under Zhiyin's own names. The rest holds.
 
 ## Decision
 

@@ -21,10 +21,10 @@ import type {
   WorkspaceTask,
 } from "./workspaceState.js";
 import type { WorkspaceCommands } from "./workspaceCommands.js";
-import {
-  OPENROUTER_CREDITS_URL,
-  type MessageAttachment,
-  type RewindCommitResult,
+import type {
+  MessageAttachment,
+  ProviderSettings,
+  RewindCommitResult,
 } from "@zhiyin/contract";
 
 /**
@@ -86,6 +86,8 @@ type RewindLanding = {
   say(message: string): void;
   /** Settings, on the key dialog or the model list. */
   openSettings(opening: "apiKey" | "model"): void;
+  /** Who requests go to, whose billing page adding credits opens. */
+  provider?: ProviderSettings["provider"];
   restoreDraft(draft: {
     id: string;
     taskId: string;
@@ -176,8 +178,8 @@ export function timelinePieces(
   }
   function takeStep(step: OtherStep) {
     if (step === "updateApiKey") landing.openSettings("apiKey");
-    else if (step === "addCredits")
-      void commands.openExternalUrl(OPENROUTER_CREDITS_URL);
+    else if (step === "addCredits" && landing.provider)
+      void commands.openExternalUrl(landing.provider.pages.billing);
     else if (step === "continue")
       void commands
         .sendMessage(task.id, "Continue.", task.reasoning)
@@ -266,7 +268,14 @@ export function timelinePieces(
     },
     failure: (remedies) => (
       <FailedTurnActions
-        remedies={remedies}
+        remedies={
+          // Credits are added on a provider's own billing page; with none
+          // known, there is nowhere to send the person.
+          landing.provider
+            ? remedies
+            : remedies.filter((remedy) => remedy !== "addCredits")
+        }
+        {...(landing.provider ? { providerName: landing.provider.name } : {})}
         {...(answeredGoingBack && answered
           ? {
               goingBack: answeredGoingBack,

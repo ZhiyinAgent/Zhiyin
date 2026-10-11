@@ -12,7 +12,7 @@ const labels: Record<TurnRemedy, string> = {
   openSettings: "Open the Model page",
   chooseModel: "Choose a model",
   chooseLargerModel: "Choose a model with a larger window",
-  addCredits: "Add OpenRouter credits",
+  addCredits: "Add credits",
   editMessage: "Edit the message",
 };
 
@@ -26,7 +26,14 @@ type FailedTurnActionsProps = {
   /** Opens the message the turn answered for editing, where it is. */
   onEdit?: () => void;
   onStep: (step: OtherStep) => void;
+  /** Who requests go to, which adding credits names. */
+  providerName?: string;
 };
+
+const labelOf = (remedy: TurnRemedy, providerName?: string) =>
+  remedy === "addCredits" && providerName
+    ? `Add ${providerName} credits`
+    : labels[remedy];
 
 /**
  * What a person can do about a failed turn, as buttons, the first one leading.
@@ -38,6 +45,7 @@ export function FailedTurnActions({
   goingBack,
   onEdit,
   onStep,
+  providerName,
 }: FailedTurnActionsProps) {
   if (goingBack)
     return (
@@ -46,6 +54,7 @@ export function FailedTurnActions({
         goingBack={goingBack}
         {...(onEdit ? { onEdit } : {})}
         onStep={onStep}
+        {...(providerName ? { providerName } : {})}
       />
     );
   const offered = remedies.filter(
@@ -62,7 +71,7 @@ export function FailedTurnActions({
           className={stepClass(index)}
           onClick={() => onStep(remedy)}
         >
-          {labels[remedy]}
+          {labelOf(remedy, providerName)}
         </button>
       ))}
     </div>
@@ -74,6 +83,7 @@ function WithGoingBack({
   goingBack,
   onEdit,
   onStep,
+  providerName,
 }: FailedTurnActionsProps & { goingBack: GoingBackProps }) {
   const { busy, send, question } = useGoingBack(goingBack);
   const offered = remedies.filter(
@@ -95,7 +105,7 @@ function WithGoingBack({
               else onStep(remedy);
             }}
           >
-            {labels[remedy]}
+            {labelOf(remedy, providerName)}
           </button>
         ))}
       </div>

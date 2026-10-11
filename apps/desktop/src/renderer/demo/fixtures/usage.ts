@@ -101,3 +101,61 @@ export const demoUsage: UsageState = {
     "30": demoRange(30, 5_238, 64.9),
   },
 };
+
+/**
+ * A week where some conversations ran on a lab's mainland China platform,
+ * which reports no cost: estimated in yuan from its price list, beside the
+ * dollars OpenRouter reported.
+ */
+function withYuanEstimates(range: ReturnType<typeof demoRange>) {
+  const yuan = (amount: number) => [
+    { currency: "CNY", amount: Number(amount.toFixed(2)) },
+  ];
+  return {
+    ...range,
+    estimatedCosts: yuan(42.6),
+    activity: range.activity.map((point, index) =>
+      index % 2 === 0
+        ? { ...point, estimatedCosts: yuan(42.6 / Math.ceil(range.days / 2)) }
+        : point,
+    ),
+    // The mainland requests are part of the range, taken from its first model.
+    models: [
+      { ...range.models[0]!, requests: range.models[0]!.requests - 212 },
+      ...range.models.slice(1),
+      {
+        model: "deepseek-v4-pro",
+        requests: 212,
+        inputTokens: 3_100_000,
+        outputTokens: 820_000,
+        costUsd: 0,
+        estimatedCosts: yuan(42.6),
+      },
+    ],
+    // Dollars order the costliest first; yuan come after, never converted.
+    conversations: [
+      {
+        ...range.conversations[0]!,
+        requests: range.conversations[0]!.requests - 212,
+        pricedRequests: range.conversations[0]!.pricedRequests - 212,
+      },
+      ...range.conversations.slice(1),
+      {
+        conversationId: "mainland",
+        requests: 212,
+        pricedRequests: 212,
+        costUsd: 0,
+        estimatedCosts: yuan(42.6),
+      },
+    ],
+  };
+}
+
+export const demoUsageWithEstimates: UsageState = {
+  status: "ready",
+  costSource: "provider-reported",
+  ranges: {
+    "7": withYuanEstimates(demoRange(7, 1_284, 18.42)),
+    "30": withYuanEstimates(demoRange(30, 5_238, 64.9)),
+  },
+};

@@ -19,6 +19,7 @@ import type {
   WorkspaceSnapshot as CoreWorkspaceSnapshot,
   WorkspaceTask as CoreWorkspaceTask,
 } from "@zhiyin/contract";
+import { OPENROUTER_CREDITS_URL, OPENROUTER_KEYS_URL } from "@zhiyin/contract";
 
 const closedBrowser: BrowserPanelState = {
   status: "closed",
@@ -317,7 +318,14 @@ export function createWorkspaceState(
       status: "unavailable",
       reason: "Usage will appear after the first model request.",
     },
+    // Until the core answers, the provider it falls back to with no choice.
     provider: input.provider ?? {
+      provider: {
+        id: "openrouter",
+        name: "OpenRouter",
+        pages: { keys: OPENROUTER_KEYS_URL, billing: OPENROUTER_CREDITS_URL },
+        upstreams: true,
+      },
       endpoint: "https://openrouter.ai/api/v1/chat/completions",
       credential: { status: "missing", source: "none" },
     },

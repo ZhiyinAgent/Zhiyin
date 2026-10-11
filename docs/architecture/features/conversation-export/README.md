@@ -41,6 +41,9 @@ letters, digits and dashes.
 - The page follows the timeline: messages, actions and events in the order
   they happened, with a condensing listed before a message that shares its
   place.
+- The page's summary gives the cost the provider reported, in dollars, and
+  apart from it any cost estimated from a price list, in its own currency
+  with the list's date, never converted.
 - An action that did not run changed nothing. Its changes read as proposed, a
   declined one says the person declined it, and the summary counts only files
   actually changed.

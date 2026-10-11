@@ -1,6 +1,6 @@
 /**
- * The model the app talks to, as the person has set it up: the provider key,
- * the models on offer and who serves them, and the model chosen. Nothing here
+ * The model the app talks to, as the person has set it up: the providers and
+ * their keys, the models on offer and who serves them, and the model chosen. Nothing here
  * touches a conversation, so it sits beside the workspace rather than inside it.
  */
 
@@ -10,15 +10,26 @@ import type {
   ModelCatalog,
   ModelProviderList,
   ProviderSettings,
+  ProviderSummary,
+  ProviderTarget,
 } from "@zhiyin/contract";
-import type { ModelClient } from "@zhiyin/model-client";
+import type { ModelClient, ProviderDirectory } from "@zhiyin/model-client";
 
-/** Which choice a lowered window was learned on: the model and its upstreams. */
+/**
+ * Which choice a lowered window was learned on: the provider and region, the
+ * model and its upstreams.
+ */
 const choiceOf = (settings: ProviderSettings) =>
-  JSON.stringify([settings.model, [...(settings.providers ?? [])].sort()]);
+  JSON.stringify([
+    settings.provider?.id,
+    settings.provider?.region?.id,
+    settings.model,
+    [...(settings.providers ?? [])].sort(),
+  ]);
 
 export class ModelSettings {
   readonly #model: ModelClient;
+  readonly #directory: ProviderDirectory | undefined;
   readonly #emit: (event: AppEvent) => void;
   /** Unknown until the model has been looked up in the provider's catalogue. */
   #current: ProviderSettings | undefined;
@@ -35,9 +46,30 @@ export class ModelSettings {
       }
     | undefined;
 
-  constructor(model: ModelClient, emit: (event: AppEvent) => void) {
+  /**
+   * `model` follows the choice; `directory` reaches every provider, for the
+   * commands that name one. Without it, only the chosen one can be set up.
+   */
+  constructor(
+    model: ModelClient,
+    emit: (event: AppEvent) => void,
+    directory?: ProviderDirectory,
+  ) {
     this.#model = model;
     this.#emit = emit;
+    this.#directory = directory;
+  }
+
+  /** The provider and region named, or the chosen ones when none is. */
+  #account(target: ProviderTarget | undefined): ModelClient {
+    if (!target) return this.#model;
+    if (!this.#directory)
+      throw new Error("Only the chosen provider can be set up here.");
+    return this.#directory.for(target);
+  }
+
+  providers(): Promise<readonly ProviderSummary[]> {
+    return this.#directory ? this.#directory.list() : Promise.resolve([]);
   }
 
   current(): ProviderSettings | undefined {
@@ -95,16 +127,20 @@ export class ModelSettings {
    * kept, or kept without being checked because the check itself could not be
    * made. The third is not a refusal and must not read as one.
    */
-  async saveApiKey(apiKey: string): Promise<ApiKeySaveOutcome> {
+  async saveApiKey(
+    apiKey: string,
+    target?: ProviderTarget,
+  ): Promise<ApiKeySaveOutcome> {
+    const account = this.#account(target);
     let outcome: ApiKeySaveOutcome = { status: "accepted" };
     try {
-      await this.#model.setApiKey(apiKey);
+      await account.setApiKey(apiKey);
     } catch (error) {
       const reason =
         error instanceof Error && error.message
           ? error.message
           : "The key could not be saved.";
-      const stored = (await this.#model.settings()).credential.status;
+      const stored = (await account.settings()).credential.status;
       outcome =
         stored === "configured"
           ? { status: "unverified", reason }
@@ -114,24 +150,28 @@ export class ModelSettings {
     return outcome;
   }
 
-  async clearApiKey(): Promise<void> {
-    await this.#model.clearApiKey();
+  async clearApiKey(target?: ProviderTarget): Promise<void> {
+    await this.#account(target).clearApiKey();
     await this.refresh();
   }
 
-  models(): Promise<ModelCatalog> {
-    return this.#model.models();
+  models(target?: ProviderTarget): Promise<ModelCatalog> {
+    return this.#account(target).models();
   }
 
-  modelProviders(model: string): Promise<ModelProviderList> {
-    return this.#model.modelProviders(model);
+  modelProviders(
+    model: string,
+    target?: ProviderTarget,
+  ): Promise<ModelProviderList> {
+    return this.#account(target).modelProviders(model);
   }
 
   async selectModel(
     model: string,
     providers: readonly string[],
+    target?: ProviderTarget,
   ): Promise<void> {
-    await this.#model.selectModel(model, providers);
+    await this.#account(target).selectModel(model, providers);
     await this.refresh();
   }
 }

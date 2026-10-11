@@ -179,6 +179,26 @@ describe("the plan across a turn", () => {
     expect(fixture.loop.snapshot().tasks[0]?.phase).not.toBe("running");
   });
 
+  it("shows the model its own answer before reminding it of the open items", async () => {
+    const fixture = withPlan({
+      script: (request) =>
+        request === 1
+          ? update("set", [{ title: "Proofread", status: "pending" }])
+          : finish,
+    });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Write the report");
+
+    const sent = fixture.requests[2]?.messages ?? [];
+    const answer = sent.findIndex(
+      (message) => message.role === "assistant" && message.content === "Done.",
+    );
+    const [reminder] = notices(fixture.requests[2], "plan");
+    expect(answer).toBeGreaterThan(-1);
+    expect(answer).toBeLessThan(sent.indexOf(reminder!));
+  });
+
   const reads = (request: number): Step => ({
     calls: [
       {

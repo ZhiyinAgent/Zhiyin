@@ -1,6 +1,7 @@
 # 0013. Long work stops at a checkpoint the person renews, and the working model keeps its own plan
 
-Status: accepted
+Status: partly superseded by 0024, which counts estimated costs toward the
+work budget, with a CNY 70 limit beside USD 10. The rest holds.
 
 ## Decision
 

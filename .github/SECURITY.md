@@ -130,18 +130,21 @@ computer; it does not revoke it at the service.
 
 ### Keys and saved data
 
-The OpenRouter key and every connector's key or sign-in are kept in Windows
+Each model provider's key, OpenRouter's or a lab's for each of its
+platforms, and every connector's key or sign-in are kept in Windows
 Credential Manager, and only the main process reads them. The window can save
 or clear a key and learn whether one is stored, but never reads one back. If
 the credential store is locked or unavailable, Zhiyin says so, and work that
-needs a stored key cannot run. For development, `OPENROUTER_API_KEY` can
-supply the provider key instead.
+needs a stored key cannot run. An automated run, such as a test of the
+installed app, can supply a key instead through a variable named for Zhiyin,
+such as `ZHIYIN_OPENROUTER_API_KEY`; no variable another tool reads is used.
 
 Everything else lives in `%APPDATA%\Zhiyin`: conversations exactly as sent to
 the model, including any secret a tool returned, pictures, pastes, saved
 outputs, file copies, usage and logs. Zhiyin sends none of it anywhere on its
 own: conversation content leaves the computer only as a conversation sends it
-to its model, through OpenRouter, and to its connectors.
+to its model, through OpenRouter or the lab's own API as the person chose,
+and to its connectors.
 
 Exported conversations have credentials in recognised formats removed, such as
 `Authorization` headers, bearer tokens and common key prefixes. Recognition

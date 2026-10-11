@@ -216,6 +216,31 @@ describe("UserInputPrompt", () => {
     expect(screen.getByText("This task has cost $10.02 so far.")).toBeVisible();
   });
 
+  it("says a cost estimated from price lists is an estimate, in its own currency", () => {
+    render(
+      <UserInputPrompt
+        prompt={
+          {
+            ...workBudget,
+            reached: ["providerCost"],
+            estimatedCosts: [{ currency: "CNY", amount: 75 }],
+            allowance: {
+              toolRounds: 24,
+              elapsedMs: 30 * 60_000,
+              providerCostUsd: 10,
+              providerCosts: [{ currency: "CNY", amount: 70 }],
+            },
+          } as PendingUserInputRequest
+        }
+        onSubmit={async () => {}}
+        onCancel={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This task has cost an estimated ¥75.00 so far."),
+    ).toBeVisible();
+  });
+
   it("says why the work may be going nowhere when Zhiyin saw it repeat itself", () => {
     render(
       <UserInputPrompt

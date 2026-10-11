@@ -61,6 +61,13 @@ const textTokens = [
   "--zy-amber",
   "--zy-danger",
   "--zy-running",
+  "--zy-provider-openrouter",
+  "--zy-provider-anthropic",
+  "--zy-provider-deepseek",
+  "--zy-provider-moonshot",
+  "--zy-provider-minimax",
+  "--zy-provider-qwen",
+  "--zy-provider-mistral",
 ];
 const groundTokens = [
   "--zy-canvas",

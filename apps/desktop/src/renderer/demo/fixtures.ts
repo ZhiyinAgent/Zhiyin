@@ -9,8 +9,16 @@ import { demoSpelling } from "./fixtures/spelling.js";
 import { demoPlugins, demoConnections } from "./fixtures/capabilities.js";
 import { chartPlace, reportPlace, shownReport } from "./fixtures/documents.js";
 import { sampleBrowserFrame } from "./sampleBrowserFrame.js";
-export { demoUsage } from "./fixtures/usage.js";
-export { demoCatalog, demoProviders } from "./fixtures/models.js";
+export { demoUsage, demoUsageWithEstimates } from "./fixtures/usage.js";
+export {
+  demoCatalog,
+  demoDeepSeekMainland,
+  demoLabCatalog,
+  demoLabSummaries,
+  demoOpenRouter,
+  demoProviders,
+  demoProviderSummaries,
+} from "./fixtures/models.js";
 export {
   demoPlugins,
   demoConnections,

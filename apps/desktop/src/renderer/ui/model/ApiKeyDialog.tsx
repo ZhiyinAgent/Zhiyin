@@ -1,28 +1,36 @@
 import { useId, useState } from "react";
 import type { ApiKeySaveOutcome, ProviderSettings } from "@zhiyin/contract";
-import { OPENROUTER_KEYS_URL } from "@zhiyin/contract";
 import { Dialog } from "../shared/index.js";
 import styles from "./model.module.css";
 
 /**
- * Where the key is entered, replaced and removed.
+ * Where the key for one provider's platform is entered, replaced and removed.
  *
  * Saving is a network-backed change that can be refused, so the dialog has a
  * pending state and reports a failure in place rather than closing as though it
  * had worked.
  */
 export function ApiKeyDialog({
+  providerName,
+  platformName,
+  keysPage,
   credential,
   onClose,
   onSaveApiKey,
   onClearApiKey,
   onOpenExternalUrl,
 }: {
+  /** Who the key is for, as the person reads it. */
+  providerName: string;
+  /** The lab's platform the key belongs to, where it runs two. */
+  platformName?: string;
+  /** The provider's page where keys are made and deleted. */
+  keysPage?: string;
   credential: ProviderSettings["credential"];
   onClose: () => void;
   onSaveApiKey: (apiKey: string) => Promise<ApiKeySaveOutcome>;
   onClearApiKey: () => Promise<void>;
-  /** Opens OpenRouter's page where keys are made and deleted. */
+  /** Opens the provider's page where keys are made and deleted. */
   onOpenExternalUrl?: (url: string) => Promise<void>;
 }) {
   const inputId = useId();
@@ -39,8 +47,8 @@ export function ApiKeyDialog({
   const entering = credential.status === "missing" || replacing;
   const kept = (
     <p className={styles["model-key-where"]}>
-      Zhiyin keeps the key in Windows Credential Manager and sends it only to
-      OpenRouter.
+      Zhiyin keeps the key in Windows Credential Manager and sends it only to{" "}
+      {providerName}.
     </p>
   );
 
@@ -90,7 +98,11 @@ export function ApiKeyDialog({
 
   return (
     <Dialog
-      title="OpenRouter API key"
+      title={
+        platformName
+          ? `${providerName} API key · ${platformName}`
+          : `${providerName} API key`
+      }
       onClose={onClose}
       footer={
         <>
@@ -147,8 +159,9 @@ export function ApiKeyDialog({
 
       {fromEnvironment && (
         <p className={styles["model-key-note"]}>
-          The key comes from the development environment, so it cannot be
-          changed here.
+          This key was set for an automated run, by a variable whose name starts
+          with ZHIYIN_. Remove the variable and restart Zhiyin to save a key
+          here.
         </p>
       )}
 
@@ -158,12 +171,12 @@ export function ApiKeyDialog({
             className={styles["model-key-value"]}
             aria-label="Stored API key"
           >
-            sk-or-v1-••••••••••••••••••••••••••••
+            ••••••••••••••••••••••••••••
           </span>
           {kept}
           <p className={styles["model-key-where"]}>
             Remove only makes Zhiyin forget it. To stop it working anywhere,
-            delete it on OpenRouter's keys page.
+            delete it on {providerName}'s keys page.
           </p>
         </div>
       )}
@@ -171,16 +184,16 @@ export function ApiKeyDialog({
       {entering && (
         <div className={styles["model-key-intro"]}>
           <p>
-            The key lets Zhiyin use AI models through your OpenRouter account.
-            OpenRouter charges that account for what Zhiyin uses.
+            The key lets Zhiyin use AI models through your {providerName}{" "}
+            account. {providerName} charges that account for what Zhiyin uses.
           </p>
-          {onOpenExternalUrl && (
+          {onOpenExternalUrl && keysPage && (
             <button
               className="button button--small"
               type="button"
-              onClick={() => void onOpenExternalUrl(OPENROUTER_KEYS_URL)}
+              onClick={() => void onOpenExternalUrl(keysPage)}
             >
-              Get a key on OpenRouter
+              Get a key on {providerName}
             </button>
           )}
         </div>
@@ -203,7 +216,6 @@ export function ApiKeyDialog({
             type="password"
             autoComplete="off"
             spellCheck={false}
-            placeholder="sk-or-v1-…"
             value={apiKey}
             onChange={(event) => setApiKey(event.target.value)}
           />

@@ -119,10 +119,10 @@ export async function launch(
     // must show the theme Electron chose, which is what is being tested.
     colorScheme: null,
     env: {
-      ...process.env,
+      ...withoutProviderKeys(),
       // No provider credential reaches a test run unless one was asked for, and
       // no folder is inherited from whoever is running it.
-      OPENROUTER_API_KEY: options.apiKey ?? "",
+      ZHIYIN_OPENROUTER_API_KEY: options.apiKey ?? "",
       ZHIYIN_WORKSPACE: "",
       ZHIYIN_TEST_DICTIONARY_SERVER:
         options.dictionaryServer ?? "http://127.0.0.1:9/",
@@ -148,6 +148,16 @@ export async function launch(
 }
 
 /**
+ * The environment of whoever runs the tests, without any key: the app reads
+ * each provider's from its own `ZHIYIN_<PROVIDER>_API_KEY`.
+ */
+function withoutProviderKeys(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.endsWith("_API_KEY")),
+  );
+}
+
+/**
  * Starts another copy against a data folder that is already owned, and answers
  * whether it got a window. A refused copy quits before it has one, so asking it
  * for a window the way an ordinary launch does would only ever report that it
@@ -160,7 +170,7 @@ export async function launchSecondCopy(
   try {
     app = await electron.launch({
       args: [built, `--user-data-dir=${dataDirectory}`],
-      env: { ...process.env, OPENROUTER_API_KEY: "", ZHIYIN_WORKSPACE: "" },
+      env: { ...withoutProviderKeys(), ZHIYIN_WORKSPACE: "" },
     });
   } catch {
     // It quit before it could even be attached to, which is the refusal

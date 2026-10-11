@@ -1,6 +1,6 @@
 /**
- * The OpenRouter key: read from the environment or the operating system's
- * credential store, and written only to the store. The key itself never
+ * A provider's key for one of its platforms: read from the environment or the
+ * operating system's credential store, and written only to the store. The key itself never
  * leaves this module except as a request's bearer token.
  */
 
@@ -16,16 +16,27 @@ export type CredentialEntry = {
 export type ProviderCredentialsOptions = {
   readonly environment: () => string | undefined;
   readonly entry?: CredentialEntry;
+  /**
+   * The name the key is stored under. OpenRouter's is `openrouter`, where it
+   * was kept before there were other providers.
+   */
+  readonly account?: string;
+  /** The key as the person is asked for it. */
+  readonly keyName?: string;
 };
 
 export class ProviderCredentials {
   readonly #environment: ProviderCredentialsOptions["environment"];
   readonly #providedEntry: CredentialEntry | undefined;
+  readonly #account: string;
+  readonly #keyName: string;
   #loadedEntry: Promise<CredentialEntry> | undefined;
 
   constructor(options: ProviderCredentialsOptions) {
     this.#environment = options.environment;
     this.#providedEntry = options.entry;
+    this.#account = options.account ?? "openrouter";
+    this.#keyName = options.keyName ?? "an OpenRouter API key";
   }
 
   async get(): Promise<string | undefined> {
@@ -65,7 +76,7 @@ export class ProviderCredentials {
     if (!value) {
       throw new ModelClientError(
         "missingCredential",
-        "Enter an OpenRouter API key before saving.",
+        `Enter ${this.#keyName} before saving.`,
       );
     }
     try {
@@ -94,7 +105,7 @@ export class ProviderCredentials {
   async #entry(): Promise<CredentialEntry> {
     if (this.#providedEntry) return this.#providedEntry;
     this.#loadedEntry ??= import("@napi-rs/keyring").then(
-      ({ AsyncEntry }) => new AsyncEntry("Zhiyin", "openrouter"),
+      ({ AsyncEntry }) => new AsyncEntry("Zhiyin", this.#account),
     );
     return this.#loadedEntry;
   }

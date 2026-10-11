@@ -47,7 +47,7 @@ import type { ConversationExport } from "@zhiyin/conversation-export";
 import type { Capabilities } from "@zhiyin/capabilities";
 import type { ConversationBrowsers } from "@zhiyin/interactive-browser";
 import type { LocatedDocument } from "@zhiyin/document-viewer";
-import type { ModelClient } from "@zhiyin/model-client";
+import type { ModelClient, ProviderDirectory } from "@zhiyin/model-client";
 import type { Rewind } from "@zhiyin/rewind";
 import type { Sessions } from "@zhiyin/session";
 import type { Spelling } from "@zhiyin/spelling";
@@ -92,7 +92,10 @@ export type WorkspaceDependencies = {
   readonly rewind: Rewind;
   readonly audit: AuditLog;
   readonly usage: UsageTelemetry;
+  /** The model as chosen: every request follows the person's choice. */
   readonly model: ModelClient;
+  /** Every provider, each set up on its own. */
+  readonly modelProviders?: ProviderDirectory;
   readonly browsers: ConversationBrowsers;
   /** The documents shown beside conversations (ADR 0018). */
   readonly documents: DocumentViewerPort;
@@ -178,7 +181,11 @@ export class Workspace {
         this.#issues.remove(UNSAVED_CHANGES);
       },
     );
-    this.settings = new ModelSettings(deps.model, (event) => this.emit(event));
+    this.settings = new ModelSettings(
+      deps.model,
+      (event) => this.emit(event),
+      deps.modelProviders,
+    );
     deps.spelling?.onChanged(() =>
       this.emit({ kind: "workspaceSnapshot", data: this.snapshot() }),
     );

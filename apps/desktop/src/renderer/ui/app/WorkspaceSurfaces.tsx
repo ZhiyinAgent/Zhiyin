@@ -44,6 +44,7 @@ type SurfaceCommands = Pick<
   | "shellAvailability"
   | "recheckShell"
   | "openExternalUrl"
+  | "listProviders"
   | "listModels"
   | "listModelProviders"
   | "selectModel"
@@ -129,7 +130,7 @@ export function WorkspaceSurfaces({
         <Surface>
           <UsagePanel
             availability={state.usage}
-            conversations={state.tasks}
+            conversations={listedConversations(state)}
             onListModels={commands.listModels}
             onOpenConversation={(id) => {
               onOpenSurface("thread");
@@ -145,13 +146,18 @@ export function WorkspaceSurfaces({
           <ModelSettings
             settings={state.provider}
             onClose={() => onOpenSurface("thread")}
-            onListModels={() => commands.listModels()}
-            onListModelProviders={(model) => commands.listModelProviders(model)}
-            onSelectModel={(model, providers) =>
-              commands.selectModel(model, providers)
+            onListProviders={commands.listProviders}
+            onListModels={(target) => commands.listModels(target)}
+            onListModelProviders={(model, target) =>
+              commands.listModelProviders(model, target)
             }
-            onSaveApiKey={(apiKey) => commands.saveProviderApiKey(apiKey)}
-            onClearApiKey={() => commands.clearProviderApiKey()}
+            onSelectModel={(model, providers, target) =>
+              commands.selectModel(model, providers, target)
+            }
+            onSaveApiKey={(apiKey, target) =>
+              commands.saveProviderApiKey(apiKey, target)
+            }
+            onClearApiKey={(target) => commands.clearProviderApiKey(target)}
             onOpenExternalUrl={commands.openExternalUrl}
             openKeyDialog={openKeyDialog}
           />

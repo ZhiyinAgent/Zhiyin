@@ -29,6 +29,8 @@ import type {
   ModelCatalog,
   ModelProviderList,
   ProviderSettings,
+  ProviderSummary,
+  ProviderTarget,
 } from "./models.js";
 import type { StoredPicture } from "./pictures.js";
 import type {
@@ -389,23 +391,44 @@ export interface CoreApi extends DocumentCommands {
   /** Ask the agent's browser to do one thing. */
   driveBrowser(intent: BrowserIntent): Promise<void>;
 
-  saveProviderApiKey(apiKey: string): Promise<ApiKeySaveOutcome>;
+  /**
+   * Every provider models can be reached through, with its regions, whether
+   * it can be used yet, and whether each has a key.
+   */
+  listProviders(): Promise<readonly ProviderSummary[]>;
 
-  clearProviderApiKey(): Promise<void>;
+  /*
+   * The key and model commands apply to the provider and region named, or to
+   * the chosen ones when none is named.
+   */
+
+  saveProviderApiKey(
+    apiKey: string,
+    target?: ProviderTarget,
+  ): Promise<ApiKeySaveOutcome>;
+
+  clearProviderApiKey(target?: ProviderTarget): Promise<void>;
 
   /** The models this account may use, or why the catalogue could not be read. */
-  listModels(): Promise<ModelCatalog>;
+  listModels(target?: ProviderTarget): Promise<ModelCatalog>;
 
   /** The upstreams that serve one model, with price and recent behaviour. */
-  listModelProviders(model: string): Promise<ModelProviderList>;
+  listModelProviders(
+    model: string,
+    target?: ProviderTarget,
+  ): Promise<ModelProviderList>;
 
   /**
-   * Choose the model and the upstreams routing may use, together. They are one
-   * command because a provider list belongs to the model it was chosen for;
-   * applying them separately would leave a model briefly restricted to
-   * upstreams that do not serve it.
+   * Choose the model and the upstreams routing may use, together, on the
+   * provider named. They are one command because an upstream list belongs to
+   * the model it was chosen for; applying them separately would leave a model
+   * briefly restricted to upstreams that do not serve it.
    */
-  selectModel(model: string, providers: readonly string[]): Promise<void>;
+  selectModel(
+    model: string,
+    providers: readonly string[],
+    target?: ProviderTarget,
+  ): Promise<void>;
 
   /** Read a file this task produced, for review inside the app. */
   previewArtifact(taskId: string, path: string): Promise<ArtifactPreview>;

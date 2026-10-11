@@ -3,7 +3,7 @@
 Zhiyin is an AI agent for your PC: you describe a task in plain words, and it
 does the work in a folder you choose, asking before it changes anything. This
 page takes you from download to your first task. You need a Windows PC and,
-for the AI itself, about $5 of credit (step 2). Web search has a free monthly
+for the AI itself, a few dollars of credit (step 2). Web search has a free monthly
 allowance (step 5).
 
 ## 1. Install Zhiyin
@@ -24,13 +24,17 @@ Zhiyin also uses two free programs:
 - [Git for Windows](https://git-scm.com/download/win), to run shell commands
   (commands typed for Windows to carry out) and to work with Git.
 
-## 2. Connect an AI model through OpenRouter
+## 2. Connect an AI model
 
 The thinking behind Zhiyin is done by an AI model, which runs on a company's
-servers. [OpenRouter](https://openrouter.ai) gives you access to many AI
-models from different companies with one account. You buy credit in advance,
-and each request Zhiyin sends uses a little of it, depending on the model. An
-**API key** is like a password that lets Zhiyin use your OpenRouter account.
+servers. You can reach one in two ways: through
+[OpenRouter](https://openrouter.ai), one account for many companies' models,
+or through the platform of the lab that makes the model. Either way you buy
+credit in advance, and each request Zhiyin sends uses a little of it,
+depending on the model. An **API key** is like a password that lets Zhiyin
+use your account.
+
+### Through OpenRouter
 
 1. Create an account at [openrouter.ai](https://openrouter.ai).
 2. Add credit on the [Credits page](https://openrouter.ai/settings/credits).
@@ -40,6 +44,7 @@ and each request Zhiyin sends uses a little of it, depending on the model. An
 3. In Zhiyin, open the **Model** page: select **•••** next to **Your
    preferences** at the bottom of the sidebar, then **Model** (or press
    **Ctrl+,**).
+   Under **Provider**, choose **OpenRouter**.
 4. Select **Add a key**. In the window that opens, **Get a key on OpenRouter**
    opens the page where keys are made. Create a key there and copy it. It
    starts with `sk-or-v1-`.
@@ -58,6 +63,28 @@ shows their price as free. OpenRouter allows them 50 requests a day, or 1,000
 a day once you have bought $10 of credit in total, and 20 a minute. One task
 can take many requests, so the daily limit runs out quickly. $5 of credit is
 the simplest start.
+
+### Through a lab's own platform
+
+Zhiyin also reaches Anthropic, OpenAI, Mistral, DeepSeek, Kimi, Qwen, Z.ai,
+MiniMax and Xiaomi MiMo directly. All but the first three run two platforms:
+**International**, billed in US dollars, and **Mainland China**, billed in
+yuan. Choose the one your account is on; a key from one usually does not work
+on the other.
+
+1. Create an account on the lab's platform and add credit there. Zhiyin uses
+   pay-as-you-go credit, not subscription coding plans.
+2. On the **Model** page, choose the lab under **Provider**, then its
+   platform where it shows two.
+3. Select **Add a key**. The window that opens links to the page where that
+   lab makes keys. Paste your key and select **Save key**. Zhiyin checks it
+   with the lab before keeping it.
+4. Choose a model in the list, then select **Save** at the top of the page.
+
+Beside the list, the page shows the chosen model's prices on that platform, in
+its currency, and when a lab charges more at busy hours, which hours those
+are in your own time. Most labs do not say what each request cost, so Zhiyin
+estimates it from the lab's price list.
 
 ## 3. Choose a folder
 
@@ -156,8 +183,10 @@ check what will run. You choose:
 Deleting a file, running a shell command and running Python always ask.
 
 **Cost.** Select **•••** next to **Your preferences**, then **Usage**. The
-page shows what OpenRouter reported each request cost, by day and by
-conversation.
+page shows what each request cost, by day and by conversation: the
+provider's own figure where it gives one, and otherwise an estimate from the
+lab's price list, marked as estimated. Dollars and yuan are shown apart,
+never converted.
 
 **Context budget.** The small ring in the message box shows how much of the
 conversation Zhiyin keeps in mind. Select it to choose **Low**, **Medium** (the
@@ -168,11 +197,14 @@ costs more per request. **Compact** summarises older messages to save room.
 
 Zhiyin says what happened, with a button for the next step:
 
-- "Add an OpenRouter API key on the Model page" or "OpenRouter rejected the
-  API key": select **Update API key** and paste a key.
+- "Add an OpenRouter API key on the Model page", or another provider's name,
+  or "… rejected the API key": select **Update API key** and paste a key.
+- "This DeepSeek account is billed in US dollars" (or yuan): choose the
+  platform the message names on the Model page, then add the key there.
 - "Choose a model on the Model page": select **Choose a model**.
-- "The OpenRouter account is out of credits": select **Add OpenRouter
-  credits**, add credit, then select **Try again**.
+- "The OpenRouter account is out of credits", or another provider's account
+  "has run out of balance": select **Add credits** with the provider's name,
+  add credit on its site, then select **Try again**.
 - A connector's window says the service refused the saved key: make a new key
   on the service's site and paste it there.
 - The Plugins page says "Shell commands are unavailable": select **Get Git for

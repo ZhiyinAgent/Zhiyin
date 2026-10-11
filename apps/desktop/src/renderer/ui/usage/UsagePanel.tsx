@@ -1,7 +1,13 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import type { ModelCatalog, UsageState } from "@zhiyin/contract";
-import { Icon, LoadingSkeleton, SurfacePanel } from "../shared/index.js";
+import {
+  formatMoney,
+  Icon,
+  LoadingSkeleton,
+  SurfacePanel,
+} from "../shared/index.js";
 import { DailyChart } from "./DailyChart.js";
+import { currencyNames, scaleMoney, SpentAmounts, spentIn } from "./spent.js";
 import styles from "./usage.module.css";
 
 type UsageRangeKey = "7" | "30";
@@ -10,17 +16,6 @@ const compactNumber = new Intl.NumberFormat("en", {
   notation: "compact",
   maximumFractionDigits: 1,
 });
-
-/** Cents for anything worth a cent; below that, two significant places. */
-function formatUsd(value: number) {
-  if (value === 0 || value >= 0.01) return `$${value.toFixed(2)}`;
-  return `$${Number(value.toPrecision(2)).toString()}`;
-}
-
-/** A scale reads in whole dollars when it can. */
-function scaleUsd(value: number) {
-  return Number.isInteger(value) ? `$${value}` : formatUsd(value);
-}
 
 function count(value: number, one: string, many: string) {
   return `${value.toLocaleString("en")} ${value === 1 ? one : many}`;
@@ -70,8 +65,15 @@ export function UsagePanel({
   const titles = new Map(conversations.map((item) => [item.id, item.title]));
   const modelNames = useModelNames(onListModels);
   const [range, setRange] = useState<UsageRangeKey>("7");
+  const [chosenCurrency, setCurrency] = useState("USD");
   const usage =
     availability.status === "ready" ? availability.ranges[range] : null;
+  /** One currency is charted at a time: costs are never converted. */
+  const spent = usage ? spentIn(usage) : [];
+  const charted =
+    spent.find((each) => each.currency === chosenCurrency) ?? spent[0];
+  const currency = charted?.currency ?? "USD";
+  const anyEstimated = spent.some((each) => each.estimated);
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
   const inputShare = totalTokens
     ? Math.round((usage!.inputTokens / totalTokens) * 100)
@@ -79,10 +81,11 @@ export function UsagePanel({
 
   return (
     <SurfacePanel
+      className={styles["usage"]}
       label="Usage overview"
       eyebrow={<p className="instrument-label">Account / Usage</p>}
       title="Usage"
-      description="Requests, model mix, and provider-reported cost on this device."
+      description="Requests, model mix, and cost on this device, as providers reported it or estimated from price lists."
       controls={
         <div className={styles["range-control"]} aria-label="Usage range">
           <button
@@ -126,11 +129,15 @@ export function UsagePanel({
             </article>
             <article>
               <span className="instrument-label">Provider cost</span>
-              <strong>{formatUsd(usage.costUsd)}</strong>
+              <strong>
+                <SpentAmounts spent={usage} stacked />
+              </strong>
               <small>
                 {usage.pricedRequests === usage.requests
-                  ? "Reported for every request"
-                  : `${usage.pricedRequests.toLocaleString("en")} of ${count(usage.requests, "request", "requests")} priced`}
+                  ? anyEstimated
+                    ? "Reported or estimated for every request"
+                    : "Reported for every request"
+                  : `${usage.pricedRequests.toLocaleString("en")} of ${count(usage.requests, "request", "requests")} priced${anyEstimated ? ", some estimated" : ""}`}
               </small>
             </article>
             <article>
@@ -165,19 +172,48 @@ export function UsagePanel({
             <figure>
               <figcaption>
                 <div>
-                  <span className="instrument-label">Cost rhythm</span>
+                  <span className="instrument-label">
+                    Cost rhythm
+                    {charted?.estimated
+                      ? currency === "USD" && usage.costUsd > 0
+                        ? " · partly estimated"
+                        : " · estimated"
+                      : ""}
+                  </span>
                   <strong>Provider cost by day</strong>
                 </div>
+                {spent.length > 1 && (
+                  <div
+                    className={styles["range-control"]}
+                    aria-label="Currency"
+                  >
+                    {spent.map((each) => (
+                      <button
+                        key={each.currency}
+                        type="button"
+                        aria-pressed={each.currency === currency}
+                        aria-label={
+                          currencyNames[each.currency] ?? each.currency
+                        }
+                        onClick={() => setCurrency(each.currency)}
+                      >
+                        {each.currency}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </figcaption>
               <DailyChart
                 name="Cost by day"
                 shape="bars"
                 points={usage.activity.map((point) => ({
                   date: point.date,
-                  value: point.costUsd,
+                  value:
+                    spentIn(point).find((each) => each.currency === currency)
+                      ?.amount ?? 0,
                 }))}
-                format={formatUsd}
-                formatScale={scaleUsd}
+                format={(value) => formatMoney(value, currency)}
+                formatScale={(value) => scaleMoney(value, currency)}
               />
             </figure>
 
@@ -257,7 +293,9 @@ export function UsagePanel({
                             % of requests
                           </small>
                         </span>
-                        <em>{formatUsd(model.costUsd)}</em>
+                        <em>
+                          <SpentAmounts spent={model} />
+                        </em>
                       </li>
                     );
                   })}
@@ -308,7 +346,9 @@ export function UsagePanel({
                               : ""}
                           </small>
                         </span>
-                        <em>{formatUsd(spent.costUsd)}</em>
+                        <em>
+                          <SpentAmounts spent={spent} />
+                        </em>
                       </>
                     );
                     return (

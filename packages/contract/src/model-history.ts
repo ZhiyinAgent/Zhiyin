@@ -1,4 +1,16 @@
 /**
+ * What a provider needs back with a model's turn to continue from it, kept as
+ * it arrived: it may be signed or encrypted for that provider alone, so nothing
+ * but the model client reads it, and it goes back only to the provider and
+ * format that produced it.
+ */
+export type ModelReplay = {
+  readonly provider: string;
+  readonly format: string;
+  readonly data: unknown;
+};
+
+/**
  * What the model has been sent of a conversation, in the order it was sent.
  *
  * Kept so each request can start with the whole of the one before it, turn
@@ -6,6 +18,10 @@
  * a request's start only while the start is the same, byte for byte. Each entry
  * has an id, so a later change to one entry names it rather than rewriting the
  * list.
+ *
+ * A turn the model wrote keeps its readable reasoning and its replay record
+ * beside its words, never in them; which of them is sent back is the
+ * provider's to say.
  */
 export type ModelHistoryEntry =
   /**
@@ -17,6 +33,9 @@ export type ModelHistoryEntry =
       readonly kind: "message";
       readonly messageId: string;
       readonly picturesLetGo?: true;
+      /** For the model's own answer: how it reasoned to it. */
+      readonly reasoning?: string;
+      readonly replay?: ModelReplay;
     }
   /**
    * The model's words and the tool calls of one round, with the arguments that
@@ -33,6 +52,8 @@ export type ModelHistoryEntry =
         readonly name: string;
         readonly arguments: string;
       }[];
+      readonly reasoning?: string;
+      readonly replay?: ModelReplay;
     }
   /** A tool's answer to one call, as the model received it. */
   | {

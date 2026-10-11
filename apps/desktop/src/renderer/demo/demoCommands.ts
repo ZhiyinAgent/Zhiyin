@@ -12,6 +12,7 @@ import type { DemoAction } from "./demoReducer.js";
 import { demoDocument, drawSamplePage } from "./fixtures/documents.js";
 import {
   demoCatalog,
+  demoProviderSummaries,
   demoCheck,
   demoComponentContent,
   type DemoScenario,
@@ -246,6 +247,7 @@ export function demoCommands(
     recoverHistory: async () => {},
     saveProviderApiKey: async () => ({ status: "accepted" as const }),
     clearProviderApiKey: async () => {},
+    listProviders: async () => demoProviderSummaries,
     listModels: async () => demoCatalog,
     listModelProviders: async () => ({
       status: "unavailable" as const,

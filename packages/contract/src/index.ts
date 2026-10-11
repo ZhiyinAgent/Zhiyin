@@ -43,7 +43,7 @@ export type {
   ProducedImage,
   StoredPicture,
 } from "./pictures.js";
-export type { ModelHistoryEntry } from "./model-history.js";
+export type { ModelHistoryEntry, ModelReplay } from "./model-history.js";
 export { estimatedTokens, utf8Bytes } from "./token-estimate.js";
 export * from "./context-budget.js";
 export type * from "./reasoning.js";

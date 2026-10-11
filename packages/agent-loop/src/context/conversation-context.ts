@@ -121,12 +121,49 @@ function requestTokens(value: unknown): number {
  */
 const pictureTokens = 4_800;
 
+/** What a request carries beyond its words and calls. */
+export type Counting = {
+  /** Earlier turns go back with their reasoning (`reasoningSentBack`). */
+  readonly reasoning?: boolean;
+};
+
+/**
+ * A model's turn as it is counted: its words and calls, and its reasoning
+ * where the provider receives that back. The replay record is never counted:
+ * what it holds that the provider reads back is the reasoning already there.
+ */
+function wordsAndCalls(
+  message: Extract<ModelMessage, { role: "assistant" }>,
+  counting: Counting,
+) {
+  return {
+    role: message.role,
+    content: message.content,
+    ...(counting.reasoning && message.reasoning
+      ? { reasoning: message.reasoning }
+      : {}),
+    ...(message.toolCalls ? { toolCalls: message.toolCalls } : {}),
+  };
+}
+
+/** The messages as they are counted, every model turn reduced to what goes back. */
+export function countedMessages(
+  messages: readonly ModelMessage[],
+  counting: Counting = {},
+) {
+  return messages.map((message) =>
+    message.role === "assistant" ? wordsAndCalls(message, counting) : message,
+  );
+}
+
 export function estimatedRequestTokens(
   messages: readonly ModelMessage[],
   tools: readonly ModelTool[],
+  counting: Counting = {},
 ): number {
   let pictures = 0;
   const withoutPictureData = messages.map((message) => {
+    if (message.role === "assistant") return wordsAndCalls(message, counting);
     if (message.role !== "user" || typeof message.content === "string")
       return message;
     return {

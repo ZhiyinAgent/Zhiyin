@@ -22,6 +22,20 @@ function count(value: unknown): boolean {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
+/**
+ * What a model's turn keeps beside its words: its reasoning, and the record
+ * its provider needs back, which only the model client reads.
+ */
+function validTurnExtras(value: Record<string, unknown>): boolean {
+  return (
+    optionalText(value.reasoning) &&
+    (value.replay === undefined ||
+      (isRecord(value.replay) &&
+        text(value.replay.provider) &&
+        text(value.replay.format)))
+  );
+}
+
 /** One entry of what the model has been sent, in any of its five kinds. */
 export function validModelHistoryEntry(value: unknown): boolean {
   if (!isRecord(value) || !text(value.id)) return false;
@@ -29,11 +43,13 @@ export function validModelHistoryEntry(value: unknown): boolean {
     case "message":
       return (
         text(value.messageId) &&
-        (value.picturesLetGo === undefined || value.picturesLetGo === true)
+        (value.picturesLetGo === undefined || value.picturesLetGo === true) &&
+        validTurnExtras(value)
       );
     case "calls":
       return (
         optionalText(value.messageId) &&
+        validTurnExtras(value) &&
         text(value.text) &&
         listOf(
           value.calls,

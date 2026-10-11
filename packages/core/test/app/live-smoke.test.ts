@@ -16,7 +16,7 @@
  *
  *   $env:ZHIYIN_SMOKE = "1"; npx vitest run --project packages packages/core/test/app/live-smoke.test.ts
  *
- * It needs OPENROUTER_API_KEY in the environment.
+ * It needs ZHIYIN_OPENROUTER_API_KEY in the environment.
  *
  * **This is not an evaluation.** An evaluation case is run in the installed
  * app and judged by a person. This only answers "does the machinery turn
@@ -53,12 +53,12 @@ import { stubDependencies, loopFrom } from "./support.js";
 
 const live =
   process.env["ZHIYIN_SMOKE"] === "1" &&
-  Boolean(process.env["OPENROUTER_API_KEY"]);
+  Boolean(process.env["ZHIYIN_OPENROUTER_API_KEY"]);
 const when = live ? describe : describe.skip;
 
 async function realLoop(workspaceDirectory: string, data: string) {
   const credentials = new ProviderCredentials({
-    environment: () => process.env["OPENROUTER_API_KEY"],
+    environment: () => process.env["ZHIYIN_OPENROUTER_API_KEY"],
   });
   const model = new OpenRouterModelClient({
     credentials,

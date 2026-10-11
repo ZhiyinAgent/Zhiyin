@@ -154,7 +154,8 @@ described in the [component library](../../component-library.md).
   for how long. A provider retry counts down to its deadline (ADR 0011). A
   stopped turn says why. A failed one gives its reason and offers the next steps
   the core suggests as buttons, such as trying again, updating the key, choosing
-  another model or adding credits.
+  another model or adding credits, which opens the billing page of the provider
+  requests go to.
 - The composer holds Send and Stop in one place. While a turn runs the field
   stays open: a message typed then is added to the current work, and Stop shows
   while the field is empty. The reasoning control, which offers only what the
@@ -237,9 +238,21 @@ described in the [component library](../../component-library.md).
   plugin shows what it is for and what it can reach before its skills,
   specialists and connectors, each with one switch. A connector is reached by
   signing in or with an access token (ADR 0021).
-- The model page lists only models that can use tools and saves the model and
-  the upstreams chosen to serve it as one change. The API key is write-only:
-  once saved it is never shown again.
+- The model page lists every provider by name, and one that cannot be used yet
+  stays listed, unchosen, with the reason. The provider, its platform where
+  the lab runs two, the model and, on OpenRouter, the upstreams chosen to serve
+  it are saved as one change. Only models that can use tools are listed. Each
+  provider and platform keeps its own API key, which is write-only: once saved
+  it is never shown again. The chosen provider's platform and whether its key
+  is saved, and where from, are shown above its models, with its platform's
+  billing page once a key is saved. No balance is read: most labs give a key
+  no way to read it, and every provider is shown alike. On a lab, the model
+  chosen is detailed beside the list: its prices on that platform, in its
+  currency, with busy hours, given in the person's own time, or a higher tier
+  where the lab has them, and its context window.
+- The usage page names each conversation that cost something by its title,
+  whether or not it has been opened since Zhiyin started, and opens it from
+  there. Only a conversation that no longer exists is called deleted.
 - Settings holds the appearance, spelling (ADR 0023), notifications, the data
   folder (ADR 0019) and conversations from an earlier version waiting for an
   update (ADR 0022). Each row appears only when the core offers it, and a change

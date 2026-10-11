@@ -101,7 +101,10 @@ export function ProviderTable({
     );
 
   return (
-    <section className={styles["model-column"]} aria-label="Providers">
+    <section
+      className={`${styles["model-column"]} ${styles["model-column--upstreams"]}`}
+      aria-label="Providers"
+    >
       <div className={styles["model-column__top"]}>
         <div className={styles["model-controls"]}>
           <div

@@ -111,6 +111,7 @@ function fakeCore(version: string): CoreApi & {
     drawDocumentPage: async () => ({ ok: false, reason: "Not drawn here." }),
     openDocument: async () => {},
     showDocumentInFolder: async () => {},
+    listProviders: async () => [],
     saveProviderApiKey: async () => ({ status: "accepted" as const }),
     clearProviderApiKey: async () => {},
     listModels: async () => ({ status: "ready" as const, models: [] }),
