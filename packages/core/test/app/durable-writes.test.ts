@@ -229,3 +229,53 @@ describe("AgentLoop durable turn ownership", () => {
     ).not.toContain("Too late.");
   });
 });
+
+describe("AgentLoop conversations working at once", () => {
+  it("keeps each conversation's work while another conversation is being saved", async () => {
+    let saved: SavedWorkspace | undefined;
+    // One save at a time, in the order asked, each taking a moment: what the
+    // store on disk does.
+    let queue: Promise<void> = Promise.resolve();
+    let created = 0;
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      newTaskId: () => `task-${++created}`,
+      sessions: {
+        ...deps.sessions,
+        saveWorkspace: (snapshot, options) => {
+          const save = queue.then(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 2));
+            if (options?.commit?.() ?? true) saved = structuredClone(snapshot);
+          });
+          queue = save.catch(() => undefined);
+          return save;
+        },
+      },
+      model: {
+        ...deps.model,
+        send: async function* () {
+          yield { kind: "textDelta" as const, text: "Answered." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    await loop.initialize();
+    const first = await loop.createTask();
+    const second = await loop.createTask();
+
+    await Promise.all([
+      loop.start(first, "First question"),
+      loop.start(second, "Second question"),
+    ]);
+
+    const said = (tasks: SavedWorkspace["tasks"], id: string) =>
+      tasks
+        .find((task) => task.id === id)
+        ?.messages.map((message) => message.text);
+    for (const tasks of [loop.snapshot().tasks, saved?.tasks ?? []]) {
+      expect(said(tasks, first)).toEqual(["First question", "Answered."]);
+      expect(said(tasks, second)).toEqual(["Second question", "Answered."]);
+    }
+  });
+});

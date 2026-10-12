@@ -132,6 +132,15 @@ export class Workspace {
   readonly turns: WorkspaceTurns;
   /** The conversations opened so far; the list holds every one. */
   #tasks: WorkspaceTask[] = [];
+  /**
+   * Each conversation's newest revision while it is being saved. A revision is
+   * committed only once saved, so until then a save of anything else writes
+   * this one, not the revision before it, which would undo it on disk.
+   */
+  readonly #beingSaved = new Map<
+    string,
+    { readonly task: WorkspaceTask; readonly commit: () => boolean }
+  >();
   readonly #conversations: ConversationList;
   #selectedTaskId: string | null = null;
   #workspaceSelection: WorkspaceSnapshot["workspace"];
@@ -177,7 +186,7 @@ export class Workspace {
     this.#deps = deps;
     this.#persistence = new WorkspacePersistence(
       deps.sessions,
-      () => this.snapshot(),
+      () => this.#toSave(),
       () => this.#historyAvailable,
       () => {
         this.#issues.add(UNSAVED_CHANGES);
@@ -802,27 +811,46 @@ export class Workspace {
       updatedAt: this.#deps.now().toISOString(),
       updatedLabel: "Now",
     };
-    const nextTasks = this.#tasks.map((item) =>
-      item.id === task.id ? updated : item,
-    );
+    // Only this conversation is replaced, in the list as it is by then: other
+    // conversations are saved and committed while this save is under way, and
+    // the list from before it would put each of them back as it was.
+    const commit = () => {
+      this.#tasks = this.#tasks.map((item) =>
+        item.id === task.id ? updated : item,
+      );
+    };
+    const held = { task: updated, commit: options.commit };
     try {
-      if (options.persist)
-        await this.#persistence.save(
-          { ...this.snapshot(), tasks: nextTasks },
-          options.commit,
-        );
+      if (options.persist) {
+        this.#beingSaved.set(task.id, held);
+        await this.#persistence.save(this.#toSave(), options.commit);
+      }
       if (!options.commit()) return;
-      this.#tasks = nextTasks;
+      commit();
     } catch (error) {
       // A genuine failed save remains visible and is marked unsaved. A write
       // whose author lost ownership is discarded instead.
-      if (options.commit()) this.#tasks = nextTasks;
+      if (options.commit()) commit();
       throw error;
     } finally {
+      if (this.#beingSaved.get(task.id) === held)
+        this.#beingSaved.delete(task.id);
       const current = this.#tasks.find((item) => item.id === task.id);
       if (current && options.announce())
         this.emit({ kind: "taskChanged", data: current });
     }
+  }
+
+  /** What a save writes: every conversation at its newest revision, committed yet or not. */
+  #toSave(): WorkspaceSnapshot {
+    const snapshot = this.snapshot();
+    return {
+      ...snapshot,
+      tasks: snapshot.tasks.map((task) => {
+        const newer = this.#beingSaved.get(task.id);
+        return newer?.commit() ? newer.task : task;
+      }),
+    };
   }
 
   /** Said once, and the window is told at once rather than at the next change. */

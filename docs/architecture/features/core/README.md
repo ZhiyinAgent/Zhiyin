@@ -139,6 +139,11 @@ answers every other command:
 - **A failed save is said, and the last saved state stays on disk.** The next
   save that succeeds clears the notice. A failure to store usage never
   discards a response that already streamed.
+- **Saving one conversation never undoes another.** Conversations work at
+  the same time and each is committed only once it is saved. A save commits
+  its own conversation alone, into the list as it is by then, and writes every
+  other conversation at its newest revision, so neither the window nor the
+  disk is put back to what a conversation was before a save began.
 - **A deleted conversation takes no further writes,** however late the work
   that produced them started, and one whose turn was stopped takes nothing but
   the record of its stopping.
