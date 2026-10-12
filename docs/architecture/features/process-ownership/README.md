@@ -93,6 +93,12 @@ a process that may write only where it is let in (ADR 0028).
   where the person can.
 - **Opening a folder twice changes nothing**, and a folder that cannot be
   opened is refused with Windows' reason.
+- **A running process costs Zhiyin's own work nothing.** However many are
+  running at once, Zhiyin goes on reading and writing its files, and each
+  process's end is still reported with its exit code. Whether a process has
+  ended is asked on a timer, at most a twentieth of a second apart, and never
+  waited on: a wait would hold one of the few threads all file work shares for
+  as long as the process lives.
 - **Arguments arrive exactly.** Each is quoted the way Windows splits a
   command line, so quotes, trailing backslashes, spaces and empty arguments
   arrive as given.

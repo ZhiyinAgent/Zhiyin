@@ -23,6 +23,7 @@ export const CREATE_ALWAYS = 2;
 export const OPEN_EXISTING = 3;
 export const FILE_ATTRIBUTE_NORMAL = 0x00000080;
 export const INFINITE = 0xffffffff;
+export const WAIT_TIMEOUT = 0x00000102;
 export const STILL_ACTIVE = 259;
 export const EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
 const PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002;
@@ -72,11 +73,8 @@ export type Win32 = {
   ) => boolean;
   readonly resumeThread: (thread: unknown) => number;
   readonly terminateProcess: (process: unknown, exitCode: number) => boolean;
-  readonly wait: (
-    process: unknown,
-    milliseconds: number,
-    callback: (error: Error | null, result: number) => void,
-  ) => void;
+  /** Asks whether a process has ended, without waiting for it. */
+  readonly ended: (process: unknown) => number;
   readonly exitCode: (process: unknown, code: unknown[]) => boolean;
   readonly oemToWide: (bytes: Buffer, wide: Buffer | null) => number;
 };
@@ -324,8 +322,7 @@ export function win32(): Win32 {
       resumeThread: (thread) => ResumeThread(thread),
       terminateProcess: (process, exitCode) =>
         TerminateProcess(process, exitCode),
-      wait: (process, milliseconds, callback) =>
-        WaitForSingleObject.async(process, milliseconds, callback),
+      ended: (process) => WaitForSingleObject(process, 0),
       exitCode: (process, code) => GetExitCodeProcess(process, code),
       oemToWide: (bytes, wide) =>
         MultiByteToWideChar(

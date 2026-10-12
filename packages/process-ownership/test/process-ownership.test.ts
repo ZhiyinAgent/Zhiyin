@@ -302,6 +302,50 @@ describe.runIf(process.platform === "win32")("process containment", () => {
   );
 
   it(
+    "keeps Zhiyin's own file work going while many processes it started are still running",
+    { timeout: 60_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const container = openProcessContainer();
+      try {
+        // More at once than Node keeps threads for file work.
+        const running = Array.from({ length: 8 }, (_, index) =>
+          container.launch({
+            executable: process.execPath,
+            arguments: [join(fixtures, "sleeper.mjs")],
+            cwd: directory,
+            stdout: join(directory, `stdout-${index}.txt`),
+            stderr: join(directory, `stderr-${index}.txt`),
+          }),
+        );
+        const ends = running.map((child) => child.wait());
+        const stalled = new Promise<string>((resolve) =>
+          setTimeout(() => resolve("stalled"), 5_000),
+        );
+
+        expect(
+          await Promise.race([
+            readFile(join(fixtures, "sleeper.mjs"), "utf8").then(
+              () => "answered",
+            ),
+            stalled,
+          ]),
+        ).toBe("answered");
+
+        // Each is still told apart from the rest when the tree is ended.
+        container.close();
+        const codes = await Promise.all(ends);
+        expect(codes.map((code) => typeof code)).toEqual(
+          Array.from({ length: 8 }, () => "number"),
+        );
+        await allGone(running.map((child) => child.pid));
+      } finally {
+        container.close();
+      }
+    },
+  );
+
+  it(
     "starts a process below normal priority when asked, so its heavy work leaves the person's own responsive",
     { timeout: 30_000 },
     async () => {
