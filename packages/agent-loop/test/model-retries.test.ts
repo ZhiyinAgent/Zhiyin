@@ -96,7 +96,10 @@ function setUp(
   send: (
     request: Parameters<OpenRouterModelClient["send"]>[0],
   ) => AsyncIterable<ModelEvent>,
-  options: { readonly revealDelayMs?: number } = {},
+  options: {
+    readonly revealDelayMs?: number;
+    readonly quietAfterMs?: number;
+  } = {},
 ) {
   const seen: AppEvent[] = [];
   const deps = stubDependencies((event) => seen.push(event));
@@ -105,6 +108,9 @@ function setUp(
     ...(options.revealDelayMs === undefined
       ? {}
       : { revealDelayMs: options.revealDelayMs }),
+    ...(options.quietAfterMs === undefined
+      ? {}
+      : { quietAfterMs: options.quietAfterMs }),
     model: { ...deps.model, send },
   });
   const announced = () =>
@@ -132,6 +138,122 @@ function assistantTexts(task: WorkspaceTask | undefined) {
     .filter((message) => message.role === "assistant")
     .map((message) => message.text);
 }
+
+/** Waits on real time, for what a timer brings about. */
+async function eventually(predicate: () => boolean): Promise<void> {
+  const began = Date.now();
+  while (!predicate()) {
+    if (Date.now() - began > 2_000) throw new Error("It never happened.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+const waitingNote = "Waiting for the model";
+
+describe("a model request that has gone quiet", () => {
+  it("says the app is waiting for the model, until something arrives", async () => {
+    let answer!: () => void;
+    const quiet = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const { loop, announced } = setUp(
+      async function* () {
+        await quiet;
+        yield { kind: "textDelta", text: "Complete" };
+        yield { kind: "done", finishReason: "stop" };
+      },
+      { quietAfterMs: 20, revealDelayMs: 0 },
+    );
+    const taskId = await loop.createTask();
+    const turn = loop.start(taskId, "Answer me");
+
+    await eventually(() =>
+      announced().some(
+        (entry) =>
+          entry.phase.kind === "working" && entry.phase.note === waitingNote,
+      ),
+    );
+    const saidAt = announced().length;
+    answer();
+    await turn;
+
+    const task = loop.snapshot().tasks[0];
+    expect(task?.phase.kind).toBe("completed");
+    expect(assistantTexts(task)).toEqual(["Complete"]);
+    // Once the answer arrives the note is gone, before the answer shows.
+    const later = announced().slice(saidAt);
+    expect(
+      later.every(
+        (entry) =>
+          entry.phase.kind !== "working" || entry.phase.note !== waitingNote,
+      ),
+    ).toBe(true);
+  });
+
+  it("says nothing of the kind while the answer keeps arriving", async () => {
+    const { loop, announced } = setUp(
+      async function* () {
+        for (const word of ["One ", "two ", "three"]) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          yield { kind: "textDelta", text: word };
+        }
+        yield { kind: "done", finishReason: "stop" };
+      },
+      { quietAfterMs: 200, revealDelayMs: 0 },
+    );
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Answer me");
+
+    expect(assistantTexts(loop.snapshot().tasks[0])).toEqual(["One two three"]);
+    expect(
+      announced().some(
+        (entry) =>
+          entry.phase.kind === "working" && entry.phase.note === waitingNote,
+      ),
+    ).toBe(false);
+  });
+
+  it("leaves the countdown to a retry in place, and says it is waiting only once the retry has gone quiet too", async () => {
+    let answer!: () => void;
+    const quiet = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    const { loop, announced } = setUp(
+      async function* () {
+        yield {
+          kind: "retrying",
+          attempt: 2,
+          maximumAttempts: 5,
+          delayMs: 150,
+          reason: "rateLimited",
+          message: "Rate limited.",
+        };
+        await quiet;
+        yield { kind: "textDelta", text: "Complete" };
+        yield { kind: "done", finishReason: "stop" };
+      },
+      { quietAfterMs: 20, revealDelayMs: 0 },
+    );
+    const taskId = await loop.createTask();
+    const began = Date.now();
+    const turn = loop.start(taskId, "Answer me");
+
+    await eventually(() =>
+      announced().some(
+        (entry) =>
+          entry.phase.kind === "working" && entry.phase.note === waitingNote,
+      ),
+    );
+    const waited = Date.now() - began;
+    answer();
+    await turn;
+
+    // Not before the retry's own wait was over.
+    expect(waited).toBeGreaterThanOrEqual(150);
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
+  });
+});
 
 describe("a model request refused before it streamed", () => {
   it("is sent again, and the turn completes with one answer and the retries recorded", async () => {

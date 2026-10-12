@@ -237,6 +237,10 @@ input and shows as the action's description and the approval's reason.
 - The answer is shown five seconds behind the model, so a provider restart
   before then is unseen. After it, the shown text is withdrawn openly and
   exactly one answer remains.
+- When the model has sent nothing for fifteen seconds, the conversation says
+  the turn is waiting for the model, and the note goes as soon as anything
+  arrives. The wait before a repeated request is counted down instead, and
+  silence is counted from when the repeat is sent.
 - When the connection drops after tools have completed and the client's retries
   are spent, the turn resumes once from the recorded results. Completed tools
   are not run again.

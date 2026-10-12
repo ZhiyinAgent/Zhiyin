@@ -26,6 +26,7 @@ import {
   type ProviderAccountOptions,
 } from "./provider-account.js";
 import { withRetries, type RetryOptions } from "./retry.js";
+import { startingWithin } from "./stream.js";
 
 export type ProviderModelClientOptions = ProviderAccountOptions & {
   /** Where every request goes instead of the provider's own host. */
@@ -37,6 +38,11 @@ export type ProviderModelClientOptions = ProviderAccountOptions & {
    * and cutting off real work is worse than waiting.
    */
   readonly stallTimeoutMs?: number;
+  /**
+   * How long an answer may take to start: the provider's own limit where it
+   * was measured, otherwise the silence a stream may keep.
+   */
+  readonly startTimeoutMs?: number;
   /** How retries wait. Replaced in tests; the policy itself is fixed. */
   readonly retry?: RetryOptions;
   /** The time a cost is estimated at, for prices that change by hour. */
@@ -86,6 +92,7 @@ export class ProviderModelClient implements ModelClient {
   readonly #endpoint: string;
   readonly #fetcher: ModelFetch;
   readonly #stallTimeoutMs: number;
+  readonly #startTimeoutMs: number;
   readonly #retry: RetryOptions | undefined;
   readonly #region: string | undefined;
   readonly #now: () => Date;
@@ -102,6 +109,11 @@ export class ProviderModelClient implements ModelClient {
     this.#account = new ProviderAccount(options, provider, this.#endpoint);
     this.#fetcher = options.fetcher ?? defaultFetch;
     this.#stallTimeoutMs = options.stallTimeoutMs ?? defaultStallTimeoutMs;
+    // Starting is never waited on longer than a silence mid-answer would be.
+    this.#startTimeoutMs = Math.min(
+      options.startTimeoutMs ?? provider.startTimeoutMs ?? this.#stallTimeoutMs,
+      this.#stallTimeoutMs,
+    );
     this.#retry = options.retry;
     this.#region = options.region;
     this.#now = options.now ?? (() => new Date());
@@ -157,7 +169,11 @@ export class ProviderModelClient implements ModelClient {
         ...request,
         messages: ownReplaysOnly(request.messages, this.#provider.id),
       },
-      fetcher: this.#fetcher,
+      fetcher: startingWithin(
+        this.#fetcher,
+        this.#startTimeoutMs,
+        this.#provider.name,
+      ),
       stallTimeoutMs: this.#stallTimeoutMs,
     })) {
       // A cost the provider did not report is estimated from its price list.

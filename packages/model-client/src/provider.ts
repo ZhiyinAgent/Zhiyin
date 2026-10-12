@@ -125,6 +125,13 @@ export type Provider = Platforms & {
    * shown to work is listed with this and sent nothing.
    */
   readonly unavailable?: string;
+  /**
+   * How long its answer may take to start, from the request being sent to
+   * the first byte back, before the request is given up as a connection that
+   * never answered. Set only where its answers were measured to start well
+   * inside it; without it, the silence a stream may keep is waited.
+   */
+  readonly startTimeoutMs?: number;
   send(input: SendInput): AsyncIterable<ModelEvent>;
   readonly catalogue: {
     models(options: CatalogOptions): Promise<ModelCatalog>;

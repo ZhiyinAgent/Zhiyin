@@ -40,6 +40,17 @@ const revealDelayMs = 5_000;
 /** How long the composing note waits before it is repeated. */
 const composingIntervalMs = 250;
 
+/**
+ * How long the model may send nothing before the conversation says it is
+ * waiting. Past what an answer usually takes to start, so the note is the
+ * exception; well short of how long a dead connection is waited on, so a
+ * person watching is told long before the request is given up and sent again.
+ */
+const quietAfterMs = 15_000;
+
+/** Shown while nothing arrives: the turn is alive and it is the model's move. */
+const waitingForModel = "Waiting for the model";
+
 export type RoundRequest = {
   readonly messages: readonly ModelMessage[];
   readonly tools: readonly ToolSpec[];
@@ -158,7 +169,21 @@ export class ModelRound {
       );
     let attempt = new Attempt();
     let reveal = holding();
+    /** The waiting note is showing, and goes when anything arrives. */
+    let waiting = false;
+    let quiet: ReturnType<typeof setTimeout> | undefined;
+    const quietAfter = this.#deps.quietAfterMs ?? quietAfterMs;
+    /** Says the turn is waiting, should nothing arrive for this long. */
+    const listen = (forMs: number) => {
+      clearTimeout(quiet);
+      quiet = setTimeout(() => {
+        if (!owns() || controller.signal.aborted) return;
+        waiting = true;
+        void this.#note(taskId, waitingForModel).catch(() => undefined);
+      }, forMs);
+    };
 
+    listen(quietAfter);
     try {
       for await (const event of this.#deps.model.send({
         ...request,
@@ -166,6 +191,18 @@ export class ModelRound {
         restartable: true,
       })) {
         if (!owns()) break;
+        if (waiting) {
+          waiting = false;
+          await this.#note(taskId, undefined);
+        }
+        // The wait before a repeat is counted down already; silence is
+        // counted from when the repeat is sent.
+        listen(
+          quietAfter +
+            (event.kind === "restarting" || event.kind === "retrying"
+              ? event.delayMs
+              : 0),
+        );
         if (event.kind === "restarting") {
           const shown = reveal.revealed.text.length;
           const recorded = shown + reveal.revealed.reasoning.length;
@@ -203,6 +240,8 @@ export class ModelRound {
       await reveal.flush().catch(() => undefined);
       this.#account(ledger, request, attempt);
       throw error;
+    } finally {
+      clearTimeout(quiet);
     }
     // A turn that no longer owns the conversation writes nothing more to it.
     if (owns()) await reveal.flush();

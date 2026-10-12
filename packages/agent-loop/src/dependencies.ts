@@ -42,6 +42,11 @@ export interface AgentLoopDependencies {
    * the loop's own value; ADR 0011.
    */
   readonly revealDelayMs?: number;
+  /**
+   * How long the model may send nothing before the conversation says it is
+   * waiting for it, in milliseconds. Defaults to the loop's own value.
+   */
+  readonly quietAfterMs?: number;
   readonly newMessageId: () => string;
   readonly newActionId: () => string;
   readonly newSpecialistRunId: () => string;

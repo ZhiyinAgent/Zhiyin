@@ -210,6 +210,14 @@ sends every request to another host.
 - **A stream that goes silent is abandoned.** After five minutes with nothing
   arriving the request fails as `networkFailure`. A slow stream that keeps
   arriving is left alone.
+- **An answer that never starts is abandoned, sooner where that is known to
+  be safe.** The wait for the first byte, the response's headers included,
+  has a limit of its own: the silence a stream may keep, or less for a
+  provider whose answers were measured to start well inside it. Anthropic's
+  is ninety seconds. A request given up this way fails as `networkFailure`
+  and is sent again like any other; one its caller cancels while waiting is
+  reported as cancelled. An answer that has started is held only to the
+  silence allowed between bytes.
 - **A cancelled request is reported as cancelled**, with the cancelling
   signal's reason, never as a failed connection.
 

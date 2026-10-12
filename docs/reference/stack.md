@@ -364,6 +364,16 @@ OpenAI's encrypted, so they go back as received. `tool_choice` other than
 `auto` is refused by Z.ai, Xiaomi, Moonshot in thinking mode and DeepSeek in
 thinking mode.
 
+**Silence on a stream.** _Anthropic's streaming page read, and its API
+measured through Zhiyin, 2026-10-12._ Anthropic documents that a stream "may
+also include any number of `ping` events" and gives no interval, so a ping
+is no promise of a heartbeat. Measured over seventeen requests (fifteen with
+tools on Haiku 5.5, two on Sonnet 5.5, one of them thinking for 68 s): the
+first bytes arrived with the response, one `ping` followed `message_start`
+and no other came, and the longest gap between bytes was 5.2 s. Not measured:
+long thinking on Opus 5.5 and Fable 5.1, requests near the context limit, and
+every other lab.
+
 **DeepSeek.** One host for every account: `https://api.deepseek.com` (Chat
 Completions, Responses) and `https://api.deepseek.com/anthropic`, on both the
 English and Chinese pages. Models `deepseek-flash` (V4.1 Flash, takes images)

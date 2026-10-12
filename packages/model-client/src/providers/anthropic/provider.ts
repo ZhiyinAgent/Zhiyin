@@ -139,6 +139,15 @@ export const anthropic: Provider = {
   keyName: "an Anthropic API key",
   keyVariable: "ZHIYIN_ANTHROPIC_API_KEY",
   reasoningSentBack: true,
+  /*
+   * Measured on 2026-10-12 over seventeen requests, with tools on Haiku 5.5
+   * and thinking for a minute on Sonnet 5.5: every answer began with its
+   * response, within seconds of being asked for, and none went more than six
+   * seconds without a byte. Ninety seconds without a first byte is a
+   * connection that never answered. Silence once an answer has begun keeps
+   * the longer limit: long thinking on the largest models was not measured.
+   */
+  startTimeoutMs: 90_000,
   endpoint,
   pages: {
     keys: "https://platform.claude.com/settings/keys",
