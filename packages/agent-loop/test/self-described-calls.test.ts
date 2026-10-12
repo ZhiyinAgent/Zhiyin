@@ -93,6 +93,24 @@ describe("a tool call that describes itself", () => {
     });
   });
 
+  it("asks every call for its purpose, among what the call has to give", async () => {
+    const fixture = withPlan({ script: () => finish });
+    const taskId = await fixture.loop.createTask();
+
+    await fixture.loop.start(taskId, "Summarise the reports");
+
+    const schemas = (fixture.requests[0]?.tools ?? []).map(
+      (tool) =>
+        tool.inputSchema as {
+          readonly properties?: Record<string, unknown>;
+          readonly required?: readonly string[];
+        },
+    );
+    const asked = schemas.filter((schema) => schema.properties?.["purpose"]);
+    expect(asked.length).toBeGreaterThan(0);
+    for (const schema of asked) expect(schema.required).toContain("purpose");
+  });
+
   it("links no call to a plan item", async () => {
     const fixture = withPlan({ script: () => finish });
     const taskId = await fixture.loop.createTask();

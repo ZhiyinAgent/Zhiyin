@@ -908,7 +908,7 @@ describe("the worst case a budget must hold", () => {
       // what the loop's own instructions take.
       const read = {
         name: "read",
-        description: sized(target * 0.15 - 2_140, "definition "),
+        description: sized(target * 0.15 - 2_150, "definition "),
         inputSchema: { type: "object" },
       };
       // A history just under the budget once the rest is added, in rounds.
