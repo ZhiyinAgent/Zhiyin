@@ -25,7 +25,7 @@ takes a few minutes.
 https://github.com/user-attachments/assets/3162f301-8551-42c1-bea6-934ddd791d20
 
 <p align="center">
-  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.1/Zhiyin-Setup-0.1.0-alpha.1.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
+  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
 </p>
 
 > [!NOTE]
@@ -58,13 +58,17 @@ Zhiyin is for.
   ended. It browses in its own headless browser, which you can watch, reads
   PDFs and pictures and shows them beside the conversation, and draws charts
   and diagrams.
+- **Builds and renders in 3D.** In a Blender of its own, which it installs
+  when you ask, it builds scenes and renders them: product pictures, rooms
+  from a floor plan, parts to 3D print. The scene is a `.blend` file in your
+  folder, drawn beside the conversation after every change.
 - **Asks you, and quizzes you.** When a choice would change the work, it asks
   a few short questions instead of guessing. When you are learning, it builds
   scored quizzes with an explanation for every question.
 - **Grows with plugins** that bundle skills, specialists and connectors,
   including remote MCP servers you reach with a pasted key or the service's
-  own sign-in. Four come built in, for software engineering, technical
-  publishing, data analysis and research, and you can make your own.
+  own sign-in. Five come built in, for software engineering, technical
+  publishing, data analysis, research and 3D, and you can make your own.
 - **Shows what it cost**, conversation by conversation: the provider's own
   figure, or an estimate from the lab's price list, in the lab's currency.
 - **Exports a conversation** as a page to read or a record to analyse.
@@ -80,24 +84,25 @@ your Windows account's access, so review each one; the
 ### Install the developer preview
 
 Download
-[`Zhiyin-Setup-0.1.0-alpha.1.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.1/Zhiyin-Setup-0.1.0-alpha.1.exe)
+[`Zhiyin-Setup-0.1.0-alpha.2.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe)
 from the
-[`v0.1.0-alpha.1`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.1)
+[`v0.1.0-alpha.2`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.2)
 prerelease. Microsoft Defender SmartScreen warns before it runs: choose **More
 info**, then **Run anyway**.
 
 You also need:
 
-- an [OpenRouter](https://openrouter.ai) API key; OpenRouter bills your
-  account for the models you use;
+- an API key, from [OpenRouter](https://openrouter.ai) or from the platform
+  of the lab that makes the model; whoever issued the key bills your account
+  for the models you use;
 - Edge or Chrome, for browser work;
 - [Git for Windows](https://git-scm.com/download/win), whose bash runs shell
   commands, and which the Git connector uses.
 
 To check the installer before running it, compare
-`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.1.exe` with the SHA-256 in the
+`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.2.exe` with the SHA-256 in the
 release notes, and confirm its origin with
-`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.1.exe --repo ZhiyinAgent/Zhiyin`.
+`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.2.exe --repo ZhiyinAgent/Zhiyin`.
 The release workflow publishes only an alpha tag that matches the app's
 version, after the full gate passes, with `SHA256SUMS.txt` and a
 build-provenance attestation.
