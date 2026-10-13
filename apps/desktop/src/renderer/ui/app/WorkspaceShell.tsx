@@ -1,36 +1,28 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Onboarding } from "../onboarding/index.js";
-import { HistoryRecoveryGate, NewerHistoryGate } from "../recovery/index.js";
 import {
-  RELEASES_URL,
   type UserInputResponse,
   type MessageAttachment,
   type ReasoningSelection,
 } from "@zhiyin/contract";
-import { ApprovalPrompt } from "../actions/index.js";
-import { WorkspacePicker } from "./WorkspacePicker.js";
 import { AppSidebar } from "./AppSidebar.js";
 import { ArtifactDrawer } from "../artifacts/index.js";
 import {
-  Composer,
   ConversationTimeline,
   NewConversation,
   OpenCitation,
   PlanPill,
-  useReadingPosition,
 } from "../conversation/index.js";
+import { ComposerDock } from "./ComposerDock.js";
+import { ConversationHeader } from "./ConversationHeader.js";
 import { Icon } from "../shared/index.js";
 import { IssueNotices } from "./IssueNotices.js";
 import { useConversationDeletion } from "./useConversationDeletion.js";
-import { WorkspaceSkeleton } from "./WorkspaceSkeleton.js";
 import { useAppShortcuts } from "./useAppShortcuts.js";
 import { useContextBudget } from "./useContextBudget.js";
 import { timelinePieces, timelineTask } from "./timelinePieces.js";
 import { WorkspaceSurfaces } from "./WorkspaceSurfaces.js";
 import type { WorkspaceCommands } from "./workspaceCommands.js";
 import {
-  approvalPromptDetails,
-  composerLock,
   guidanceDraft,
   sendComposerMessage,
   taskIsRunning,
@@ -38,10 +30,9 @@ import {
 import { WorkspaceNotice } from "../workspace/index.js";
 import { ConversationWorkspace } from "./ConversationWorkspace.js";
 import { useWorkspaceView } from "./useWorkspaceView.js";
+import { useFollowedConversation } from "./useFollowedConversation.js";
+import { windowGate } from "./windowGate.js";
 import { RestartNotice } from "./RestartNotice.js";
-import { SessionHeader } from "./SessionHeader.js";
-import { RunningCommands } from "../commands/index.js";
-import { WorkspaceViewTabs } from "./WorkspaceViewTabs.js";
 import { useConversationExport } from "./useConversationExport.js";
 import { useConversationPermissions } from "./useConversationPermissions.js";
 import { useSavedConversationsUpdate } from "./useSavedConversationsUpdate.js";
@@ -53,6 +44,32 @@ import type {
 } from "./workspaceState.js";
 import { listedConversations } from "./workspaceState.js";
 import styles from "./app.module.css";
+
+/** Says in the conversation what is open beside it, and offers to show it. */
+function BesideNotice({
+  beside,
+  onShow,
+}: {
+  beside: NonNullable<ReturnType<typeof useWorkspaceView>["beside"]>;
+  onShow: () => void;
+}) {
+  return (
+    <WorkspaceNotice
+      {...(beside.kind === "browser"
+        ? { text: "Zhiyin opened a browser." }
+        : beside.kind === "scene"
+          ? {
+              text: `${beside.scene.file?.split("/").pop() ?? "A 3D scene"} is open in the 3D view.`,
+              icon: "cube" as const,
+            }
+          : {
+              text: `${beside.document.name} is open in the workspace.`,
+              icon: "file" as const,
+            })}
+      onShow={onShow}
+    />
+  );
+}
 
 type WorkspaceShellProps = {
   state: WorkspaceState;
@@ -107,7 +124,6 @@ export function WorkspaceShell({
   // document, and keeps a choice the person makes until the turn ends.
   const viewing = useWorkspaceView(state, commands, act);
   const besideOpen = viewing.open;
-  const hasWorkspace = viewing.beside !== undefined;
   const [composerDraft, setComposerDraft] = useState<{
     readonly id: string;
     readonly taskId: string;
@@ -118,10 +134,6 @@ export function WorkspaceShell({
   // The person's message open for editing where it is, as taskId:messageId.
   const [editingMessage, setEditingMessage] = useState<string>();
   const conversationRef = useRef<HTMLDivElement>(null);
-  // Opening or closing the browser resizes this column, which rewraps every
-  // message. Where someone was reading survives that; a scroll offset in
-  // pixels would not. It is also the one place that follows the end.
-  const reading = useReadingPosition(conversationRef);
   const selectedTask =
     state.tasks.find((task) => task.id === state.selectedTaskId) ?? null;
   const returnedGuidance = guidanceDraft(selectedTask);
@@ -156,48 +168,16 @@ export function WorkspaceShell({
     />
   );
   const isRunning = taskIsRunning(selectedTask);
-  const folderLocked = isRunning || state.runtime.tasks === "unavailable";
-  const lastMessage = selectedTask?.messages.at(-1);
-
-  useEffect(() => {
-    reading.followEnd();
-  }, [reading, state.selectedTaskId]);
-
-  useEffect(() => {
-    if (lastMessage?.role === "user") reading.followEnd();
-    else reading.catchUp();
-    const conversation = conversationRef.current;
-    if (!conversation || !reading.following()) return;
-    // A question taller than the thread is read from its top. Following
-    // the tail would scroll its heading, and at a short window the question
-    // itself, out of sight above the answers.
-    const question = conversation.querySelector<HTMLElement>(
-      '[aria-label="Quiz"]',
-    );
-    if (question && question.offsetHeight > conversation.clientHeight - 32)
-      reading.readFrom(question);
-  }, [
-    reading,
-    lastMessage?.id,
-    lastMessage?.role,
-    lastMessage?.text,
-    lastMessage?.reasoning?.text,
-    selectedTask?.phase.kind,
-    besideOpen,
-  ]);
+  useFollowedConversation(conversationRef, {
+    conversationId: state.selectedTaskId,
+    task: selectedTask,
+    compact: besideOpen,
+  });
 
   // The workspace is not always what the window is showing: onboarding and a
   // recovery decision are answered before anything else.
-  const workspaceShowing =
-    state.connection !== "loading" &&
-    !state.newerHistory &&
-    !(state.historyRecovery && commands.recoverHistory) &&
-    !(
-      state.preferences &&
-      !state.preferences.onboarded &&
-      commands.configureProfile &&
-      state.runtime.tasks === "available"
-    );
+  const gate = windowGate(state, commands);
+  const workspaceShowing = gate === undefined;
   const savedUpdate = useSavedConversationsUpdate(
     state,
     commands.settleSavedConversations,
@@ -228,37 +208,7 @@ export function WorkspaceShell({
       () => permissions.open(task.id),
     );
 
-  if (state.connection === "loading") return <WorkspaceSkeleton />;
-  // History a newer version saved is not damage, so it is neither recovered
-  // nor started over: nothing here opens it, and the way on is that version.
-  if (state.newerHistory)
-    return (
-      <NewerHistoryGate
-        newer={state.newerHistory}
-        onGetLatest={() => void commands.openExternalUrl(RELEASES_URL)}
-        {...(commands.openDataFolder
-          ? { onOpenDataFolder: () => void commands.openDataFolder?.() }
-          : {})}
-      />
-    );
-  // Before anything else: saved conversations that will not open are a
-  // question only the person can answer, and nothing is written over them
-  // until they do.
-  if (state.historyRecovery && commands.recoverHistory)
-    return (
-      <HistoryRecoveryGate
-        recovery={state.historyRecovery}
-        onChoose={commands.recoverHistory}
-        onShowKept={(path) => void commands.showInFolder?.(path)}
-      />
-    );
-  if (
-    state.preferences &&
-    !state.preferences.onboarded &&
-    commands.configureProfile &&
-    state.runtime.tasks === "available"
-  )
-    return <Onboarding onComplete={commands.configureProfile} />;
+  if (gate) return gate;
 
   async function act(operation: () => void | Promise<unknown>) {
     setCommandError("");
@@ -403,59 +353,18 @@ export function WorkspaceShell({
       {state.surface === "thread" && (
         <>
           <section className={styles["session-pane"]}>
-            {/* With nothing to name yet, the bar is still there to drag the
-                window by and to keep the conversation below its controls. */}
-            {!(selectedTask || hasWorkspace) && (
-              <div className={styles["top-bar"]} />
-            )}
-            {(selectedTask || hasWorkspace) && (
-              <SessionHeader
-                workspace={state.workspace?.name ?? ""}
-                title={selectedTask?.title ?? "New task"}
-                running={
-                  selectedTask && (
-                    <RunningCommands
-                      taskId={selectedTask.id}
-                      running={state.runningCommands[selectedTask.id] ?? []}
-                      commands={commands}
-                      onListed={(listed) =>
-                        dispatch({
-                          type: "commandsChanged",
-                          taskId: selectedTask.id,
-                          commands: listed,
-                        })
-                      }
-                    />
-                  )
-                }
-                viewSelector={
-                  hasWorkspace ? (
-                    <WorkspaceViewTabs
-                      id={workspaceViewId}
-                      selected={besideOpen ? "workspace" : "conversation"}
-                      live={
-                        state.browser.loading ||
-                        selectedTask?.phase.kind === "browser"
-                      }
-                      onSelect={(view) =>
-                        view === "workspace"
-                          ? viewing.toWorkspace()
-                          : viewing.toConversation()
-                      }
-                    />
-                  ) : undefined
-                }
-                {...(selectedTask?.artifacts.length
-                  ? {
-                      files: {
-                        count: selectedTask.artifacts.length,
-                        open: filesOpen,
-                        onToggle: () => setFilesOpen((shown) => !shown),
-                      },
-                    }
-                  : {})}
-              />
-            )}
+            <ConversationHeader
+              state={state}
+              task={selectedTask}
+              commands={commands}
+              dispatch={dispatch}
+              viewing={viewing}
+              viewId={workspaceViewId}
+              files={{
+                open: filesOpen,
+                onToggle: () => setFilesOpen((shown) => !shown),
+              }}
+            />
             <main
               className={`${styles["thread-view"]}${
                 selectedTask?.phase.kind === "approval" ||
@@ -540,18 +449,8 @@ export function WorkspaceShell({
                         />
                       )}
                     {viewing.beside && !besideOpen && (
-                      <WorkspaceNotice
-                        {...(viewing.beside.kind === "browser"
-                          ? { text: "Zhiyin opened a browser." }
-                          : viewing.beside.kind === "scene"
-                            ? {
-                                text: `${viewing.beside.scene.file?.split("/").pop() ?? "A 3D scene"} is open in the 3D view.`,
-                                icon: "cube" as const,
-                              }
-                            : {
-                                text: `${viewing.beside.document.name} is open in the workspace.`,
-                                icon: "file" as const,
-                              })}
+                      <BesideNotice
+                        beside={viewing.beside}
                         onShow={viewing.toWorkspace}
                       />
                     )}
@@ -580,125 +479,24 @@ export function WorkspaceShell({
                     }}
                   />
                 )}
-                <div
-                  className={`${styles["composer-dock"]}${besideOpen ? ` ${styles["composer-dock--compact"]}` : ""}${selectedTask?.phase.kind === "approval" || selectedTask?.phase.kind === "input" ? ` ${styles["composer-dock--deciding"]}` : ""}`}
-                >
-                  {besideOpen && selectedTask?.phase.kind === "completed" && (
-                    <div className={styles["workspace-completion"]}>
-                      <button
-                        className="text-button"
-                        type="button"
-                        onClick={viewing.toConversation}
-                      >
-                        Return to conversation
-                      </button>
-                    </div>
-                  )}
-                  {selectedTask?.phase.kind === "approval" && (
-                    <div className={styles["composer-dock__decision"]}>
-                      <ApprovalPrompt
-                        key={selectedTask.phase.prompt.id}
-                        {...approvalPromptDetails(selectedTask.phase.prompt)}
-                        compact={besideOpen}
-                        onDecision={async (decision, reason) => {
-                          const prompt =
-                            selectedTask.phase.kind === "approval"
-                              ? selectedTask.phase.prompt
-                              : undefined;
-                          if (!prompt) return;
-                          await commands.resolveApproval(
-                            selectedTask.id,
-                            prompt.id,
-                            decision === "allow-once"
-                              ? "allow"
-                              : decision === "allow-conversation"
-                                ? "allow-conversation"
-                                : "deny",
-                            ...(decision === "deny" && reason?.trim()
-                              ? [reason.trim()]
-                              : []),
-                          );
-                        }}
-                      />
-                    </div>
-                  )}
-                  {selectedTask?.phase.kind === "input" &&
-                    selectedTask.phase.prompt.kind !== "quiz" && (
-                      <div className={styles["composer-dock__decision"]}>
-                        <UserInputPrompt
-                          prompt={selectedTask.phase.prompt}
-                          onSubmit={submitUserInput}
-                          onCancel={stopTask}
-                        />
-                      </div>
-                    )}
-                  <div
-                    className={styles["workspace-composer"]}
-                    hidden={unopened}
-                  >
-                    <Composer
-                      key={selectedTask?.id ?? "new"}
-                      {...(state.provider.reasoning
-                        ? { reasoningCapabilities: state.provider.reasoning }
-                        : {})}
-                      {...(selectedTask?.reasoning
-                        ? { initialReasoning: selectedTask.reasoning }
-                        : {})}
-                      onSubmit={submitMessage}
-                      context={budget.context}
-                      keepPaste={commands.keepPaste}
-                      {...(commands.keepPicture
-                        ? { keepPicture: commands.keepPicture }
-                        : {})}
-                      seesPictures={state.provider.acceptsImages === true}
-                      {...(commands.readPicture
-                        ? { readPicture: commands.readPicture }
-                        : {})}
-                      // A paste not yet sent belongs to no conversation; one
-                      // a rewind put back is still the conversation's.
-                      openAttachment={(id) =>
-                        void act(() =>
-                          commands.openAttachment(selectedTask?.id ?? null, id),
-                        )
-                      }
-                      {...(composerDraft &&
-                      composerDraft.taskId === selectedTask?.id
-                        ? { draft: composerDraft }
-                        : returnedGuidance
-                          ? { draft: returnedGuidance }
-                          : {})}
-                      running={isRunning}
-                      onStop={stopTask}
-                      scope={
-                        <WorkspacePicker
-                          disabled={folderLocked}
-                          {...(state.workspace
-                            ? { current: state.workspace }
-                            : {})}
-                          recent={state.recentWorkspaces}
-                          {...(commands.chooseWorkspace
-                            ? {
-                                onChoose: () =>
-                                  act(() => commands.chooseWorkspace?.()),
-                              }
-                            : {})}
-                          {...(commands.useRecentWorkspace
-                            ? {
-                                onUseRecent: (path: string) =>
-                                  act(() =>
-                                    commands.useRecentWorkspace?.(path),
-                                  ),
-                              }
-                            : {})}
-                        />
-                      }
-                      {...composerLock(
-                        selectedTask,
-                        state.runtime.tasks !== "unavailable",
-                      )}
-                    />
-                  </div>
-                </div>
+                <ComposerDock
+                  state={state}
+                  task={selectedTask}
+                  commands={commands}
+                  act={act}
+                  compact={besideOpen}
+                  hidden={unopened}
+                  draft={
+                    composerDraft && composerDraft.taskId === selectedTask?.id
+                      ? composerDraft
+                      : returnedGuidance
+                  }
+                  context={budget.context}
+                  onSubmit={submitMessage}
+                  onStop={stopTask}
+                  onUserInput={submitUserInput}
+                  onReturnToConversation={viewing.toConversation}
+                />
               </ConversationWorkspace>
             </main>
           </section>

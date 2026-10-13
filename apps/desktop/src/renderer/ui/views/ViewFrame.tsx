@@ -1,38 +1,14 @@
 import {
   createContext,
-  useEffect,
-  useEffectEvent,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
+  type HTMLAttributes,
   type ReactNode,
 } from "react";
 import type { ArtifactExport } from "@zhiyin/contract";
+import { useDrawingZoom, type DrawingSize } from "./drawingZoom.js";
 import styles from "./views.module.css";
-
-/**
- * Zoom is the drawing's real size: at 100% its labels are the size they were
- * drawn at. Far enough out to see a whole large diagram, far enough in to read
- * a label on one. Steps land on round numbers so the readout stays a number a
- * person can hold on to, even after fitting a drawing has put it at 37%.
- */
-const minimumZoom = 25;
-const maximumZoom = 400;
-const zoomStep = 10;
-
-/**
- * The smallest size a drawing opens at. Mermaid draws labels at 16px; at 75%
- * they are 12px, the smallest text anywhere in the app. A drawing that would
- * have to be smaller than this to fit opens here instead, and is dragged.
- */
-const readableZoom = 75;
-
-/** The canvas's padding, both sides together: room the drawing does not get. */
-const canvasPadding = 40;
-
-/** The size a drawing was drawn at, in its own pixels. */
-export type DrawingSize = { readonly width: number; readonly height: number };
 
 /**
  * How a drawing tells the frame around it what size it came out. A context
@@ -42,26 +18,6 @@ export type DrawingSize = { readonly width: number; readonly height: number };
 export const ReportDrawingSize = createContext<
   ((size: DrawingSize | undefined) => void) | undefined
 >(undefined);
-
-type FrameSize = { readonly width: number; readonly height?: number };
-
-/** The largest real size, up to 100%, at which the whole drawing shows. */
-function fittingZoom(drawing: DrawingSize, frame: FrameSize): number {
-  if (frame.width <= 0) return 100;
-  const across = (frame.width - canvasPadding) / drawing.width;
-  const down =
-    frame.height === undefined
-      ? Infinity
-      : (frame.height - canvasPadding) / drawing.height;
-  return Math.max(1, Math.min(100, Math.floor(Math.min(across, down) * 100)));
-}
-
-/** The next round step in either direction, whatever the zoom is now. */
-function steppedZoom(zoom: number, direction: 1 | -1): number {
-  return direction === 1
-    ? Math.floor(zoom / zoomStep) * zoomStep + zoomStep
-    : Math.ceil(zoom / zoomStep) * zoomStep - zoomStep;
-}
 
 /** Marks focus that arrived from a pointer, so the keyboard ring stays off. */
 const pointerFocus = "data-pointer-focus";
@@ -96,6 +52,96 @@ function standalone(drawn: SVGElement): string {
   return copy.outerHTML;
 }
 
+/**
+ * How a person moves around a drawing by hand: dragging it with a pointer,
+ * scrolling it with the arrow keys, and zooming it with + and −. These are
+ * what the frame's body listens for, and each acts on the body it was heard
+ * on; only the mark on focus that came from a pointer is kept for a view that
+ * does not move.
+ */
+function useDrawingMovement(
+  /** The frame shows a drawing that zooms, and not its source. */
+  moves: boolean,
+  changeZoom: (direction: 1 | -1) => void,
+): Pick<
+  HTMLAttributes<HTMLDivElement>,
+  | "onPointerDown"
+  | "onPointerMove"
+  | "onPointerUp"
+  | "onPointerCancel"
+  | "onBlur"
+  | "onKeyDown"
+> {
+  const drag = useRef<{
+    x: number;
+    y: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  return {
+    onPointerDown: (event) => {
+      // Focus is about to land here from a mouse. Chromium counts that as
+      // focus-visible on a region like this one, so a ring meant for
+      // keyboard users appears around a drawing somebody just grabbed to
+      // drag. Marked as pointer-driven, and unmarked the moment a key is
+      // pressed, so the ring is there for whoever is actually navigating.
+      const body = event.currentTarget;
+      body.setAttribute(pointerFocus, "");
+      if (!moves) return;
+      event.preventDefault();
+      body.focus({ preventScroll: true });
+      drag.current = {
+        x: event.clientX,
+        y: event.clientY,
+        left: body.scrollLeft,
+        top: body.scrollTop,
+      };
+      body.setPointerCapture?.(event.pointerId);
+    },
+    onPointerMove: (event) => {
+      if (!drag.current) return;
+      const body = event.currentTarget;
+      body.scrollLeft = drag.current.left - (event.clientX - drag.current.x);
+      body.scrollTop = drag.current.top - (event.clientY - drag.current.y);
+    },
+    onPointerUp: () => {
+      drag.current = null;
+    },
+    onPointerCancel: () => {
+      drag.current = null;
+    },
+    onBlur: (event) => event.currentTarget.removeAttribute(pointerFocus),
+    onKeyDown: (event) => {
+      event.currentTarget.removeAttribute(pointerFocus);
+      if (!moves) return;
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        changeZoom(1);
+      } else if (event.key === "-") {
+        event.preventDefault();
+        changeZoom(-1);
+      } else if (event.key.startsWith("Arrow")) {
+        event.preventDefault();
+        const amount = 48;
+        event.currentTarget.scrollBy?.({
+          left:
+            event.key === "ArrowRight"
+              ? amount
+              : event.key === "ArrowLeft"
+                ? -amount
+                : 0,
+          top:
+            event.key === "ArrowDown"
+              ? amount
+              : event.key === "ArrowUp"
+                ? -amount
+                : 0,
+        });
+      }
+    },
+  };
+}
+
 export function ViewFrame({
   title,
   kind,
@@ -115,87 +161,24 @@ export function ViewFrame({
   onSave?: (svg: string) => Promise<ArtifactExport>;
 }) {
   const [tab, setTab] = useState<"rendered" | "source">("rendered");
-  /** Unset until a person zooms: the drawing opens at its fitting size. */
-  const [chosenZoom, setZoom] = useState<number>();
-  const [drawing, setDrawing] = useState<DrawingSize>();
-  const [frame, setFrame] = useState<FrameSize>({ width: 0 });
   const [status, setStatus] = useState("");
   const body = useRef<HTMLDivElement>(null);
-  const drag = useRef<{
-    x: number;
-    y: number;
-    left: number;
-    top: number;
-  } | null>(null);
+  const {
+    drawing,
+    reportDrawing,
+    zoom,
+    fit,
+    overflows,
+    changeZoom,
+    fitToFrame,
+  } = useDrawingZoom(body, zoomable, tab === "rendered");
+  const movement = useDrawingMovement(
+    zoomable && tab === "rendered",
+    changeZoom,
+  );
   const sourceLabel = kind === "diagram" ? "Source" : "Data";
-  const fit = drawing ? fittingZoom(drawing, frame) : 100;
-  const zoom = chosenZoom ?? Math.min(100, Math.max(fit, readableZoom));
-  /** Below a quarter only when that is what it takes to see all of it. */
-  const smallestZoom = Math.min(minimumZoom, fit);
   const showZoom = zoomable && tab === "rendered" && drawing !== undefined;
-  /**
-   * Worked out rather than read from the scroll container, so it is right on
-   * the render that changes the zoom instead of one frame later.
-   */
-  const overflows =
-    drawing !== undefined &&
-    frame.width > 0 &&
-    ((drawing.width * zoom) / 100 + canvasPadding > frame.width + 1 ||
-      (frame.height !== undefined &&
-        (drawing.height * zoom) / 100 + canvasPadding > frame.height + 1));
   const footerContent = showZoom || Boolean(status);
-  const changeZoom = (direction: 1 | -1) =>
-    setZoom(
-      Math.min(
-        maximumZoom,
-        Math.max(smallestZoom, steppedZoom(zoom, direction)),
-      ),
-    );
-  /** The wheel listener is registered once per drawing, and zooms from here. */
-  const zoomFromWheel = useEffectEvent(changeZoom);
-
-  /**
-   * The frame's width, and the height it stops growing at. Measured once the
-   * drawing is in, and again whenever the frame is resized, since what fits
-   * depends on both.
-   */
-  useLayoutEffect(() => {
-    const element = body.current;
-    if (!element || !zoomable || !drawing) return;
-    const measure = () => {
-      const limit = Number.parseFloat(getComputedStyle(element).maxHeight);
-      const next: FrameSize = Number.isFinite(limit)
-        ? { width: element.clientWidth, height: limit }
-        : { width: element.clientWidth };
-      setFrame((previous) =>
-        previous.width === next.width && previous.height === next.height
-          ? previous
-          : next,
-      );
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [zoomable, drawing]);
-
-  /**
-   * The wheel is registered by hand because React's wheel listener is passive,
-   * and a passive listener cannot stop the page scrolling underneath. Zooming
-   * a diagram while the thread slides away is not zooming.
-   */
-  useEffect(() => {
-    const element = body.current;
-    if (!element || !zoomable || tab !== "rendered") return;
-    const onWheel = (event: WheelEvent) => {
-      if (event.deltaY === 0) return;
-      event.preventDefault();
-      zoomFromWheel(event.deltaY < 0 ? 1 : -1);
-    };
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => element.removeEventListener("wheel", onWheel);
-  }, [zoomable, tab]);
 
   async function save() {
     const drawn = body.current?.querySelector("svg");
@@ -261,66 +244,7 @@ export function ViewFrame({
         role="region"
         aria-label={`${title} ${kind}`}
         tabIndex={tab === "rendered" ? 0 : -1}
-        onPointerDown={(event) => {
-          // Focus is about to land here from a mouse. Chromium counts that as
-          // focus-visible on a region like this one, so a ring meant for
-          // keyboard users appears around a drawing somebody just grabbed to
-          // drag. Marked as pointer-driven, and unmarked the moment a key is
-          // pressed, so the ring is there for whoever is actually navigating.
-          body.current?.setAttribute(pointerFocus, "");
-          if (!zoomable || tab !== "rendered" || !body.current) return;
-          event.preventDefault();
-          body.current.focus({ preventScroll: true });
-          drag.current = {
-            x: event.clientX,
-            y: event.clientY,
-            left: body.current.scrollLeft,
-            top: body.current.scrollTop,
-          };
-          body.current.setPointerCapture?.(event.pointerId);
-        }}
-        onPointerMove={(event) => {
-          if (!drag.current || !body.current) return;
-          body.current.scrollLeft =
-            drag.current.left - (event.clientX - drag.current.x);
-          body.current.scrollTop =
-            drag.current.top - (event.clientY - drag.current.y);
-        }}
-        onPointerUp={() => {
-          drag.current = null;
-        }}
-        onPointerCancel={() => {
-          drag.current = null;
-        }}
-        onBlur={() => body.current?.removeAttribute(pointerFocus)}
-        onKeyDown={(event) => {
-          body.current?.removeAttribute(pointerFocus);
-          if (!zoomable || tab !== "rendered") return;
-          if (event.key === "+" || event.key === "=") {
-            event.preventDefault();
-            changeZoom(1);
-          } else if (event.key === "-") {
-            event.preventDefault();
-            changeZoom(-1);
-          } else if (event.key.startsWith("Arrow")) {
-            event.preventDefault();
-            const amount = 48;
-            body.current?.scrollBy?.({
-              left:
-                event.key === "ArrowRight"
-                  ? amount
-                  : event.key === "ArrowLeft"
-                    ? -amount
-                    : 0,
-              top:
-                event.key === "ArrowDown"
-                  ? amount
-                  : event.key === "ArrowUp"
-                    ? -amount
-                    : 0,
-            });
-          }
-        }}
+        {...movement}
       >
         <div
           hidden={tab !== "rendered"}
@@ -340,28 +264,11 @@ export function ViewFrame({
               : undefined
           }
         >
-          <ReportDrawingSize.Provider value={setDrawing}>
+          <ReportDrawingSize.Provider value={reportDrawing}>
             {children}
           </ReportDrawingSize.Provider>
         </div>
-        {table ? (
-          <div hidden={tab !== "source"} className={styles["task-view__data"]}>
-            {table}
-            <details className={styles["task-view__technical"]}>
-              <summary>Technical</summary>
-              <pre className={styles["task-view__source"]}>
-                <code>{source}</code>
-              </pre>
-            </details>
-          </div>
-        ) : (
-          <pre
-            hidden={tab !== "source"}
-            className={styles["task-view__source"]}
-          >
-            <code>{source}</code>
-          </pre>
-        )}
+        <ViewSource source={source} table={table} hidden={tab !== "source"} />
       </div>
       {/*
         Only when it has something to say. A chart has no zoom and, until it is
@@ -371,34 +278,12 @@ export function ViewFrame({
       {footerContent && (
         <footer className={styles["task-view__footer"]}>
           {showZoom && (
-            <div
-              className={styles["task-view__zoom"]}
-              aria-label="Diagram zoom"
-            >
-              <button
-                type="button"
-                onClick={() => changeZoom(-1)}
-                aria-label="Zoom out"
-              >
-                −
-              </button>
-              <span aria-live="polite">{zoom}%</span>
-              <button
-                type="button"
-                onClick={() => changeZoom(1)}
-                aria-label="Zoom in"
-              >
-                +
-              </button>
-              <button
-                type="button"
-                className={styles["task-view__zoom-reset"]}
-                onClick={() => setZoom(fit)}
-                disabled={zoom === fit}
-              >
-                Fit
-              </button>
-            </div>
+            <ZoomControls
+              zoom={zoom}
+              fit={fit}
+              onStep={changeZoom}
+              onFit={fitToFrame}
+            />
           )}
           {showZoom && overflows && (
             <span className={styles["task-view__hint"]}>
@@ -409,5 +294,68 @@ export function ViewFrame({
         </footer>
       )}
     </section>
+  );
+}
+
+/**
+ * What a view was drawn from. Where it reads as rows it is shown as rows, and
+ * the source itself waits under Technical; otherwise it is shown as written.
+ */
+function ViewSource({
+  source,
+  table,
+  hidden,
+}: {
+  source: string;
+  table: ReactNode;
+  hidden: boolean;
+}) {
+  return table ? (
+    <div hidden={hidden} className={styles["task-view__data"]}>
+      {table}
+      <details className={styles["task-view__technical"]}>
+        <summary>Technical</summary>
+        <pre className={styles["task-view__source"]}>
+          <code>{source}</code>
+        </pre>
+      </details>
+    </div>
+  ) : (
+    <pre hidden={hidden} className={styles["task-view__source"]}>
+      <code>{source}</code>
+    </pre>
+  );
+}
+
+/** A drawing's zoom: a step out, where it stands, a step in, and back to fit. */
+function ZoomControls({
+  zoom,
+  fit,
+  onStep,
+  onFit,
+}: {
+  zoom: number;
+  fit: number;
+  onStep: (direction: 1 | -1) => void;
+  onFit: () => void;
+}) {
+  return (
+    <div className={styles["task-view__zoom"]} aria-label="Diagram zoom">
+      <button type="button" onClick={() => onStep(-1)} aria-label="Zoom out">
+        −
+      </button>
+      <span aria-live="polite">{zoom}%</span>
+      <button type="button" onClick={() => onStep(1)} aria-label="Zoom in">
+        +
+      </button>
+      <button
+        type="button"
+        className={styles["task-view__zoom-reset"]}
+        onClick={onFit}
+        disabled={zoom === fit}
+      >
+        Fit
+      </button>
+    </div>
   );
 }

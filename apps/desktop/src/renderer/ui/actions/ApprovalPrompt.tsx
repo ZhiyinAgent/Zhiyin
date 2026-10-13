@@ -5,13 +5,11 @@ import type {
   FileChange,
   ToolInvocation,
 } from "@zhiyin/contract";
-import { diffLines } from "@zhiyin/contract";
+import { ApprovalChoice, type ApprovalDecision } from "./ApprovalChoice.js";
+import { ApprovalEvidence } from "./ApprovalEvidence.js";
 import { DiffModal } from "./DiffModal.js";
-import { ToolCallView } from "./ToolCallView.js";
 import { Icon } from "../shared/index.js";
 import styles from "./actions.module.css";
-
-export type ApprovalDecision = "allow-once" | "allow-conversation" | "deny";
 
 type ApprovalPromptProps = {
   effect?: string;
@@ -72,9 +70,6 @@ export function ApprovalPrompt({
   const [decisionError, setDecisionError] = useState<string>();
   const [denialReason, setDenialReason] = useState("");
   const [confirmingScope, setConfirmingScope] = useState(false);
-  const claimTipId = useId();
-  const scopeId = useId();
-  const scopeQuestionId = useId();
   const scopeConfirm = useRef<HTMLDivElement>(null);
   // The question takes the place of the button that asked it, which is gone:
   // focus moves to it, so the keyboard and a screen reader follow.
@@ -82,18 +77,6 @@ export function ApprovalPrompt({
     if (confirmingScope) scopeConfirm.current?.focus();
   }, [confirmingScope]);
   const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
-  const showClaimTip = (target: HTMLElement) => {
-    const box = target.getBoundingClientRect();
-    setClaimTipAt({ x: box.left + box.width / 2, y: box.top });
-  };
-  const actionAlreadyNamed = invocation?.name === title && !invocation.via;
-  // A command to run is shown as the command itself: the tool that runs it
-  // and the field it arrives in are the machine's names, not the person's.
-  const shellCommand =
-    invocation && shellTools.test(invocation.name)
-      ? invocation.arguments.find((argument) => argument.name === "command")
-          ?.value
-      : undefined;
 
   async function decide(decision: ApprovalDecision) {
     if (pendingDecision) return;
@@ -136,38 +119,11 @@ export function ApprovalPrompt({
                   item.change === "recycled" || item.change === "deleted",
               )) && <p className={styles.approval__detail}>{detail}</p>}
           {claim && (
-            <p className={styles.approval__claim}>
-              <span>
-                Zhiyin says
-                <button
-                  type="button"
-                  className={styles["approval__claim-about"]}
-                  aria-label="About this AI explanation"
-                  aria-describedby={claimTipAt ? claimTipId : undefined}
-                  onMouseEnter={(event) => showClaimTip(event.currentTarget)}
-                  onMouseLeave={() => setClaimTipAt(undefined)}
-                  onFocus={(event) => showClaimTip(event.currentTarget)}
-                  onBlur={() => setClaimTipAt(undefined)}
-                >
-                  <Icon name="info" />
-                </button>
-              </span>{" "}
-              {claim}
-              {claimTipAt &&
-                createPortal(
-                  <span
-                    id={claimTipId}
-                    role="tooltip"
-                    className={styles["approval__claim-tip"]}
-                    style={{ left: claimTipAt.x, top: claimTipAt.y }}
-                  >
-                    This explanation was written by the AI. It can be wrong or
-                    deliberately misleading. Check what will run and what will
-                    change before you approve.
-                  </span>,
-                  document.body,
-                )}
-            </p>
+            <ApprovalClaim
+              claim={claim}
+              tipAt={claimTipAt}
+              onTip={setClaimTipAt}
+            />
           )}
           {description && description !== claim && (
             <p className={styles.approval__reason}>{description}</p>
@@ -177,215 +133,41 @@ export function ApprovalPrompt({
               Sends this to <strong>{destination}</strong>:
             </p>
           )}
-          {/*
-            A file whose change cannot be shown as a difference, such as a
-            binary scene, says only that it changes. What the call will do is
-            then the only account of the change, so it is shown with the files.
-          */}
-          {changes?.length &&
-            changes.every((change) => change.omitted !== undefined) &&
-            invocation &&
-            !invocation.via &&
-            invocation.arguments.length > 0 && (
-              <ToolCallView invocation={invocation} hideName />
-            )}
-          {changes?.length ? (
-            <ul
-              className={styles["approval__file-list"]}
-              aria-label="What will change"
-            >
-              {/*
-                A file change is reviewed as a difference, never as the call
-                that would make it. Each row names the file the way a person
-                would, and opens that file's review.
-              */}
-              {changes.map((change) => (
-                <li key={change.path}>
-                  <FileRow
-                    change={change}
-                    disabled={pendingDecision !== null}
-                    onReview={() => setReviewing(change.path)}
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : shellCommand !== undefined ? (
-            <code
-              className={styles.approval__command}
-              aria-label="What will run"
-            >
-              {shellCommand}
-            </code>
-          ) : invocation?.via ? (
-            <>
-              {/* What is sent leads; the connector's own names follow on request. */}
-              {invocation.arguments.length === 1 ? (
-                <code
-                  className={styles.approval__command}
-                  aria-label="What will be sent"
-                >
-                  {invocation.arguments[0]!.value}
-                </code>
-              ) : (
-                invocation.arguments.length > 1 && (
-                  <ToolCallView invocation={invocation} hideName />
-                )
-              )}
-              <details className={styles.approval__technical}>
-                <summary>Technical details</summary>
-                <ToolCallView invocation={invocation} />
-              </details>
-            </>
-          ) : invocation ? (
-            (!actionAlreadyNamed || invocation.arguments.length > 0) && (
-              <ToolCallView
-                invocation={invocation}
-                hideName={actionAlreadyNamed}
-              />
-            )
-          ) : (
-            <code
-              className={styles.approval__command}
-              aria-label="What will run"
-            >
-              {target}
-            </code>
-          )}
-          {recovery?.files.some((file) => file.status === "unprotected") && (
-            <div
-              className={styles.approval__recovery}
-              aria-label="File recovery"
-            >
-              <p>Some file changes cannot be restored after this action.</p>
-              <ul>
-                {recovery.files
-                  .filter((file) => file.status === "unprotected")
-                  .map((file) => (
-                    <li key={file.path}>
-                      <strong>{file.path}</strong>
-                      {file.reason && <span>{file.reason}</span>}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          )}
+          <ApprovalEvidence
+            title={title}
+            target={target}
+            invocation={invocation}
+            changes={changes}
+            disabled={pendingDecision !== null}
+            onReview={setReviewing}
+          />
+          <UnrestorableFiles recovery={recovery} />
         </div>
         {decisionError && (
           <p className={styles.approval__error} role="alert">
             {decisionError}
           </p>
         )}
-        {denying && (
-          <div className={styles["approval__deny-step"]}>
-            <strong>Deny this action</strong>
-            <label className={styles["approval__denial-reason"]}>
-              <span>Tell Zhiyin what to do instead (optional)</span>
-              <textarea
-                autoFocus
-                value={denialReason}
-                onChange={(event) => setDenialReason(event.target.value)}
-                placeholder="You can leave this blank"
-                maxLength={2_000}
-                disabled={pendingDecision !== null}
-              />
-            </label>
-          </div>
-        )}
-        <div className={styles.approval__footer}>
-          {confirmingScope && conversationRule && (
-            <div
-              ref={scopeConfirm}
-              className={styles["approval__scope-confirm"]}
-              role="group"
-              aria-labelledby={scopeQuestionId}
-              tabIndex={-1}
-            >
-              <p id={scopeQuestionId}>
-                Allow this for the rest of the conversation?
-              </p>
-              <strong>{conversationRule.label}</strong>
-              <p>
-                It will run without asking again. You can take this back from
-                the conversation menu.
-              </p>
-            </div>
-          )}
-          {!denying && !confirmingScope && conversationRule && (
-            <button
-              className={styles.approval__allowance}
-              type="button"
-              aria-label="Allow for this conversation"
-              aria-describedby={scopeId}
-              disabled={pendingDecision !== null}
-              onClick={() => setConfirmingScope(true)}
-            >
-              <span>Allow for this conversation</span>
-              <small id={scopeId}>{conversationRule.label}</small>
-            </button>
-          )}
-          <div className={styles.approval__actions}>
-            {denying ? (
-              <>
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => setDenying(false)}
-                >
-                  Back
-                </button>
-                <button
-                  className="button button--accent"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => void decide("deny")}
-                >
-                  {pendingDecision === "deny" ? "Denying…" : "Confirm denial"}
-                </button>
-              </>
-            ) : confirmingScope && conversationRule ? (
-              <>
-                <button
-                  className="button button--quiet"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => setConfirmingScope(false)}
-                >
-                  Back
-                </button>
-                <button
-                  className="button button--accent"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => void decide("allow-conversation")}
-                >
-                  Allow for this conversation
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  className="button"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => setDenying(true)}
-                >
-                  Deny
-                </button>
-                <button
-                  className="button button--accent"
-                  type="button"
-                  disabled={pendingDecision !== null}
-                  onClick={() => void decide("allow-once")}
-                >
-                  {pendingDecision === "allow-once"
-                    ? "Allowing…"
-                    : "Allow once"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
+        <ApprovalChoice
+          pending={pendingDecision}
+          denial={{
+            open: denying,
+            reason: denialReason,
+            onOpen: () => setDenying(true),
+            onBack: () => setDenying(false),
+            onReason: setDenialReason,
+          }}
+          scope={
+            conversationRule && {
+              label: conversationRule.label,
+              confirming: confirmingScope,
+              onAsk: () => setConfirmingScope(true),
+              onBack: () => setConfirmingScope(false),
+            }
+          }
+          scopeQuestion={scopeConfirm}
+          onDecide={(decision) => void decide(decision)}
+        />
       </div>
       {reviewing && !!changes?.length && (
         <DiffModal
@@ -399,76 +181,88 @@ export function ApprovalPrompt({
   );
 }
 
-function FileRow({
-  change,
-  disabled,
-  onReview,
+/**
+ * What Zhiyin says this action is for, attributed to it. The note beside the
+ * attribution says why that matters: the model wrote it, so it is a claim to
+ * check and not evidence. The note opens over the page, where the prompt says.
+ */
+function ApprovalClaim({
+  claim,
+  tipAt: claimTipAt,
+  onTip: setClaimTipAt,
 }: {
-  change: FileChange;
-  disabled: boolean;
-  onReview: () => void;
+  claim: string;
+  /** Where the note is drawn, while it is shown. */
+  tipAt: { x: number; y: number } | undefined;
+  onTip: (at: { x: number; y: number } | undefined) => void;
 }) {
-  const slash = change.path.lastIndexOf("/");
-  const name = change.path.slice(slash + 1);
-  const folder = slash > 0 ? change.path.slice(0, slash) : undefined;
-  const counts =
-    change.after === undefined
-      ? undefined
-      : diffLines(change.before ?? "", change.after);
+  const claimTipId = useId();
+  const showClaimTip = (target: HTMLElement) => {
+    const box = target.getBoundingClientRect();
+    setClaimTipAt({ x: box.left + box.width / 2, y: box.top });
+  };
   return (
-    <button
-      type="button"
-      className={styles.approval__file}
-      aria-label={`Review this change to ${name}`}
-      disabled={disabled}
-      onClick={onReview}
-    >
-      <span className={styles["approval__file-icon"]} aria-hidden="true">
-        <Icon name="file" />
-      </span>
-      <span className={styles["approval__file-text"]}>
-        <span className={styles["approval__file-name"]}>{name}</span>
-        <span className={styles["approval__file-meta"]}>
-          <span>{changeLabels[change.change]}</span>
-          {folder && <span>in {folder}</span>}
-          {change.createdFolder && (
-            <span>Also creates folder {change.createdFolder}</span>
-          )}
-          {change.omitted && <span>{change.omitted}</span>}
-        </span>
-      </span>
-      {counts && (
-        <span className={styles["approval__file-counts"]}>
-          {counts.added > 0 && (
-            <span className={styles["approval__file-added"]}>
-              +{counts.added}
-            </span>
-          )}
-          {counts.removed > 0 && (
-            <span className={styles["approval__file-removed"]}>
-              −{counts.removed}
-            </span>
-          )}
-        </span>
-      )}
-      <span className={styles["approval__file-open"]} aria-hidden="true">
-        <Icon name="chevron" />
-      </span>
-    </button>
+    <p className={styles.approval__claim}>
+      <span>
+        Zhiyin says
+        <button
+          type="button"
+          className={styles["approval__claim-about"]}
+          aria-label="About this AI explanation"
+          aria-describedby={claimTipAt ? claimTipId : undefined}
+          onMouseEnter={(event) => showClaimTip(event.currentTarget)}
+          onMouseLeave={() => setClaimTipAt(undefined)}
+          onFocus={(event) => showClaimTip(event.currentTarget)}
+          onBlur={() => setClaimTipAt(undefined)}
+        >
+          <Icon name="info" />
+        </button>
+      </span>{" "}
+      {claim}
+      {claimTipAt &&
+        createPortal(
+          <span
+            id={claimTipId}
+            role="tooltip"
+            className={styles["approval__claim-tip"]}
+            style={{ left: claimTipAt.x, top: claimTipAt.y }}
+          >
+            This explanation was written by the AI. It can be wrong or
+            deliberately misleading. Check what will run and what will change
+            before you approve.
+          </span>,
+          document.body,
+        )}
+    </p>
   );
 }
 
-const changeLabels: Record<FileChange["change"], string> = {
-  created: "New file",
-  updated: "Edited",
-  recycled: "To the Recycle Bin",
-  deleted: "Deleted permanently",
-};
+/** The files this action changes that could not be put back afterwards. */
+function UnrestorableFiles({
+  recovery,
+}: {
+  recovery: ApprovalRequest["recovery"];
+}) {
+  if (!recovery?.files.some((file) => file.status === "unprotected"))
+    return null;
+  return (
+    <div className={styles.approval__recovery} aria-label="File recovery">
+      <p>Some file changes cannot be restored after this action.</p>
+      <ul>
+        {recovery.files
+          .filter((file) => file.status === "unprotected")
+          .map((file) => (
+            <li key={file.path}>
+              <strong>{file.path}</strong>
+              {file.reason && <span>{file.reason}</span>}
+            </li>
+          ))}
+      </ul>
+    </div>
+  );
+}
 
 type IconName = Parameters<typeof Icon>[0]["name"];
-
-/** The tools that run what they are given as a command. */
-const shellTools = /^(bash|sh|shell|powershell|pwsh|run_command)$/i;
 
 /**
  * What kind of action this is, drawn as the card's one icon so a request reads

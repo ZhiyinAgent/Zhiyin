@@ -1,55 +1,25 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type {
   AuthoredPluginContents,
   ComponentContent,
-  ComponentContentDraft,
-  McpConnectionTestOutcome,
-  McpServerDefinition,
   McpServerState,
-  McpSignInOutcome,
   PluginComponentState,
   PluginSourceOutcome,
   PluginState,
   ShellAvailability,
 } from "@zhiyin/contract";
-import { Dialog, Icon, SurfacePanel } from "../shared/index.js";
-import { ComponentEditor } from "./ComponentEditor.js";
-import { ConnectorSettings } from "./ConnectorSettings.js";
-import {
-  draftFromContents,
-  localIdOf,
-  nextContents,
-} from "./componentDrafts.js";
-import { ToolchainInstallDialog } from "./ToolchainInstallDialog.js";
-import { OverrideEditor } from "./OverrideEditor.js";
+import { Icon, SurfacePanel } from "../shared/index.js";
+import { localIdOf } from "./componentDrafts.js";
 import { NewPluginDialog } from "./NewPluginDialog.js";
+import {
+  OpenedComponent,
+  type Opened,
+  type OpenedActions,
+} from "./OpenedComponent.js";
 import { PluginDetail } from "./PluginDetail.js";
+import { PluginDirectory } from "./PluginDirectory.js";
+import { ShellNotice } from "./ShellNotice.js";
 import styles from "./capabilities.module.css";
-
-/**
- * What a directory row says about its plugin. A fully ready plugin says
- * nothing, so the rows that need a look are the ones that stand out.
- */
-function pluginBadge(plugin: PluginState): string | undefined {
-  if (plugin.status === "ready") return undefined;
-  if (plugin.status === "off") return "Off";
-  if (plugin.status === "failed") return "Needs attention";
-  return "Needs setup";
-}
-
-/** What is open over the page, if anything. */
-type Opened =
-  | {
-      readonly mode: "authored";
-      readonly pluginId: string;
-      readonly localId: string | undefined;
-      readonly kind: PluginComponentState["kind"];
-      readonly contents: AuthoredPluginContents;
-    }
-  | { readonly mode: "override"; readonly content: ComponentContent }
-  | { readonly mode: "connector"; readonly component: PluginComponentState }
-  | { readonly mode: "install"; readonly component: PluginComponentState }
-  | { readonly mode: "error"; readonly message: string };
 
 export function CapabilityLibrary({
   plugins = [],
@@ -80,7 +50,7 @@ export function CapabilityLibrary({
   onCheckShell,
   onRecheckShell,
   onOpenExternalUrl,
-}: {
+}: OpenedActions & {
   plugins?: readonly PluginState[];
   mcpServers?: readonly McpServerState[];
   loading?: boolean;
@@ -94,40 +64,15 @@ export function CapabilityLibrary({
   onLoadEditableContents: (
     id: string,
   ) => Promise<AuthoredPluginContents | undefined>;
-  onSavePluginContents: (
-    id: string,
-    contents: AuthoredPluginContents,
-  ) => Promise<void>;
   onToggleComponent: (id: string, enabled: boolean) => Promise<void>;
   onLoadComponentContent: (id: string) => Promise<ComponentContent | undefined>;
-  onOverrideComponent: (
-    id: string,
-    content: ComponentContentDraft,
-  ) => Promise<void>;
-  onResetComponent: (id: string) => Promise<void>;
   onInstallToolchain: (id: string) => Promise<void>;
-  onTestConnection: (
-    server: McpServerDefinition,
-    token?: string,
-  ) => Promise<McpConnectionTestOutcome>;
-  onSetConnectionToolEnabled: (
-    id: string,
-    toolName: string,
-    enabled: boolean,
-  ) => Promise<void>;
-  onSaveConnectionToken: (id: string, token: string) => Promise<void>;
-  onClearConnectionToken: (id: string) => Promise<void>;
-  onSignInToConnection: (id: string) => Promise<McpSignInOutcome>;
-  onCancelConnectionSignIn: (id: string) => Promise<void>;
   /** Re-checks every connection now, trying failed ones again. */
   onRefreshConnections: () => Promise<void>;
-  /** Reaches one configured connector now and says how it answered. */
-  onCheckConnection: (id: string) => Promise<McpServerState>;
   /** The current reading, fetched once on open — never cached beyond that. */
   onCheckShell: () => Promise<ShellAvailability>;
   /** Re-detects the shell on request, so an install just now is picked up. */
   onRecheckShell: () => Promise<ShellAvailability>;
-  onOpenExternalUrl: (url: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | undefined>();
@@ -135,31 +80,6 @@ export function CapabilityLibrary({
   const [actionError, setActionError] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
   const [opened, setOpened] = useState<Opened | undefined>();
-  const [shell, setShell] = useState<ShellAvailability | undefined>();
-  const [checkingShell, setCheckingShell] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    void onCheckShell()
-      .then((result) => {
-        if (live) setShell(result);
-      })
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [onCheckShell]);
-
-  async function recheckShell() {
-    setCheckingShell(true);
-    try {
-      setShell(await onRecheckShell());
-    } catch {
-      // The previous reading stays; the button is there to try again.
-    } finally {
-      setCheckingShell(false);
-    }
-  }
 
   const normalized = query.trim().toLocaleLowerCase();
   const visible = normalized
@@ -252,136 +172,6 @@ export function CapabilityLibrary({
     }
   }
 
-  function renderOpened() {
-    if (!opened) return null;
-    const close = () => setOpened(undefined);
-    if (opened.mode === "error")
-      return (
-        <Dialog title="Could not open this component" onClose={close}>
-          <p role="alert">{opened.message}</p>
-        </Dialog>
-      );
-    if (opened.mode === "override")
-      return (
-        <OverrideEditor
-          content={opened.content}
-          onSave={(draft) => onOverrideComponent(opened.content.id, draft)}
-          onReset={() => onResetComponent(opened.content.id)}
-          onClose={close}
-        />
-      );
-    if (opened.mode === "connector") {
-      const id = opened.component.id;
-      const current =
-        selected?.components.find((component) => component.id === id) ??
-        opened.component;
-      return (
-        <ConnectorSettings
-          component={current}
-          server={mcpServers.find((server) => server.id === id)}
-          onTest={onTestConnection}
-          onCheck={onCheckConnection}
-          onSaveToken={(token) => onSaveConnectionToken(id, token)}
-          onClearToken={() => onClearConnectionToken(id)}
-          onSignIn={() => onSignInToConnection(id)}
-          onCancelSignIn={() => onCancelConnectionSignIn(id)}
-          onSetToolEnabled={(tool, enabled) =>
-            onSetConnectionToolEnabled(id, tool, enabled)
-          }
-          onOpenExternalUrl={onOpenExternalUrl}
-          onClose={close}
-        />
-      );
-    }
-    if (opened.mode === "install")
-      return (
-        <ToolchainInstallDialog
-          component={opened.component}
-          onClose={close}
-          onInstall={() => {
-            const id = opened.component.id;
-            close();
-            void attempt(
-              undefined,
-              () => onInstallToolchain(id),
-              "The installation did not finish.",
-            );
-          }}
-        />
-      );
-    const draft = draftFromContents(
-      opened.contents,
-      opened.localId,
-      opened.kind,
-    );
-    if (!draft)
-      return (
-        <Dialog title="Could not open this component" onClose={close}>
-          <p role="alert">This component no longer exists.</p>
-        </Dialog>
-      );
-    const fullId = (localId: string) => `${opened.pluginId}/${localId}`;
-    const localId = opened.localId;
-    const server =
-      localId !== undefined
-        ? mcpServers.find((item) => item.id === fullId(localId))
-        : undefined;
-    return (
-      <ComponentEditor
-        draft={draft}
-        onClose={close}
-        onSave={async (saved) => {
-          await onSavePluginContents(
-            opened.pluginId,
-            nextContents(opened.contents, opened.localId, saved),
-          );
-          // Reached at once, so the list says whether it connected or what
-          // it still needs, without a test before saving.
-          if (saved.kind === "connection")
-            void onCheckConnection(fullId(saved.id)).catch(() => undefined);
-        }}
-        {...(opened.localId !== undefined
-          ? {
-              onRemove: () =>
-                onSavePluginContents(
-                  opened.pluginId,
-                  nextContents(opened.contents, opened.localId, undefined),
-                ),
-            }
-          : {})}
-        {...(draft.kind === "connection"
-          ? {
-              onTest: onTestConnection,
-              onSaveToken: (localId: string, token: string) =>
-                onSaveConnectionToken(fullId(localId), token),
-              onSetToolEnabled: (toolName: string, enabled: boolean) =>
-                onSetConnectionToolEnabled(fullId(draft.id), toolName, enabled),
-              onSignIn: (localId: string) =>
-                onSignInToConnection(fullId(localId)),
-              onCancelSignIn: (localId: string) =>
-                onCancelConnectionSignIn(fullId(localId)),
-              onSignOut: (localId: string) =>
-                onClearConnectionToken(fullId(localId)),
-              ...(server
-                ? {
-                    connectionState: {
-                      status: server.status,
-                      tools: server.tools,
-                      tokenSaved: server.credential.status === "saved",
-                      ...(server.credential.status === "signed-in"
-                        ? { account: "signed-in" as const }
-                        : server.signIn
-                          ? { account: "signed-out" as const }
-                          : {}),
-                    },
-                  }
-                : {}),
-            }
-          : {})}
-      />
-    );
-  }
-
   return (
     <SurfacePanel
       label="Plugins"
@@ -426,97 +216,23 @@ export function CapabilityLibrary({
           {actionError}
         </p>
       )}
-      {shell && !shell.available && (
-        <div role="status" className={styles["shell-notice"]}>
-          <span>Shell commands are unavailable. {shell.reason}</span>
-          <span className={styles["shell-notice__actions"]}>
-            <button
-              type="button"
-              className="button button--small"
-              onClick={() => void onOpenExternalUrl(shell.installUrl)}
-            >
-              Get Git for Windows
-            </button>
-            <button
-              type="button"
-              className="button button--small button--quiet"
-              disabled={checkingShell}
-              onClick={() => void recheckShell()}
-            >
-              {checkingShell ? "Checking…" : "Check again"}
-            </button>
-          </span>
-        </div>
-      )}
+      <ShellNotice
+        onCheck={onCheckShell}
+        onRecheck={onRecheckShell}
+        onOpenExternalUrl={onOpenExternalUrl}
+      />
       <div className={styles["plugin-layout"]}>
-        <aside className={styles["plugin-directory"]}>
-          <label className={styles["plugin-search"]}>
-            <Icon name="search" />
-            <input
-              type="search"
-              aria-label="Find plugins"
-              placeholder="Find a plugin"
-              value={query}
-              disabled={loading}
-              onChange={(event) => setQuery(event.currentTarget.value)}
-            />
-          </label>
-          <div className={styles["plugin-directory__count"]}>
-            <span>Installed</span>
-            {!loading && <span>{visible.length}</span>}
-          </div>
-          <nav aria-label="Installed plugins">
-            {visible.map((plugin) => {
-              const badge = pluginBadge(plugin);
-              const isSelected = selected?.id === plugin.id;
-              return (
-                <button
-                  type="button"
-                  key={plugin.id}
-                  aria-pressed={isSelected}
-                  className={`${styles["plugin-row"]}${isSelected ? ` ${styles["plugin-row--selected"]}` : ""}${plugin.enabled ? "" : ` ${styles["plugin-row--off"]}`}`}
-                  onClick={() => {
-                    setSelectedId(plugin.id);
-                    setActionError(undefined);
-                  }}
-                >
-                  <span className={styles["plugin-row__copy"]}>
-                    <strong>{plugin.name}</strong>
-                    <span>{plugin.category}</span>
-                  </span>
-                  {badge && plugin.status === "partial" ? (
-                    <span
-                      className={`${styles["plugin-status"]} ${styles["plugin-status--partial"]} ${styles["plugin-status--icon"]}`}
-                      role="img"
-                      aria-label={badge}
-                      data-tip={badge}
-                    >
-                      <Icon name="settings" />
-                    </span>
-                  ) : (
-                    badge && (
-                      <span
-                        className={`${styles["plugin-status"]} ${styles[`plugin-status--${plugin.status}`]}`}
-                      >
-                        {badge}
-                      </span>
-                    )
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-          {loading && (
-            <p className={styles["plugin-empty"]}>Loading installed plugins…</p>
-          )}
-          {!loading && !visible.length && (
-            <p className={styles["plugin-empty"]}>
-              {query.trim()
-                ? `No installed plugin matches “${query.trim()}”.`
-                : "No plugins installed yet."}
-            </p>
-          )}
-        </aside>
+        <PluginDirectory
+          plugins={visible}
+          selectedId={selected?.id}
+          query={query}
+          loading={loading}
+          onQuery={setQuery}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setActionError(undefined);
+          }}
+        />
 
         {selected ? (
           <PluginDetail
@@ -600,7 +316,35 @@ export function CapabilityLibrary({
         />
       )}
 
-      {renderOpened()}
+      {opened && (
+        <OpenedComponent
+          opened={opened}
+          plugin={selected}
+          mcpServers={mcpServers}
+          actions={{
+            onSavePluginContents,
+            onOverrideComponent,
+            onResetComponent,
+            onTestConnection,
+            onSetConnectionToolEnabled,
+            onSaveConnectionToken,
+            onClearConnectionToken,
+            onSignInToConnection,
+            onCancelConnectionSignIn,
+            onCheckConnection,
+            onOpenExternalUrl,
+          }}
+          onInstall={(id) => {
+            setOpened(undefined);
+            void attempt(
+              undefined,
+              () => onInstallToolchain(id),
+              "The installation did not finish.",
+            );
+          }}
+          onClose={() => setOpened(undefined)}
+        />
+      )}
     </SurfacePanel>
   );
 }

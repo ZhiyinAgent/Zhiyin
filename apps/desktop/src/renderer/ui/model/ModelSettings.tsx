@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type {
   ModelCatalog,
   ModelCatalogEntry,
@@ -8,12 +8,14 @@ import type {
   ProviderTarget,
   ApiKeySaveOutcome,
 } from "@zhiyin/contract";
-import { CloseButton } from "../shared/index.js";
 import { AccountBar } from "./AccountBar.js";
 import { ApiKeyDialog } from "./ApiKeyDialog.js";
-import { hostOf } from "./format.js";
+import { ChoiceHeader } from "./ChoiceHeader.js";
+import { CurrentChoice } from "./CurrentChoice.js";
+import { KeyCard } from "./KeyCard.js";
 import { ModelDetails } from "./ModelDetails.js";
 import { ModelList, type ModelFilter, type ModelOrder } from "./ModelList.js";
+import { useModelLists, useProviders } from "./modelLists.js";
 import { ProviderColumn } from "./ProviderColumn.js";
 import { ProviderTable, type ProviderOrder } from "./ProviderTable.js";
 import styles from "./model.module.css";
@@ -80,14 +82,10 @@ export function ModelSettings({
   /** Empty until the person chooses a model. */
   const savedModel = settings.model ?? "";
 
-  const [summaries, setSummaries] = useState<
-    readonly ProviderSummary[] | "failed" | null
-  >(null);
+  const [summaries, refreshProviders] = useProviders(onListProviders);
   const [target, setTarget] = useState(savedTarget);
   const [model, setModel] = useState(savedModel);
   const [upstreams, setUpstreams] = useState<readonly string[]>(savedUpstreams);
-  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
-  const [list, setList] = useState<ModelProviderList | null>(null);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<readonly ModelFilter[]>([]);
   const [modelOrder, setModelOrder] = useState<ModelOrder>("match");
@@ -123,61 +121,21 @@ export function ModelSettings({
     upstreams.length !== savedUpstreams.length ||
     upstreams.some((slug) => !savedUpstreams.includes(slug));
 
-  // Nothing has been asked for yet is the same thing as still waiting for it,
-  // so waiting is derived rather than tracked. A flag set at the top of an
-  // effect is a second source of truth that can disagree with the first.
-  const loadingCatalog = !keyMissing && catalog === null;
-  const loadingUpstreams =
-    !keyMissing && routes === true && model !== "" && list === null;
-
-  const refreshProviders = useCallback(() => {
-    onListProviders()
-      .then(setSummaries)
-      // A list already shown stays: a failed refresh says nothing new.
-      .catch(() => setSummaries((current) => current ?? "failed"));
-  }, [onListProviders]);
-
-  useEffect(() => {
-    refreshProviders();
-  }, [refreshProviders]);
-
-  useEffect(() => {
-    if (keyMissing) return;
-    let cancelled = false;
-    onListModels(target)
-      .then((result) => {
-        if (!cancelled) setCatalog(result);
-      })
-      .catch(() => {
-        if (!cancelled)
-          setCatalog({
-            status: "unavailable",
-            reason: "The model list could not be loaded.",
-          });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [keyMissing, onListModels, target]);
-
-  useEffect(() => {
-    if (keyMissing || !model || routes !== true) return;
-    let cancelled = false;
-    onListModelProviders(model, target)
-      .then((result) => {
-        if (!cancelled) setList(result);
-      })
-      .catch(() => {
-        if (!cancelled)
-          setList({
-            status: "unavailable",
-            reason: "The provider list could not be loaded.",
-          });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [keyMissing, model, routes, onListModelProviders, target]);
+  const {
+    catalog,
+    list,
+    loadingCatalog,
+    loadingUpstreams,
+    forgetCatalog,
+    forgetList,
+  } = useModelLists({
+    keyMissing,
+    routes,
+    model,
+    target,
+    onListModels,
+    onListModelProviders,
+  });
 
   function chooseTarget(next: ProviderTarget) {
     // A new target is set only when it is another one: the lists are read
@@ -189,18 +147,21 @@ export function ModelSettings({
     const back = sameTarget(next, savedTarget);
     setModel(back ? savedModel : "");
     setUpstreams(back ? savedUpstreams : []);
-    setCatalog(null);
-    setList(null);
+    forgetCatalog();
+    forgetList();
     setFailure(null);
   }
 
-  const chooseModel = useCallback((entry: ModelCatalogEntry) => {
-    setModel(entry.id);
-    // An upstream list belongs to the model it was chosen for; both the choice
-    // and the list of what could be chosen are dropped together.
-    setUpstreams([]);
-    setList(null);
-  }, []);
+  const chooseModel = useCallback(
+    (entry: ModelCatalogEntry) => {
+      setModel(entry.id);
+      // An upstream list belongs to the model it was chosen for; both the choice
+      // and the list of what could be chosen are dropped together.
+      setUpstreams([]);
+      forgetList();
+    },
+    [forgetList],
+  );
 
   const toggleUpstream = useCallback((slug: string) => {
     setUpstreams((current) =>
@@ -236,8 +197,8 @@ export function ModelSettings({
   function discard() {
     if (!showsSaved) {
       setTarget(savedTarget);
-      setCatalog(null);
-      setList(null);
+      forgetCatalog();
+      forgetList();
     }
     setModel(savedModel);
     setUpstreams(savedUpstreams);
@@ -279,73 +240,23 @@ export function ModelSettings({
 
   return (
     <section className={styles["model-settings"]} aria-label="Model">
-      <header className={styles["model-settings__head"]}>
-        <div>
-          <p className="instrument-label">Workspace / Settings</p>
-          <h1>Model</h1>
-        </div>
-        <div className={styles["model-settings__actions"]}>
-          {failure && (
-            <span className={styles["model-settings__failed"]} role="alert">
-              {failure}
-            </span>
-          )}
-          {dirty && !failure && (
-            <span className={styles["model-settings__dirty"]}>
-              Not saved yet
-            </span>
-          )}
-          <button
-            className="button"
-            type="button"
-            disabled={!dirty || saving}
-            data-tip={!dirty ? "Nothing has changed yet" : undefined}
-            onClick={discard}
-          >
-            Discard
-          </button>
-          <button
-            className="button button--accent"
-            type="button"
-            disabled={unsavable !== undefined || saving}
-            data-tip={unsavable}
-            onClick={() => void save()}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <CloseButton label="Close settings" onClick={onClose} />
-        </div>
-      </header>
+      <ChoiceHeader
+        dirty={dirty}
+        saving={saving}
+        failure={failure}
+        unsavable={unsavable}
+        onDiscard={discard}
+        onSave={() => void save()}
+        onClose={onClose}
+      />
 
-      <p className={styles["model-settings__current"]}>
-        <span className={styles["model-settings__label"]}>Now using</span>
-        {saved && (
-          <span
-            className={`${styles["model-settings__provider"]} ${styles["provider-name"]}`}
-            data-provider={saved.id}
-          >
-            {saved.region ? `${saved.name} · ${saved.region.name}` : saved.name}
-          </span>
-        )}
-        <strong data-tip={chosenName ? savedModel : undefined}>
-          {chosenName ?? (savedModel || "No model chosen")}
-        </strong>
-        {savedModel && saved?.upstreams && (
-          <span className={styles["model-settings__routing"]}>
-            {savedUpstreams.length === 0
-              ? "Any provider"
-              : savedUpstreams.length === 1
-                ? "1 provider"
-                : `${savedUpstreams.length} providers`}
-          </span>
-        )}
-        {withdrawn && (
-          <span className={styles["model-settings__withdrawn"]} role="status">
-            No longer offered by {saved?.name ?? "the provider"}. Choose another
-            model below.
-          </span>
-        )}
-      </p>
+      <CurrentChoice
+        saved={saved}
+        model={savedModel}
+        modelName={chosenName}
+        upstreams={savedUpstreams}
+        withdrawn={withdrawn}
+      />
 
       <div
         className={`${styles["model-settings__columns"]}${routes ? ` ${styles["model-settings__columns--routed"]}` : ""}`}
@@ -375,28 +286,12 @@ export function ModelSettings({
           />
         )}
         {keyMissing ? (
-          // Nothing for this provider can be listed without its key, so one
-          // card stands for the columns it would fill.
-          <div className={styles["key-card"]}>
-            <div className={styles["key-card__words"]}>
-              <strong>
-                Add {providerName ? articled(providerName) : "a"} key
-              </strong>
-              <p>
-                {routes
-                  ? "Models, the providers serving them and how those providers have been running are listed once Zhiyin has a key for this account."
-                  : `${providerName ?? "The provider"}'s models are listed once Zhiyin has a key for this account.`}
-                {pages && ` Keys are made on ${hostOf(pages.keys)}.`}
-              </p>
-            </div>
-            <button
-              className="button"
-              type="button"
-              onClick={() => setKeyOpen(true)}
-            >
-              Add a key
-            </button>
-          </div>
+          <KeyCard
+            providerName={providerName}
+            routes={routes}
+            pages={pages}
+            onAdd={() => setKeyOpen(true)}
+          />
         ) : (
           <>
             <ModelList
@@ -455,9 +350,4 @@ export function ModelSettings({
       )}
     </section>
   );
-}
-
-/** "an OpenRouter", "a DeepSeek": the article a name is read with. */
-function articled(name: string): string {
-  return /^[aeiou]/i.test(name) ? `an ${name}` : `a ${name}`;
 }

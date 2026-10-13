@@ -6,55 +6,127 @@ import type {
   McpSignInOutcome,
   McpToolSummary,
 } from "@zhiyin/contract";
-import { Dialog, Icon } from "../shared/index.js";
-import { inWords } from "./names.js";
+import { Dialog } from "../shared/index.js";
 import { useConnectorSignIn } from "./connectorSignIn.js";
 import {
   AccessChoice,
   SignInCard,
   type AccessMode,
 } from "./ConnectorAccess.js";
+import {
+  ConnectorAddressFields,
+  ConnectorDisclosureFields,
+  ConnectorTestNote,
+  ConnectorTokenField,
+  SkillFields,
+  SpecialistFields,
+} from "./ComponentFields.js";
+import { ConnectorTools } from "./ConnectorSections.js";
+import { slugify, type ComponentDraft } from "./componentDrafts.js";
 import styles from "./capabilities.module.css";
-
-type SkillDraft = {
-  readonly kind: "skill";
-  readonly id: string;
-  readonly description: string;
-  readonly instructions: string;
-};
-
-type SpecialistDraft = {
-  readonly kind: "specialist";
-  readonly id: string;
-  readonly name: string;
-  readonly description: string;
-  readonly instructions: string;
-};
-
-type ConnectorDraft = {
-  readonly kind: "connection";
-  readonly id: string;
-  readonly name: string;
-  readonly url: string;
-  readonly access: string;
-  readonly dataDestination: string;
-};
-
-export type ComponentDraft = SkillDraft | SpecialistDraft | ConnectorDraft;
-
-function slugify(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 const kindLabel: Record<ComponentDraft["kind"], string> = {
   skill: "skill",
   specialist: "specialist",
   connection: "connector",
 };
+
+type Pending = "save" | "remove" | "token" | "sign-out" | null;
+
+/**
+ * The editor's buttons: Done once a new connector is saved and only its
+ * sign-in is left, the question before a removal, and otherwise Remove, Test
+ * connection and Save.
+ */
+function EditorActions({
+  stage,
+  label,
+  pending,
+  removal,
+  test,
+  onClose,
+}: {
+  stage: "saved" | "confirming-removal" | "editing";
+  /** The kind of component, as it is called on the page. */
+  label: string;
+  pending: Pending;
+  removal: {
+    readonly offered: boolean;
+    readonly onAsk: () => void;
+    readonly onKeep: () => void;
+    readonly onConfirm: () => void;
+  };
+  /** Absent where there is nothing to test. */
+  test?:
+    | {
+        readonly running: boolean;
+        readonly incomplete: boolean;
+        readonly onRun: () => void;
+      }
+    | undefined;
+  onClose: () => void;
+}) {
+  if (stage === "saved")
+    return (
+      <button className="button" type="button" onClick={onClose}>
+        Done
+      </button>
+    );
+  if (stage === "confirming-removal")
+    return (
+      <>
+        <span role="alert">Remove this {label}?</span>
+        <button
+          className="button"
+          type="button"
+          disabled={pending !== null}
+          onClick={removal.onKeep}
+        >
+          Keep it
+        </button>
+        <button
+          className="button button--accent"
+          type="button"
+          disabled={pending !== null}
+          onClick={removal.onConfirm}
+        >
+          {pending === "remove" ? "Removing…" : "Remove"}
+        </button>
+      </>
+    );
+  return (
+    <>
+      {removal.offered && (
+        <button
+          className={`button button--quiet ${styles["component-editor__footer-start"]}`}
+          type="button"
+          disabled={pending !== null}
+          onClick={removal.onAsk}
+        >
+          Remove
+        </button>
+      )}
+      {test && (
+        <button
+          className="button"
+          type="button"
+          disabled={test.running || pending !== null || test.incomplete}
+          onClick={test.onRun}
+        >
+          {test.running ? "Testing…" : "Test connection"}
+        </button>
+      )}
+      <button
+        className="button button--accent"
+        type="submit"
+        form="component-editor-form"
+        disabled={pending !== null}
+      >
+        {pending === "save" ? "Saving…" : "Save"}
+      </button>
+    </>
+  );
+}
 
 /**
  * One component's edit form in a plugin made in the app, shaped to its kind.
@@ -106,9 +178,7 @@ export function ComponentEditor({
     null,
   );
   const [testing, setTesting] = useState(false);
-  const [pending, setPending] = useState<
-    "save" | "remove" | "token" | "sign-out" | null
-  >(null);
+  const [pending, setPending] = useState<Pending>(null);
   // A new connector has its id once it is saved; signing in comes after.
   const savedId = useRef<string | undefined>(isNew ? undefined : draft.id);
   const closeWhenSignedIn = useRef(false);
@@ -136,6 +206,11 @@ export function ComponentEditor({
     !form.instructions.trim();
   const urlInvalid =
     form.kind === "connection" && attempted && !isHttpUrl(form.url);
+  const missing = {
+    name: nameInvalid,
+    description: descriptionInvalid,
+    instructions: instructionsInvalid,
+  };
 
   // What is known about the account holds for the address it was saved at.
   const account =
@@ -158,7 +233,6 @@ export function ComponentEditor({
         : isNew || connectionState?.status !== "connected"
           ? "sign-in"
           : "token");
-  const needs = testResult?.ok === false ? testResult.needs : undefined;
   // Saving never waits on a test or a sign-in: a connector is checked once it
   // is saved, and signed in to, or given a token, now or later.
   const offersSignInAfterSave =
@@ -270,67 +344,33 @@ export function ComponentEditor({
       title={title}
       onClose={onClose}
       footer={
-        savedForSignIn ? (
-          <button className="button" type="button" onClick={onClose}>
-            Done
-          </button>
-        ) : confirmingRemoval ? (
-          <>
-            <span role="alert">Remove this {kindLabel[form.kind]}?</span>
-            <button
-              className="button"
-              type="button"
-              disabled={pending !== null}
-              onClick={() => setConfirmingRemoval(false)}
-            >
-              Keep it
-            </button>
-            <button
-              className="button button--accent"
-              type="button"
-              disabled={pending !== null}
-              onClick={() => void remove()}
-            >
-              {pending === "remove" ? "Removing…" : "Remove"}
-            </button>
-          </>
-        ) : (
-          <>
-            {!isNew && onRemove && (
-              <button
-                className={`button button--quiet ${styles["component-editor__footer-start"]}`}
-                type="button"
-                disabled={pending !== null}
-                onClick={() => setConfirmingRemoval(true)}
-              >
-                Remove
-              </button>
-            )}
-            {form.kind === "connection" && onTest && !signedIn && (
-              <button
-                className="button"
-                type="button"
-                disabled={
-                  testing ||
-                  pending !== null ||
-                  !form.name.trim() ||
-                  !isHttpUrl(form.url)
+        <EditorActions
+          stage={
+            savedForSignIn
+              ? "saved"
+              : confirmingRemoval
+                ? "confirming-removal"
+                : "editing"
+          }
+          label={kindLabel[form.kind]}
+          pending={pending}
+          removal={{
+            offered: !isNew && onRemove !== undefined,
+            onAsk: () => setConfirmingRemoval(true),
+            onKeep: () => setConfirmingRemoval(false),
+            onConfirm: () => void remove(),
+          }}
+          test={
+            form.kind === "connection" && onTest && !signedIn
+              ? {
+                  running: testing,
+                  incomplete: !form.name.trim() || !isHttpUrl(form.url),
+                  onRun: () => void test(),
                 }
-                onClick={() => void test()}
-              >
-                {testing ? "Testing…" : "Test connection"}
-              </button>
-            )}
-            <button
-              className="button button--accent"
-              type="submit"
-              form="component-editor-form"
-              disabled={pending !== null}
-            >
-              {pending === "save" ? "Saving…" : "Save"}
-            </button>
-          </>
-        )
+              : undefined
+          }
+          onClose={onClose}
+        />
       }
     >
       <form
@@ -342,98 +382,16 @@ export function ComponentEditor({
         }}
       >
         {form.kind === "skill" && (
-          <>
-            <label>
-              <span>Name</span>
-              <input
-                aria-label="Name"
-                aria-invalid={nameInvalid || undefined}
-                value={form.id}
-                disabled={!isNew}
-                onChange={(event) =>
-                  setForm({ ...form, id: slugify(event.target.value) })
-                }
-              />
-              {nameInvalid && <small role="alert">Enter a name.</small>}
-            </label>
-            <label>
-              <span>When should Zhiyin use it?</span>
-              <textarea
-                aria-label="When should Zhiyin use it?"
-                aria-invalid={descriptionInvalid || undefined}
-                rows={3}
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-              {descriptionInvalid && (
-                <small role="alert">Describe when to use it.</small>
-              )}
-            </label>
-            <label>
-              <span>Instructions</span>
-              <textarea
-                aria-label="Instructions"
-                aria-invalid={instructionsInvalid || undefined}
-                rows={8}
-                value={form.instructions}
-                onChange={(event) =>
-                  setForm({ ...form, instructions: event.target.value })
-                }
-              />
-              {instructionsInvalid && (
-                <small role="alert">Add instructions.</small>
-              )}
-            </label>
-          </>
+          <SkillFields
+            form={form}
+            isNew={isNew}
+            invalid={missing}
+            onChange={setForm}
+          />
         )}
 
         {form.kind === "specialist" && (
-          <>
-            <label>
-              <span>Name</span>
-              <input
-                aria-label="Name"
-                aria-invalid={nameInvalid || undefined}
-                value={form.name}
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-              {nameInvalid && <small role="alert">Enter a name.</small>}
-            </label>
-            <label>
-              <span>What should it handle?</span>
-              <textarea
-                aria-label="What should it handle?"
-                aria-invalid={descriptionInvalid || undefined}
-                rows={3}
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-              {descriptionInvalid && (
-                <small role="alert">Describe what it handles.</small>
-              )}
-            </label>
-            <label>
-              <span>Instructions</span>
-              <textarea
-                aria-label="Instructions"
-                aria-invalid={instructionsInvalid || undefined}
-                rows={8}
-                value={form.instructions}
-                onChange={(event) =>
-                  setForm({ ...form, instructions: event.target.value })
-                }
-              />
-              {instructionsInvalid && (
-                <small role="alert">Add instructions.</small>
-              )}
-            </label>
-          </>
+          <SpecialistFields form={form} invalid={missing} onChange={setForm} />
         )}
 
         {form.kind === "connection" && savedForSignIn && (
@@ -457,36 +415,14 @@ export function ComponentEditor({
         )}
         {form.kind === "connection" && !savedForSignIn && (
           <>
-            <label>
-              <span>Name</span>
-              <input
-                aria-label="Name"
-                aria-invalid={nameInvalid || undefined}
-                value={form.name}
-                onChange={(event) => {
-                  setForm({ ...form, name: event.target.value });
-                  setTestResult(null);
-                }}
-              />
-              {nameInvalid && <small role="alert">Enter a name.</small>}
-            </label>
-            <label>
-              <span>MCP endpoint</span>
-              <input
-                aria-label="MCP endpoint"
-                aria-invalid={urlInvalid || undefined}
-                type="url"
-                placeholder="https://example.com/mcp"
-                value={form.url}
-                onChange={(event) => {
-                  setForm({ ...form, url: event.target.value });
-                  setTestResult(null);
-                }}
-              />
-              {urlInvalid && (
-                <small role="alert">Enter an HTTP or HTTPS MCP endpoint.</small>
-              )}
-            </label>
+            <ConnectorAddressFields
+              form={form}
+              invalid={{ name: nameInvalid, url: urlInvalid }}
+              onChange={(next) => {
+                setForm(next);
+                setTestResult(null);
+              }}
+            />
             {!signedIn && !tokenSaved && (
               <AccessChoice
                 mode={mode}
@@ -497,26 +433,14 @@ export function ComponentEditor({
               />
             )}
             {mode === "token" && !signedIn && (
-              <label>
-                <span>
-                  {tokenSaved ? "Replace access token" : "Access token"}
-                </span>
-                <input
-                  aria-label="Access token"
-                  type="password"
-                  autoComplete="off"
-                  placeholder={
-                    tokenSaved
-                      ? "Saved — paste a new one to replace it"
-                      : "Paste the token from the service, if it needs one"
-                  }
-                  value={token}
-                  onChange={(event) => {
-                    setToken(event.target.value);
-                    setTestResult(null);
-                  }}
-                />
-              </label>
+              <ConnectorTokenField
+                token={token}
+                saved={tokenSaved}
+                onChange={(next) => {
+                  setToken(next);
+                  setTestResult(null);
+                }}
+              />
             )}
             {(signedIn ||
               signIn.signingIn ||
@@ -534,95 +458,18 @@ export function ComponentEditor({
                 onSignOut={() => void signOut()}
               />
             )}
-            {testResult?.ok === true && (
-              <p className={styles["connector-test-note"]} role="status">
-                <span
-                  className={`${styles["component-editor__test-status"]} ${styles["component-editor__test-status--ok"]}`}
-                >
-                  <Icon name="check" />
-                  Connected · {testResult.tools.length}{" "}
-                  {testResult.tools.length === 1 ? "tool" : "tools"} found
-                </span>
-              </p>
-            )}
-            {testResult?.ok === false && (
-              <p
-                className={`${styles["connector-test-note"]} ${
-                  mode === "sign-in" && needs === "sign-in"
-                    ? ""
-                    : styles["component-editor__test-status--failed"]
-                }`}
-                role={
-                  mode === "sign-in" && needs === "sign-in" ? "status" : "alert"
-                }
-              >
-                {mode === "sign-in" && needs === "sign-in"
-                  ? "This service has its own sign-in."
-                  : mode === "sign-in" && needs === "token"
-                    ? "This service has no sign-in Zhiyin can use. Choose Paste an access token."
-                    : testResult.reason}
-              </p>
-            )}
-            <label>
-              <span>What can it access? (optional)</span>
-              <textarea
-                aria-label="What can it access?"
-                rows={2}
-                value={form.access}
-                onChange={(event) =>
-                  setForm({ ...form, access: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              <span>Where does data go? (optional)</span>
-              <textarea
-                aria-label="Where does data go?"
-                rows={2}
-                value={form.dataDestination}
-                onChange={(event) =>
-                  setForm({ ...form, dataDestination: event.target.value })
-                }
-              />
-            </label>
+            <ConnectorTestNote result={testResult} mode={mode} />
+            <ConnectorDisclosureFields form={form} onChange={setForm} />
             {!isNew && connectionState && onSetToolEnabled && (
-              <fieldset className={styles["component-editor__tools"]}>
-                <legend>Tools</legend>
-                {tools.length === 0 ? (
-                  <p className={styles["component-editor__tools-empty"]}>
-                    {connectionState.status === "connected" || testResult?.ok
-                      ? "This server does not advertise any tools."
-                      : "Tools will appear once this server connects."}
-                  </p>
-                ) : (
-                  <ul>
-                    {tools.map((tool) => (
-                      <li key={tool.name}>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={tool.enabled}
-                            onChange={(event) =>
-                              void onSetToolEnabled(
-                                tool.name,
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          <span>
-                            <strong data-tip={tool.name}>
-                              {inWords(tool.name)}
-                            </strong>
-                            {tool.description && (
-                              <small>{tool.description}</small>
-                            )}
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </fieldset>
+              <ConnectorTools
+                tools={tools}
+                empty={
+                  connectionState.status === "connected" || testResult?.ok
+                    ? "This server does not advertise any tools."
+                    : "Tools will appear once this server connects."
+                }
+                onSetToolEnabled={onSetToolEnabled}
+              />
             )}
           </>
         )}

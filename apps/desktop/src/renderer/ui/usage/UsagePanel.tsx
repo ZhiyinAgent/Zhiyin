@@ -1,28 +1,16 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import type { ModelCatalog, UsageState } from "@zhiyin/contract";
+import { Icon, LoadingSkeleton, SurfacePanel } from "../shared/index.js";
 import {
-  formatMoney,
-  Icon,
-  LoadingSkeleton,
-  SurfacePanel,
-} from "../shared/index.js";
-import { DailyChart } from "./DailyChart.js";
-import { currencyNames, scaleMoney, SpentAmounts, spentIn } from "./spent.js";
+  ConversationCosts,
+  CostByDay,
+  ModelMix,
+  RequestsByDay,
+  UsageMetrics,
+} from "./UsageFigures.js";
 import styles from "./usage.module.css";
 
 type UsageRangeKey = "7" | "30";
-
-const compactNumber = new Intl.NumberFormat("en", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-
-function count(value: number, one: string, many: string) {
-  return `${value.toLocaleString("en")} ${value === 1 ? one : many}`;
-}
-
-/** The conversations shown by cost; the rest are in the files. */
-const shownConversations = 8;
 
 /**
  * The catalogue's names for the models used, once it answers. A model it no
@@ -68,17 +56,6 @@ export function UsagePanel({
   const [chosenCurrency, setCurrency] = useState("USD");
   const usage =
     availability.status === "ready" ? availability.ranges[range] : null;
-  /** One currency is charted at a time: costs are never converted. */
-  const spent = usage ? spentIn(usage) : [];
-  const charted =
-    spent.find((each) => each.currency === chosenCurrency) ?? spent[0];
-  const currency = charted?.currency ?? "USD";
-  const anyEstimated = spent.some((each) => each.estimated);
-  const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
-  const inputShare =
-    usage && totalTokens
-      ? Math.round((usage.inputTokens / totalTokens) * 100)
-      : 0;
 
   return (
     <SurfacePanel
@@ -122,258 +99,21 @@ export function UsagePanel({
 
       {usage && (
         <>
-          <div className={styles["usage-metrics"]}>
-            <article>
-              <span className="instrument-label">Requests</span>
-              <strong>{usage.requests.toLocaleString("en")}</strong>
-              <small>{usage.days}-day local activity</small>
-            </article>
-            <article>
-              <span className="instrument-label">Provider cost</span>
-              <strong>
-                <SpentAmounts spent={usage} stacked />
-              </strong>
-              <small>
-                {usage.pricedRequests === usage.requests
-                  ? anyEstimated
-                    ? "Reported or estimated for every request"
-                    : "Reported for every request"
-                  : `${usage.pricedRequests.toLocaleString("en")} of ${count(usage.requests, "request", "requests")} priced${anyEstimated ? ", some estimated" : ""}`}
-              </small>
-            </article>
-            <article>
-              <span className="instrument-label">Tokens processed</span>
-              <strong>{compactNumber.format(totalTokens)}</strong>
-              <small>
-                {inputShare}% input · {100 - inputShare}% output
-              </small>
-            </article>
-          </div>
+          <UsageMetrics usage={usage} />
 
           <div className={styles["usage-instruments"]}>
-            <figure>
-              <figcaption>
-                <div>
-                  <span className="instrument-label">Request activity</span>
-                  <strong>Requests by day</strong>
-                </div>
-              </figcaption>
-              <DailyChart
-                name="Requests by day"
-                shape="line"
-                points={usage.activity.map((point) => ({
-                  date: point.date,
-                  value: point.requests,
-                }))}
-                format={(value) => count(value, "request", "requests")}
-                formatScale={(value) => value.toLocaleString("en")}
-              />
-            </figure>
-
-            <figure>
-              <figcaption>
-                <div>
-                  <span className="instrument-label">
-                    Cost rhythm
-                    {charted?.estimated
-                      ? currency === "USD" && usage.costUsd > 0
-                        ? " · partly estimated"
-                        : " · estimated"
-                      : ""}
-                  </span>
-                  <strong>Provider cost by day</strong>
-                </div>
-                {spent.length > 1 && (
-                  <div
-                    className={styles["range-control"]}
-                    aria-label="Currency"
-                  >
-                    {spent.map((each) => (
-                      <button
-                        key={each.currency}
-                        type="button"
-                        aria-pressed={each.currency === currency}
-                        aria-label={
-                          currencyNames[each.currency] ?? each.currency
-                        }
-                        onClick={() => setCurrency(each.currency)}
-                      >
-                        {each.currency}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </figcaption>
-              <DailyChart
-                name="Cost by day"
-                shape="bars"
-                points={usage.activity.map((point) => ({
-                  date: point.date,
-                  value:
-                    spentIn(point).find((each) => each.currency === currency)
-                      ?.amount ?? 0,
-                }))}
-                format={(value) => formatMoney(value, currency)}
-                formatScale={(value) => scaleMoney(value, currency)}
-              />
-            </figure>
-
-            <figure className={styles["model-mix"]}>
-              <figcaption>
-                <div>
-                  <span className="instrument-label">Model mix</span>
-                  <strong>Requests by model</strong>
-                </div>
-              </figcaption>
-              <div className={styles["model-chart__body"]}>
-                <div className={styles["model-dial"]}>
-                  <svg
-                    viewBox="0 0 160 160"
-                    role="img"
-                    aria-label="Usage share by model"
-                  >
-                    <circle
-                      className={styles["model-dial__track"]}
-                      cx="80"
-                      cy="80"
-                      r="56"
-                    />
-                    {usage.models.map((model, index) => {
-                      const share = usage.requests
-                        ? (model.requests / usage.requests) * 100
-                        : 0;
-                      const offset = usage.models
-                        .slice(0, index)
-                        .reduce(
-                          (sum, item) =>
-                            sum + (item.requests / usage.requests) * 100,
-                          0,
-                        );
-                      return (
-                        <circle
-                          className={
-                            styles[`model-dial__segment--${index % 3}`]
-                          }
-                          cx="80"
-                          cy="80"
-                          r="56"
-                          pathLength="100"
-                          strokeDasharray={`${share} ${100 - share}`}
-                          strokeDashoffset={-offset}
-                          key={model.model}
-                        />
-                      );
-                    })}
-                  </svg>
-                  <span>
-                    <strong>{usage.models.length}</strong>
-                    {usage.models.length === 1 ? "model" : "models"}
-                  </span>
-                </div>
-                <ul
-                  className={styles["model-legend"]}
-                  aria-label="Requests by model"
-                >
-                  {usage.models.map((model, index) => {
-                    const name = modelNames.get(model.model);
-                    return (
-                      <li key={model.model}>
-                        <i
-                          className={`${styles["model-key"]} ${styles[`model-key--${index % 3}`]}`}
-                        />
-                        <span>
-                          <strong data-tip={name ? model.model : undefined}>
-                            {name ?? model.model}
-                          </strong>
-                          <small>
-                            {usage.requests
-                              ? Math.round(
-                                  (model.requests / usage.requests) * 100,
-                                )
-                              : 0}
-                            % of requests
-                          </small>
-                        </span>
-                        <em>
-                          <SpentAmounts spent={model} />
-                        </em>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </figure>
-
-            <figure className={styles["conversation-costs"]}>
-              <figcaption>
-                <div>
-                  <span className="instrument-label">Conversations</span>
-                  <strong>Cost by conversation</strong>
-                </div>
-                {usage.conversations.length > shownConversations && (
-                  <span>
-                    The {shownConversations} costliest of{" "}
-                    {usage.conversations.length.toLocaleString("en")}
-                  </span>
-                )}
-              </figcaption>
-              <ul aria-label="Cost by conversation">
-                {usage.conversations
-                  .slice(0, shownConversations)
-                  .map((spent) => {
-                    const title =
-                      spent.conversationId === undefined
-                        ? undefined
-                        : titles.get(spent.conversationId);
-                    const row = (
-                      <>
-                        <span>
-                          <strong
-                            className={
-                              title
-                                ? undefined
-                                : styles["conversation-costs__gone"]
-                            }
-                          >
-                            {title ??
-                              (spent.conversationId === undefined
-                                ? "Outside any conversation"
-                                : "A deleted conversation")}
-                          </strong>
-                          <small>
-                            {count(spent.requests, "request", "requests")}
-                            {spent.pricedRequests < spent.requests
-                              ? `, ${spent.pricedRequests.toLocaleString("en")} priced`
-                              : ""}
-                          </small>
-                        </span>
-                        <em>
-                          <SpentAmounts spent={spent} />
-                        </em>
-                      </>
-                    );
-                    const conversationId = spent.conversationId;
-                    return (
-                      <li key={conversationId ?? ""}>
-                        {title && conversationId && onOpenConversation ? (
-                          <button
-                            type="button"
-                            className={styles["conversation-costs__row"]}
-                            aria-label={`Open ${title}`}
-                            onClick={() => onOpenConversation(conversationId)}
-                          >
-                            {row}
-                          </button>
-                        ) : (
-                          <div className={styles["conversation-costs__row"]}>
-                            {row}
-                          </div>
-                        )}
-                      </li>
-                    );
-                  })}
-              </ul>
-            </figure>
+            <RequestsByDay usage={usage} />
+            <CostByDay
+              usage={usage}
+              chosen={chosenCurrency}
+              onChoose={setCurrency}
+            />
+            <ModelMix usage={usage} names={modelNames} />
+            <ConversationCosts
+              usage={usage}
+              titles={titles}
+              onOpen={onOpenConversation}
+            />
           </div>
         </>
       )}

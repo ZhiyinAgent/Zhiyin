@@ -8,15 +8,13 @@ import type {
   ReasoningCapabilities,
   ReasoningSelection,
 } from "@zhiyin/contract";
+import { typedMessageCharacters } from "@zhiyin/contract";
 import {
-  attachablePictureTypes,
-  picturesPerMessage,
-  typedMessageCharacters,
-  utf8Bytes,
-} from "@zhiyin/contract";
-import { AttachedPicture } from "./AttachedPicture.js";
+  AttachmentStrip,
+  PictureChooser,
+  useMessageAttachments,
+} from "./ComposerAttachments.js";
 import { ContextRing } from "./ContextRing.js";
-import { PastedText } from "./PastedText.js";
 import { ReasoningControls } from "./ReasoningControls.js";
 import styles from "./conversation.module.css";
 
@@ -61,29 +59,35 @@ type ComposerProps = {
 
 /** A paste this long is kept as a file and shown as a chip, not as text. */
 const pasteCharacters = 15_000;
-/** Past this, a paste is refused; the store keeps nothing larger. */
-const pasteBytes = 50 * 1024 * 1024;
 
-const cannotSee =
-  "This model can't see pictures. Choose one that can, or describe what's in it.";
-
-/** `pasted-2026-10-02-140512.png`: a picture from the clipboard has no name. */
-function pastedPictureName(now: Date, mediaType: string): string {
-  const two = (value: number) => String(value).padStart(2, "0");
-  const extension =
-    { "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" }[
-      mediaType
-    ] ?? "png";
-  return `pasted-${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}.${extension}`;
-}
-
-function dataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Not read."));
-    reader.readAsDataURL(file);
-  });
+/**
+ * The reasoning the next message asks for: what the person chose where the
+ * model leaves it to them, and otherwise what the model does by default.
+ */
+function reasoningFor(
+  capabilities:
+    | Extract<ReasoningCapabilities, { readonly status: "available" }>
+    | undefined,
+  selectedReasoning: ReasoningSelection | undefined,
+): ReasoningSelection {
+  return capabilities &&
+    (capabilities.required ||
+      (selectedReasoning?.enabled ?? capabilities.defaultEnabled))
+    ? {
+        enabled: true,
+        ...((
+          selectedReasoning?.enabled
+            ? selectedReasoning.effort
+            : capabilities.defaultEffort
+        )
+          ? {
+              effort: selectedReasoning?.enabled
+                ? selectedReasoning.effort
+                : capabilities.defaultEffort,
+            }
+          : {}),
+      }
+    : { enabled: false };
 }
 
 export function Composer({
@@ -110,143 +114,29 @@ export function Composer({
     reasoningCapabilities?.status === "available"
       ? reasoningCapabilities
       : undefined;
-  const selectedReasoning = reasoningDraft ?? initialReasoning;
-  const reasoning: ReasoningSelection =
-    capabilities &&
-    (capabilities.required ||
-      (selectedReasoning?.enabled ?? capabilities.defaultEnabled))
-      ? {
-          enabled: true,
-          ...((
-            selectedReasoning?.enabled
-              ? selectedReasoning.effort
-              : capabilities.defaultEffort
-          )
-            ? {
-                effort: selectedReasoning?.enabled
-                  ? selectedReasoning.effort
-                  : capabilities.defaultEffort,
-              }
-            : {}),
-        }
-      : { enabled: false };
-  const [message, setMessage] = useState("");
-  const [attachments, setAttachments] = useState<readonly MessageAttachment[]>(
-    [],
+  const reasoning = reasoningFor(
+    capabilities,
+    reasoningDraft ?? initialReasoning,
   );
-  const [keeping, setKeeping] = useState(0);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const attached = useMessageAttachments({
+    keepPaste,
+    keepPicture,
+    seesPictures,
+    say: setError,
+  });
+  const { attachments, keeping, replace } = attached;
   const submitting = useRef(false);
   const loadedDraftId = useRef<string | undefined>(undefined);
-  /** Each picture as this composer read it, to show before it is sent. */
-  const [previews, setPreviews] = useState<Readonly<Record<string, string>>>(
-    {},
-  );
-  /** Pictures on the message or on their way to it, counted as they come. */
-  const pictures = useRef(0);
-  const chooser = useRef<HTMLInputElement>(null);
-
-  /**
-   * One way in for a pasted, a dropped and a chosen picture. Nothing offered is
-   * dropped silently: what is left out, and why, is said.
-   */
-  function addPictures(files: readonly File[], pasted: boolean) {
-    if (!files.length) return;
-    setError("");
-    if (!seesPictures || !keepPicture) {
-      setError(cannotSee);
-      return;
-    }
-    const usable = files.filter((file) =>
-      attachablePictureTypes.includes(file.type),
-    );
-    const room = Math.max(0, picturesPerMessage - pictures.current);
-    const taken = usable.slice(0, room);
-    const problems = [
-      ...files
-        .filter((file) => !usable.includes(file))
-        .map(
-          (file) =>
-            `${file.name} was left out: only PNG, JPEG, GIF and WebP pictures can be attached.`,
-        ),
-      ...(usable.length > taken.length
-        ? [`A message can carry at most ${picturesPerMessage} pictures.`]
-        : []),
-    ];
-    if (problems.length) setError(problems.join(" "));
-    pictures.current += taken.length;
-    for (const file of taken) void keepOne(file, pasted, keepPicture);
-  }
-
-  async function keepOne(
-    file: File,
-    pasted: boolean,
-    keep: NonNullable<ComposerProps["keepPicture"]>,
-  ) {
-    const name = pasted ? pastedPictureName(new Date(), file.type) : file.name;
-    setKeeping((count) => count + 1);
-    try {
-      const read = await dataUrl(file);
-      const kept = await keep({
-        name,
-        mediaType: file.type,
-        data: read.slice(read.indexOf(",") + 1),
-      });
-      if (kept.status === "kept") {
-        setAttachments((current) => [...current, kept.attachment]);
-        setPreviews((current) => ({ ...current, [kept.attachment.id]: read }));
-        return;
-      }
-      pictures.current -= 1;
-      setError(`${name} was not added: ${kept.reason}`);
-    } catch {
-      pictures.current -= 1;
-      setError(`${name} could not be added. Try again.`);
-    } finally {
-      setKeeping((count) => count - 1);
-    }
-  }
-
-  function remove(id: string) {
-    setAttachments((current) => {
-      const next = current.filter((item) => item.id !== id);
-      pictures.current = next.filter((item) => item.kind === "picture").length;
-      return next;
-    });
-  }
-
-  async function keep(text: string) {
-    if (!keepPaste) return;
-    setError("");
-    if (utf8Bytes(text) > pasteBytes) {
-      setError(
-        "This paste is larger than 50 MB. Save it as a file in the folder and ask about the file instead.",
-      );
-      return;
-    }
-    setKeeping((count) => count + 1);
-    try {
-      const kept = await keepPaste(text);
-      if (kept.status === "kept")
-        setAttachments((current) => [...current, kept.attachment]);
-      else setError(`The pasted text was not kept: ${kept.reason}`);
-    } catch {
-      setError("The pasted text could not be kept. Try pasting it again.");
-    } finally {
-      setKeeping((count) => count - 1);
-    }
-  }
 
   useEffect(() => {
     if (!draft || loadedDraftId.current === draft.id) return;
     loadedDraftId.current = draft.id;
     setMessage(draft.text);
-    setAttachments(draft.attachments ?? []);
-    pictures.current = (draft.attachments ?? []).filter(
-      (item) => item.kind === "picture",
-    ).length;
+    replace(draft.attachments ?? []);
     setError("");
-  }, [draft]);
+  }, [draft, replace]);
 
   async function submit() {
     const typed = message.trim();
@@ -280,8 +170,7 @@ export function Composer({
         sent = [...kept, file.attachment];
       }
       setMessage("");
-      setAttachments([]);
-      pictures.current = 0;
+      replace([]);
       try {
         if (sent.length)
           await onSubmit?.(value, capabilities ? reasoning : undefined, sent);
@@ -289,10 +178,7 @@ export function Composer({
         else await onSubmit?.(value);
       } catch {
         setMessage(typed);
-        setAttachments(kept);
-        pictures.current = kept.filter(
-          (item) => item.kind === "picture",
-        ).length;
+        replace(kept);
         setError("Your message could not be sent. It is still here.");
       }
     } finally {
@@ -321,7 +207,7 @@ export function Composer({
       onDrop={(event) => {
         if (!keepPicture || !event.dataTransfer.files.length) return;
         event.preventDefault();
-        addPictures(Array.from(event.dataTransfer.files), false);
+        attached.addPictures(Array.from(event.dataTransfer.files), false);
       }}
     >
       <textarea
@@ -343,7 +229,7 @@ export function Composer({
           );
           if (files.length && keepPicture) {
             event.preventDefault();
-            addPictures(files, true);
+            attached.addPictures(files, true);
             return;
           }
           if (!keepPaste) return;
@@ -352,7 +238,7 @@ export function Composer({
           // Taken before it reaches the field, so a paste of any size never
           // has to be laid out as text.
           event.preventDefault();
-          void keep(text);
+          void attached.keepText(text);
         }}
         onKeyDown={(event) => {
           if (
@@ -365,31 +251,11 @@ export function Composer({
           }
         }}
       />
-      {(attachments.length > 0 || keeping > 0) && (
-        <div className={styles.composer__attachments}>
-          {attachments.map((attachment) =>
-            attachment.kind === "picture" ? (
-              <AttachedPicture
-                key={attachment.id}
-                attachment={attachment}
-                {...(previews[attachment.id]
-                  ? { preview: previews[attachment.id] }
-                  : {})}
-                {...(readPicture ? { readPicture } : {})}
-                onRemove={remove}
-              />
-            ) : (
-              <PastedText
-                key={attachment.id}
-                attachment={attachment}
-                {...(openAttachment ? { onOpen: openAttachment } : {})}
-                onRemove={remove}
-              />
-            ),
-          )}
-          {keeping > 0 && <span role="status">Keeping what you added…</span>}
-        </div>
-      )}
+      <AttachmentStrip
+        attached={attached}
+        readPicture={readPicture}
+        openAttachment={openAttachment}
+      />
       {message.trim().length > typedMessageCharacters && (
         <p className={styles.composer__note} role="status">
           Longer than 50,000 characters: it will be sent as a file Zhiyin reads
@@ -405,34 +271,11 @@ export function Composer({
         <div className={styles.composer__tools}>
           {scope}
           {keepPicture && (
-            <>
-              <button
-                type="button"
-                aria-label="Attach pictures"
-                disabled={Boolean(disabledReason) || !seesPictures}
-                {...(seesPictures
-                  ? {}
-                  : {
-                      title:
-                        "This model can't see pictures. Choose one that can in Model.",
-                    })}
-                onClick={() => chooser.current?.click()}
-              >
-                <Icon name="image" />
-              </button>
-              <input
-                ref={chooser}
-                type="file"
-                accept={attachablePictureTypes.join(",")}
-                multiple
-                hidden
-                aria-label="Pictures to attach"
-                onChange={(event) => {
-                  addPictures(Array.from(event.target.files ?? []), false);
-                  event.target.value = "";
-                }}
-              />
-            </>
+            <PictureChooser
+              disabled={Boolean(disabledReason)}
+              seesPictures={seesPictures}
+              onChoose={(files) => attached.addPictures(files, false)}
+            />
           )}
           {onAddContext && (
             <button
@@ -455,30 +298,52 @@ export function Composer({
           {context && <ContextRing {...context} disabled={sending} />}
           {disabledReason && <span>{disabledReason}</span>}
         </div>
-        {running && !message.trim() && !attachments.length ? (
-          <button
-            className={`${styles.composer__send} ${styles.composer__stop}`}
-            type="button"
-            aria-label="Stop task"
-            onClick={onStop}
-          >
-            <Icon name="square" />
-          </button>
-        ) : (
-          <button
-            className={styles.composer__send}
-            type="submit"
-            aria-label={running ? "Add to current work" : "Send message"}
-            disabled={
-              Boolean(disabledReason) ||
-              keeping > 0 ||
-              (!message.trim() && !attachments.length)
-            }
-          >
-            <Icon name="arrow-up" />
-          </button>
-        )}
+        <SendOrStop
+          running={running}
+          empty={!message.trim() && !attachments.length}
+          blocked={Boolean(disabledReason) || keeping > 0}
+          onStop={onStop}
+        />
       </div>
     </form>
+  );
+}
+
+/**
+ * The button that ends the footer. While a turn runs and nothing is written
+ * it stops the turn; with something written it sends, as guidance if a turn
+ * is running.
+ */
+function SendOrStop({
+  running,
+  empty,
+  blocked,
+  onStop,
+}: {
+  running: boolean;
+  /** Nothing is typed and nothing is attached. */
+  empty: boolean;
+  /** The composer is paused, or something added is still being kept. */
+  blocked: boolean;
+  onStop: (() => void) | undefined;
+}) {
+  return running && empty ? (
+    <button
+      className={`${styles.composer__send} ${styles.composer__stop}`}
+      type="button"
+      aria-label="Stop task"
+      onClick={onStop}
+    >
+      <Icon name="square" />
+    </button>
+  ) : (
+    <button
+      className={styles.composer__send}
+      type="submit"
+      aria-label={running ? "Add to current work" : "Send message"}
+      disabled={blocked || empty}
+    >
+      <Icon name="arrow-up" />
+    </button>
   );
 }

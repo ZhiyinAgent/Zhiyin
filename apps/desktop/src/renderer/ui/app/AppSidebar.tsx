@@ -106,14 +106,10 @@ export function AppSidebar({
   onUpdateConversations,
   now = currentTime,
 }: AppSidebarProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [taskMenu, setTaskMenu] = useState<TaskMenu | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
   const [clock, setClock] = useState(now);
   const taskMenuRef = useRef<HTMLDivElement>(null);
-  const appMenuRef = useRef<HTMLDivElement>(null);
-  const renameFinished = useRef(false);
 
   useEffect(() => {
     const interval = window.setInterval(() => setClock(now()), 60_000);
@@ -121,18 +117,16 @@ export function AppSidebar({
   }, [now]);
 
   useDismiss(Boolean(taskMenu), [taskMenuRef], () => setTaskMenu(null));
-  useDismiss(menuOpen, [appMenuRef], () => setMenuOpen(false));
 
   useEffect(() => {
-    if (!taskMenu && !menuOpen) return;
+    if (!taskMenu) return;
     function escape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       setTaskMenu(null);
-      setMenuOpen(false);
     }
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
-  }, [taskMenu, menuOpen]);
+  }, [taskMenu]);
 
   /** The menu is placed against the whole row, whichever way it was opened. */
   function openTaskMenu(task: SidebarTask, from: Element) {
@@ -151,21 +145,6 @@ export function AppSidebar({
         width: row.width,
       },
     });
-  }
-
-  function startRename(task: SidebarTask) {
-    setTaskMenu(null);
-    setRenamingId(task.id);
-    setRenameValue(task.title);
-    renameFinished.current = false;
-  }
-
-  function commitRename(task: SidebarTask) {
-    if (renameFinished.current) return;
-    renameFinished.current = true;
-    const title = renameValue.trim();
-    setRenamingId(null);
-    if (title && title !== task.title) void onRenameTask?.(task.id, title);
   }
 
   return (
@@ -200,20 +179,14 @@ export function AppSidebar({
             ref={taskMenu?.id === task.id ? taskMenuRef : undefined}
           >
             {renamingId === task.id ? (
-              <input
-                className={`${styles["task-row"]} ${styles["task-row--editing"]}`}
-                aria-label="Rename conversation"
-                autoFocus
-                value={renameValue}
-                onChange={(event) => setRenameValue(event.target.value)}
-                onBlur={() => commitRename(task)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitRename(task);
-                  else if (event.key === "Escape") {
-                    renameFinished.current = true;
-                    setRenamingId(null);
-                  }
+              <TaskRename
+                title={task.title}
+                onCommit={(title) => {
+                  setRenamingId(null);
+                  if (title && title !== task.title)
+                    void onRenameTask?.(task.id, title);
                 }}
+                onCancel={() => setRenamingId(null)}
               />
             ) : (
               <button
@@ -256,170 +229,292 @@ export function AppSidebar({
               </button>
             )}
 
-            {taskMenu?.id === task.id &&
-              taskMenu.mode === "menu" &&
-              task.needsUpdate && (
-                // Nothing else can be done with it until it is updated: it is
-                // not open, and the store will not write to or remove it.
-                <div
-                  className={styles["task-context-menu"]}
-                  role="menu"
-                  style={taskMenuPosition(taskMenu)}
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setTaskMenu(null);
-                      onUpdateConversations?.();
-                    }}
-                  >
-                    Update or delete…
-                  </button>
-                </div>
-              )}
-            {taskMenu?.id === task.id &&
-              taskMenu.mode === "menu" &&
-              !task.needsUpdate && (
-                <div
-                  className={styles["task-context-menu"]}
-                  role="menu"
-                  style={taskMenuPosition(taskMenu)}
-                >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => startRename(task)}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setTaskMenu(null);
-                      onTaskPermissions?.(task.id);
-                    }}
-                  >
-                    Permissions
-                  </button>
-                  {onExportConversation && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setTaskMenu(null);
-                        onExportConversation(task.id);
-                      }}
-                    >
-                      Export…
-                    </button>
-                  )}
-                  <button
-                    className={styles["task-context-menu__danger"]}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => setTaskMenu({ ...taskMenu, mode: "delete" })}
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-
-            {taskMenu?.id === task.id && taskMenu.mode === "delete" && (
-              <div
-                className={styles["task-delete-confirm"]}
-                role="group"
-                aria-label={`Delete ${task.title}`}
-                style={taskMenuPosition(taskMenu)}
-              >
-                <strong>Delete “{task.title}”?</strong>
-                <div>
-                  <button type="button" onClick={() => setTaskMenu(null)}>
-                    Keep
-                  </button>
-                  <button
-                    className={styles["task-delete-confirm__delete"]}
-                    type="button"
-                    onClick={() => {
-                      setTaskMenu(null);
-                      void onDeleteTask?.(task.id);
-                    }}
-                  >
-                    Delete conversation
-                  </button>
-                </div>
-              </div>
+            {taskMenu?.id === task.id && (
+              // The question before a deletion is drawn anew, in place of
+              // the menu, and never as the menu's own element changed.
+              <TaskOptions
+                key={taskMenu.mode}
+                task={task}
+                menu={taskMenu}
+                onClose={() => setTaskMenu(null)}
+                onAskDelete={() => setTaskMenu({ ...taskMenu, mode: "delete" })}
+                onRename={() => {
+                  setTaskMenu(null);
+                  setRenamingId(task.id);
+                }}
+                onPermissions={onTaskPermissions}
+                onExport={onExportConversation}
+                onDelete={onDeleteTask}
+                onUpdate={onUpdateConversations}
+              />
             )}
           </div>
         ))}
       </div>
 
-      <div className={styles["app-sidebar__profile"]} ref={appMenuRef}>
-        <span className={styles["profile-avatar"]}>
-          <Icon name="user" />
-        </span>
-        <span>
-          <strong>Your preferences</strong>
-        </span>
+      <AppMenu
+        onOpenUsage={onOpenUsage}
+        onOpenSettings={onOpenSettings}
+        onOpenInstructions={onOpenInstructions}
+        onOpenPreferences={onOpenPreferences}
+      />
+    </aside>
+  );
+}
+
+/**
+ * A conversation's name, open for typing where it stands in the list. Enter
+ * or leaving the field keeps what was typed; Escape leaves the name as it was.
+ */
+function TaskRename({
+  title,
+  onCommit,
+  onCancel,
+}: {
+  title: string;
+  /** Given the name as typed, without the space around it. */
+  onCommit: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(title);
+  const finished = useRef(false);
+
+  function commit() {
+    if (finished.current) return;
+    finished.current = true;
+    onCommit(value.trim());
+  }
+
+  return (
+    <input
+      className={`${styles["task-row"]} ${styles["task-row--editing"]}`}
+      aria-label="Rename conversation"
+      autoFocus
+      value={value}
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit();
+        else if (event.key === "Escape") {
+          finished.current = true;
+          onCancel();
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * What can be done with one conversation, opened against its row: its menu,
+ * and the question the menu becomes before a deletion. One still waiting for
+ * an update offers only that.
+ */
+function TaskOptions({
+  task,
+  menu,
+  onClose,
+  onAskDelete,
+  onRename,
+  onPermissions,
+  onExport,
+  onDelete,
+  onUpdate,
+}: {
+  task: SidebarTask;
+  menu: TaskMenu;
+  onClose: () => void;
+  onAskDelete: () => void;
+  onRename: () => void;
+  onPermissions: AppSidebarProps["onTaskPermissions"];
+  onExport: AppSidebarProps["onExportConversation"];
+  onDelete: AppSidebarProps["onDeleteTask"];
+  onUpdate: AppSidebarProps["onUpdateConversations"];
+}) {
+  if (menu.mode === "delete")
+    return (
+      <div
+        className={styles["task-delete-confirm"]}
+        role="group"
+        aria-label={`Delete ${task.title}`}
+        style={taskMenuPosition(menu)}
+      >
+        <strong>Delete “{task.title}”?</strong>
+        <div>
+          <button type="button" onClick={onClose}>
+            Keep
+          </button>
+          <button
+            className={styles["task-delete-confirm__delete"]}
+            type="button"
+            onClick={() => {
+              onClose();
+              void onDelete?.(task.id);
+            }}
+          >
+            Delete conversation
+          </button>
+        </div>
+      </div>
+    );
+  if (task.needsUpdate)
+    return (
+      // Nothing else can be done with it until it is updated: it is
+      // not open, and the store will not write to or remove it.
+      <div
+        className={styles["task-context-menu"]}
+        role="menu"
+        style={taskMenuPosition(menu)}
+      >
         <button
           type="button"
-          aria-label="Open app menu"
-          aria-expanded={menuOpen}
-          aria-haspopup="menu"
-          onClick={() => setMenuOpen((open) => !open)}
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onUpdate?.();
+          }}
         >
-          •••
+          Update or delete…
         </button>
-        {menuOpen && (
-          <div className={styles["brand-menu"]} role="menu">
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenUsage?.();
-              }}
-            >
-              <Icon name="usage" />
-              <span>Usage</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenSettings?.();
-              }}
-            >
-              <Icon name="settings" />
-              <span>Model</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenInstructions?.();
-              }}
-            >
-              <Icon name="spark" />
-              <span>Custom instructions</span>
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenPreferences?.();
-              }}
-            >
-              <Icon name="sliders" />
-              <span>Settings</span>
-            </button>
-          </div>
-        )}
       </div>
-    </aside>
+    );
+  return (
+    <div
+      className={styles["task-context-menu"]}
+      role="menu"
+      style={taskMenuPosition(menu)}
+    >
+      <button type="button" role="menuitem" onClick={onRename}>
+        Rename
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          onClose();
+          onPermissions?.(task.id);
+        }}
+      >
+        Permissions
+      </button>
+      {onExport && (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onClose();
+            onExport(task.id);
+          }}
+        >
+          Export…
+        </button>
+      )}
+      <button
+        className={styles["task-context-menu__danger"]}
+        type="button"
+        role="menuitem"
+        onClick={onAskDelete}
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The foot of the sidebar, with the menu that opens the app's own pages:
+ * usage, the model, custom instructions and settings.
+ */
+function AppMenu({
+  onOpenUsage,
+  onOpenSettings,
+  onOpenInstructions,
+  onOpenPreferences,
+}: {
+  onOpenUsage: (() => void) | undefined;
+  onOpenSettings: (() => void) | undefined;
+  onOpenInstructions: (() => void) | undefined;
+  onOpenPreferences: (() => void) | undefined;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const appMenuRef = useRef<HTMLDivElement>(null);
+
+  useDismiss(menuOpen, [appMenuRef], () => setMenuOpen(false));
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function escape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setMenuOpen(false);
+    }
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [menuOpen]);
+
+  return (
+    <div className={styles["app-sidebar__profile"]} ref={appMenuRef}>
+      <span className={styles["profile-avatar"]}>
+        <Icon name="user" />
+      </span>
+      <span>
+        <strong>Your preferences</strong>
+      </span>
+      <button
+        type="button"
+        aria-label="Open app menu"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        •••
+      </button>
+      {menuOpen && (
+        <div className={styles["brand-menu"]} role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              onOpenUsage?.();
+            }}
+          >
+            <Icon name="usage" />
+            <span>Usage</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              onOpenSettings?.();
+            }}
+          >
+            <Icon name="settings" />
+            <span>Model</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              onOpenInstructions?.();
+            }}
+          >
+            <Icon name="spark" />
+            <span>Custom instructions</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              onOpenPreferences?.();
+            }}
+          >
+            <Icon name="sliders" />
+            <span>Settings</span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

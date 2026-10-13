@@ -5,7 +5,7 @@ import type {
   UserInputResponse,
 } from "@zhiyin/contract";
 import styles from "./user-input.module.css";
-import { everyAnswer, quizOutcome, sameSet } from "./quiz.js";
+import { everyAnswer, quizOutcome, sameSet, type QuizOutcome } from "./quiz.js";
 import { StepTrack } from "./StepTrack.js";
 
 type Answers = Record<string, readonly string[]>;
@@ -98,14 +98,7 @@ export function QuizPrompt({
   }
 
   if (showResult) {
-    const score = quizScore(prompt.questions, selected);
     const total = prompt.questions.length;
-    const resultTitle =
-      score === total
-        ? "Every answer landed."
-        : score >= Math.ceil(total / 2)
-          ? "Nearly there."
-          : "Worth another pass.";
     return (
       <section
         className={`${styles["user-input"]} ${styles["user-input--quiz"]}`}
@@ -118,53 +111,12 @@ export function QuizPrompt({
           </div>
           <span>All {total} answered</span>
         </header>
-        <main className={styles["quiz-result"]}>
-          <p className={styles["quiz-result__eyebrow"]}>Your result</p>
-          <div
-            className={styles["quiz-result__score"]}
-            aria-label={`${score} of ${total} correct`}
-          >
-            <strong>
-              {score} / {total}
-            </strong>
-            <span>correct</span>
-          </div>
-          <ol
-            className={styles["quiz-result__track"]}
-            aria-label="Question results"
-          >
-            {prompt.questions.map((item, index) => {
-              const itemOutcome = quizOutcome(item, selected[item.id] ?? []);
-              return (
-                <li
-                  className={`${styles[`is-${itemOutcome}`]}`}
-                  aria-label={`Question ${index + 1}: ${itemOutcome === "wrong" ? "incorrect" : itemOutcome}`}
-                  key={item.id}
-                >
-                  {index + 1}
-                </li>
-              );
-            })}
-          </ol>
-          <h4>{resultTitle}</h4>
-          <p className={styles["quiz-result__summary"]}>
-            Review or retry before sending this result back to the task.
-          </p>
-          <div className={styles["quiz-result__retry"]}>
-            <div>
-              <strong>Want another go?</strong>
-              <span>Your next attempt starts with a clean slate.</span>
-            </div>
-            <button
-              className="button button--quiet"
-              type="button"
-              disabled={pending}
-              onClick={reset}
-            >
-              Try again
-            </button>
-          </div>
-        </main>
+        <QuizResult
+          questions={prompt.questions}
+          selected={selected}
+          pending={pending}
+          onRetry={reset}
+        />
         {error && (
           <p className={styles["user-input__error"]} role="alert">
             {error}
@@ -238,76 +190,18 @@ export function QuizPrompt({
           {question.selection === "multiple" && (
             <p className={styles["input-flow__hint"]}>Choose all that apply</p>
           )}
-          <div className={styles["input-flow__options"]}>
-            {question.answers.map((answer) => {
-              const answerSelected = selectedIds.includes(answer.id);
-              const answerCorrect = question.correctAnswerIds.includes(
-                answer.id,
-              );
-              const missed =
-                questionReviewed &&
-                answerCorrect &&
-                outcome === "incomplete" &&
-                !answerSelected;
-              const stateClass = questionReviewed
-                ? answerCorrect
-                  ? outcome === "incomplete" && !answerSelected
-                    ? styles["input-flow__option--incomplete"]
-                    : styles["input-flow__option--correct"]
-                  : answerSelected
-                    ? styles["input-flow__option--wrong"]
-                    : undefined
-                : answerSelected
-                  ? styles["input-flow__option--selected"]
-                  : undefined;
-              return (
-                <label
-                  className={`${styles["input-flow__option"]} ${stateClass ?? ""}`}
-                  key={answer.id}
-                >
-                  <input
-                    type={
-                      question.selection === "multiple" ? "checkbox" : "radio"
-                    }
-                    aria-label={`${answer.label}${
-                      questionReviewed
-                        ? answerCorrect
-                          ? outcome === "incomplete" && !answerSelected
-                            ? ", missed"
-                            : ", correct"
-                          : answerSelected
-                            ? ", incorrect"
-                            : ""
-                        : ""
-                    }`}
-                    name={`${formId}-${question.id}`}
-                    checked={answerSelected}
-                    disabled={pending || questionReviewed}
-                    onChange={() => choose(answer.id)}
-                  />
-                  <span>{answer.label}</span>
-                  {missed && (
-                    <em className={styles["input-flow__missed"]}>Missed</em>
-                  )}
-                </label>
-              );
-            })}
-          </div>
+          <QuizAnswers
+            question={question}
+            name={`${formId}-${question.id}`}
+            selectedIds={selectedIds}
+            reviewed={questionReviewed}
+            outcome={outcome}
+            pending={pending}
+            onChoose={choose}
+          />
         </div>
         {questionReviewed && (
-          <div
-            className={`${styles["input-flow__feedback"]} ${styles[`input-flow__feedback--${outcome}`]}`}
-            role="status"
-          >
-            <strong>
-              {outcome === "correct"
-                ? "Correct"
-                : outcome === "incomplete"
-                  ? `Not quite: this needed ${everyAnswer(question)}.`
-                  : "Not quite"}
-            </strong>
-            <p>{question.explanation}</p>
-          </div>
+          <QuizFeedback question={question} outcome={outcome} />
         )}
       </form>
       <footer
@@ -354,5 +248,181 @@ export function QuizPrompt({
         </div>
       </footer>
     </section>
+  );
+}
+
+/**
+ * A question's answers to choose from. Once the question is checked they are
+ * marked instead: the right ones, a wrong one that was chosen, and a right one
+ * that a partly right choice left out.
+ */
+function QuizAnswers({
+  question,
+  name,
+  selectedIds,
+  reviewed,
+  outcome,
+  pending,
+  onChoose,
+}: {
+  question: QuizQuestion;
+  /** The name the question's answers share as one group of inputs. */
+  name: string;
+  selectedIds: readonly string[];
+  /** The question was checked, so its answers are marked and held. */
+  reviewed: boolean;
+  outcome: QuizOutcome;
+  pending: boolean;
+  onChoose: (answerId: string) => void;
+}) {
+  return (
+    <div className={styles["input-flow__options"]}>
+      {question.answers.map((answer) => {
+        const answerSelected = selectedIds.includes(answer.id);
+        const answerCorrect = question.correctAnswerIds.includes(answer.id);
+        const missed =
+          reviewed &&
+          answerCorrect &&
+          outcome === "incomplete" &&
+          !answerSelected;
+        const stateClass = reviewed
+          ? answerCorrect
+            ? outcome === "incomplete" && !answerSelected
+              ? styles["input-flow__option--incomplete"]
+              : styles["input-flow__option--correct"]
+            : answerSelected
+              ? styles["input-flow__option--wrong"]
+              : undefined
+          : answerSelected
+            ? styles["input-flow__option--selected"]
+            : undefined;
+        return (
+          <label
+            className={`${styles["input-flow__option"]} ${stateClass ?? ""}`}
+            key={answer.id}
+          >
+            <input
+              type={question.selection === "multiple" ? "checkbox" : "radio"}
+              aria-label={`${answer.label}${
+                reviewed
+                  ? answerCorrect
+                    ? outcome === "incomplete" && !answerSelected
+                      ? ", missed"
+                      : ", correct"
+                    : answerSelected
+                      ? ", incorrect"
+                      : ""
+                  : ""
+              }`}
+              name={name}
+              checked={answerSelected}
+              disabled={pending || reviewed}
+              onChange={() => onChoose(answer.id)}
+            />
+            <span>{answer.label}</span>
+            {missed && <em className={styles["input-flow__missed"]}>Missed</em>}
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** What checking a question showed, with the explanation that came with it. */
+function QuizFeedback({
+  question,
+  outcome,
+}: {
+  question: QuizQuestion;
+  outcome: QuizOutcome;
+}) {
+  return (
+    <div
+      className={`${styles["input-flow__feedback"]} ${styles[`input-flow__feedback--${outcome}`]}`}
+      role="status"
+    >
+      <strong>
+        {outcome === "correct"
+          ? "Correct"
+          : outcome === "incomplete"
+            ? `Not quite: this needed ${everyAnswer(question)}.`
+            : "Not quite"}
+      </strong>
+      <p>{question.explanation}</p>
+    </div>
+  );
+}
+
+/**
+ * How the quiz went: the score, each question's outcome in order, and the
+ * offer of another attempt before the result is sent back to the task.
+ */
+function QuizResult({
+  questions,
+  selected,
+  pending,
+  onRetry,
+}: {
+  questions: readonly QuizQuestion[];
+  selected: Answers;
+  pending: boolean;
+  onRetry: () => void;
+}) {
+  const score = quizScore(questions, selected);
+  const total = questions.length;
+  const resultTitle =
+    score === total
+      ? "Every answer landed."
+      : score >= Math.ceil(total / 2)
+        ? "Nearly there."
+        : "Worth another pass.";
+  return (
+    <main className={styles["quiz-result"]}>
+      <p className={styles["quiz-result__eyebrow"]}>Your result</p>
+      <div
+        className={styles["quiz-result__score"]}
+        aria-label={`${score} of ${total} correct`}
+      >
+        <strong>
+          {score} / {total}
+        </strong>
+        <span>correct</span>
+      </div>
+      <ol
+        className={styles["quiz-result__track"]}
+        aria-label="Question results"
+      >
+        {questions.map((item, index) => {
+          const itemOutcome = quizOutcome(item, selected[item.id] ?? []);
+          return (
+            <li
+              className={`${styles[`is-${itemOutcome}`]}`}
+              aria-label={`Question ${index + 1}: ${itemOutcome === "wrong" ? "incorrect" : itemOutcome}`}
+              key={item.id}
+            >
+              {index + 1}
+            </li>
+          );
+        })}
+      </ol>
+      <h4>{resultTitle}</h4>
+      <p className={styles["quiz-result__summary"]}>
+        Review or retry before sending this result back to the task.
+      </p>
+      <div className={styles["quiz-result__retry"]}>
+        <div>
+          <strong>Want another go?</strong>
+          <span>Your next attempt starts with a clean slate.</span>
+        </div>
+        <button
+          className="button button--quiet"
+          type="button"
+          disabled={pending}
+          onClick={onRetry}
+        >
+          Try again
+        </button>
+      </div>
+    </main>
   );
 }

@@ -8,7 +8,13 @@
  * counted until it is sent. When the model's window is not known it says so.
  */
 
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   contextBudgets,
@@ -33,6 +39,26 @@ function short(tokens: number): string {
   if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(2))}M`;
   return `${Math.round(tokens / 1_000)}K`;
 }
+
+/**
+ * The last request's size against the budget chosen, as the ring, its panel
+ * and the breakdown all read it.
+ */
+function contextReading(
+  usage: ContextUsage | undefined,
+  model: ModelWindow,
+  budget: ContextBudgetChoice,
+) {
+  const options = contextBudgets(model);
+  const chosen = contextTarget(budget, model);
+  const known = model.contextWindow !== undefined;
+  const total = usage?.totalTokens ?? 0;
+  const percent = Math.round((total / chosen.targetTokens) * 100);
+  const fixed = usage ? usage.parts.instructions + usage.parts.tools : 0;
+  return { options, chosen, known, total, percent, fixed };
+}
+
+type Reading = ReturnType<typeof contextReading>;
 
 export function ContextRing({
   usage,
@@ -73,24 +99,12 @@ export function ContextRing({
   const [condensing, setCondensing] = useState(false);
   const [condenseFailure, setCondenseFailure] = useState<string>();
 
-  const options = contextBudgets(model);
-  const chosen = contextTarget(budget, model);
-  // Budgets the window caps to one target; the menu says so, not implying
-  // the larger one buys more room.
-  const same = options.filter(
-    (option) =>
-      options.filter((other) => other.targetTokens === option.targetTokens)
-        .length > 1,
-  );
-  const known = model.contextWindow !== undefined;
-  const total = usage?.totalTokens ?? 0;
-  const percent = Math.round((total / chosen.targetTokens) * 100);
+  const reading = contextReading(usage, model, budget);
   const busy = compacting || condensing;
-  const measured = known
-    ? `Context: ${percent}% of the ${names[chosen.budget]} budget`
+  const measured = reading.known
+    ? `Context: ${reading.percent}% of the ${names[reading.chosen.budget]} budget`
     : "Context: size not known yet";
   const label = busy ? `${measured}, compacting` : measured;
-  const fixed = usage ? usage.parts.instructions + usage.parts.tools : 0;
 
   if (open && disabled) setOpen(false);
 
@@ -119,34 +133,21 @@ export function ContextRing({
 
   useDismiss(open, [root, panel], () => setOpen(false));
 
-  const rows: readonly (readonly [string, number, string])[] = usage
-    ? [
-        [
-          "Setup",
-          fixed,
-          "Zhiyin's instructions and the tools it can use. Sent with every message.",
-        ],
-        ...(usage.parts.summary > 0
-          ? [
-              [
-                "Summary",
-                usage.parts.summary,
-                "A short version of older messages, written when the conversation was compacted.",
-              ] as const,
-            ]
-          : []),
-        [
-          "Conversation",
-          usage.parts.conversation + usage.parts.toolResults,
-          "Your messages, Zhiyin's replies, and what it read or ran along the way.",
-        ],
-        [
-          "Free",
-          Math.max(0, chosen.targetTokens - total),
-          "Room left before Zhiyin compacts older messages on its own.",
-        ],
-      ]
-    : [];
+  function condense(run: () => Promise<void>) {
+    // An action, so the panel closes; it opens again to say why if the
+    // action fails.
+    setOpen(false);
+    setCondensing(true);
+    setCondenseFailure(undefined);
+    run()
+      .catch((error: unknown) => {
+        setCondenseFailure(
+          error instanceof Error ? error.message : String(error),
+        );
+        setOpen(true);
+      })
+      .finally(() => setCondensing(false));
+  }
 
   return (
     <div
@@ -174,185 +175,280 @@ export function ContextRing({
         disabled={disabled}
         onClick={() => setOpen(!open)}
       >
-        <svg viewBox="0 0 20 20" aria-hidden="true">
-          <circle
-            className={styles["context-ring__track"]}
-            cx="10"
-            cy="10"
-            r="7"
-          />
-          {/* Set on the arc itself, not inherited, so Chromium repaints it on
-              every change; at 0% there is no arc, not a round-capped dot. */}
-          {known && total > 0 && (
-            <circle
-              className={`${styles["context-ring__fill"]}${percent >= 100 ? ` ${styles["context-ring__fill--over"]}` : ""}`}
-              cx="10"
-              cy="10"
-              r="7"
-              pathLength="100"
-              style={{ strokeDasharray: `${Math.min(100, percent)} 100` }}
-            />
-          )}
-          {!known && (
-            <circle
-              className={styles["context-ring__point"]}
-              cx="10"
-              cy="10"
-              r="1.75"
-            />
-          )}
-        </svg>
+        <Ring reading={reading} />
       </button>
       {open &&
         !disabled &&
         createPortal(
-          <div
-            ref={panel}
+          <BudgetPanel
+            panelRef={panel}
             id={panelId}
-            className={`${styles["reasoning-controls__panel"]} ${styles["context-ring__panel"]}`}
-            role="dialog"
-            aria-label="Context"
-          >
-            <div className={styles["reasoning-controls__heading"]}>
-              <button
-                type="button"
-                className={styles["reasoning-controls__reset"]}
-                aria-label="What's using space"
-                disabled={!usage}
-                onClick={() => {
-                  setOpen(false);
-                  setBreakdown(true);
-                }}
-              >
-                <Icon name="usage" />
-              </button>
-              <span
-                className={`${styles["reasoning-controls__level"]}${known && percent >= 100 ? ` ${styles["context-ring__level--over"]}` : ""}${known ? "" : ` ${styles["context-ring__level--unknown"]}`}`}
-                aria-live="polite"
-                title={
-                  known
-                    ? `${short(total)} of ${short(chosen.targetTokens)} tokens`
-                    : "This model does not list its context window"
-                }
-              >
-                {known ? `${percent}%` : "Not measured"}
-              </span>
-              <span />
-            </div>
-            <p className={styles["reasoning-controls__caption"]}>
-              How much of this conversation Zhiyin keeps in mind, in tokens.
-              More costs more per request.
-            </p>
-            {same.length > 1 && (
-              <p className={styles["reasoning-controls__caption"]}>
-                {same.map((option) => names[option.budget]).join(" and ")} are
-                the same size on this model.
-              </p>
-            )}
-            <div
-              role="radiogroup"
-              aria-label="Context budget"
-              className={styles["context-ring__choices"]}
-            >
-              {options.map((option) => (
-                <label key={option.budget}>
-                  <input
-                    type="radio"
-                    name={`${panelId}-budget`}
-                    checked={option.budget === chosen.budget}
-                    onChange={() => onChoose(option.budget)}
-                  />
-                  <span>{names[option.budget]}</span>
-                  <span>{short(option.targetTokens)}</span>
-                </label>
-              ))}
-            </div>
-            {usage && !fixedPartFits(usage, chosen.targetTokens) && (
-              <p className={styles["context-ring__warning"]} role="note">
-                Instructions and tools take{" "}
-                {Math.round((fixed / chosen.targetTokens) * 100)}% of this
-                budget.
-              </p>
-            )}
-            {onCondense && (
-              <button
-                type="button"
-                className={styles["context-ring__compact"]}
-                data-tip="Summarise older messages so the conversation takes less space"
-                disabled={busy}
-                onClick={() => {
-                  // An action, so the panel closes; it opens again to say
-                  // why if the action fails.
-                  setOpen(false);
-                  setCondensing(true);
-                  setCondenseFailure(undefined);
-                  onCondense()
-                    .catch((error: unknown) => {
-                      setCondenseFailure(
-                        error instanceof Error ? error.message : String(error),
-                      );
-                      setOpen(true);
-                    })
-                    .finally(() => setCondensing(false));
-                }}
-              >
-                {busy ? "Compacting…" : "Compact"}
-              </button>
-            )}
-            {condenseFailure && (
-              <p className={styles["context-ring__warning"]} role="alert">
-                Could not compact: {condenseFailure}
-              </p>
-            )}
-          </div>,
+            reading={reading}
+            usage={usage}
+            busy={busy}
+            failure={condenseFailure}
+            onChoose={onChoose}
+            onBreakdown={() => {
+              setOpen(false);
+              setBreakdown(true);
+            }}
+            onCondense={onCondense ? () => condense(onCondense) : undefined}
+          />,
           document.body,
         )}
       {breakdown && usage && (
-        <Dialog
-          title="What's using space"
+        <SpaceBreakdown
+          reading={reading}
+          usage={usage}
+          refusedTokens={model.refusedTokens}
+          instructions={instructions}
+          onEditInstructions={
+            onEditInstructions
+              ? () => {
+                  setBreakdown(false);
+                  onEditInstructions();
+                }
+              : undefined
+          }
           onClose={() => {
             setBreakdown(false);
             trigger.current?.focus();
           }}
-        >
-          <p className={styles["context-ring__breakdown-total"]}>
-            {percent}% of the {names[chosen.budget]} budget (
-            {short(chosen.targetTokens)})
-          </p>
-          <table className={styles["context-ring__breakdown"]}>
-            <tbody>
-              {rows.map(([name, tokens, meaning]) => (
-                <BreakdownRow
-                  key={name}
-                  name={name}
-                  tokens={tokens}
-                  meaning={meaning}
-                />
-              ))}
-            </tbody>
-          </table>
-          {instructions && instructions.length > 0 && (
-            <InstructionSources
-              sources={instructions}
-              {...(onEditInstructions
-                ? {
-                    onEdit: () => {
-                      setBreakdown(false);
-                      onEditInstructions();
-                    },
-                  }
-                : {})}
-            />
-          )}
-          {model.refusedTokens !== undefined && (
-            <p className={styles["context-ring__lowered"]}>
-              Limit lowered after the provider refused a request of{" "}
-              {short(model.refusedTokens)} tokens.
-            </p>
-          )}
-        </Dialog>
+        />
       )}
     </div>
+  );
+}
+
+/**
+ * The ring itself: an arc for how full the budget is, and a point in its
+ * place where the model's window is not known.
+ */
+function Ring({ reading: { known, total, percent } }: { reading: Reading }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <circle className={styles["context-ring__track"]} cx="10" cy="10" r="7" />
+      {/* Set on the arc itself, not inherited, so Chromium repaints it on
+          every change; at 0% there is no arc, not a round-capped dot. */}
+      {known && total > 0 && (
+        <circle
+          className={`${styles["context-ring__fill"]}${percent >= 100 ? ` ${styles["context-ring__fill--over"]}` : ""}`}
+          cx="10"
+          cy="10"
+          r="7"
+          pathLength="100"
+          style={{ strokeDasharray: `${Math.min(100, percent)} 100` }}
+        />
+      )}
+      {!known && (
+        <circle
+          className={styles["context-ring__point"]}
+          cx="10"
+          cy="10"
+          r="1.75"
+        />
+      )}
+    </svg>
+  );
+}
+
+/**
+ * What the ring opens: how full the budget is, the budgets to choose from,
+ * and compacting. It is drawn at the end of the page, so the ring is told
+ * which element it is, to place it and to know a click inside it.
+ */
+function BudgetPanel({
+  panelRef,
+  id,
+  reading: { options, chosen, known, total, percent, fixed },
+  usage,
+  busy,
+  failure,
+  onChoose,
+  onBreakdown,
+  onCondense,
+}: {
+  panelRef: RefObject<HTMLDivElement | null>;
+  id: string;
+  reading: Reading;
+  usage: ContextUsage | undefined;
+  /** The conversation is being summarised now. */
+  busy: boolean;
+  /** Why the compacting asked here did not happen. */
+  failure: string | undefined;
+  onChoose: (budget: ContextBudgetChoice) => void;
+  onBreakdown: () => void;
+  /** Absent before there is a conversation to compact. */
+  onCondense: (() => void) | undefined;
+}) {
+  // Budgets the window caps to one target; the menu says so, not implying
+  // the larger one buys more room.
+  const same = options.filter(
+    (option) =>
+      options.filter((other) => other.targetTokens === option.targetTokens)
+        .length > 1,
+  );
+  return (
+    <div
+      ref={panelRef}
+      id={id}
+      className={`${styles["reasoning-controls__panel"]} ${styles["context-ring__panel"]}`}
+      role="dialog"
+      aria-label="Context"
+    >
+      <div className={styles["reasoning-controls__heading"]}>
+        <button
+          type="button"
+          className={styles["reasoning-controls__reset"]}
+          aria-label="What's using space"
+          disabled={!usage}
+          onClick={onBreakdown}
+        >
+          <Icon name="usage" />
+        </button>
+        <span
+          className={`${styles["reasoning-controls__level"]}${known && percent >= 100 ? ` ${styles["context-ring__level--over"]}` : ""}${known ? "" : ` ${styles["context-ring__level--unknown"]}`}`}
+          aria-live="polite"
+          title={
+            known
+              ? `${short(total)} of ${short(chosen.targetTokens)} tokens`
+              : "This model does not list its context window"
+          }
+        >
+          {known ? `${percent}%` : "Not measured"}
+        </span>
+        <span />
+      </div>
+      <p className={styles["reasoning-controls__caption"]}>
+        How much of this conversation Zhiyin keeps in mind, in tokens. More
+        costs more per request.
+      </p>
+      {same.length > 1 && (
+        <p className={styles["reasoning-controls__caption"]}>
+          {same.map((option) => names[option.budget]).join(" and ")} are the
+          same size on this model.
+        </p>
+      )}
+      <div
+        role="radiogroup"
+        aria-label="Context budget"
+        className={styles["context-ring__choices"]}
+      >
+        {options.map((option) => (
+          <label key={option.budget}>
+            <input
+              type="radio"
+              name={`${id}-budget`}
+              checked={option.budget === chosen.budget}
+              onChange={() => onChoose(option.budget)}
+            />
+            <span>{names[option.budget]}</span>
+            <span>{short(option.targetTokens)}</span>
+          </label>
+        ))}
+      </div>
+      {usage && !fixedPartFits(usage, chosen.targetTokens) && (
+        <p className={styles["context-ring__warning"]} role="note">
+          Instructions and tools take{" "}
+          {Math.round((fixed / chosen.targetTokens) * 100)}% of this budget.
+        </p>
+      )}
+      {onCondense && (
+        <button
+          type="button"
+          className={styles["context-ring__compact"]}
+          data-tip="Summarise older messages so the conversation takes less space"
+          disabled={busy}
+          onClick={onCondense}
+        >
+          {busy ? "Compacting…" : "Compact"}
+        </button>
+      )}
+      {failure && (
+        <p className={styles["context-ring__warning"]} role="alert">
+          Could not compact: {failure}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What the last request was made of, part by part, with the standing
+ * instructions it carried and whether its limit was lowered after a refusal.
+ */
+function SpaceBreakdown({
+  reading: { chosen, total, percent, fixed },
+  usage,
+  refusedTokens,
+  instructions,
+  onEditInstructions,
+  onClose,
+}: {
+  reading: Reading;
+  usage: ContextUsage;
+  refusedTokens: number | undefined;
+  instructions: readonly StandingInstruction[] | undefined;
+  onEditInstructions: (() => void) | undefined;
+  onClose: () => void;
+}) {
+  const rows: readonly (readonly [string, number, string])[] = [
+    [
+      "Setup",
+      fixed,
+      "Zhiyin's instructions and the tools it can use. Sent with every message.",
+    ],
+    ...(usage.parts.summary > 0
+      ? [
+          [
+            "Summary",
+            usage.parts.summary,
+            "A short version of older messages, written when the conversation was compacted.",
+          ] as const,
+        ]
+      : []),
+    [
+      "Conversation",
+      usage.parts.conversation + usage.parts.toolResults,
+      "Your messages, Zhiyin's replies, and what it read or ran along the way.",
+    ],
+    [
+      "Free",
+      Math.max(0, chosen.targetTokens - total),
+      "Room left before Zhiyin compacts older messages on its own.",
+    ],
+  ];
+  return (
+    <Dialog title="What's using space" onClose={onClose}>
+      <p className={styles["context-ring__breakdown-total"]}>
+        {percent}% of the {names[chosen.budget]} budget (
+        {short(chosen.targetTokens)})
+      </p>
+      <table className={styles["context-ring__breakdown"]}>
+        <tbody>
+          {rows.map(([name, tokens, meaning]) => (
+            <BreakdownRow
+              key={name}
+              name={name}
+              tokens={tokens}
+              meaning={meaning}
+            />
+          ))}
+        </tbody>
+      </table>
+      {instructions && instructions.length > 0 && (
+        <InstructionSources
+          sources={instructions}
+          {...(onEditInstructions ? { onEdit: onEditInstructions } : {})}
+        />
+      )}
+      {refusedTokens !== undefined && (
+        <p className={styles["context-ring__lowered"]}>
+          Limit lowered after the provider refused a request of{" "}
+          {short(refusedTokens)} tokens.
+        </p>
+      )}
+    </Dialog>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type {
   ClarificationOption,
+  ClarificationQuestion,
   PendingUserInputRequest,
   QuizAnswer,
   UserInputResponse,
@@ -63,7 +64,6 @@ export function ClarificationPrompt({
   const [questionIndex, setQuestionIndex] = useState(0);
   const [showReview, setShowReview] = useState(false);
   const [pending, setPending] = useState(false);
-  const [confirmingStop, setConfirmingStop] = useState(false);
   const [error, setError] = useState("");
 
   const total = prompt.questions.length;
@@ -73,7 +73,6 @@ export function ClarificationPrompt({
   if (!question) return null;
 
   const questionId = question.id;
-  const options = question.options ?? [];
   const selectedIds = selected[questionId] ?? [];
   const text = written[questionId] ?? "";
   const answered = selectedIds.length > 0 || Boolean(text.trim());
@@ -104,43 +103,8 @@ export function ClarificationPrompt({
     }
   }
 
-  /**
-   * Quiet, beside the answers rather than among them, and asked about once in
-   * place: stopping ends the task, and it sits a short reach from Next.
-   */
-  const stopTask = confirmingStop ? (
-    <div
-      className={styles["input-flow__stop"]}
-      role="group"
-      aria-label="Stop this task"
-    >
-      <span>Stop this task?</span>
-      <button
-        className={`button button--small ${styles["input-flow__stop-confirm"]}`}
-        type="button"
-        disabled={pending}
-        onClick={() => void onCancel()}
-      >
-        Stop
-      </button>
-      <button
-        className="button button--small button--quiet"
-        type="button"
-        disabled={pending}
-        onClick={() => setConfirmingStop(false)}
-      >
-        Keep answering
-      </button>
-    </div>
-  ) : (
-    <button
-      className="text-button"
-      type="button"
-      disabled={pending}
-      onClick={() => setConfirmingStop(true)}
-    >
-      Stop task
-    </button>
+  const stopTask = (
+    <StopTask pending={pending} onStop={() => void onCancel()} />
   );
 
   if (showReview) {
@@ -160,41 +124,16 @@ export function ClarificationPrompt({
             done={prompt.questions.map(() => true)}
           />
         </header>
-        <ol className={styles["input-review"]}>
-          {prompt.questions.map((item, index) => (
-            <li className={styles["input-review__row"]} key={item.id}>
-              <div>
-                <p>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  {item.prompt}
-                </p>
-                <strong>
-                  {written[item.id]?.trim() ||
-                    (selected[item.id] ?? [])
-                      .map(
-                        (id) =>
-                          (item.options ?? []).find(
-                            (option) => option.id === id,
-                          )?.label ?? id,
-                      )
-                      .join(", ")}
-                </strong>
-              </div>
-              <button
-                className="button button--quiet"
-                type="button"
-                aria-label={`Change answer to ${item.prompt}`}
-                disabled={pending}
-                onClick={() => {
-                  setShowReview(false);
-                  setQuestionIndex(index);
-                }}
-              >
-                Change
-              </button>
-            </li>
-          ))}
-        </ol>
+        <AnswerReview
+          questions={prompt.questions}
+          selected={selected}
+          written={written}
+          pending={pending}
+          onChange={(index) => {
+            setShowReview(false);
+            setQuestionIndex(index);
+          }}
+        />
         {error && (
           <p className={styles["user-input__error"]} role="alert">
             {error}
@@ -276,52 +215,15 @@ export function ClarificationPrompt({
           aria-labelledby={`${formId}-question`}
         >
           <h4 id={`${formId}-question`}>{question.prompt}</h4>
-          <div className={styles["input-flow__options"]}>
-            {options.map((option) => (
-              <label
-                className={`${styles["input-flow__option"]} ${
-                  selectedIds.includes(option.id)
-                    ? styles["input-flow__option--selected"]
-                    : ""
-                }`}
-                key={option.id}
-              >
-                <input
-                  type="radio"
-                  aria-label={option.label}
-                  name={`${formId}-${question.id}`}
-                  checked={selectedIds.includes(option.id)}
-                  disabled={pending}
-                  onChange={() => choose(option.id)}
-                />
-                <span>
-                  <strong>{option.label}</strong>
-                  {optionDescription(option) && (
-                    <small>{optionDescription(option)}</small>
-                  )}
-                </span>
-              </label>
-            ))}
-            {question.allowText && (
-              <label className={styles["user-input__written"]}>
-                {options.length > 0 && <span>Something else</span>}
-                <textarea
-                  aria-label={
-                    options.length
-                      ? `${question.prompt} — Something else`
-                      : question.prompt
-                  }
-                  rows={options.length ? 2 : 3}
-                  placeholder={
-                    options.length ? "Describe another option" : "Your answer"
-                  }
-                  value={text}
-                  disabled={pending}
-                  onChange={(event) => write(event.target.value)}
-                />
-              </label>
-            )}
-          </div>
+          <QuestionAnswers
+            question={question}
+            name={`${formId}-${question.id}`}
+            selectedIds={selectedIds}
+            text={text}
+            pending={pending}
+            onChoose={choose}
+            onWrite={write}
+          />
         </div>
       </form>
       {error && (
@@ -364,5 +266,177 @@ export function ClarificationPrompt({
         </div>
       </footer>
     </section>
+  );
+}
+
+/**
+ * Quiet, beside the answers rather than among them, and asked about once in
+ * place: stopping ends the task, and it sits a short reach from Next.
+ */
+function StopTask({
+  pending,
+  onStop,
+}: {
+  pending: boolean;
+  onStop: () => void;
+}) {
+  const [confirmingStop, setConfirmingStop] = useState(false);
+  return confirmingStop ? (
+    <div
+      className={styles["input-flow__stop"]}
+      role="group"
+      aria-label="Stop this task"
+    >
+      <span>Stop this task?</span>
+      <button
+        className={`button button--small ${styles["input-flow__stop-confirm"]}`}
+        type="button"
+        disabled={pending}
+        onClick={onStop}
+      >
+        Stop
+      </button>
+      <button
+        className="button button--small button--quiet"
+        type="button"
+        disabled={pending}
+        onClick={() => setConfirmingStop(false)}
+      >
+        Keep answering
+      </button>
+    </div>
+  ) : (
+    <button
+      className="text-button"
+      type="button"
+      disabled={pending}
+      onClick={() => setConfirmingStop(true)}
+    >
+      Stop task
+    </button>
+  );
+}
+
+/**
+ * A question's answers: the options it offers, one of which is chosen, and
+ * room to write another where the question allows it. Choosing and writing
+ * replace each other.
+ */
+function QuestionAnswers({
+  question,
+  name,
+  selectedIds,
+  text,
+  pending,
+  onChoose,
+  onWrite,
+}: {
+  question: ClarificationQuestion;
+  /** The name the question's options share as one group of inputs. */
+  name: string;
+  selectedIds: readonly string[];
+  text: string;
+  pending: boolean;
+  onChoose: (answerId: string) => void;
+  onWrite: (value: string) => void;
+}) {
+  const options = question.options ?? [];
+  return (
+    <div className={styles["input-flow__options"]}>
+      {options.map((option) => (
+        <label
+          className={`${styles["input-flow__option"]} ${
+            selectedIds.includes(option.id)
+              ? styles["input-flow__option--selected"]
+              : ""
+          }`}
+          key={option.id}
+        >
+          <input
+            type="radio"
+            aria-label={option.label}
+            name={name}
+            checked={selectedIds.includes(option.id)}
+            disabled={pending}
+            onChange={() => onChoose(option.id)}
+          />
+          <span>
+            <strong>{option.label}</strong>
+            {optionDescription(option) && (
+              <small>{optionDescription(option)}</small>
+            )}
+          </span>
+        </label>
+      ))}
+      {question.allowText && (
+        <label className={styles["user-input__written"]}>
+          {options.length > 0 && <span>Something else</span>}
+          <textarea
+            aria-label={
+              options.length
+                ? `${question.prompt} — Something else`
+                : question.prompt
+            }
+            rows={options.length ? 2 : 3}
+            placeholder={
+              options.length ? "Describe another option" : "Your answer"
+            }
+            value={text}
+            disabled={pending}
+            onChange={(event) => onWrite(event.target.value)}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+/** Every answer given, each with the way back to change it, before sending. */
+function AnswerReview({
+  questions,
+  selected,
+  written,
+  pending,
+  onChange,
+}: {
+  questions: readonly ClarificationQuestion[];
+  selected: Answers;
+  written: TextAnswers;
+  pending: boolean;
+  /** Goes back to the question at this place in the order. */
+  onChange: (index: number) => void;
+}) {
+  return (
+    <ol className={styles["input-review"]}>
+      {questions.map((item, index) => (
+        <li className={styles["input-review__row"]} key={item.id}>
+          <div>
+            <p>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              {item.prompt}
+            </p>
+            <strong>
+              {written[item.id]?.trim() ||
+                (selected[item.id] ?? [])
+                  .map(
+                    (id) =>
+                      (item.options ?? []).find((option) => option.id === id)
+                        ?.label ?? id,
+                  )
+                  .join(", ")}
+            </strong>
+          </div>
+          <button
+            className="button button--quiet"
+            type="button"
+            aria-label={`Change answer to ${item.prompt}`}
+            disabled={pending}
+            onClick={() => onChange(index)}
+          >
+            Change
+          </button>
+        </li>
+      ))}
+    </ol>
   );
 }

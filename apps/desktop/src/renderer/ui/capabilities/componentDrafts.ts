@@ -8,7 +8,41 @@ import type {
   AuthoredPluginContents,
   PluginComponentState,
 } from "@zhiyin/contract";
-import type { ComponentDraft } from "./ComponentEditor.js";
+
+export type SkillDraft = {
+  readonly kind: "skill";
+  readonly id: string;
+  readonly description: string;
+  readonly instructions: string;
+};
+
+export type SpecialistDraft = {
+  readonly kind: "specialist";
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly instructions: string;
+};
+
+export type ConnectorDraft = {
+  readonly kind: "connection";
+  readonly id: string;
+  readonly name: string;
+  readonly url: string;
+  readonly access: string;
+  readonly dataDestination: string;
+};
+
+export type ComponentDraft = SkillDraft | SpecialistDraft | ConnectorDraft;
+
+/** The id a name becomes: lowercase words joined by hyphens. */
+export function slugify(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+}
 
 /** The part of a component id after its plugin's name. */
 export function localIdOf(pluginId: string, fullId: string): string {
