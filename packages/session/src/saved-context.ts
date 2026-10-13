@@ -3,16 +3,22 @@
  * held to, the size last measured, and each attempt to condense it.
  */
 
+import {
+  oneOf,
+  type CondensingFailure,
+  type ContextBudgetChoice,
+} from "@zhiyin/contract";
 import { isRecord, optionalText, validSequence } from "./saved-values.js";
+
+const budget = oneOf<ContextBudgetChoice>({
+  low: true,
+  medium: true,
+  ultra: true,
+});
 
 /** Absent, or one of the budgets; absent follows the default. */
 export function validContextBudget(value: unknown): boolean {
-  return (
-    value === undefined ||
-    value === "low" ||
-    value === "medium" ||
-    value === "ultra"
-  );
+  return value === undefined || budget(value);
 }
 
 /** Absent, or a measured size with its parts. */
@@ -25,12 +31,12 @@ export function validContextUsage(value: unknown): boolean {
   );
 }
 
-const condensingFailures = new Set([
-  "nothing-to-condense",
-  "too-large",
-  "request-failed",
-  "unusable",
-]);
+const condensingFailure = oneOf<CondensingFailure>({
+  "nothing-to-condense": true,
+  "too-large": true,
+  "request-failed": true,
+  unusable: true,
+});
 
 /** One attempt to condense: where it happened, the sizes, and how it ended. */
 export function validCondensing(value: unknown): boolean {
@@ -57,7 +63,7 @@ export function validCondensing(value: unknown): boolean {
             value.reread.every((path) => typeof path === "string"))) &&
         value.reason === undefined
       : value.outcome === "failed" &&
-        condensingFailures.has(String(value.reason)) &&
+        condensingFailure(value.reason) &&
         optionalText(value.detail))
   );
 }

@@ -69,6 +69,8 @@ single feature can own it.
   conversation export remove the same ones (ADR 0020).
 - `diffLines(before, after)`, the line and word difference used by both the
   window's change review and an exported conversation, so the two read alike.
+- `oneOf` and `byKind`, the checks that data from outside is one of the
+  values, or a record of one of the kinds, a contract type names.
 
 ## Invariants
 
@@ -79,6 +81,9 @@ single feature can own it.
 - A value set and its type come from one declaration. Reasoning efforts are
   checked by the core, filtered by the model client, validated by the session
   and ordered in the window, all from `REASONING_EFFORTS`.
+- Where a check writes a type's names out, `oneOf` and `byKind` hold them to
+  the type: a name the type gains and the check lacks, or the reverse, fails to
+  compile, and neither takes names without the type they belong to.
 - The window's copy takes a change only on top of the one before it. Past a
   missing one it asks once for that conversation whole and sets its changes
   aside until it arrives; the rest of a workspace change still applies.

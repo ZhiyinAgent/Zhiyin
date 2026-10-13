@@ -35,6 +35,15 @@ function newestFirst(a: ConversationSummary, b: ConversationSummary): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
+/**
+ * Keeps why a conversation would not open, where it can be read afterwards.
+ * The person is told only that it is damaged.
+ */
+export type RecordDamage = (damage: {
+  readonly conversationId: string;
+  readonly error: unknown;
+}) => void;
+
 /** What opening a conversation found. */
 export type Opening = {
   /** Absent when the conversation could not be read. */
@@ -61,13 +70,16 @@ export class ConversationList {
    * conversation makes it, holding every damaged one; the rest point to it.
    */
   #kept: Promise<string | undefined> | undefined;
+  readonly #recordDamage: RecordDamage | undefined;
 
   constructor(
     sessions: Sessions,
     settle: (task: WorkspaceTask) => WorkspaceTask,
+    recordDamage?: RecordDamage,
   ) {
     this.#sessions = sessions;
     this.#settle = settle;
+    this.#recordDamage = recordDamage;
   }
 
   replace(summaries: readonly ConversationSummary[]): void {
@@ -159,6 +171,7 @@ export class ConversationList {
             conversationId: id,
           },
         };
+      this.#recordDamage?.({ conversationId: id, error });
       this.#kept ??= this.#sessions.preserveDamaged().catch(() => {
         this.#kept = undefined;
         return undefined;

@@ -77,7 +77,7 @@ import { WorkspaceShell } from "./workspace-shell.js";
 import { closeInTurn } from "./closing.js";
 import * as produced from "./produced-files.js";
 import { Issues } from "./issues.js";
-import { ConversationList } from "./conversation-list.js";
+import { ConversationList, type RecordDamage } from "./conversation-list.js";
 import { KeptItems } from "./kept-items.js";
 import { Attention, type Notifier } from "./attention.js";
 
@@ -111,6 +111,8 @@ export type WorkspaceDependencies = {
   readonly now: () => Date;
   /** Every event the window is sent leaves through here. */
   readonly emit: (event: AppEvent) => void;
+  /** Keeps why a conversation would not open; absent, it is not kept. */
+  readonly recordDamage?: RecordDamage;
   /** The operating system's notifications; absent, none are sent. */
   readonly notifier?: Notifier;
   /** Paints the window light or dark; absent, nothing is painted. */
@@ -275,8 +277,10 @@ export class Workspace {
         this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
       },
     });
-    this.#conversations = new ConversationList(deps.sessions, (task) =>
-      this.turns.settleAfterRestart(task),
+    this.#conversations = new ConversationList(
+      deps.sessions,
+      (task) => this.turns.settleAfterRestart(task),
+      deps.recordDamage,
     );
     this.#attention = deps.notifier
       ? new Attention({

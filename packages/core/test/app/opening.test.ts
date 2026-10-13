@@ -166,6 +166,56 @@ describe("opening conversations", () => {
     expect(app.snapshot().selectedTaskId).toBe("task-1");
   });
 
+  it("keeps which part of a damaged conversation did not read, and tells the person only that it is damaged", async () => {
+    const root = await temporaryRoot();
+    // The store writes what it is given: an action in a status nobody writes.
+    await new FileSessions(root).saveWorkspace({
+      tasks: [
+        conversation(0),
+        {
+          ...conversation(1),
+          actions: [
+            {
+              id: "action-1",
+              action: "Read",
+              target: "notes.md",
+              sequence: 99,
+              status: "paused",
+            },
+          ],
+        } as unknown as WorkspaceTask,
+      ],
+      selectedTaskId: "task-0",
+      recentWorkspaces: [],
+    });
+    const kept: unknown[] = [];
+    const app = loopFrom({
+      ...stubDependencies(() => {}),
+      sessions: new FileSessions(root),
+      revealDelayMs: 0,
+      recordDamage: (damage) => kept.push(damage),
+    });
+    await app.initialize();
+
+    await app.selectTask("task-1");
+
+    expect(kept).toEqual([
+      {
+        conversationId: "task-1",
+        error: expect.objectContaining({
+          message:
+            "This conversation is damaged and cannot be opened safely: what it holds as “actions” is not what Zhiyin saves there.",
+        }),
+      },
+    ]);
+    expect(app.snapshot().issues).toEqual([
+      expect.objectContaining({
+        message:
+          "“Conversation 1” is damaged and can't be opened. Your other conversations are unaffected.",
+      }),
+    ]);
+  });
+
   it("reports a damaged conversation once and keeps one copy however often it is opened, and drops the report when it is deleted", async () => {
     const root = await temporaryRoot();
     await plant(root, 2);

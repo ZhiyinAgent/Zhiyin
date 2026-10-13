@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CHANNEL } from "@zhiyin/contract";
+import {
+  CHANNEL,
+  emptyConversationLists,
+  type WorkspaceTask,
+} from "@zhiyin/contract";
+import { FileSessions } from "@zhiyin/session";
 import { buildCore } from "./composition.js";
 import type { LogEntry } from "./diagnostic-log.js";
 
@@ -247,6 +252,83 @@ describe("the application's composition", () => {
           },
         ]);
         expect(JSON.stringify(sent)).not.toContain(thrown.message);
+      } finally {
+        await core.shutdown();
+      }
+    },
+  );
+
+  it(
+    "keeps which part of a damaged conversation did not read in the log, and tells the person only that it is damaged",
+    { timeout: 60_000 },
+    async () => {
+      // The store writes what it is given: an action in a status nobody writes.
+      const planted = new FileSessions(dataDirectory, { version: "test" });
+      await planted.saveWorkspace({
+        tasks: [
+          {
+            id: "task-1",
+            title: "Plan the launch",
+            titleSource: "manual",
+            updatedAt: "2026-10-05T09:00:00.000Z",
+            updatedLabel: "Earlier",
+            messages: [],
+            ...emptyConversationLists,
+            actions: [
+              {
+                id: "action-1",
+                action: "Read",
+                target: "notes.md",
+                sequence: 1,
+                status: "paused",
+              },
+            ],
+            phase: { kind: "draft" },
+          } as unknown as WorkspaceTask,
+        ],
+        selectedTaskId: "task-1",
+        recentWorkspaces: [],
+      });
+      await planted.release();
+      const sent: unknown[] = [];
+      const logged: LogEntry[] = [];
+      const core = buildCore({
+        dataDirectory,
+        builtInPluginsDirectory: fileURLToPath(
+          new URL("../../../../packages/plugins/built-in", import.meta.url),
+        ),
+        workspaceDirectory,
+        version: "test",
+        send: (_channel, payload) => void sent.push(payload),
+        chooseFolder: async () => undefined,
+        chooseSaveLocation: async () => undefined,
+        openExternal: async () => {},
+        openPath: async () => {},
+        showInFolder: async () => {},
+        startDrawing: async () => {
+          throw new Error("Nothing is drawn in this test.");
+        },
+        log: { record: (entry) => void logged.push(entry) },
+      });
+      core.start();
+      try {
+        await core.receive(CHANNEL.frontendReady, []);
+        await eventually(() =>
+          JSON.stringify(sent).includes("is damaged and can't be opened"),
+        );
+
+        expect(logged).toEqual([
+          {
+            level: "error",
+            source: "history",
+            message: "Conversation task-1 is damaged and was not opened.",
+            error: expect.objectContaining({
+              message:
+                "This conversation is damaged and cannot be opened safely: what it holds as “actions” is not what Zhiyin saves there.",
+            }),
+          },
+        ]);
+        expect(JSON.stringify(sent)).not.toContain("is not what Zhiyin saves");
       } finally {
         await core.shutdown();
       }

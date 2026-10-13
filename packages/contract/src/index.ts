@@ -26,6 +26,7 @@ export * from "./errors.js";
 export * from "./tools.js";
 export * from "./workspace-context.js";
 export * from "./ipc.js";
+export * from "./named-values.js";
 export { REASONING_EFFORTS } from "./reasoning.js";
 export type {
   ConversationSummary,

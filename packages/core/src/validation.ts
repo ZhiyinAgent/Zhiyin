@@ -1,14 +1,57 @@
 import {
   ALLOWED_EXTERNAL_URLS,
   attachablePictureTypes,
+  byKind,
   CHANNEL,
+  COMMAND_CHANNELS,
+  oneOf,
   REASONING_EFFORTS,
   typedMessageCharacters,
+  type Appearance,
+  type BrowserIntent,
+  type CommandName,
+  type Commands,
+  type ContextBudgetChoice,
+  type ConversationFormat,
+  type SceneIntent,
+  type SceneView,
+  type WorkspaceView,
 } from "@zhiyin/contract";
 
-function budget(value: unknown): boolean {
-  return value === "low" || value === "medium" || value === "ultra";
-}
+/*
+ * The choices a command offers, each held to the type the command itself
+ * declares: one the type gains has no entry here until it is written.
+ */
+const budget = oneOf<ContextBudgetChoice>({
+  low: true,
+  medium: true,
+  ultra: true,
+});
+const appearance = oneOf<Appearance>({ system: true, light: true, dark: true });
+const workspaceView = oneOf<WorkspaceView>({
+  conversation: true,
+  browser: true,
+  document: true,
+  scene: true,
+});
+const sceneView = oneOf<SceneView>({ camera: true, overview: true });
+const exportFormat = oneOf<ConversationFormat>({ html: true, json: true });
+const rewoundFiles = oneOf<Parameters<Commands["commitRewind"]>[2]>({
+  keep: true,
+  restore: true,
+});
+const approvalDecision = oneOf<Parameters<Commands["resolveApproval"]>[2]>({
+  allow: true,
+  "allow-conversation": true,
+  deny: true,
+});
+const recoveryChoice = oneOf<Parameters<Commands["recoverHistory"]>[0]>({
+  recover: true,
+  startFresh: true,
+});
+const savedConversationsChoice = oneOf<
+  Parameters<Commands["settleSavedConversations"]>[0]
+>({ update: true, recycle: true });
 
 function reasoningSelection(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -211,71 +254,56 @@ function userInputResponse(value: unknown): boolean {
  * checked as data rather than trusted as a shape. An address is bounded; a
  * coordinate is a finite number; text is capped at what a person could paste.
  */
-function browserIntent(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) return false;
-  const intent = value as Record<string, unknown>;
-  const finite = (key: string) =>
-    typeof intent[key] === "number" && Number.isFinite(intent[key]);
-  switch (intent["kind"]) {
-    case "open":
-      return intent["url"] === undefined || text(intent["url"], 4000);
-    case "close":
-    case "back":
-    case "forward":
-    case "reload":
-      return Object.keys(intent).length === 1;
-    case "navigate":
-      return text(intent["url"], 4000);
-    case "click":
-      return finite("x") && finite("y");
-    case "scroll":
-      return finite("x") && finite("y") && finite("deltaY");
-    case "type":
-      return text(intent["text"], 10_000);
-    case "key":
-      return text(intent["key"], 32);
-    default:
-      return false;
-  }
+const browserIntent = byKind<BrowserIntent["kind"]>({
+  open: (intent) => intent.url === undefined || text(intent.url, 4000),
+  close: nothingElse,
+  back: nothingElse,
+  forward: nothingElse,
+  reload: nothingElse,
+  navigate: (intent) => text(intent.url, 4000),
+  click: (intent) => finite(intent.x) && finite(intent.y),
+  scroll: (intent) =>
+    finite(intent.x) && finite(intent.y) && finite(intent.deltaY),
+  type: (intent) => text(intent.text, 10_000),
+  key: (intent) => text(intent.key, 32),
+});
+
+function finite(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/** An intent that is its kind and nothing more. */
+function nothingElse(intent: Record<string, unknown>): boolean {
+  return Object.keys(intent).length === 1;
 }
 
 /**
  * The 3D view's turning and zooming arrive many times a second, so each is
  * checked as data: finite numbers within what a drag or a window could give.
  */
-function sceneIntent(value: unknown): boolean {
-  if (typeof value !== "object" || value === null) return false;
-  const intent = value as Record<string, unknown>;
-  const within = (key: string, limit: number) =>
-    typeof intent[key] === "number" &&
-    Number.isFinite(intent[key]) &&
-    Math.abs(intent[key]) <= limit;
-  const keys = Object.keys(intent).length;
-  switch (intent["kind"]) {
-    case "view":
-      return (
-        keys === 2 &&
-        (intent["view"] === "camera" || intent["view"] === "overview")
-      );
-    case "turn":
-      return keys === 3 && within("yaw", 3600) && within("pitch", 3600);
-    case "zoom":
-      return (
-        keys === 2 && within("factor", 100) && (intent["factor"] as number) > 0
-      );
-    case "reset":
-      return keys === 1;
-    case "size":
-      return (
-        keys === 3 &&
-        within("width", 16_384) &&
-        within("height", 16_384) &&
-        (intent["width"] as number) >= 1 &&
-        (intent["height"] as number) >= 1
-      );
-    default:
-      return false;
-  }
+const sceneIntent = byKind<SceneIntent["kind"]>({
+  view: (intent) => fields(intent) === 2 && sceneView(intent.view),
+  turn: (intent) =>
+    fields(intent) === 3 &&
+    within(intent.yaw, 3600) &&
+    within(intent.pitch, 3600),
+  zoom: (intent) =>
+    fields(intent) === 2 && within(intent.factor, 100) && intent.factor > 0,
+  reset: nothingElse,
+  size: (intent) =>
+    fields(intent) === 3 &&
+    within(intent.width, 16_384) &&
+    within(intent.height, 16_384) &&
+    intent.width >= 1 &&
+    intent.height >= 1,
+});
+
+function fields(intent: Record<string, unknown>): number {
+  return Object.keys(intent).length;
+}
+
+function within(value: unknown, limit: number): value is number {
+  return finite(value) && Math.abs(value) <= limit;
 }
 
 /**
@@ -297,8 +325,9 @@ export function validateCommand(
   channel: string,
   sent: readonly unknown[],
 ): void {
+  if (!isCommandChannel(channel)) throw invalidRequest();
   const args = asGiven(sent);
-  let valid = false;
+  let valid: boolean;
   switch (channel) {
     case CHANNEL.frontendReady:
     case CHANNEL.openDataFolder:
@@ -377,12 +406,7 @@ export function validateCommand(
           (Number.isInteger(args[2]) && (args[2] as number) >= 1));
       break;
     case CHANNEL.chooseWorkspaceView:
-      valid =
-        args.length === 2 &&
-        text(args[0]) &&
-        ["conversation", "browser", "document", "scene"].includes(
-          args[1] as string,
-        );
+      valid = args.length === 2 && text(args[0]) && workspaceView(args[1]);
       break;
     // A page counts from 1; the width is device pixels, at most what a page
     // is ever drawn at.
@@ -410,13 +434,10 @@ export function validateCommand(
         args.length === 3 &&
         text(args[0]) &&
         text(args[1], 4000) &&
-        (args[2] === "keep" || args[2] === "restore");
+        rewoundFiles(args[2]);
       break;
     case CHANNEL.exportConversation:
-      valid =
-        args.length === 2 &&
-        text(args[0]) &&
-        (args[1] === "html" || args[1] === "json");
+      valid = args.length === 2 && text(args[0]) && exportFormat(args[1]);
       break;
     case CHANNEL.exportView:
       valid =
@@ -474,9 +495,7 @@ export function validateCommand(
       valid = args.length === 1 && typeof args[0] === "boolean";
       break;
     case CHANNEL.setAppearance:
-      valid =
-        args.length === 1 &&
-        (args[0] === "system" || args[0] === "light" || args[0] === "dark");
+      valid = args.length === 1 && appearance(args[0]);
       break;
     case CHANNEL.setSpelling:
       valid = args.length === 1 && spellingChoice(args[0]);
@@ -495,9 +514,7 @@ export function validateCommand(
         (args.length === 3 || args.length === 4) &&
         text(args[0]) &&
         text(args[1]) &&
-        (args[2] === "allow" ||
-          args[2] === "allow-conversation" ||
-          args[2] === "deny") &&
+        approvalDecision(args[2]) &&
         (args.length === 3 || (args[2] === "deny" && text(args[3], 2_000)));
       break;
     case CHANNEL.revokeConversationPermission:
@@ -581,15 +598,31 @@ export function validateCommand(
         args[0].every(pluginName);
       break;
     case CHANNEL.recoverHistory:
-      valid =
-        args.length === 1 &&
-        (args[0] === "recover" || args[0] === "startFresh");
+      valid = args.length === 1 && recoveryChoice(args[0]);
       break;
     case CHANNEL.settleSavedConversations:
-      valid =
-        args.length === 1 && (args[0] === "update" || args[0] === "recycle");
+      valid = args.length === 1 && savedConversationsChoice(args[0]);
       break;
+    default: {
+      // Every command's channel has its case above, or this does not compile.
+      const unnamed: never = channel;
+      throw new Error(`No shape is written for ${String(unnamed)}.`);
+    }
   }
-  if (!valid)
-    throw new Error("This request is invalid. Reopen the page and try again.");
+  if (!valid) throw invalidRequest();
+}
+
+type CommandChannel = (typeof COMMAND_CHANNELS)[CommandName];
+
+const commandChannels: ReadonlySet<string> = new Set(
+  Object.values(COMMAND_CHANNELS),
+);
+
+/** A channel a command travels on; anything else is refused unread. */
+function isCommandChannel(channel: string): channel is CommandChannel {
+  return commandChannels.has(channel);
+}
+
+function invalidRequest(): Error {
+  return new Error("This request is invalid. Reopen the page and try again.");
 }

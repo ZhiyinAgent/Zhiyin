@@ -4,7 +4,29 @@
  * app, and a record of the wrong shape would fail somewhere far from here.
  */
 
-import { REASONING_EFFORTS, viewKinds } from "@zhiyin/contract";
+import {
+  byKind,
+  oneOf,
+  REASONING_EFFORTS,
+  viewKinds,
+  type ActionDetail,
+  type FileChange,
+  type ModelResponseRecord,
+  type ModelRetryRecord,
+  type PendingUserInputRequest,
+  type QuizQuestion,
+  type ReasoningTrace,
+  type SpecialistRun,
+  type TaskAction,
+  type TaskArtifact,
+  type TaskMessage,
+  type TaskPhase,
+  type TaskPlanItem,
+  type UserInputRequest,
+  type WorkLimit,
+  type WorkspaceTask,
+  type WorkStep,
+} from "@zhiyin/contract";
 import {
   validCondensing,
   validContextBudget,
@@ -33,6 +55,72 @@ import {
   validUndo,
 } from "./saved-records.js";
 
+const titleSource = oneOf<WorkspaceTask["titleSource"]>({
+  generated: true,
+  manual: true,
+});
+const messageRole = oneOf<TaskMessage["role"]>({ user: true, assistant: true });
+const traceStatus = oneOf<ReasoningTrace["status"]>({
+  streaming: true,
+  complete: true,
+  interrupted: true,
+});
+const termination = oneOf<ModelResponseRecord["termination"]>({
+  sentinel: true,
+  finishReason: true,
+  usage: true,
+});
+const retryKind = oneOf<ModelRetryRecord["kind"]>({
+  silent: true,
+  restart: true,
+});
+const actionStatus = oneOf<TaskAction["status"]>({
+  running: true,
+  completed: true,
+  reported: true,
+  failed: true,
+  denied: true,
+  blocked: true,
+  cancelled: true,
+});
+const changeKind = oneOf<FileChange["change"]>({
+  created: true,
+  updated: true,
+  recycled: true,
+  deleted: true,
+});
+const artifactChange = oneOf<TaskArtifact["change"]>({
+  created: true,
+  updated: true,
+});
+const runStatus = oneOf<SpecialistRun["status"]>({
+  running: true,
+  completed: true,
+  failed: true,
+  interrupted: true,
+});
+const planStatus = oneOf<TaskPlanItem["status"]>({
+  pending: true,
+  in_progress: true,
+  done: true,
+  skipped: true,
+});
+const stepStatus = oneOf<WorkStep["status"]>({
+  complete: true,
+  active: true,
+  queued: true,
+  failed: true,
+});
+const quizSelection = oneOf<QuizQuestion["selection"]>({
+  single: true,
+  multiple: true,
+});
+const workLimit = oneOf<WorkLimit>({
+  toolRounds: true,
+  elapsed: true,
+  providerCost: true,
+});
+
 function validReasoningSelection(value: unknown): boolean {
   if (value === undefined) return true;
   if (!isRecord(value)) return false;
@@ -48,7 +136,7 @@ function validReasoningTrace(value: unknown): boolean {
     value === undefined ||
     (isRecord(value) &&
       typeof value.text === "string" &&
-      ["streaming", "complete", "interrupted"].includes(String(value.status)))
+      traceStatus(value.status))
   );
 }
 
@@ -59,7 +147,7 @@ function validModelResponse(value: unknown): boolean {
     optionalText(value.model) &&
     optionalText(value.provider) &&
     (value.finishReason === null || typeof value.finishReason === "string") &&
-    ["sentinel", "finishReason", "usage"].includes(String(value.termination)) &&
+    termination(value.termination) &&
     typeof value.complete === "boolean" &&
     (value.retries === undefined ||
       (Array.isArray(value.retries) && value.retries.every(validModelRetry))) &&
@@ -120,7 +208,7 @@ function validModelRetry(value: unknown): boolean {
     typeof value.failure === "string" &&
     typeof value.delayMs === "number" &&
     Number.isFinite(value.delayMs) &&
-    (value.kind === "silent" || value.kind === "restart") &&
+    retryKind(value.kind) &&
     (value.discardedCharacters === undefined ||
       (typeof value.discardedCharacters === "number" &&
         Number.isFinite(value.discardedCharacters)))
@@ -162,7 +250,7 @@ function validSpecialistHandoff(value: unknown): boolean {
 
 function validSpecialistRun(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  const status = String(value.status);
+  const status = value.status;
   if (
     typeof value.id !== "string" ||
     !optionalText(value.parentRunId) ||
@@ -170,7 +258,7 @@ function validSpecialistRun(value: unknown): boolean {
     typeof value.task !== "string" ||
     !Number.isInteger(value.depth) ||
     Number(value.depth) < 1 ||
-    !["running", "completed", "failed", "interrupted"].includes(status) ||
+    !runStatus(status) ||
     !validIsoDate(value.startedAt) ||
     !stringArray(value.actionIds) ||
     !validSequence(value.sequence) ||
@@ -185,107 +273,132 @@ function validSpecialistRun(value: unknown): boolean {
     : value.handoff === undefined && typeof value.reason === "string";
 }
 
+function validMessage(message: unknown): boolean {
+  return (
+    isRecord(message) &&
+    typeof message.id === "string" &&
+    messageRole(message.role) &&
+    typeof message.text === "string" &&
+    (message.attachments === undefined ||
+      listOf(message.attachments, validAttachment)) &&
+    validReasoningTrace(message.reasoning) &&
+    optionalText(message.interactionId) &&
+    validSequence(message.sequence)
+  );
+}
+
+function validAction(action: unknown): boolean {
+  return (
+    isRecord(action) &&
+    typeof action.id === "string" &&
+    typeof action.action === "string" &&
+    typeof action.target === "string" &&
+    [
+      action.command,
+      action.toolName,
+      action.evidence,
+      action.description,
+      action.detail,
+      action.claim,
+      action.reason,
+    ].every(optionalText) &&
+    validChanges(action.changes) &&
+    validDetails(action.details) &&
+    actionStatus(action.status) &&
+    optionalIsoDate(action.startedAt) &&
+    optionalIsoDate(action.finishedAt) &&
+    validSequence(action.sequence)
+  );
+}
+
+function validArtifact(item: unknown): boolean {
+  return (
+    isRecord(item) &&
+    typeof item.path === "string" &&
+    typeof item.name === "string" &&
+    artifactChange(item.change) &&
+    typeof item.bytes === "number" &&
+    typeof item.updatedAt === "string"
+  );
+}
+
+function validView(view: unknown): boolean {
+  return (
+    isRecord(view) &&
+    typeof view.id === "string" &&
+    typeof view.callId === "string" &&
+    typeof view.title === "string" &&
+    (viewKinds as readonly string[]).includes(String(view.kind)) &&
+    typeof view.source === "string" &&
+    validSequence(view.sequence)
+  );
+}
+
+/**
+ * How each part of a conversation is checked, under the name it is saved by.
+ * Every part the type names has its check here: one added to the type without
+ * one does not compile.
+ */
+const conversationParts: {
+  readonly [Part in keyof WorkspaceTask]-?: (
+    task: Record<string, unknown>,
+  ) => boolean;
+} = {
+  id: (task) => typeof task.id === "string",
+  title: (task) => typeof task.title === "string",
+  reasoning: (task) => validReasoningSelection(task.reasoning),
+  contextBudget: (task) => validContextBudget(task.contextBudget),
+  titleSource: (task) => titleSource(task.titleSource),
+  workspace: (task) => task.workspace === undefined || isFolder(task.workspace),
+  updatedLabel: (task) => typeof task.updatedLabel === "string",
+  updatedAt: (task) => validIsoDate(task.updatedAt),
+  messages: (task) => listOf(task.messages, validMessage),
+  guidance: (task) => listOf(task.guidance, validGuidance),
+  modelResponses: (task) => listOf(task.modelResponses, validModelResponse),
+  modelHistory: (task) => listOf(task.modelHistory, validModelHistoryEntry),
+  conversationPermissions: (task) =>
+    listOf(task.conversationPermissions, validConversationPermission),
+  runningJobs: (task) => listOf(task.runningJobs, validRunningJob),
+  activatedPlugins: (task) => listOf(task.activatedPlugins, validPluginId),
+  undos: (task) => listOf(task.undos, validUndo),
+  compaction: (task) =>
+    validCompaction(task.compaction, task.messages, task.actions),
+  condensings: (task) => listOf(task.condensings, validCondensing),
+  contextUsage: (task) => validContextUsage(task.contextUsage),
+  standingInstructions: (task) =>
+    validStandingInstructions(task.standingInstructions),
+  phase: (task) => validPhase(task.phase),
+  actions: (task) => listOf(task.actions, validAction),
+  artifacts: (task) => listOf(task.artifacts, validArtifact),
+  specialistRuns: (task) =>
+    listOf(task.specialistRuns, validSpecialistRun) &&
+    uniqueIds(task.specialistRuns as unknown[]),
+  views: (task) => listOf(task.views, validView),
+  interactions: (task) => listOf(task.interactions, validInteraction),
+  plan: (task) => listOf(task.plan, validPlanItem),
+};
+
+/**
+ * What is wrong with a saved conversation, naming the first part of it that is
+ * not what Zhiyin writes there; nothing when all of it reads.
+ */
+export function conversationProblem(task: unknown): string | undefined {
+  if (!isRecord(task)) return "what was saved is not a conversation";
+  const part = Object.entries(conversationParts).find(
+    ([, reads]) => !reads(task),
+  )?.[0];
+  return part === undefined
+    ? undefined
+    : `what it holds as “${part}” is not what Zhiyin saves there`;
+}
+
 /**
  * One conversation, checked on its own when it is opened. Each conversation
  * is its own file, so one that fails this is left behind without taking any
  * other conversation with it.
  */
 export function isWorkspaceTask(task: unknown): boolean {
-  return Boolean(
-    isRecord(task) &&
-    typeof task.id === "string" &&
-    typeof task.title === "string" &&
-    validReasoningSelection(task.reasoning) &&
-    validContextBudget(task.contextBudget) &&
-    (task.titleSource === "generated" || task.titleSource === "manual") &&
-    (task.workspace === undefined || isFolder(task.workspace)) &&
-    typeof task.updatedLabel === "string" &&
-    validIsoDate(task.updatedAt) &&
-    listOf(
-      task.messages,
-      (message) =>
-        isRecord(message) &&
-        typeof message.id === "string" &&
-        (message.role === "user" || message.role === "assistant") &&
-        typeof message.text === "string" &&
-        (message.attachments === undefined ||
-          listOf(message.attachments, validAttachment)) &&
-        validReasoningTrace(message.reasoning) &&
-        optionalText(message.interactionId) &&
-        validSequence(message.sequence),
-    ) &&
-    listOf(task.guidance, validGuidance) &&
-    listOf(task.modelResponses, validModelResponse) &&
-    listOf(task.modelHistory, validModelHistoryEntry) &&
-    listOf(task.conversationPermissions, validConversationPermission) &&
-    listOf(task.runningJobs, validRunningJob) &&
-    listOf(task.activatedPlugins, validPluginId) &&
-    listOf(task.undos, validUndo) &&
-    validCompaction(task.compaction, task.messages, task.actions) &&
-    listOf(task.condensings, validCondensing) &&
-    validContextUsage(task.contextUsage) &&
-    validStandingInstructions(task.standingInstructions) &&
-    validPhase(task.phase) &&
-    listOf(
-      task.actions,
-      (action) =>
-        isRecord(action) &&
-        typeof action.id === "string" &&
-        typeof action.action === "string" &&
-        typeof action.target === "string" &&
-        [
-          action.command,
-          action.toolName,
-          action.evidence,
-          action.description,
-          action.detail,
-          action.claim,
-          action.reason,
-        ].every(optionalText) &&
-        validChanges(action.changes) &&
-        validDetails(action.details) &&
-        [
-          "running",
-          "completed",
-          // An action that ran and answered without succeeding. Left out
-          // of this list, a saved conversation holding one would read as
-          // damaged.
-          "reported",
-          "failed",
-          "denied",
-          "blocked",
-          "cancelled",
-        ].includes(String(action.status)) &&
-        optionalIsoDate(action.startedAt) &&
-        optionalIsoDate(action.finishedAt) &&
-        validSequence(action.sequence),
-    ) &&
-    listOf(
-      task.artifacts,
-      (item) =>
-        isRecord(item) &&
-        typeof item.path === "string" &&
-        typeof item.name === "string" &&
-        (item.change === "created" || item.change === "updated") &&
-        typeof item.bytes === "number" &&
-        typeof item.updatedAt === "string",
-    ) &&
-    listOf(task.specialistRuns, validSpecialistRun) &&
-    uniqueIds(task.specialistRuns as unknown[]) &&
-    listOf(
-      task.views,
-      (view) =>
-        isRecord(view) &&
-        typeof view.id === "string" &&
-        typeof view.callId === "string" &&
-        typeof view.title === "string" &&
-        (viewKinds as readonly string[]).includes(String(view.kind)) &&
-        typeof view.source === "string" &&
-        validSequence(view.sequence),
-    ) &&
-    listOf(task.interactions, validInteraction) &&
-    listOf(task.plan, validPlanItem),
-  );
+  return conversationProblem(task) === undefined;
 }
 
 /** One plan item: a title and where the working model says it stands. */
@@ -294,7 +407,7 @@ function validPlanItem(item: unknown): boolean {
     isRecord(item) &&
     typeof item.id === "string" &&
     typeof item.title === "string" &&
-    ["pending", "in_progress", "done", "skipped"].includes(String(item.status))
+    planStatus(item.status)
   );
 }
 
@@ -343,102 +456,107 @@ function uniqueIds(values: readonly unknown[]): boolean {
   );
 }
 
-function validUserInputRequest(value: unknown): boolean {
-  if (
-    !isRecord(value) ||
-    typeof value.title !== "string" ||
-    !Array.isArray(value.questions) ||
-    value.questions.length < 1 ||
-    !uniqueIds(value.questions)
-  )
-    return false;
-  if (value.kind === "clarification")
-    return (
-      value.questions.length <= 3 &&
-      value.questions.every(
-        (question) =>
-          isRecord(question) &&
-          typeof question.id === "string" &&
-          typeof question.prompt === "string" &&
-          (question.allowText === undefined || question.allowText === true) &&
-          (question.options === undefined ||
-            (Array.isArray(question.options) &&
-              question.options.length >= 2 &&
-              question.options.length <= 5 &&
-              uniqueIds(question.options) &&
-              question.options.every(
-                (option) =>
-                  isRecord(option) &&
-                  typeof option.id === "string" &&
-                  typeof option.label === "string" &&
-                  optionalText(option.description),
-              ))) &&
-          (question.allowText === true || Array.isArray(question.options)),
-      )
-    );
-  if (value.kind !== "quiz" || value.questions.length > 12) return false;
-  return value.questions.every(
-    (question) =>
-      isRecord(question) &&
-      typeof question.id === "string" &&
-      typeof question.prompt === "string" &&
-      (question.selection === "single" || question.selection === "multiple") &&
-      typeof question.explanation === "string" &&
-      question.explanation.trim().length > 0 &&
-      Array.isArray(question.answers) &&
-      question.answers.length >= 2 &&
-      question.answers.length <= 8 &&
-      uniqueIds(question.answers) &&
-      question.answers.every(
-        (answer) =>
-          isRecord(answer) &&
-          typeof answer.id === "string" &&
-          typeof answer.label === "string",
-      ) &&
-      Array.isArray(question.correctAnswerIds) &&
-      question.correctAnswerIds.length >= 1 &&
-      new Set(question.correctAnswerIds).size ===
-        question.correctAnswerIds.length &&
-      question.correctAnswerIds.every(
-        (answerId) =>
-          typeof answerId === "string" &&
-          (question.answers as unknown[]).some(
-            (answer) => isRecord(answer) && answer.id === answerId,
-          ),
-      ) &&
-      (question.selection !== "single" ||
-        question.correctAnswerIds.length === 1),
+/** One to `most` questions under a title, each with an id of its own. */
+function asked(
+  request: Record<string, unknown>,
+  most: number,
+): readonly unknown[] | undefined {
+  const questions = request.questions;
+  return typeof request.title === "string" &&
+    Array.isArray(questions) &&
+    questions.length >= 1 &&
+    questions.length <= most &&
+    uniqueIds(questions)
+    ? questions
+    : undefined;
+}
+
+function validClarificationQuestion(question: unknown): boolean {
+  return (
+    isRecord(question) &&
+    typeof question.id === "string" &&
+    typeof question.prompt === "string" &&
+    (question.allowText === undefined || question.allowText === true) &&
+    (question.options === undefined ||
+      (Array.isArray(question.options) &&
+        question.options.length >= 2 &&
+        question.options.length <= 5 &&
+        uniqueIds(question.options) &&
+        question.options.every(
+          (option) =>
+            isRecord(option) &&
+            typeof option.id === "string" &&
+            typeof option.label === "string" &&
+            optionalText(option.description),
+        ))) &&
+    (question.allowText === true || Array.isArray(question.options))
   );
 }
 
-const workLimits = new Set<unknown>(["toolRounds", "elapsed", "providerCost"]);
+function validQuizQuestion(question: unknown): boolean {
+  return (
+    isRecord(question) &&
+    typeof question.id === "string" &&
+    typeof question.prompt === "string" &&
+    quizSelection(question.selection) &&
+    typeof question.explanation === "string" &&
+    question.explanation.trim().length > 0 &&
+    Array.isArray(question.answers) &&
+    question.answers.length >= 2 &&
+    question.answers.length <= 8 &&
+    uniqueIds(question.answers) &&
+    question.answers.every(
+      (answer) =>
+        isRecord(answer) &&
+        typeof answer.id === "string" &&
+        typeof answer.label === "string",
+    ) &&
+    Array.isArray(question.correctAnswerIds) &&
+    question.correctAnswerIds.length >= 1 &&
+    new Set(question.correctAnswerIds).size ===
+      question.correctAnswerIds.length &&
+    question.correctAnswerIds.every(
+      (answerId) =>
+        typeof answerId === "string" &&
+        (question.answers as unknown[]).some(
+          (answer) => isRecord(answer) && answer.id === answerId,
+        ),
+    ) &&
+    (question.selection !== "single" || question.correctAnswerIds.length === 1)
+  );
+}
+
+const validUserInputRequest = byKind<UserInputRequest["kind"]>({
+  clarification: (request) =>
+    asked(request, 3)?.every(validClarificationQuestion) ?? false,
+  quiz: (request) => asked(request, 12)?.every(validQuizQuestion) ?? false,
+});
+
 const count = (value: unknown) =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 const amount = (value: unknown) =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-function validPendingUserInputRequest(value: unknown): boolean {
-  return (
-    validUserInputRequest(value) ||
-    validFolderInstructionsRequest(value) ||
-    (isRecord(value) &&
-      value.kind === "workBudget" &&
-      typeof value.title === "string" &&
-      count(value.completedRounds) &&
-      Array.isArray(value.reached) &&
-      value.reached.length > 0 &&
-      value.reached.every((limit) => workLimits.has(limit)) &&
-      amount(value.elapsedMs) &&
-      (value.costUsd === undefined || amount(value.costUsd)) &&
-      optionalAmounts(value.estimatedCosts) &&
-      isRecord(value.allowance) &&
-      count(value.allowance.toolRounds) &&
-      amount(value.allowance.elapsedMs) &&
-      amount(value.allowance.providerCostUsd) &&
-      optionalAmounts(value.allowance.providerCosts) &&
-      optionalText(value.reason))
-  );
-}
+const validPendingUserInputRequest = byKind<PendingUserInputRequest["kind"]>({
+  clarification: validUserInputRequest,
+  quiz: validUserInputRequest,
+  folderInstructions: validFolderInstructionsRequest,
+  workBudget: (request) =>
+    typeof request.title === "string" &&
+    count(request.completedRounds) &&
+    Array.isArray(request.reached) &&
+    request.reached.length > 0 &&
+    request.reached.every(workLimit) &&
+    amount(request.elapsedMs) &&
+    (request.costUsd === undefined || amount(request.costUsd)) &&
+    optionalAmounts(request.estimatedCosts) &&
+    isRecord(request.allowance) &&
+    count(request.allowance.toolRounds) &&
+    amount(request.allowance.elapsedMs) &&
+    amount(request.allowance.providerCostUsd) &&
+    optionalAmounts(request.allowance.providerCosts) &&
+    optionalText(request.reason),
+});
 
 function validUserInputResponse(request: unknown, value: unknown): boolean {
   if (
@@ -518,10 +636,7 @@ function validChanges(value: unknown): boolean {
         (change) =>
           isRecord(change) &&
           typeof change.path === "string" &&
-          (change.change === "created" ||
-            change.change === "updated" ||
-            change.change === "recycled" ||
-            change.change === "deleted") &&
+          changeKind(change.change) &&
           optionalText(change.before) &&
           optionalText(change.after) &&
           optionalText(change.omitted),
@@ -534,52 +649,37 @@ function validChanges(value: unknown): boolean {
  * so a stored one whose items are the wrong shape would reach the interface as
  * a crash rather than as damaged data.
  */
-function validDetail(detail: unknown): boolean {
-  if (!isRecord(detail)) return false;
-  switch (detail.kind) {
-    case "text":
-      return (
-        typeof detail.label === "string" && typeof detail.text === "string"
-      );
-    case "facts":
-      return (
-        Array.isArray(detail.items) &&
-        detail.items.every(
-          (item) =>
-            isRecord(item) &&
-            typeof item.label === "string" &&
-            typeof item.value === "string",
-        )
-      );
-    case "matches":
-      return (
-        Array.isArray(detail.items) &&
-        optionalText(detail.note) &&
-        detail.items.every(
-          (item) =>
-            isRecord(item) &&
-            typeof item.path === "string" &&
-            typeof item.line === "number" &&
-            typeof item.text === "string",
-        )
-      );
-    case "list":
-      return (
-        typeof detail.label === "string" &&
-        Array.isArray(detail.items) &&
-        detail.items.every((item) => typeof item === "string")
-      );
-    case "image":
-      return (
-        typeof detail.label === "string" &&
-        typeof detail.mediaType === "string" &&
-        typeof detail.source === "string" &&
-        typeof detail.alt === "string"
-      );
-    default:
-      return false;
-  }
-}
+const validDetail = byKind<ActionDetail["kind"]>({
+  text: (detail) =>
+    typeof detail.label === "string" && typeof detail.text === "string",
+  facts: (detail) =>
+    Array.isArray(detail.items) &&
+    detail.items.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.label === "string" &&
+        typeof item.value === "string",
+    ),
+  matches: (detail) =>
+    Array.isArray(detail.items) &&
+    optionalText(detail.note) &&
+    detail.items.every(
+      (item) =>
+        isRecord(item) &&
+        typeof item.path === "string" &&
+        typeof item.line === "number" &&
+        typeof item.text === "string",
+    ),
+  list: (detail) =>
+    typeof detail.label === "string" &&
+    Array.isArray(detail.items) &&
+    detail.items.every((item) => typeof item === "string"),
+  image: (detail) =>
+    typeof detail.label === "string" &&
+    typeof detail.mediaType === "string" &&
+    typeof detail.source === "string" &&
+    typeof detail.alt === "string",
+});
 
 function validDetails(value: unknown): boolean {
   return (
@@ -587,59 +687,50 @@ function validDetails(value: unknown): boolean {
   );
 }
 
-function validPhase(value: unknown): boolean {
-  if (!isRecord(value)) return false;
-  switch (value.kind) {
-    case "draft":
-    case "loading":
-    case "interrupted":
-      return optionalText(value.reason);
-    case "failed":
-      return typeof value.reason === "string";
-    case "completed":
-      return (
-        isRecord(value.outcome) &&
-        typeof value.outcome.title === "string" &&
-        typeof value.outcome.summary === "string"
-      );
-    case "working":
-    case "browser":
-    case "approval":
-    case "input": {
-      if (
-        !Array.isArray(value.steps) ||
-        !value.steps.every(
-          (step) =>
-            isRecord(step) &&
-            typeof step.id === "string" &&
-            typeof step.label === "string" &&
-            ["complete", "active", "queued", "failed"].includes(
-              String(step.status),
-            ),
-        )
-      )
-        return false;
-      if (value.kind === "working" && !validRetryDeadline(value.retry))
-        return false;
-      const prompt = value.prompt;
-      if (value.kind === "input")
-        return (
-          isRecord(prompt) &&
-          typeof prompt.id === "string" &&
-          validPendingUserInputRequest(prompt)
-        );
-      return (
-        value.kind !== "approval" ||
-        (isRecord(prompt) &&
-          ["id", "action", "target", "reason", "command"].every(
-            (key) => typeof prompt[key] === "string",
-          ) &&
-          optionalText(prompt.detail) &&
-          optionalText(prompt.claim) &&
-          validChanges(prompt.changes))
-      );
-    }
-    default:
-      return false;
-  }
+function validSteps(steps: unknown): boolean {
+  return listOf(
+    steps,
+    (step) =>
+      isRecord(step) &&
+      typeof step.id === "string" &&
+      typeof step.label === "string" &&
+      stepStatus(step.status),
+  );
 }
+
+/** What the person is asked to allow, as the approval prompt draws it. */
+function validApprovalRequest(prompt: unknown): boolean {
+  return (
+    isRecord(prompt) &&
+    ["id", "action", "target", "reason", "command"].every(
+      (key) => typeof prompt[key] === "string",
+    ) &&
+    optionalText(prompt.detail) &&
+    optionalText(prompt.claim) &&
+    validChanges(prompt.changes)
+  );
+}
+
+const reasonIfAny = (phase: Record<string, unknown>) =>
+  optionalText(phase.reason);
+
+const validPhase = byKind<TaskPhase["kind"]>({
+  draft: reasonIfAny,
+  loading: reasonIfAny,
+  interrupted: reasonIfAny,
+  failed: (phase) => typeof phase.reason === "string",
+  completed: (phase) =>
+    isRecord(phase.outcome) &&
+    typeof phase.outcome.title === "string" &&
+    typeof phase.outcome.summary === "string",
+  working: (phase) =>
+    validSteps(phase.steps) && validRetryDeadline(phase.retry),
+  browser: (phase) => validSteps(phase.steps),
+  approval: (phase) =>
+    validSteps(phase.steps) && validApprovalRequest(phase.prompt),
+  input: (phase) =>
+    validSteps(phase.steps) &&
+    isRecord(phase.prompt) &&
+    typeof phase.prompt.id === "string" &&
+    validPendingUserInputRequest(phase.prompt),
+});

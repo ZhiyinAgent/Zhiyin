@@ -4,11 +4,20 @@
  * trusted.
  */
 
-import type { ConversationSummary } from "@zhiyin/contract";
+import { oneOf, type ConversationSummary } from "@zhiyin/contract";
 import type { SavedSettings } from "./history-store.js";
 import { isFolder } from "./saved-workspace.js";
 import { isRecord } from "./saved-values.js";
 import { validContextBudget } from "./saved-context.js";
+
+const titleSource = oneOf<ConversationSummary["titleSource"]>({
+  generated: true,
+  manual: true,
+});
+const paintedAppearance = oneOf<NonNullable<SavedSettings["appearance"]>>({
+  light: true,
+  dark: true,
+});
 
 /** A conversation as the list shows it, without opening it. */
 export function isConversationSummary(
@@ -18,7 +27,7 @@ export function isConversationSummary(
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.title === "string" &&
-    (value.titleSource === "generated" || value.titleSource === "manual") &&
+    titleSource(value.titleSource) &&
     typeof value.updatedAt === "string" &&
     typeof value.updatedLabel === "string"
   );
@@ -45,11 +54,7 @@ export function isSavedSettings(value: unknown): value is SavedSettings {
     return false;
   if (value.notifications !== undefined && value.notifications !== "off")
     return false;
-  if (
-    value.appearance !== undefined &&
-    value.appearance !== "light" &&
-    value.appearance !== "dark"
-  )
+  if (value.appearance !== undefined && !paintedAppearance(value.appearance))
     return false;
   if (
     value.spellingChoice !== undefined &&

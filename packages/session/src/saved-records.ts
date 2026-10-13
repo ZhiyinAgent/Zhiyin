@@ -4,7 +4,31 @@
  * person granted, running jobs, activated plugins and undone turns.
  */
 
+import {
+  byKind,
+  oneOf,
+  type ConversationPermission,
+  type MessageAttachment,
+  type ModelHistoryEntry,
+  type TaskGuidance,
+  type TaskUndo,
+} from "@zhiyin/contract";
 import { isRecord, optionalText } from "./saved-values.js";
+
+const guidanceStatus = oneOf<TaskGuidance["status"]>({
+  pending: true,
+  draft: true,
+});
+const permissionKind = oneOf<ConversationPermission["kind"]>({
+  "file-folder": true,
+  "connector-tool": true,
+});
+const undoneFileStatus = oneOf<TaskUndo["files"][number]["status"]>({
+  restored: true,
+  removed: true,
+  conflict: true,
+  unprotected: true,
+});
 
 /** A list whose every entry passes `valid`. */
 export function listOf(
@@ -36,62 +60,52 @@ function validTurnExtras(value: Record<string, unknown>): boolean {
   );
 }
 
-/** One entry of what the model has been sent, in any of its five kinds. */
+const historyEntry = byKind<ModelHistoryEntry["kind"]>({
+  message: (entry) =>
+    text(entry.messageId) &&
+    (entry.picturesLetGo === undefined || entry.picturesLetGo === true) &&
+    validTurnExtras(entry),
+  calls: (entry) =>
+    optionalText(entry.messageId) &&
+    validTurnExtras(entry) &&
+    text(entry.text) &&
+    listOf(
+      entry.calls,
+      (call) =>
+        isRecord(call) &&
+        text(call.id) &&
+        text(call.name) &&
+        text(call.arguments),
+    ),
+  result: (entry) =>
+    text(entry.callId) && text(entry.name) && text(entry.content),
+  notice: (entry) => text(entry.content) && optionalText(entry.messageId),
+  pictures: (entry) =>
+    text(entry.text) &&
+    listOf(
+      entry.pictures,
+      (picture) =>
+        isRecord(picture) && text(picture.mediaType) && text(picture.source),
+    ),
+});
+
+/** One entry of what the model has been sent, in the shape its kind has. */
 export function validModelHistoryEntry(value: unknown): boolean {
-  if (!isRecord(value) || !text(value.id)) return false;
-  switch (value.kind) {
-    case "message":
-      return (
-        text(value.messageId) &&
-        (value.picturesLetGo === undefined || value.picturesLetGo === true) &&
-        validTurnExtras(value)
-      );
-    case "calls":
-      return (
-        optionalText(value.messageId) &&
-        validTurnExtras(value) &&
-        text(value.text) &&
-        listOf(
-          value.calls,
-          (call) =>
-            isRecord(call) &&
-            text(call.id) &&
-            text(call.name) &&
-            text(call.arguments),
-        )
-      );
-    case "result":
-      return text(value.callId) && text(value.name) && text(value.content);
-    case "notice":
-      return text(value.content) && optionalText(value.messageId);
-    case "pictures":
-      return (
-        text(value.text) &&
-        listOf(
-          value.pictures,
-          (picture) =>
-            isRecord(picture) &&
-            text(picture.mediaType) &&
-            text(picture.source),
-        )
-      );
-    default:
-      return false;
-  }
+  return isRecord(value) && text(value.id) && historyEntry(value);
 }
 
-/** A long paste or a picture the person attached to a message. */
-export function validAttachment(value: unknown): boolean {
-  if (!isRecord(value) || !text(value.id)) return false;
-  if (value.kind === "pastedText")
-    return count(value.bytes) && count(value.lines);
-  return (
-    value.kind === "picture" &&
+const attachment = byKind<MessageAttachment["kind"]>({
+  pastedText: (value) => count(value.bytes) && count(value.lines),
+  picture: (value) =>
     text(value.name) &&
     text(value.mediaType) &&
     count(value.bytes) &&
-    optionalText(value.source)
-  );
+    optionalText(value.source),
+});
+
+/** A long paste or a picture the person attached to a message. */
+export function validAttachment(value: unknown): boolean {
+  return isRecord(value) && text(value.id) && attachment(value);
 }
 
 /** A message sent during a turn, waiting for a safe boundary or kept as a draft. */
@@ -100,7 +114,7 @@ export function validGuidance(value: unknown): boolean {
     isRecord(value) &&
     text(value.id) &&
     text(value.text) &&
-    (value.status === "pending" || value.status === "draft") &&
+    guidanceStatus(value.status) &&
     (value.attachments === undefined ||
       listOf(value.attachments, validAttachment))
   );
@@ -113,7 +127,7 @@ export function validConversationPermission(value: unknown): boolean {
     text(value.id) &&
     text(value.label) &&
     text(value.at) &&
-    (value.kind === "file-folder" || value.kind === "connector-tool") &&
+    permissionKind(value.kind) &&
     text(value.toolName) &&
     optionalText(value.workspaceRoot) &&
     optionalText(value.folder) &&
@@ -140,9 +154,7 @@ export function validUndo(value: unknown): boolean {
       (file) =>
         isRecord(file) &&
         text(file.path) &&
-        ["restored", "removed", "conflict", "unprotected"].includes(
-          String(file.status),
-        ) &&
+        undoneFileStatus(file.status) &&
         optionalText(file.reason),
     )
   );

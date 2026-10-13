@@ -95,7 +95,8 @@ answers every other command:
 
 - **Nothing malformed reaches anyone.** Every command's arguments are checked
   against its channel before anything answers it, and an unknown channel is
-  refused. Typed messages are at most 50,000 characters, so the latest message
+  refused. A command channel with no check fails to compile, and the choices a
+  command offers are held to the command's own type. Typed messages are at most 50,000 characters, so the latest message
   always fits its budget; longer text travels as a kept paste of up to 50 MB.
   An attached picture is PNG, JPEG, GIF or WebP of up to 12 MB. Personal
   instructions are at most 64,000 characters. Budgets, appearance, spelling
@@ -261,7 +262,8 @@ answers every other command:
   data folder's `logs`, for two weeks, and is never sent anywhere. An
   exception nobody handled is recorded and the process keeps running. An
   error of Zhiyin's own that ended a turn is recorded with its stack and its
-  conversation's id. A page that crashes is loaded again, unless it crashed
+  conversation's id. A conversation that would not open is recorded with its
+  id and the part of it that did not read. A page that crashes is loaded again, unless it crashed
   more than three times in a minute.
 
 ## Testing notes

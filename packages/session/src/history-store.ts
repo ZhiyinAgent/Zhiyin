@@ -25,7 +25,7 @@ import { join } from "node:path";
 import type { ConversationSummary, WorkspaceTask } from "@zhiyin/contract";
 import { changesBetween } from "./history-changes.js";
 import { HistoryLog, type HistoryFiles } from "./history-log.js";
-import { isWorkspaceTask } from "./saved-workspace.js";
+import { conversationProblem, isWorkspaceTask } from "./saved-workspace.js";
 import { isRecord } from "./saved-values.js";
 import { isConversationSummary, isSavedSettings } from "./saved-index.js";
 import { SessionStoreError } from "./errors.js";
@@ -570,14 +570,17 @@ export class HistoryStore {
         `This conversation was saved by Zhiyin ${format!.writtenBy} and needs an update before it opens.`,
         { writtenBy: format!.writtenBy },
       );
-    if (
-      standing !== "current" ||
-      !isWorkspaceTask(read.state) ||
-      (read.state as { id: unknown }).id !== id
-    )
+    const problem =
+      standing !== "current"
+        ? "it was saved in a form this version does not read"
+        : (conversationProblem(read.state) ??
+          ((read.state as { id: unknown }).id !== id
+            ? "it is saved where another conversation belongs"
+            : undefined));
+    if (problem)
       throw new SessionStoreError(
         "corrupted",
-        "This conversation is damaged and cannot be opened safely.",
+        `This conversation is damaged and cannot be opened safely: ${problem}.`,
       );
     const task = read.state as WorkspaceTask;
     this.#conversations.set(id, { log: read.log, state: task, lost: false });

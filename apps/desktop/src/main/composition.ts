@@ -414,6 +414,15 @@ export function buildCore({
       newTaskId: randomUUID,
       now,
       emit,
+      // The person is told only that a conversation is damaged; what did not
+      // read in it is kept here.
+      recordDamage: ({ conversationId, error }) =>
+        log?.record({
+          level: "error",
+          source: "history",
+          message: `Conversation ${conversationId} is damaged and was not opened.`,
+          error,
+        }),
       ...(notifier ? { notifier } : {}),
       ...(appearance ? { appearance } : {}),
       ...(spelling

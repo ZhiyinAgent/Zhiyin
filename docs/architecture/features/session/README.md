@@ -137,7 +137,11 @@ instead, so nothing a conversation is called can name a path.
   have the shape this version writes: every list present, every message,
   action, view, question and specialist run placed on the timeline, and every
   closed value one Zhiyin gives. One that differs is refused as damaged and
-  never read in part. Every status the writer produces, the reader accepts.
+  never read in part. Every status the writer produces, the reader accepts:
+  the statuses and kinds it accepts are written against the contract's types,
+  and so is the check each part of a conversation gets, so a status, a kind or
+  a part the type gains and the reader lacks fails to compile. A conversation
+  refused when it is opened says which part of it did not read.
 - **A damaged conversation fails alone.** The list opens, and so does every
   other conversation. A folder with nothing readable is moved to
   `damaged-history` and reported once.
