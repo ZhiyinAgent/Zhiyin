@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TaskAction, ToolCallInspection } from "@zhiyin/contract";
-import type { ModelEvent } from "@zhiyin/model-client";
+import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
 import type { WorkLimits } from "../src/index.js";
 import {
   completeHandoffMessage,
@@ -632,6 +632,7 @@ describe("specialist child execution", () => {
     const base = stubDependencies(() => {});
     let parentAttempt = 0;
     let runId = 0;
+    let afterFourth: ModelRequest | undefined;
     const loop = loopFrom({
       ...base,
       plugins: pluginsOffering([
@@ -655,10 +656,8 @@ describe("specialist child execution", () => {
           );
           if (delegating) {
             const attempt = ++parentAttempt;
-            if (attempt === 4) {
-              expect(JSON.stringify(request.messages)).toContain(
-                "already delegated to 3 specialists",
-              );
+            if (attempt === 5) {
+              afterFourth = request;
               yield { kind: "textDelta" as const, text: "Stopping here." };
               yield { kind: "done" as const };
               return;
@@ -707,6 +706,9 @@ describe("specialist child execution", () => {
     const runs = loop.snapshot().tasks[0]?.specialistRuns ?? [];
     expect(runs).toHaveLength(3);
     expect(runs.every((run) => run.status === "completed")).toBe(true);
+    expect(JSON.stringify(afterFourth?.messages)).toContain(
+      "already delegated to 3 specialists",
+    );
   });
 
   /**
@@ -721,6 +723,7 @@ describe("specialist child execution", () => {
       round: number,
       tools: readonly string[],
       messages: string,
+      request: ModelRequest,
     ) => readonly ModelEvent[];
     /** Whether a tool may run; allowed when left out. */
     readonly decide?: () => Promise<{
@@ -790,6 +793,7 @@ describe("specialist child execution", () => {
               specialistRound,
               (request.tools ?? []).map((tool) => tool.name),
               text,
+              request,
             );
             yield { kind: "done" as const };
             return;
@@ -892,6 +896,20 @@ describe("specialist child execution", () => {
     });
   });
 
+  it("asks for a specialist's answer to be started again should it drop midway, as a turn's is", async () => {
+    const restartable: unknown[] = [];
+    const loop = delegatingLoop({
+      specialist: (_round, _tools, _messages, request) => {
+        restartable.push(request.restartable);
+        return [finishes("Done.")];
+      },
+    });
+
+    await settled(loop);
+
+    expect(restartable).toEqual([true]);
+  });
+
   it("takes a specialist's report from the answer that followed a restart, and nothing of the attempt it replaced", async () => {
     const loop = delegatingLoop({
       specialist: () => [
@@ -912,6 +930,7 @@ describe("specialist child execution", () => {
           reason: "networkFailure",
           message: "The connection dropped.",
         },
+        { kind: "textDelta", text: "Reporting now." },
         finishes("The whole report."),
       ],
     });
@@ -922,6 +941,14 @@ describe("specialist child execution", () => {
       status: "completed",
       handoff: { summary: "The whole report." },
     });
+    // What a specialist says while it works is its own: none of it is shown
+    // as the conversation's answer, before the restart or after.
+    const said = loop
+      .snapshot()
+      .tasks[0]?.messages.map((message) => message.text)
+      .join("\n");
+    expect(said).not.toContain("I will rep");
+    expect(said).not.toContain("Reporting now.");
   });
 
   it("keeps a specialist's card where it was delegated, ahead of everything that came after", async () => {

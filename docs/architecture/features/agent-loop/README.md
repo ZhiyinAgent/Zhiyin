@@ -233,7 +233,9 @@ out still runs, and is named in the background.
   conversation larger than the model's window is condensed a part at a time.
 - A request the provider refuses as too long, before any of the answer shows,
   is recovered once: the window is lowered, the conversation is condensed
-  within it, and the step is sent again. A second refusal ends the turn.
+  within it, and the step is sent again. A second refusal of the same step
+  ends the turn; a later step of the turn that is refused is recovered the
+  same way.
 
 ### Long work (ADR 0011, ADR 0013, ADR 0014)
 
@@ -243,7 +245,8 @@ out still runs, and is named in the background.
   each currency against its own limit and never converted. Tokens are not
   limited, because every request is counted whole. Continue starts the time and cost again and
   doubles the rounds; Pause runs nothing more and asks for one tool-free
-  progress report.
+  progress report, which alone is the turn's answer, without what was said
+  before the pause.
 - The plan holds at most eight items, an update is corrected rather than
   refused, and each turn the person starts begins with an empty plan. A turn
   about to finish with items open is reminded of them once. After four rounds
@@ -252,8 +255,11 @@ out still runs, and is named in the background.
   starts the count again at four.
 - The answer is shown five seconds behind the model, so a provider restart
   before then is unseen. After it, the shown text is withdrawn openly and
-  exactly one answer remains. A specialist, the background work and
-  condensing keep nothing of an attempt a restart replaced either.
+  exactly one answer remains. A specialist's round is the same round as a
+  turn's, gathered without being shown: an answer of its own that drops midway
+  is started again too, and its waiting is not said in the conversation. The
+  background work and condensing keep nothing of an attempt a restart replaced
+  either.
 - When the model has sent nothing for fifteen seconds, the conversation says
   the turn is waiting for the model, and the note goes as soon as anything
   arrives. The wait before a repeated request is counted down instead, and

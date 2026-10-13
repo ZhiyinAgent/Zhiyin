@@ -34,6 +34,9 @@ import { withSchemaProblems } from "./schema-problems.js";
  * quiet outcome was answered to the model alone: no action record, no
  * permission request, nothing in the transcript.
  */
+/** A call its tool looked at and did not refuse. */
+type AllowedInspection = Extract<ToolCallInspection, { readonly ok: true }>;
+
 type ToolCallOutcome = {
   readonly result: ToolInvocationResult;
   readonly quiet?: boolean;
@@ -179,195 +182,34 @@ export class ToolCalls {
       return { result };
     }
 
-    let args = proposedArguments;
-    let inspection = withSchemaProblems(
-      await this.#inspectTool(taskId, owner, call.name, args),
-      args,
-      round.tools.find((tool) => tool.name === call.name)?.inputSchema,
-    );
-    controller.signal.throwIfAborted();
+    const checked = await this.#inspected(taskId, call, {
+      proposedArguments,
+      owner,
+      controller,
+      quietRetriesLeft,
+      round,
+      specialistRunId,
+    });
+    if ("settled" in checked) return checked.settled;
+    const { args, inspection } = checked;
 
-    // Before the main model is troubled with it, a small model is given the
-    // refusal and the last few observations and allowed to re-aim the call.
-    if (!inspection.ok && inspection.correctable) {
-      const repair = await this.#repair.repair(taskId, call, {
-        proposed: args,
-        owner,
-        refusal: inspection,
-        round,
-        signal: controller.signal,
-      });
-      controller.signal.throwIfAborted();
-      if (repair) {
-        args = repair.arguments;
-        // The call is rewritten to what will run, so the model is left
-        // holding what actually happened rather than the draft it first wrote.
-        call.arguments = JSON.stringify(repair.arguments);
-        inspection = repair.inspection;
-      }
-    }
-
-    if (!inspection.ok) {
-      const result = inspection.correctable
-        ? correctableByModel(inspection.reason)
-        : refusal(
-            "tool",
-            inspection.reason,
-            "Do not send this call again. Choose another way, or tell the person why it cannot be done.",
-          );
-      // The tool says the model can fix this itself, and the model has tries
-      // left: answer it and leave the person out of it entirely.
-      if (inspection.correctable && quietRetriesLeft > 0) {
-        await this.#audit(taskId, call.name, "quiet-retry", inspection.reason, {
-          before: args,
-        });
-        return { result, quiet: true };
-      }
-      await this.recordFailedProposal(taskId, call, {
-        description: "The requested action could not be inspected.",
-        reason: result.reason,
-        specialistRunId,
-        status: "failed",
-        answer: result,
-      });
-      return { result };
-    }
-
-    if (
-      owner === "built-in" &&
-      inspection.requiresApproval === false &&
-      inspection.input
-    ) {
-      const complete = this.#deps.capabilities.completeUserInput;
-      if (!complete)
-        return {
-          result: {
-            ok: false,
-            reason:
-              "This question tool cannot accept an answer in the current runtime.",
-          },
-        };
-      const outcome = await this.#waits.waitForUserInput(
-        taskId,
-        inspection.input,
-        (response) => complete(call.name, args, response),
-        controller.signal,
-      );
-      if (outcome.kind === "cancelled")
-        return {
-          result: { ok: false, reason: "The task was cancelled." },
-        };
-      await this.#records.recordUserInteraction(
-        taskId,
-        call,
-        inspection.input,
-        outcome.response,
-        outcome.result,
-      );
-      return { result: outcome.result };
-    }
-
-    if (
-      owner === "built-in" &&
-      inspection.requiresApproval === false &&
-      inspection.view
-    ) {
-      let checked = await this.#deps.views.validate(
-        inspection.view.kind,
-        inspection.view.source,
-      );
-      controller.signal.throwIfAborted();
-      for (
-        let attempt = 0;
-        !checked.ok && attempt < maximumRepairAttempts;
-        attempt += 1
-      ) {
-        const repair = await this.#repair.repair(taskId, call, {
-          proposed: args,
-          owner,
-          refusal: { ok: false, reason: checked.reason, correctable: true },
-          round,
+    if (owner === "built-in" && inspection.requiresApproval === false) {
+      if (inspection.input)
+        return this.#askPerson(taskId, call, {
+          args,
+          input: inspection.input,
           signal: controller.signal,
         });
-        if (
-          !repair ||
-          repair.inspection.requiresApproval !== false ||
-          !repair.inspection.view
-        )
-          break;
-        const repairedView = repair.inspection.view;
-        args = repair.arguments;
-        call.arguments = JSON.stringify(repair.arguments);
-        inspection = repair.inspection;
-        checked = await this.#deps.views.validate(
-          repairedView.kind,
-          repairedView.source,
-        );
-      }
-      if (!checked.ok) {
-        await this.#audit(taskId, call.name, "quiet-retry", checked.reason, {
-          before: args,
-        });
-        return {
-          result: {
-            ok: false,
-            reason: `The view was not shown because it could not be validated: ${checked.reason}`,
-          },
-          quiet: quietRetriesLeft > 0,
-        };
-      }
-
-      const presentation: PresentedAction = {
-        title: inspection.action,
-        description:
-          inspection.detail ?? "Add a reviewable view to this conversation.",
-      };
-      const actionId = this.#records.nextActionId(taskId);
-      await this.#records.recordToolAction(taskId, actionId, {
-        inspection,
-        presentation,
-        status: "running",
-        call,
-        approval: {
-          by: "no-approval-needed",
-          at: this.#deps.now().toISOString(),
-          reason: "Inert conversation view.",
-        },
-        ...(specialistRunId ? { specialistRunId } : {}),
-        readOnly: true,
-      });
-      let result: ToolInvocationResult;
-      try {
-        result = await this.#deps.capabilities.execute(
-          taskId,
-          "built-in",
-          call.name,
+      if (inspection.view)
+        return this.#showView(taskId, call, {
           args,
-          { signal: controller.signal },
-        );
-      } catch {
-        result = {
-          ok: false,
-          reason: "The requested view failed while it was being prepared.",
-        };
-      }
-      if (
-        result.ok &&
-        (!result.view ||
-          JSON.stringify(result.view) !== JSON.stringify(inspection.view))
-      )
-        result = {
-          ok: false,
-          reason: "The produced view did not match the validated source.",
-        };
-      await this.#records.finishToolAction(taskId, call, actionId, {
-        inspection,
-        presentation,
-        status: outcomeStatus(result),
-        reason: result.ok ? undefined : result.reason,
-        result,
-      });
-      return { result };
+          inspection,
+          view: inspection.view,
+          controller,
+          quietRetriesLeft,
+          round,
+          specialistRunId,
+        });
     }
 
     // Named by the call itself, or from what the code knows; a call that did
@@ -599,6 +441,250 @@ export class ToolCalls {
       title: presentation.title,
       ...(inspection.access === "change" && result.ok ? { changed: true } : {}),
     };
+  }
+
+  /**
+   * What a call would do, as the tool that owns it says. A call the tool
+   * refuses as fixable is given once to a small model to re-aim, before the
+   * main model is troubled with it. One still refused is answered here: to
+   * the model alone while it has tries left, and on the record once it has
+   * none.
+   */
+  async #inspected(
+    taskId: string,
+    call: AssembledToolCall,
+    {
+      proposedArguments,
+      owner,
+      controller,
+      quietRetriesLeft,
+      round,
+      specialistRunId,
+    }: {
+      readonly proposedArguments: unknown;
+      readonly owner: ToolOwner;
+      readonly controller: AbortController;
+      readonly quietRetriesLeft: number;
+      readonly round: RoundEvidence;
+      readonly specialistRunId: string | undefined;
+    },
+  ): Promise<
+    | { readonly args: unknown; readonly inspection: AllowedInspection }
+    | { readonly settled: ToolCallOutcome }
+  > {
+    let args = proposedArguments;
+    let inspection = withSchemaProblems(
+      await this.#inspectTool(taskId, owner, call.name, args),
+      args,
+      round.tools.find((tool) => tool.name === call.name)?.inputSchema,
+    );
+    controller.signal.throwIfAborted();
+
+    // Before the main model is troubled with it, a small model is given the
+    // refusal and the last few observations and allowed to re-aim the call.
+    if (!inspection.ok && inspection.correctable) {
+      const repair = await this.#repair.repair(taskId, call, {
+        proposed: args,
+        owner,
+        refusal: inspection,
+        round,
+        signal: controller.signal,
+      });
+      controller.signal.throwIfAborted();
+      if (repair) {
+        args = repair.arguments;
+        // The call is rewritten to what will run, so the model is left
+        // holding what actually happened rather than the draft it first wrote.
+        call.arguments = JSON.stringify(repair.arguments);
+        inspection = repair.inspection;
+      }
+    }
+
+    if (!inspection.ok) {
+      const result = inspection.correctable
+        ? correctableByModel(inspection.reason)
+        : refusal(
+            "tool",
+            inspection.reason,
+            "Do not send this call again. Choose another way, or tell the person why it cannot be done.",
+          );
+      // The tool says the model can fix this itself, and the model has tries
+      // left: answer it and leave the person out of it entirely.
+      if (inspection.correctable && quietRetriesLeft > 0) {
+        await this.#audit(taskId, call.name, "quiet-retry", inspection.reason, {
+          before: args,
+        });
+        return { settled: { result, quiet: true } };
+      }
+      await this.recordFailedProposal(taskId, call, {
+        description: "The requested action could not be inspected.",
+        reason: result.reason,
+        specialistRunId,
+        status: "failed",
+        answer: result,
+      });
+      return { settled: { result } };
+    }
+    return { args, inspection };
+  }
+
+  /** A question for the person: asked, and answered with what they said. */
+  async #askPerson(
+    taskId: string,
+    call: AssembledToolCall,
+    {
+      args,
+      input,
+      signal,
+    }: {
+      readonly args: unknown;
+      readonly input: NonNullable<AllowedInspection["input"]>;
+      readonly signal: AbortSignal;
+    },
+  ): Promise<ToolCallOutcome> {
+    const complete = this.#deps.capabilities.completeUserInput;
+    if (!complete)
+      return {
+        result: {
+          ok: false,
+          reason:
+            "This question tool cannot accept an answer in the current runtime.",
+        },
+      };
+    const outcome = await this.#waits.waitForUserInput(
+      taskId,
+      input,
+      (response) => complete(call.name, args, response),
+      signal,
+    );
+    if (outcome.kind === "cancelled")
+      return {
+        result: { ok: false, reason: "The task was cancelled." },
+      };
+    await this.#records.recordUserInteraction(
+      taskId,
+      call,
+      input,
+      outcome.response,
+      outcome.result,
+    );
+    return { result: outcome.result };
+  }
+
+  /**
+   * A view for the conversation: checked by what draws it, re-aimed while it
+   * does not draw, and shown only as the source that was checked.
+   */
+  async #showView(
+    taskId: string,
+    call: AssembledToolCall,
+    given: {
+      readonly args: unknown;
+      readonly inspection: AllowedInspection;
+      readonly view: NonNullable<AllowedInspection["view"]>;
+      readonly controller: AbortController;
+      readonly quietRetriesLeft: number;
+      readonly round: RoundEvidence;
+      readonly specialistRunId: string | undefined;
+    },
+  ): Promise<ToolCallOutcome> {
+    const { view, controller, quietRetriesLeft, round, specialistRunId } =
+      given;
+    const owner = "built-in";
+    let { args, inspection } = given;
+    let checked = await this.#deps.views.validate(view.kind, view.source);
+    controller.signal.throwIfAborted();
+    for (
+      let attempt = 0;
+      !checked.ok && attempt < maximumRepairAttempts;
+      attempt += 1
+    ) {
+      const repair = await this.#repair.repair(taskId, call, {
+        proposed: args,
+        owner,
+        refusal: { ok: false, reason: checked.reason, correctable: true },
+        round,
+        signal: controller.signal,
+      });
+      if (
+        !repair ||
+        repair.inspection.requiresApproval !== false ||
+        !repair.inspection.view
+      )
+        break;
+      const repairedView = repair.inspection.view;
+      args = repair.arguments;
+      call.arguments = JSON.stringify(repair.arguments);
+      inspection = repair.inspection;
+      checked = await this.#deps.views.validate(
+        repairedView.kind,
+        repairedView.source,
+      );
+    }
+    if (!checked.ok) {
+      await this.#audit(taskId, call.name, "quiet-retry", checked.reason, {
+        before: args,
+      });
+      return {
+        result: {
+          ok: false,
+          reason: `The view was not shown because it could not be validated: ${checked.reason}`,
+        },
+        quiet: quietRetriesLeft > 0,
+      };
+    }
+
+    const presentation: PresentedAction = {
+      title: inspection.action,
+      description:
+        inspection.detail ?? "Add a reviewable view to this conversation.",
+    };
+    const actionId = this.#records.nextActionId(taskId);
+    await this.#records.recordToolAction(taskId, actionId, {
+      inspection,
+      presentation,
+      status: "running",
+      call,
+      approval: {
+        by: "no-approval-needed",
+        at: this.#deps.now().toISOString(),
+        reason: "Inert conversation view.",
+      },
+      ...(specialistRunId ? { specialistRunId } : {}),
+      readOnly: true,
+    });
+    let result: ToolInvocationResult;
+    try {
+      result = await this.#deps.capabilities.execute(
+        taskId,
+        "built-in",
+        call.name,
+        args,
+        { signal: controller.signal },
+      );
+    } catch {
+      result = {
+        ok: false,
+        reason: "The requested view failed while it was being prepared.",
+      };
+    }
+    if (
+      result.ok &&
+      (!result.view ||
+        JSON.stringify(result.view) !== JSON.stringify(inspection.view))
+    )
+      result = {
+        ok: false,
+        reason: "The produced view did not match the validated source.",
+      };
+    await this.#records.finishToolAction(taskId, call, actionId, {
+      inspection,
+      presentation,
+      status: outcomeStatus(result),
+      reason: result.ok ? undefined : result.reason,
+      result,
+    });
+    return { result };
   }
 
   /**

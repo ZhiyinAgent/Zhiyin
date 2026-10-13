@@ -9,15 +9,14 @@ import type {
 } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
-import { estimatedRequestTokens } from "../context/conversation-context.js";
 import { QuietFailures, withdrawCalls } from "../tools/quiet-failures.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 import type { ToolCalls } from "../tools/tool-calls.js";
+import { ModelRound } from "../turn/model-round.js";
 import type { TurnOwnership } from "../turn/turn-ownership.js";
 import type { TurnRecords } from "../turn/turn-records.js";
 import { readToolInput } from "../tools/tool-input.js";
 import {
-  type AssembledToolCall,
   answerableCalls,
   maximumQuietRetries,
   namelessCallFailure,
@@ -233,6 +232,7 @@ export function handoffMessage(
 export class SpecialistExecution {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
+  readonly #round: ModelRound;
   readonly #toolCalls: ToolCalls;
   readonly #ownership: TurnOwnership;
   readonly #onSettled: (
@@ -254,6 +254,7 @@ export class SpecialistExecution {
   ) {
     this.#deps = deps;
     this.#records = parts.records;
+    this.#round = new ModelRound(deps, parts.records, "specialist");
     this.#toolCalls = parts.toolCalls;
     this.#ownership = parts.ownership;
     this.#onSettled = parts.onSettled;
@@ -334,75 +335,15 @@ export class SpecialistExecution {
 
     try {
       for (;;) {
-        const assembled = new Map<number, AssembledToolCall>();
-        let text = "";
-        let reportedUsage = false;
-        /** An attempt the provider did not account for is estimated. */
-        const account = () => {
-          if (!reportedUsage)
-            ledger.estimate(
-              estimatedRequestTokens(
-                [...messages, { role: "assistant", content: text }],
-                tools,
-              ),
-            );
-        };
-        const request = { messages, tools, signal: controller.signal };
-        for await (const event of this.#deps.model.send(request)) {
-          controller.signal.throwIfAborted();
-          switch (event.kind) {
-            case "textDelta":
-              text += event.text;
-              break;
-            case "toolCallDelta": {
-              const call = assembled.get(event.index) ?? {
-                index: event.index,
-                callId: "",
-                name: "",
-                arguments: "",
-              };
-              if (event.callId) call.callId = event.callId;
-              if (event.name) call.name += event.name;
-              if (event.argumentsDelta) call.arguments += event.argumentsDelta;
-              assembled.set(event.index, call);
-              break;
-            }
-            case "usage":
-              reportedUsage = true;
-              ledger.record(event.usage);
-              await this.#deps.host.recordUsage({
-                ...event.usage,
-                conversationId: options.taskId,
-                purpose: "specialist",
-              });
-              break;
-            case "restarting":
-              // Everything the replaced attempt sent is void; it was still
-              // read and written by the provider, so it is accounted for.
-              account();
-              text = "";
-              assembled.clear();
-              reportedUsage = false;
-              break;
-            case "reasoningDelta":
-            case "retrying":
-            case "done":
-              // A specialist's reasoning is not kept, its waiting is not
-              // shown, and its answer ends where the stream does.
-              break;
-            default: {
-              const unnamed: never = event;
-              throw new Error(
-                `A specialist was sent ${String(unnamed)}, which it cannot read.`,
-              );
-            }
-          }
-        }
-        account();
-        controller.signal.throwIfAborted();
-        const calls = [...assembled.values()].sort(
-          (left, right) => left.index - right.index,
+        // The same round a turn runs, gathered without being shown.
+        const { calls, text } = await this.#round.run(
+          options.taskId,
+          controller,
+          ledger,
+          { messages, tools },
+          () => !controller.signal.aborted,
         );
+        controller.signal.throwIfAborted();
         const finish = calls.find(
           (call) => call.name === finishSpecialistTool.name,
         );

@@ -334,6 +334,67 @@ describe("AgentLoop renewable work budget", () => {
     });
   });
 
+  it("reports a pause in the words that followed it, without what was said before", async () => {
+    const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));
+    const base = stubDependencies(() => {});
+    let request = 0;
+    const loop = loopFrom({
+      ...base,
+      workLimits: { maximumElapsedMs: 60_000, maximumProviderCostUsd: 0.1 },
+      tools: workTool(execute),
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Read" }),
+      },
+      model: {
+        ...base.model,
+        send: async function* () {
+          request += 1;
+          if (request === 1) {
+            yield {
+              kind: "usage" as const,
+              usage: {
+                requestId: "request-1",
+                model: "test",
+                inputTokens: 90,
+                outputTokens: 30,
+                totalTokens: 120,
+                costUsd: 0.12,
+              },
+            };
+            yield {
+              kind: "textDelta" as const,
+              text: "Starting with the inventory.",
+            };
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "call-1",
+              name: "inspect_progress",
+              argumentsDelta: "{}",
+            };
+          } else {
+            yield { kind: "textDelta" as const, text: "Nothing is done yet." };
+          }
+          yield { kind: "done" as const };
+        },
+      },
+      newUserInputId: () => "limit-1",
+    });
+    const taskId = await loop.createTask();
+
+    const running = loop.start(taskId, "Inspect everything");
+    await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
+    await loop.resolveUserInput(taskId, "limit-1", {
+      answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
+    });
+    await running;
+
+    expect(loop.snapshot().tasks[0]?.phase).toMatchObject({
+      kind: "completed",
+      outcome: { title: "Work paused", summary: "Nothing is done yet." },
+    });
+  });
+
   it("condenses a long run where it crosses its context budget, and carries it across the renewal", async () => {
     const requests: ModelRequest[] = [];
     const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));

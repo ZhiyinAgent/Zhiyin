@@ -203,6 +203,87 @@ describe("a request the provider refuses as too long", () => {
     });
   });
 
+  it("is recovered again at a later step of the same turn, once a step between them was answered", async () => {
+    const deps = stubDependencies(() => {});
+    const executed: string[] = [];
+    let step = 0;
+    const { host } = loopAndHost({
+      ...deps,
+      modelWindow: listed,
+      tools: {
+        list: () => [
+          {
+            name: "read_part",
+            description: "Reads the next part.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect: async () => ({
+          ok: true as const,
+          action: "Read part",
+          target: "workspace",
+          command: "read_part({})",
+          access: "read" as const,
+          scope: "workspace" as const,
+        }),
+        execute: async (name: string) => {
+          executed.push(name);
+          return { ok: true as const, value: "read" };
+        },
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Read" }),
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request: ModelRequest) {
+          if (asksToCondense(request)) {
+            yield {
+              kind: "textDelta" as const,
+              text: JSON.stringify({ summary: "The older material was read." }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          step += 1;
+          // The first and the third step are refused; the second is answered.
+          if (step === 1 || step === 3)
+            throw tooLong({ sent: sizeOf(request) });
+          if (step === 2)
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "call-1",
+              name: "read_part",
+              argumentsDelta: "{}",
+            };
+          else yield { kind: "textDelta" as const, text: "Carried on." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    const loop = host.app;
+    loop.restore([
+      {
+        id: "task-1",
+        title: "Long work",
+        titleSource: "manual",
+        updatedLabel: "Earlier",
+        updatedAt: "2026-10-05T09:00:00.000Z",
+        ...emptyConversationLists,
+        messages: earlier,
+        actions: [],
+        phase: { kind: "interrupted" },
+      },
+    ]);
+
+    await loop.start("task-1", "Continue");
+
+    expect(executed).toEqual(["read_part"]);
+    expect(step).toBe(4);
+    expect(task(loop)?.phase.kind).toBe("completed");
+  });
+
   it("is not recovered once the answer has begun to show", async () => {
     const { loop, host, provider } = refusing({
       always: true,

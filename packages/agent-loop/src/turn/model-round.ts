@@ -1,6 +1,7 @@
 /**
  * One model round: the request sent, the answer streamed into the conversation
- * behind the model, and its tool calls assembled. ADR 0011.
+ * behind the model, and its tool calls assembled. ADR 0011. A specialist's
+ * round is the same round, gathered without being shown.
  *
  * The model client decides whether a failed request is sent again. What the
  * round owns is taking back what it received from an attempt that failed: no
@@ -109,13 +110,27 @@ class Attempt {
   firstTokenAt: string | undefined;
 }
 
+/**
+ * Whose answer a round gathers. A turn's is shown in the conversation as it
+ * arrives, with the notes that say it is waiting or starting again. A
+ * specialist's is gathered unseen, and what it used is counted as the
+ * specialist's.
+ */
+export type RoundAudience = "conversation" | "specialist";
+
 export class ModelRound {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
+  readonly #shown: boolean;
 
-  constructor(deps: AgentLoopDependencies, records: TurnRecords) {
+  constructor(
+    deps: AgentLoopDependencies,
+    records: TurnRecords,
+    audience: RoundAudience = "conversation",
+  ) {
     this.#deps = deps;
     this.#records = records;
+    this.#shown = audience === "conversation";
   }
 
   /**
@@ -131,7 +146,8 @@ export class ModelRound {
     owns: () => boolean,
   ): Promise<RoundResult> {
     const startedAt = this.#deps.now().toISOString();
-    const assistantId = this.#deps.newMessageId();
+    // An answer nobody is shown is no message, and takes no message's id.
+    const assistantId = this.#shown ? this.#deps.newMessageId() : "";
     let assistantSequence: number | undefined;
     /** Shown characters each restart withdrew, in order. */
     const withdrawn: number[] = [];
@@ -139,9 +155,10 @@ export class ModelRound {
     let noting = false;
     const holding = () =>
       new HeldReveal(
-        this.#deps.revealDelayMs ?? revealDelayMs,
+        // Nothing is held back from an answer nobody is shown.
+        this.#shown ? (this.#deps.revealDelayMs ?? revealDelayMs) : 0,
         async (revealed: Revealed) => {
-          if (!owns()) return;
+          if (!owns() || !this.#shown) return;
           assistantSequence ??= this.#records.nextTimelineSequence(
             this.#records.task(taskId),
           );
@@ -209,7 +226,7 @@ export class ModelRound {
           await reveal.discard();
           this.#account(ledger, request, attempt);
           withdrawn.push(shown);
-          if (recorded)
+          if (recorded && this.#shown)
             await this.#records.withdrawAssistantMessage(taskId, assistantId);
           await this.#note(
             taskId,
@@ -332,7 +349,7 @@ export class ModelRound {
         await this.#deps.host.recordUsage({
           ...event.usage,
           conversationId: taskId,
-          purpose: "turn",
+          purpose: this.#shown ? "turn" : "specialist",
         });
         break;
       case "done":
@@ -372,6 +389,8 @@ export class ModelRound {
     note: string | undefined,
     retry?: { readonly readyAt: string; readonly count?: string },
   ) {
+    // The working note is the turn's; a specialist's waiting is not said there.
+    if (!this.#shown) return;
     await this.#records.showWorking(
       taskId,
       note,
