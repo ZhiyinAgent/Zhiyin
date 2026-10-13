@@ -271,7 +271,6 @@ export class ToolCalls {
         outcome.response,
         outcome.result,
       );
-      this.#records.emitToolActivity(taskId, call, "completed", outcome.result);
       return { result: outcome.result };
     }
 
@@ -384,12 +383,6 @@ export class ToolCalls {
         result.ok ? undefined : result.reason,
         result,
       );
-      this.#records.emitToolActivity(
-        taskId,
-        call,
-        outcomeStatus(result),
-        result,
-      );
       return { result };
     }
 
@@ -469,7 +462,6 @@ export class ToolCalls {
             reason,
             "Choose an action permitted by the current policy.",
           );
-      this.#records.emitToolActivity(taskId, call, "denied", result);
       await this.#records.recordToolAction(
         taskId,
         actionId,
@@ -506,7 +498,6 @@ export class ToolCalls {
         reason,
         "Nothing was changed. Look at the target again and propose the change from what it holds now; the person will be asked again. If it cannot be reached, tell the person why.",
       );
-      this.#records.emitToolActivity(taskId, call, "failed", result);
       await this.#records.recordToolAction(
         taskId,
         actionId,
@@ -565,7 +556,6 @@ export class ToolCalls {
       appliedRule,
       this.#deps.now().toISOString(),
     );
-    this.#records.emitToolActivity(taskId, call, "approved");
     await this.#records.recordToolAction(
       taskId,
       actionId,
@@ -633,12 +623,6 @@ export class ToolCalls {
         result.ok ? undefined : result.reason,
         result,
         owner === "mcp" ? "connector" : "tool",
-      );
-      this.#records.emitToolActivity(
-        taskId,
-        call,
-        outcomeStatus(result),
-        result,
       );
     }
     return {
@@ -727,15 +711,6 @@ export class ToolCalls {
           : {}),
         ...(specialistRunId ? { specialistRunId } : {}),
         evidence: evidenceText(answer),
-      },
-    );
-    this.#records.emitToolActivity(
-      taskId,
-      call,
-      status === "blocked" ? "denied" : "failed",
-      {
-        ok: false,
-        reason,
       },
     );
   }

@@ -153,24 +153,6 @@ export class TurnRecords {
       : "Unavailable action";
   }
 
-  emitToolActivity(
-    taskId: string,
-    call: AssembledToolCall,
-    status: "approved" | "denied" | "completed" | "reported" | "failed",
-    result?: ToolInvocationResult,
-  ): void {
-    this.#deps.host.emit({
-      kind: "toolActivity",
-      data: {
-        taskId,
-        callId: call.callId,
-        toolName: call.name,
-        status,
-        ...(result ? { result } : {}),
-      },
-    });
-  }
-
   async showAssistantProgress(
     taskId: string,
     assistantId: string,

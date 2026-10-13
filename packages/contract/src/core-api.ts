@@ -48,9 +48,8 @@ import type {
   UndoPreview,
 } from "./rewind.js";
 import type { WorkspaceTask } from "./task.js";
-import type { ToolInvocationResult } from "./tool-invocation.js";
 import type { ShellAvailability } from "./tools.js";
-import type { ProviderUsage, UsageState } from "./usage-state.js";
+import type { UsageState } from "./usage-state.js";
 import type { UserInputResponse } from "./user-input.js";
 import type { ViewCheckOutcome, ViewCheckRequest } from "./views.js";
 import type { TaskChange, WorkspaceChange } from "./window-changes.js";
@@ -112,22 +111,10 @@ export type AppEvent =
         readonly commands: readonly RunningCommand[];
       };
     }
-  | { readonly kind: "usageRecorded"; readonly data: ProviderUsage }
   | { readonly kind: "usageChanged"; readonly data: UsageState }
   | {
       readonly kind: "providerSettingsChanged";
       readonly data: ProviderSettings;
-    }
-  | {
-      readonly kind: "toolActivity";
-      readonly data: {
-        readonly taskId: string;
-        readonly callId: string;
-        readonly toolName: string;
-        readonly status:
-          "approved" | "denied" | "completed" | "reported" | "failed";
-        readonly result?: ToolInvocationResult;
-      };
     };
 
 /**

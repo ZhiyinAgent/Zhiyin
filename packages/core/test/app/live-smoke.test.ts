@@ -176,11 +176,11 @@ when("a live turn against a real provider", () => {
       );
 
     console.log("artifacts:", JSON.stringify(task?.artifacts));
-    const usage = events.filter((event) => event.kind === "usageRecorded");
+    const totals = events.filter((event) => event.kind === "usageChanged");
 
-    console.log("provider requests:", usage.length);
+    console.log("provider requests:", totals.length);
 
-    console.log("usage:", JSON.stringify(usage.map((event) => event.data)));
+    console.log("usage:", JSON.stringify(totals.at(-1)?.data));
 
     expect(task?.phase.kind).toBe("completed");
     await expect(

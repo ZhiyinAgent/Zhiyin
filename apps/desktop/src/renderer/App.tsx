@@ -3,6 +3,7 @@ import { WindowCopy, type CoreApi } from "@zhiyin/contract";
 import {
   ConnectionRecovery,
   WorkspaceShell,
+  actionFor,
   createWorkspaceState,
   workspaceReducer,
 } from "./ui/app/index.js";
@@ -39,41 +40,10 @@ export function App({
         dispatch({ type: "workspaceHydrated", snapshot: update.snapshot });
       else if (update?.task)
         dispatch({ type: "taskReplaced", task: update.task });
-      else if (event.kind === "coreReady") dispatch({ type: "connected" });
-      else if (event.kind === "taskRemoved")
-        dispatch({ type: "taskRemoved", ...event.data });
-      else if (event.kind === "taskSelectionChanged")
-        dispatch({ type: "selectionReceived", taskId: event.data.taskId });
-      else if (event.kind === "mcpServersChanged")
-        dispatch({ type: "mcpServersReceived", servers: event.data });
-      else if (event.kind === "pluginsChanged")
-        dispatch({ type: "pluginsReceived", plugins: event.data });
-      else if (event.kind === "browserChanged")
-        dispatch({
-          type: "browserChanged",
-          taskId: event.data.taskId,
-          browser: event.data.browser,
-        });
-      else if (event.kind === "sceneChanged")
-        dispatch({
-          type: "sceneChanged",
-          taskId: event.data.taskId,
-          scene: event.data.scene,
-        });
-      else if (event.kind === "documentChanged")
-        dispatch({
-          type: "documentChanged",
-          taskId: event.data.taskId,
-          document: event.data.document,
-        });
-      else if (event.kind === "workspaceViewChanged")
-        dispatch({ type: "workspaceViewChanged", ...event.data });
-      else if (event.kind === "commandsChanged")
-        dispatch({ type: "commandsChanged", ...event.data });
-      else if (event.kind === "usageChanged")
-        dispatch({ type: "usageReceived", usage: event.data });
-      else if (event.kind === "providerSettingsChanged")
-        dispatch({ type: "providerReceived", provider: event.data });
+      else {
+        const action = actionFor(event);
+        if (action) dispatch(action);
+      }
     });
     const unsubscribeView = core.onViewCheck((request) => {
       void validateView(request).then((outcome) =>

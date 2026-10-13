@@ -1,3 +1,4 @@
+export { actionFor } from "./appEvents.js";
 export { ConnectionRecovery } from "./ConnectionRecovery.js";
 export { ConversationPermissions } from "./ConversationPermissions.js";
 export { ExportConversationDialog } from "./ExportConversationDialog.js";

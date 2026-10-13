@@ -14,6 +14,7 @@ import {
   pluginsOffering,
   stubDependencies,
   until,
+  loopAndHost,
   loopFrom,
   fenced,
   wordsOf,
@@ -194,7 +195,7 @@ describe("AgentLoop", () => {
 
   it("runs a first model turn through authoritative task events", async () => {
     const seen: AppEvent[] = [];
-    const loop = loopFrom(
+    const { host } = loopAndHost(
       stubDependencies(
         (event) => seen.push(event),
         [
@@ -215,6 +216,7 @@ describe("AgentLoop", () => {
         ],
       ),
     );
+    const loop = host.app;
 
     const taskId = await loop.createTask();
     await loop.start(taskId, "Introduce yourself");
@@ -229,19 +231,16 @@ describe("AgentLoop", () => {
       ],
       phase: { kind: "completed" },
     });
-    expect(seen).toContainEqual({
-      kind: "usageRecorded",
-      data: {
-        requestId: "generation-1",
-        conversationId: "task-1",
-        purpose: "turn",
-        model: "z-ai/glm-5.3-flash",
-        inputTokens: 8,
-        outputTokens: 4,
-        totalTokens: 12,
-        costUsd: 0.000002,
-        recordedAt: "2026-09-02T19:00:00.000Z",
-      },
+    expect(host.usage).toContainEqual({
+      requestId: "generation-1",
+      conversationId: "task-1",
+      purpose: "turn",
+      model: "z-ai/glm-5.3-flash",
+      inputTokens: 8,
+      outputTokens: 4,
+      totalTokens: 12,
+      costUsd: 0.000002,
+      recordedAt: "2026-09-02T19:00:00.000Z",
     });
     expect(seen.at(-1)).toMatchObject({
       kind: "taskChanged",
@@ -561,16 +560,6 @@ describe("AgentLoop", () => {
         "read_file",
         '{"ok":true,"value":{"text":"Project notes"}}',
       ),
-    });
-    expect(seen).toContainEqual({
-      kind: "toolActivity",
-      data: {
-        taskId,
-        callId: "call-readme",
-        toolName: "read_file",
-        status: "completed",
-        result: { ok: true, value: { text: "Project notes" } },
-      },
     });
     expect(seen).toContainEqual({
       kind: "taskChanged",

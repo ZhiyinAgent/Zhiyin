@@ -287,14 +287,11 @@ export class TestHost implements TurnHost {
   }
 
   async recordUsage(modelUsage: unknown): Promise<void> {
-    // Stamped and announced the way the app does, because a turn's tests watch
-    // for what the window is told.
-    const usage = {
+    // Stamped the way the app does, and kept for a turn's tests to read.
+    this.usage.push({
       ...(modelUsage as Record<string, unknown>),
       recordedAt: this.#now().toISOString(),
-    };
-    this.usage.push(usage);
-    this.#emit({ kind: "usageRecorded", data: usage } as unknown as AppEvent);
+    });
   }
 
   reportIssue(notice: string): void {

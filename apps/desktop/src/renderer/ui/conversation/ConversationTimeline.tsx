@@ -11,12 +11,43 @@ import styles from "./conversation.module.css";
 import {
   timelineBlocks,
   type Placed,
+  type TimelineBlock,
   type TimelineMessage,
   type TimelineTask,
   type WaitingOn,
 } from "./timeline.js";
 
 export type { TimelineMessage, TimelineTask };
+
+/** What tells one entry of the timeline from the others, for React. */
+function blockKey<
+  Action extends Placed,
+  View extends Placed,
+  Interaction extends Placed,
+  SpecialistRun extends Placed,
+>(
+  block: TimelineBlock<Action, View, Interaction, SpecialistRun>,
+  index: number,
+): string {
+  switch (block.kind) {
+    case "message":
+      return block.message.id;
+    case "view":
+      return block.view.id;
+    case "interaction":
+      return block.interaction.id;
+    case "specialistRun":
+      return block.run.id;
+    case "condensing":
+      return block.condensing.id;
+    case "actions":
+      return `actions-${block.actions[0]?.id ?? index}`;
+    default: {
+      const unnamed: never = block;
+      return unnamed;
+    }
+  }
+}
 
 /**
  * What other modules draw inside the conversation, passed in by the app shell.
@@ -370,44 +401,12 @@ export function ConversationTimeline<
     return !next || (next.kind === "message" && next.message.role === "user");
   };
 
-  const drawn = blocks.map((block, index) => {
-    const turn = turnOf[index];
-    const turnEnd =
-      turn && endsTurn(index)
-        ? pieces.turnEnd?.(turn, busy && index === blocks.length - 1)
-        : null;
-    const key =
-      block.kind === "message"
-        ? block.message.id
-        : block.kind === "view"
-          ? block.view.id
-          : block.kind === "interaction"
-            ? block.interaction.id
-            : block.kind === "specialistRun"
-              ? block.run.id
-              : block.kind === "condensing"
-                ? block.condensing.id
-                : `actions-${block.actions[0]?.id ?? index}`;
-    return (
-      <Fragment key={key}>
-        {block.kind === "message" ? (
-          block.message.role === "user" ? (
-            pieces.userMessage ? (
-              pieces.userMessage(
-                block.message,
-                busy,
-                <UserTurn
-                  text={block.message.text}
-                  {...userTurnExtras(block.message, pieces)}
-                />,
-              )
-            ) : (
-              <UserTurn
-                text={block.message.text}
-                {...userTurnExtras(block.message, pieces)}
-              />
-            )
-          ) : (
+  /** One entry of the timeline, as its kind is drawn. */
+  const drawBlock = (block: (typeof blocks)[number]): ReactNode => {
+    switch (block.kind) {
+      case "message": {
+        if (block.message.role !== "user")
+          return (
             <AgentTurn compact={compact}>
               {block.message.text.trim() && (
                 <StreamingMarkdown
@@ -416,24 +415,53 @@ export function ConversationTimeline<
                 />
               )}
             </AgentTurn>
-          )
-        ) : block.kind === "view" ? (
+          );
+        const bubble = (
+          <UserTurn
+            text={block.message.text}
+            {...userTurnExtras(block.message, pieces)}
+          />
+        );
+        return pieces.userMessage
+          ? pieces.userMessage(block.message, busy, bubble)
+          : bubble;
+      }
+      case "view":
+        return (
           <AgentTurn compact={compact}>{pieces.view(block.view)}</AgentTurn>
-        ) : block.kind === "interaction" ? (
+        );
+      case "interaction":
+        return (
           <AgentTurn compact={compact}>
             {pieces.interaction(block.interaction)}
           </AgentTurn>
-        ) : block.kind === "specialistRun" ? (
-          pieces.specialistRun ? (
-            <AgentTurn compact={compact}>
-              {pieces.specialistRun(block.run)}
-            </AgentTurn>
-          ) : null
-        ) : block.kind === "condensing" ? (
-          <CondensingCard condensing={block.condensing} />
-        ) : (
-          pieces.actions(block.actions)
-        )}
+        );
+      case "specialistRun":
+        return pieces.specialistRun ? (
+          <AgentTurn compact={compact}>
+            {pieces.specialistRun(block.run)}
+          </AgentTurn>
+        ) : null;
+      case "condensing":
+        return <CondensingCard condensing={block.condensing} />;
+      case "actions":
+        return pieces.actions(block.actions);
+      default: {
+        const unnamed: never = block;
+        return unnamed;
+      }
+    }
+  };
+
+  const drawn = blocks.map((block, index) => {
+    const turn = turnOf[index];
+    const turnEnd =
+      turn && endsTurn(index)
+        ? pieces.turnEnd?.(turn, busy && index === blocks.length - 1)
+        : null;
+    return (
+      <Fragment key={blockKey(block, index)}>
+        {drawBlock(block)}
         {turnEnd ? <AgentTurn compact={compact}>{turnEnd}</AgentTurn> : null}
       </Fragment>
     );
