@@ -9,8 +9,12 @@ import type { AgentLoop } from "@zhiyin/agent-loop";
 /** What the workspace asks of whoever runs turns. */
 export type WorkspaceTurns = Pick<
   AgentLoop,
+  | "send"
   | "start"
   | "cancel"
+  | "answerNow"
+  | "sendNow"
+  | "takeBack"
   | "condenseNow"
   | "shutdown"
   | "resolveApproval"

@@ -139,9 +139,19 @@ described in the [component library](../../component-library.md).
 ### Conversation and composer
 
 - The timeline places messages, actions, views, answered questions, specialist
-  runs and compactions in the order they happened. Raw reasoning is not shown,
-  and a message with nothing visible in it draws nothing. Entries off screen
+  runs and compactions in the order they happened. Reasoning a model sends is
+  shown only while it arrives, before the answer begins: its last lines, as
+  plain text under the status, following the newest. Beside that status is the
+  offer to have the answer now: it takes one press, and stands again when the
+  core says nothing was stopped. Reasoning that is over is
+  not shown, and a message with nothing visible in it draws nothing. Entries off screen
   are skipped by layout and keep their height.
+- A message added while a turn works is drawn at once at the end of the
+  conversation, in outline where a read message is filled, and says it will be
+  read at the next step. Under each is the offer to take it back, which returns
+  it to the message box. Under the last, while the model only reasons, is the
+  offer to send them all now. Once the model has read a message it is an
+  ordinary one, drawn once.
 - Model text is rendered as Markdown with tables, never as raw HTML, revealed
   at a steady pace while it streams and whole once the turn stops. A link
   never navigates the window: a web address is shown as text, and a link to a
@@ -150,8 +160,8 @@ described in the [component library](../../component-library.md).
 - A person reading the end of a conversation is kept at the end while it grows,
   until they move the view away with a wheel, a finger, a scroll key or the
   scrollbar. When the column changes width, the message being read stays put.
-- A running turn says "Working", or what it is composing, and after five seconds
-  for how long. A provider retry counts down to its deadline (ADR 0011). A
+- A running turn says "Working", that the model is thinking, or what it is
+  composing, and after five seconds for how long. A provider retry counts down to its deadline (ADR 0011). A
   stopped turn says why. A failed one gives its reason and offers the next steps
   the core suggests as buttons, such as trying again, updating the key, choosing
   another model or adding credits, which opens the billing page of the provider
@@ -194,7 +204,8 @@ described in the [component library](../../component-library.md).
 - A quiz lives in the conversation and grades an answer only once it is
   checked. Clarifying questions, the work checkpoint (Keep going, or Stop and
   summarise) and a folder's `AGENTS.md`, shown in full with Use and Ignore, sit
-  above the composer.
+  above the composer. However long the file, its text scrolls inside the
+  question, so both answers stay in reach down to the smallest window.
 
 ### Actions, files and specialists
 

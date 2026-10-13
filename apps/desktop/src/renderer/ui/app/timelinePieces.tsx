@@ -219,6 +219,11 @@ export function timelinePieces(
   return {
     openAttachment: (id) => void commands.openAttachment(task.id, id),
     ...(readPicture ? { readPicture } : {}),
+    answerNow: () => commands.answerNow(task.id),
+    waitingMessage: {
+      sendNow: () => commands.sendNow(task.id),
+      takeBack: (messageId) => commands.takeBackMessage(task.id, messageId),
+    },
     ...(previewRewind && commitRewind
       ? {
           userMessage: (message, busy, bubble) => {

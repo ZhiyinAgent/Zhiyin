@@ -106,8 +106,10 @@ export type DemoScenario =
   | "new"
   | "thinking"
   | "required-reasoning"
+  | "waiting-message"
   | "working"
   | "quiz"
+  | "folder-instructions"
   | "approval"
   | "browser"
   | "document"
@@ -122,8 +124,10 @@ const demoScenarios = new Set<DemoScenario>([
   "new",
   "thinking",
   "required-reasoning",
+  "waiting-message",
   "working",
   "quiz",
+  "folder-instructions",
   "approval",
   "browser",
   "document",
@@ -242,8 +246,8 @@ export function createDemoWorkspaceState(
     task.phase = { kind: "working", steps: [] };
   }
   // A model that always reasons: the composer's reasoning control cannot be
-  // turned off. Its reasoning itself is never shown.
-  if (scenario === "required-reasoning") {
+  // turned off. What it is reasoning shows under the status while it arrives.
+  if (scenario === "required-reasoning" || scenario === "waiting-message") {
     task.title = "Cinema landing page";
     task.messages = [
       {
@@ -266,7 +270,19 @@ export function createDemoWorkspaceState(
     task.actions = [];
     task.plan = [];
     task.reasoning = { enabled: true, effort: "high" };
-    task.phase = { kind: "working", steps: [] };
+    task.phase = { kind: "working", steps: [], note: "Thinking" };
+  }
+  // What the person added while the model reasons: in the conversation at
+  // once, waiting for the next step, the last of them long enough to wrap.
+  if (scenario === "waiting-message") {
+    task.guidance = [
+      { id: "cinema-added-1", text: "Use the dark theme.", status: "pending" },
+      {
+        id: "cinema-added-2",
+        text: "And put the opening times above the film list, not below it: people look for those first, then choose a film.",
+        status: "pending",
+      },
+    ];
   }
   if (scenario === "quiz") {
     task.title = "Institutions de la Ve République";
@@ -338,6 +354,33 @@ export function createDemoWorkspaceState(
               "L’article 49 compte uniquement les votes favorables et exige la majorité des membres composant l’Assemblée.",
           },
         ],
+      },
+    };
+  }
+  // A folder's instructions long enough to scroll, asked before the first
+  // answer: the question shares the window with the composer under it.
+  if (scenario === "folder-instructions") {
+    task.messages = task.messages.slice(0, 1);
+    task.actions = [];
+    task.plan = [];
+    task.phase = {
+      kind: "input",
+      steps: [],
+      prompt: {
+        id: "folder-instructions-preview",
+        kind: "folderInstructions",
+        title: "Use these folder instructions?",
+        path: "AGENTS.md",
+        text: [
+          "# Quarterly reports",
+          "",
+          ...Array.from(
+            { length: 40 },
+            (_, line) =>
+              `${line + 1}. Figures come from the shared sheet; never round a percentage past one decimal.`,
+          ),
+        ].join("\n"),
+        truncated: false,
       },
     };
   }

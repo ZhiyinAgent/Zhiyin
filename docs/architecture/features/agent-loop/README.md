@@ -50,11 +50,18 @@ permission or execution.
 
 `AgentLoop` is built from `AgentLoopDependencies`. The core's workspace calls:
 
-- `start(taskId, text, reasoning?, attachments?, delivery?)` opens a turn with
-  the person's message. While a turn already runs, the message is saved and
-  delivered at that turn's next round boundary as a `guidance` notice; one that
-  misses the turn comes back as a draft and starts nothing on its own.
+- `send(taskId, text, reasoning?, attachments?, delivery?)` takes the person's
+  message and is settled once it is in the conversation. It opens a turn, which
+  then runs on. While a turn already runs, the message is saved and delivered
+  at that turn's next round boundary as a `guidance` notice; one that misses
+  the turn comes back as a draft and starts nothing on its own. `start` does
+  the same and waits for the turn it opened to end.
 - `cancel(taskId)` stops the conversation's turn and its specialists.
+- `answerNow(taskId)` asks for the answer while the turn's request has only
+  reasoned so far, and says whether there was such a request to stop.
+- `sendNow(taskId)` has the messages waiting for the turn's next step sent
+  now, and says whether a request was stopped for them. `takeBack(taskId,
+  messageId)` gives one of them back to the person, unread.
 - `condenseNow(taskId)` condenses because the person asked: at once between
   turns, where a message sent meanwhile waits for it, or before the running
   turn's next model request.
@@ -77,7 +84,8 @@ The dependencies are the feature interfaces above, `model`, `guidanceModel`
 model, ADR 0010), optional work limits, picture fitting, id factories, a clock
 and the `TurnHost`. The host is the app around the turn: it finds and stores
 conversations, each store checked against the writing turn, reports and lowers
-the model's window, supplies the default budget and standing instructions,
+the model's window, says whether the chosen model can answer without
+reasoning, supplies the default budget and standing instructions,
 records usage and emits events. It also hears which files an action wrote and
 shows or closes the document beside the conversation for the main agent
 (ADR 0018); the model is told what the person now sees and, after a successful
@@ -165,6 +173,13 @@ out still runs, and is named in the background.
   report is, keeps its own words.
 - Every request records its usage against its conversation, with its purpose:
   the turn, a condensing, a specialist, or background naming and repair.
+- A turn's or a specialist's request that ends before the provider counts it
+  (stopped by the person or by the loop, or failed partway) is recorded once
+  any of its answer has arrived, as the loop's estimate: the tokens it sent
+  and received, priced by the model client. What the conversation's last
+  counted request sent is taken as read from the cache when that request was
+  counted within the last five minutes. Its cost counts toward the checkpoint.
+  A request nothing came back from is not recorded.
 - Every quiet correction and repair is written to the audit log. If that write
   fails, the turn goes on and the failure appears as a workspace issue.
 
@@ -264,6 +279,34 @@ out still runs, and is named in the background.
   the turn is waiting for the model, and the note goes as soon as anything
   arrives. The wait before a repeated request is counted down instead, and
   silence is counted from when the repeat is sent.
+- While the model reasons and has said and called nothing yet, the
+  conversation says it is thinking. A request that reasons past about 50,000
+  tokens that way, at any reasoning effort, is stopped and asked once, in a
+  `thinking` notice, to act on what it knows: call a tool, answer, or ask one
+  question. What it reasoned leaves no empty answer behind, and a message the
+  person added meanwhile goes with the new request. Stopped twice in a row,
+  the turn ends and says why. Reasoning that continues once an answer or a
+  call has begun is never cut. A specialist's own rounds are not held to this
+  limit.
+- A person can ask for the answer while the turn's request has only reasoned.
+  That request is stopped, what it reasoned leaves no empty answer behind, and
+  the model is asked again with an `answerNow` notice telling it to answer
+  from what it knows or take the next step directly. Where the chosen model
+  can answer without reasoning, that request and the rest of the turn go
+  without it; where it cannot, they keep the conversation's setting. The next
+  turn has the conversation's setting again. Once an answer or a call has
+  begun, or when no request is reasoning, asking changes nothing and says so.
+  A person's Stop meanwhile ends the turn as it always does.
+- A message added while a turn works waits for the turn's next request, and
+  the model's reasoning is left to go on. The person can have it sent now:
+  where a message waits and the turn's request has only reasoned, that request
+  is stopped, what it reasoned leaves no empty answer behind, and the turn asks
+  again with every waiting message, its reasoning setting unchanged. Once an
+  answer or a call has begun, or when nothing waits, sending now changes
+  nothing and says so, and the message is read at the next step.
+- A waiting message the person takes back becomes a draft and the model never
+  reads it. One the model was already sent stays a message of the
+  conversation.
 - When the connection drops after tools have completed and the client's retries
   are spent, the turn resumes once from the recorded results. Completed tools
   are not run again.

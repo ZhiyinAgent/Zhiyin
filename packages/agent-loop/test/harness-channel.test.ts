@@ -63,6 +63,8 @@ describe("a notice from Zhiyin", () => {
       "instructions",
       "guidance",
       "recovery",
+      "thinking",
+      "answerNow",
       "job",
       "undo",
     ]);

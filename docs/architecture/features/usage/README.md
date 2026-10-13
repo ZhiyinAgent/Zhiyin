@@ -22,7 +22,9 @@ because request accounting has its own retention and failure behavior.
   reasoning tokens when the provider reports them), the provider-reported or
   estimated cost if any, the upstream that served it, the conversation and
   purpose it was made for (`turn`, `condensing`, `specialist` or
-  `background`), and when it was recorded.
+  `background`), and when it was recorded. The counts are the
+  provider's, or the agent loop's own for a request the provider never
+  counted, whose id says so.
 - `state(now)` returns seven- and thirty-day summaries by UTC day, or an
   `unavailable` state with a reason before the first request.
 

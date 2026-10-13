@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   ConversationTimeline,
@@ -103,7 +103,12 @@ describe("ConversationTimeline", () => {
     }
   });
 
-  it("keeps reasoning-only continuations out of the conversation while work stays visible", () => {
+  /**
+   * A model that sends its reasoning is read while it reasons: what it is
+   * thinking now sits under the status, so minutes of it are not minutes of
+   * nothing. Reasoning that is over stays out of the conversation.
+   */
+  it("shows what the model is reasoning now under the status, and none of what it reasoned before", () => {
     const { container } = render(
       <ConversationTimeline
         task={{
@@ -133,13 +138,335 @@ describe("ConversationTimeline", () => {
       />,
     );
     expect(screen.queryByText("Search first.")).toBeNull();
-    expect(screen.queryByText("Check another source.")).toBeNull();
-    expect(screen.queryByText("Thought process")).toBeNull();
+    expect(screen.getByRole("group", { name: "Reasoning" })).toHaveTextContent(
+      "Check another source.",
+    );
     expect(
       container.querySelectorAll("[aria-label='Zhiyin response']"),
     ).toHaveLength(1);
     expect(screen.getByRole("status")).toHaveTextContent("Working");
     expect(screen.getByText("actions a1")).toBeVisible();
+  });
+
+  it("draws the end of a long trace, not the whole of it", () => {
+    const early = "The first idea, long since left behind.";
+    const latest = "So the cable leaves from the back.";
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            conversation.messages[0]!,
+            {
+              id: "thinking",
+              role: "assistant",
+              text: "",
+              sequence: 1,
+              reasoning: {
+                text: `${early}\n${"Or perhaps the other way round. ".repeat(600)}\n${latest}`,
+                status: "streaming",
+              },
+            },
+          ],
+          actions: [],
+          views: [],
+          plan: [],
+          phase: { kind: "working", steps: [], note: "Thinking" },
+        }}
+        pieces={pieces}
+      />,
+    );
+
+    const trace = screen.getByRole("group", { name: "Reasoning" });
+    expect(trace).toHaveTextContent(latest);
+    expect(trace).not.toHaveTextContent(early);
+    expect(trace.textContent?.length).toBeLessThan(5_000);
+    expect(trace.textContent?.startsWith("…")).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking");
+  });
+
+  it("takes the trace away once the answer has begun", () => {
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            conversation.messages[0]!,
+            {
+              id: "answering",
+              role: "assistant",
+              text: "The cable leaves from the back.",
+              sequence: 1,
+              reasoning: { text: "Weighing both sides.", status: "complete" },
+            },
+          ],
+          actions: [],
+          views: [],
+          plan: [],
+          phase: { kind: "working", steps: [] },
+        }}
+        pieces={pieces}
+      />,
+    );
+
+    expect(screen.queryByRole("group", { name: "Reasoning" })).toBeNull();
+    expect(screen.queryByText("Weighing both sides.")).toBeNull();
+  });
+
+  /**
+   * While the model only reasons, the person can ask for the answer now. The
+   * offer stands beside the status for as long as the reasoning shows, takes
+   * one press, and stands again when there was nothing left to stop.
+   */
+  it("offers the answer now while the model only reasons, and takes one press", async () => {
+    let settle!: (stopped: boolean) => void;
+    const answerNow = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [
+            conversation.messages[0]!,
+            {
+              id: "thinking",
+              role: "assistant",
+              text: "",
+              sequence: 1,
+              reasoning: { text: "Weighing both sides.", status: "streaming" },
+            },
+          ],
+          actions: [],
+          views: [],
+          phase: { kind: "working", steps: [], note: "Thinking" },
+        }}
+        pieces={{ ...pieces, answerNow }}
+      />,
+    );
+    const offer = screen.getByRole("button", { name: "Answer now" });
+    // Beside the status, in the same response.
+    expect(
+      within(
+        screen.getByRole("status").closest("article") as HTMLElement,
+      ).getByRole("button", { name: "Answer now" }),
+    ).toBe(offer);
+
+    fireEvent.click(offer);
+    fireEvent.click(offer);
+
+    expect(answerNow).toHaveBeenCalledTimes(1);
+    expect(offer).toBeDisabled();
+    // The answer had begun, so nothing was stopped: the offer stands again.
+    await act(async () => settle(false));
+    expect(screen.getByRole("button", { name: "Answer now" })).toBeEnabled();
+  });
+
+  it("offers no answer now once the answer has begun, when the turn is over, or where it cannot be asked for", () => {
+    const reasoning = {
+      id: "thinking",
+      role: "assistant" as const,
+      text: "",
+      sequence: 1,
+      reasoning: { text: "Weighing both sides.", status: "streaming" as const },
+    };
+    const working = { kind: "working" as const, steps: [], note: "Thinking" };
+    const drawn = (
+      task: Partial<TimelineTask<Entry, Entry, Entry>>,
+      answerNow?: () => Promise<boolean>,
+    ) => {
+      const shown = render(
+        <ConversationTimeline
+          task={{ ...conversation, actions: [], views: [], ...task }}
+          pieces={{ ...pieces, ...(answerNow ? { answerNow } : {}) }}
+        />,
+      );
+      const offered = screen.queryByRole("button", { name: "Answer now" });
+      shown.unmount();
+      return offered;
+    };
+    const asked = async () => true;
+
+    expect(
+      drawn(
+        { messages: [conversation.messages[0]!, reasoning], phase: working },
+        asked,
+      ),
+    ).not.toBeNull();
+    expect(
+      drawn({
+        messages: [conversation.messages[0]!, reasoning],
+        phase: working,
+      }),
+    ).toBeNull();
+    expect(
+      drawn(
+        {
+          messages: [
+            conversation.messages[0]!,
+            { ...reasoning, text: "It comes to" },
+          ],
+          phase: { kind: "working", steps: [] },
+        },
+        asked,
+      ),
+    ).toBeNull();
+    expect(
+      drawn(
+        {
+          messages: [conversation.messages[0]!, reasoning],
+          phase: { kind: "interrupted" },
+        },
+        asked,
+      ),
+    ).toBeNull();
+  });
+
+  /**
+   * A message added while a turn works is in the conversation at once, at
+   * its end, said to be waiting: the person sees it was taken. Under it they
+   * can take it back, and, while the model only reasons, have it sent now.
+   */
+  describe("a message that waits for the turn's next step", () => {
+    const reasoning = {
+      id: "thinking",
+      role: "assistant" as const,
+      text: "",
+      sequence: 1,
+      reasoning: { text: "Weighing both sides.", status: "streaming" as const },
+    };
+    const waitingTask = (
+      over: Partial<TimelineTask<Entry, Entry, Entry>> = {},
+    ): TimelineTask<Entry, Entry, Entry> => ({
+      ...conversation,
+      messages: [conversation.messages[0]!, reasoning],
+      actions: [],
+      views: [],
+      phase: { kind: "working", steps: [], note: "Thinking" },
+      guidance: [
+        { id: "g1", text: "Use the 2024 figures", status: "pending" },
+        { id: "g2", text: "And keep it to one page", status: "pending" },
+      ],
+      ...over,
+    });
+    const waitingMessages = () =>
+      screen.queryAllByRole("group", { name: "Message waiting to be read" });
+
+    it("is drawn after everything else, as the person wrote it, and says it will be read at the next step", () => {
+      const { container } = render(
+        <ConversationTimeline task={waitingTask()} pieces={pieces} />,
+      );
+
+      const [first, second] = waitingMessages();
+      expect(first).toHaveTextContent("Use the 2024 figures");
+      expect(first).toHaveTextContent("Read at the next step");
+      expect(second).toHaveTextContent("And keep it to one page");
+      // Below what the model is doing now: it was said after that began.
+      const status = screen.getAllByRole("status")[0] as HTMLElement;
+      expect(
+        status.compareDocumentPosition(first as HTMLElement) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(container.lastElementChild).toBe(second);
+    });
+
+    it("is not drawn once it has come back as a draft, or when nothing waits", () => {
+      render(
+        <ConversationTimeline
+          task={waitingTask({
+            guidance: [
+              { id: "g1", text: "Use the 2024 figures", status: "draft" },
+            ],
+          })}
+          pieces={pieces}
+        />,
+      );
+
+      expect(waitingMessages()).toHaveLength(0);
+      expect(screen.queryByText("Use the 2024 figures")).toBeNull();
+    });
+
+    it("can be taken back, each on its own", async () => {
+      const takeBack = vi.fn(async () => {});
+      render(
+        <ConversationTimeline
+          task={waitingTask()}
+          pieces={{ ...pieces, waitingMessage: { takeBack } }}
+        />,
+      );
+
+      fireEvent.click(
+        within(waitingMessages()[1] as HTMLElement).getByRole("button", {
+          name: "Take back",
+        }),
+      );
+
+      expect(takeBack).toHaveBeenCalledExactlyOnceWith("g2");
+      await act(async () => {});
+    });
+
+    it("can be sent now while the model only reasons, from under the last one, in one press", async () => {
+      let settle!: (stopped: boolean) => void;
+      const sendNow = vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            settle = resolve;
+          }),
+      );
+      render(
+        <ConversationTimeline
+          task={waitingTask()}
+          pieces={{
+            ...pieces,
+            waitingMessage: { takeBack: async () => {}, sendNow },
+          }}
+        />,
+      );
+      const [first, last] = waitingMessages() as HTMLElement[];
+      expect(
+        within(first as HTMLElement).queryByRole("button", {
+          name: "Send now",
+        }),
+      ).toBeNull();
+      const offer = within(last as HTMLElement).getByRole("button", {
+        name: "Send now",
+      });
+
+      fireEvent.click(offer);
+      fireEvent.click(offer);
+
+      expect(sendNow).toHaveBeenCalledTimes(1);
+      expect(offer).toBeDisabled();
+      // The model was past reasoning: nothing was stopped, and it waits on.
+      await act(async () => settle(false));
+      expect(offer).toBeEnabled();
+    });
+
+    it("is not offered to be sent now while the model works on something else", () => {
+      render(
+        <ConversationTimeline
+          task={waitingTask({
+            messages: [conversation.messages[0]!],
+            phase: { kind: "working", steps: [], note: "Composing a request" },
+          })}
+          pieces={{
+            ...pieces,
+            waitingMessage: {
+              takeBack: async () => {},
+              sendNow: async () => true,
+            },
+          }}
+        />,
+      );
+
+      expect(screen.queryByRole("button", { name: "Send now" })).toBeNull();
+      expect(screen.getAllByRole("button", { name: "Take back" })).toHaveLength(
+        2,
+      );
+    });
   });
 
   it("shows the interrupted outcome without a raw reasoning row", () => {
@@ -234,6 +561,42 @@ describe("ConversationTimeline", () => {
     expect(
       screen.getByText("Composing a request: Render diagram"),
     ).toBeTruthy();
+  });
+
+  /**
+   * A model can reason for minutes before its first words. What the turn is
+   * doing is then said the way "Working" is, with the time beside it, in a
+   * conversation's first round as in any later one.
+   */
+  it("says a turn is thinking as its status, in the first round and after", () => {
+    const thinking: TimelineTask<Entry, Entry, Entry>["phase"] = {
+      kind: "working",
+      steps: [],
+      note: "Thinking",
+    };
+    const first = render(
+      <ConversationTimeline
+        task={{
+          ...conversation,
+          messages: [conversation.messages[0]!],
+          actions: [],
+          views: [],
+          plan: [],
+          phase: thinking,
+        }}
+        pieces={pieces}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking");
+    first.unmount();
+
+    render(
+      <ConversationTimeline
+        task={{ ...conversation, plan: [], phase: thinking }}
+        pieces={pieces}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Thinking");
   });
 
   it("ends each turn with its own closing piece, before the next message, saying which turn is still working", () => {

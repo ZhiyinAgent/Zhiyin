@@ -21,8 +21,8 @@ const listed = (model: string, providers: string[] = []): ProviderSettings => ({
   credential: { status: "configured", source: "credentialStore" },
 });
 
-async function chosenSettings() {
-  let chosen = listed("small-model");
+async function chosenSettings(stated: Partial<ProviderSettings> = {}) {
+  let chosen = { ...listed("small-model"), ...stated };
   const events: AppEvent[] = [];
   const model = {
     settings: async () => chosen,
@@ -57,6 +57,35 @@ async function chosenSettings() {
   await settings.refresh();
   return { settings, events };
 }
+
+/**
+ * A turn may turn the model's reasoning off partway only where the chosen
+ * model is known to answer without it.
+ */
+describe("whether a turn may go on without the model's reasoning", () => {
+  const optional = {
+    status: "available",
+    required: false,
+    defaultEnabled: true,
+    efforts: ["high"],
+  } as const;
+  const drops = async (stated: Partial<ProviderSettings>) =>
+    (await chosenSettings(stated)).settings.forTurns().reasoningOptional();
+
+  it("is yes where the model lists reasoning as optional", async () => {
+    expect(await drops({ reasoning: optional })).toBe(true);
+  });
+
+  it("is no where the model requires reasoning, or its controls are unknown", async () => {
+    expect(await drops({ reasoning: { ...optional, required: true } })).toBe(
+      false,
+    );
+    expect(
+      await drops({ reasoning: { status: "unavailable", reason: "Unknown." } }),
+    ).toBe(false);
+    expect(await drops({})).toBe(false);
+  });
+});
 
 describe("the window planned with after a refusal as too long", () => {
   it("is lowered for the model and upstreams it was refused on, and says what was refused", async () => {

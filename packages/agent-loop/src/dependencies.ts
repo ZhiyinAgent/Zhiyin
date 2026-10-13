@@ -48,6 +48,12 @@ export interface AgentLoopDependencies {
    */
   readonly quietAfterMs?: number;
   /**
+   * How much one request may reason before it has answered or called
+   * anything, in tokens as the loop estimates them. Defaults to the loop's own
+   * value.
+   */
+  readonly longestThoughtTokens?: number;
+  /**
    * Keeps an error of Zhiyin's own that ended a turn, where it can be read
    * afterwards. The conversation says only that there was one.
    */
@@ -77,6 +83,8 @@ export interface TurnHost {
   historyAvailable(): boolean;
   capabilitiesAvailable(): boolean;
   acceptsImages(): boolean;
+  /** Whether the chosen model can be asked to answer without reasoning. */
+  reasoningOptional(): boolean;
   /** The model the next request goes to, and what it lists of its size. */
   modelWindow(): ModelWindow & { readonly model: string };
   /**

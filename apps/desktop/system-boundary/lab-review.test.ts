@@ -726,6 +726,355 @@ describe.runIf(availability.available)(
     }, 300_000);
 
     /**
+     * A folder's instructions can be answered in whatever height the window
+     * has. The question sits above the composer and is given what room is
+     * left, so the file's text is what scrolls; an answer cut off by the dock
+     * could not be given at all.
+     */
+    it("keeps both answers to a folder's instructions in reach, however long the file", async () => {
+      const target = await launcher.launch(desktop);
+      try {
+        const page = (target.automation() as BrowserContext).pages()[0];
+        if (!page) throw new Error("No browser page");
+
+        // The window as it opens, a short one, and the smallest supported.
+        for (const size of [desktop, { width: 1100, height: 600 }, minimum]) {
+          await page.setViewportSize(size);
+          await target.goto(
+            `${served.url}zhiyin-demo.html?scenario=folder-instructions`,
+          );
+          const question = page.locator(
+            'section[aria-label="Folder instructions"]',
+          );
+          await question.waitFor({ state: "visible", timeout: 60_000 });
+
+          // An answer is in reach when it is what a click at its middle
+          // lands on: one cut off by the dock, or under the composer, is not.
+          const outOfReach: string[] = [];
+          for (const name of ["Ignore them", "Use them"]) {
+            const reachable = await question
+              .getByRole("button", { name, exact: true })
+              .evaluate((node) => {
+                const box = node.getBoundingClientRect();
+                const top = document.elementFromPoint(
+                  box.x + box.width / 2,
+                  box.y + box.height / 2,
+                );
+                return (
+                  box.height > 0 &&
+                  box.bottom <= window.innerHeight &&
+                  top !== null &&
+                  node.contains(top)
+                );
+              });
+            if (!reachable) outOfReach.push(name);
+          }
+          // The file's text is what gives way: it scrolls inside the question.
+          const text = await question.evaluate((node) => {
+            const scroller = [...node.querySelectorAll("*")].find((child) => {
+              const overflowY = getComputedStyle(child).overflowY;
+              return (
+                (overflowY === "auto" || overflowY === "scroll") &&
+                child.scrollHeight > child.clientHeight + 4
+              );
+            });
+            return {
+              shown: Math.round(scroller?.clientHeight ?? 0),
+              scrolls: scroller !== undefined,
+            };
+          });
+
+          expect({ size, outOfReach, scrolls: text.scrolls }).toEqual({
+            size,
+            outOfReach: [],
+            scrolls: true,
+          });
+          // Enough of the file stays in view to read it by scrolling.
+          expect(text.shown).toBeGreaterThanOrEqual(60);
+          expect(await escapingHorizontally(page)).toEqual([]);
+        }
+      } finally {
+        await target.close();
+      }
+    }, 300_000);
+
+    /**
+     * What a model is reasoning is read as a few lines that follow its newest
+     * words. However long the reasoning, it takes seven lines and no more, the
+     * status keeps its place beside the mark, and nothing leaves the window.
+     */
+    it("keeps what the model is reasoning to a few lines that follow its end", async () => {
+      const target = await launcher.launch(desktop);
+      try {
+        const page = (target.automation() as BrowserContext).pages()[0];
+        if (!page) throw new Error("No browser page");
+
+        for (const size of [desktop, minimum]) {
+          await page.setViewportSize(size);
+          await target.goto(
+            `${served.url}zhiyin-demo.html?scenario=required-reasoning`,
+          );
+          const trace = page.locator('[role="group"][aria-label="Reasoning"]');
+          await trace.waitFor({ state: "visible", timeout: 60_000 });
+
+          const measured = await trace.evaluate((node) => {
+            const style = getComputedStyle(node);
+            const line = Number.parseFloat(style.lineHeight);
+            const box = node.getBoundingClientRect();
+            const turn = node.closest("article");
+            const mark = turn?.firstElementChild?.getBoundingClientRect();
+            const status = turn
+              ?.querySelector('[role="status"]')
+              ?.getBoundingClientRect();
+            return {
+              lines: Math.round((node.clientHeight / line) * 10) / 10,
+              more: node.scrollHeight > node.clientHeight + 1,
+              atItsEnd:
+                node.scrollTop + node.clientHeight >= node.scrollHeight - 1,
+              inside:
+                box.left >= 0 &&
+                box.right <= window.innerWidth &&
+                box.bottom <= window.innerHeight,
+              // The status line and the mark share a centre line.
+              offCentre:
+                mark && status
+                  ? Math.abs(
+                      mark.top +
+                        mark.height / 2 -
+                        (status.top + status.height / 2),
+                    )
+                  : Number.NaN,
+              underStatus: status ? box.top >= status.bottom - 1 : false,
+            };
+          });
+
+          expect({ size, ...measured, offCentre: undefined }).toEqual({
+            size,
+            lines: 7,
+            more: true,
+            atItsEnd: true,
+            inside: true,
+            offCentre: undefined,
+            underStatus: true,
+          });
+          expect(measured.offCentre).toBeLessThanOrEqual(1.5);
+          expect(await escapingHorizontally(page)).toEqual([]);
+        }
+      } finally {
+        await target.close();
+      }
+    }, 300_000);
+
+    /**
+     * The offer to have the answer now stands on the status's own line, clear
+     * of it and above what the model is reasoning, at the smallest window as
+     * at an ordinary one. It is reached and pressed from the keyboard, and
+     * once pressed the reasoning is gone and the status says what happens.
+     */
+    it("offers the answer now on the thinking status's line, and takes the reasoning away when pressed", async () => {
+      const target = await launcher.launch(desktop);
+      try {
+        const page = (target.automation() as BrowserContext).pages()[0];
+        if (!page) throw new Error("No browser page");
+
+        for (const size of [desktop, minimum]) {
+          await page.setViewportSize(size);
+          await target.goto(
+            `${served.url}zhiyin-demo.html?scenario=required-reasoning`,
+          );
+          const offer = page.getByRole("button", { name: "Answer now" });
+          await offer.waitFor({ state: "visible", timeout: 60_000 });
+
+          const measured = await offer.evaluate((node) => {
+            const box = node.getBoundingClientRect();
+            const turn = node.closest("article");
+            const status = turn
+              ?.querySelector('[role="status"]')
+              ?.getBoundingClientRect();
+            const trace = turn
+              ?.querySelector('[role="group"][aria-label="Reasoning"]')
+              ?.getBoundingClientRect();
+            return {
+              inside: box.left >= 0 && box.right <= window.innerWidth,
+              onOneLine: node.scrollWidth <= node.clientWidth,
+              // Far enough from the status to read as its own thing.
+              clearOfStatus: status ? box.left - status.right >= 8 : false,
+              aboveReasoning: trace ? box.bottom <= trace.top + 1 : false,
+              offCentre: status
+                ? Math.abs(
+                    box.top + box.height / 2 - (status.top + status.height / 2),
+                  )
+                : Number.NaN,
+              tallEnough: box.height >= 22,
+            };
+          });
+          expect({ size, ...measured, offCentre: undefined }).toEqual({
+            size,
+            inside: true,
+            onOneLine: true,
+            clearOfStatus: true,
+            aboveReasoning: true,
+            offCentre: undefined,
+            tallEnough: true,
+          });
+          expect(measured.offCentre).toBeLessThanOrEqual(1.5);
+          expect(await escapingHorizontally(page)).toEqual([]);
+
+          await offer.focus();
+          await page.keyboard.press("Enter");
+
+          await page
+            .locator('[role="group"][aria-label="Reasoning"]')
+            .waitFor({ state: "detached", timeout: 10_000 });
+          await expect
+            .poll(() => page.getByRole("status").first().textContent())
+            .toContain("Answering now");
+          expect(
+            await page.getByRole("button", { name: "Answer now" }).count(),
+          ).toBe(0);
+        }
+      } finally {
+        await target.close();
+      }
+    }, 300_000);
+
+    /**
+     * A message that waits for the turn's next step sits where the person's
+     * messages sit, in outline, with what can be done about it under its own
+     * right edge: the note and its offers on one centre line, inside the
+     * window at its smallest. Taken back, it is in the message box again;
+     * sent now, it is an ordinary message and the reasoning is gone.
+     */
+    it("shows a waiting message under the person's own edge, and takes it back or sends it now from the keyboard", async () => {
+      const target = await launcher.launch(desktop);
+      try {
+        const page = (target.automation() as BrowserContext).pages()[0];
+        if (!page) throw new Error("No browser page");
+        const waiting = page.locator(
+          '[role="group"][aria-label="Message waiting to be read"]',
+        );
+
+        for (const size of [desktop, minimum]) {
+          await page.setViewportSize(size);
+          await target.goto(
+            `${served.url}zhiyin-demo.html?scenario=waiting-message`,
+          );
+          await waiting.first().waitFor({ state: "visible", timeout: 60_000 });
+          await waiting.last().scrollIntoViewIfNeeded();
+
+          const measured = await waiting.evaluateAll((groups) => {
+            const sent = document.querySelector(
+              '[role="log"] [class*="user-turn"]:not([class*="waiting"])',
+            );
+            const edge = sent?.getBoundingClientRect().right ?? Number.NaN;
+            return groups.map((group) => {
+              const bubble = group.firstElementChild as HTMLElement;
+              const row = group.lastElementChild as HTMLElement;
+              const box = bubble.getBoundingClientRect();
+              const parts = [...row.children].map((part) =>
+                part.getBoundingClientRect(),
+              );
+              const centres = parts.map((part) => part.top + part.height / 2);
+              const style = getComputedStyle(bubble);
+              return {
+                outlined:
+                  style.borderTopStyle === "dashed" &&
+                  style.backgroundColor === "rgba(0, 0, 0, 0)",
+                // Where an ordinary message of the person's ends.
+                offEdge: Math.abs(box.right - edge),
+                rowOffEdge: Math.abs((parts.at(-1)?.right ?? 0) - box.right),
+                rowUnder: (parts[0]?.top ?? 0) >= box.bottom,
+                rowGap: Math.round(
+                  row.getBoundingClientRect().top - box.bottom,
+                ),
+                oneLine: Math.max(...centres) - Math.min(...centres) <= 1.5,
+                apart: parts
+                  .slice(1)
+                  .every((part, index) => part.left - parts[index]!.right >= 6),
+                inside: parts.every(
+                  (part) => part.left >= 0 && part.right <= window.innerWidth,
+                ),
+                offers: [...row.querySelectorAll("button")].map(
+                  (button) =>
+                    `${button.textContent} ${button.getBoundingClientRect().height >= 22}`,
+                ),
+              };
+            });
+          });
+          const drawn = {
+            outlined: true,
+            rowUnder: true,
+            oneLine: true,
+            apart: true,
+            inside: true,
+          };
+          expect(
+            measured.map((each) => ({
+              ...each,
+              offEdge: each.offEdge <= 1,
+              rowOffEdge: each.rowOffEdge <= 1,
+              rowGap: each.rowGap >= 4 && each.rowGap <= 10,
+            })),
+          ).toEqual([
+            {
+              ...drawn,
+              offEdge: true,
+              rowOffEdge: true,
+              rowGap: true,
+              offers: ["Take back true"],
+            },
+            {
+              ...drawn,
+              offEdge: true,
+              rowOffEdge: true,
+              rowGap: true,
+              offers: ["Send now true", "Take back true"],
+            },
+          ]);
+          expect(await escapingHorizontally(page)).toEqual([]);
+
+          // Taken back from the keyboard: gone from the conversation, and in
+          // the message box.
+          await waiting
+            .first()
+            .getByRole("button", { name: "Take back" })
+            .focus();
+          await page.keyboard.press("Enter");
+          await expect.poll(() => waiting.count()).toBe(1);
+          await expect
+            .poll(() =>
+              page
+                .getByRole("textbox", { name: "Message Zhiyin" })
+                .inputValue(),
+            )
+            .toBe("Use the dark theme.");
+
+          // Sent now: an ordinary message, and no reasoning left under the
+          // status.
+          await waiting.getByRole("button", { name: "Send now" }).focus();
+          await page.keyboard.press("Enter");
+          await expect.poll(() => waiting.count()).toBe(0);
+          await page
+            .locator('[role="group"][aria-label="Reasoning"]')
+            .waitFor({ state: "detached", timeout: 10_000 });
+          await expect
+            .poll(() => page.getByRole("status").first().textContent())
+            .toContain("Reading your message");
+          expect(
+            await page
+              .locator('[role="log"]')
+              .getByText("And put the opening times above the film list", {
+                exact: false,
+              })
+              .count(),
+          ).toBe(1);
+        }
+      } finally {
+        await target.close();
+      }
+    }, 300_000);
+
+    /**
      * The browser panel in each of the states it can actually be in.
      *
      * An open panel shows a picture of the page, in the proportions the frame

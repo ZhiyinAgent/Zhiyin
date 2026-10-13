@@ -179,7 +179,17 @@ describe("the installed app and its data", () => {
     const dataDirectory = await temporaryDataDirectory();
     const launched = await launch({ dataDirectory });
     const lock = join(dataDirectory, "owner.lock");
-    await expect(access(lock)).resolves.toBeUndefined();
+    // Claimed as the app starts, which its window does not wait for.
+    await expect
+      .poll(
+        () =>
+          access(lock).then(
+            () => true,
+            () => false,
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     await launched.close();
 

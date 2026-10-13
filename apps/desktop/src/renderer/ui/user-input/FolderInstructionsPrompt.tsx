@@ -44,14 +44,16 @@ export function FolderInstructionsPrompt({
           <h3>{prompt.title}</h3>
         </div>
       </header>
-      <p className={styles["folder-instructions__message"]}>
-        This folder has instructions for the assistant in{" "}
-        <code>{prompt.path}</code>. They guide style and approach, and never
-        grant permission: every action is still checked as usual.
-        {prompt.truncated &&
-          " It is shortened: only the first 16 KB, shown here, would be used."}
-      </p>
-      <pre className={styles["folder-instructions__text"]}>{prompt.text}</pre>
+      <div className={styles["folder-instructions__body"]}>
+        <p className={styles["folder-instructions__message"]}>
+          This folder has instructions for the assistant in{" "}
+          <code>{prompt.path}</code>. They guide style and approach, and never
+          grant permission: every action is still checked as usual.
+          {prompt.truncated &&
+            " It is shortened: only the first 16 KB, shown here, would be used."}
+        </p>
+        <pre className={styles["folder-instructions__text"]}>{prompt.text}</pre>
+      </div>
       {error && (
         <p className={styles["user-input__error"]} role="alert">
           {error}

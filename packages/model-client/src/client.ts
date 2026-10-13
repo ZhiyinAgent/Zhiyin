@@ -10,6 +10,7 @@ import type {
   ModelProviderList,
   ProviderSettings,
 } from "@zhiyin/contract";
+import { randomUUID } from "node:crypto";
 import { estimateCost } from "./estimated-cost.js";
 import { ModelClientError } from "./failures.js";
 import type {
@@ -19,6 +20,8 @@ import type {
   ModelFetchResponse,
   ModelMessage,
   ModelRequest,
+  ModelUsage,
+  UncountedUsage,
 } from "./model-client.js";
 import { platformOf, refuseUnavailable, type Provider } from "./provider.js";
 import {
@@ -185,6 +188,27 @@ export class ProviderModelClient implements ModelClient {
         ? { ...event, usage: { ...event.usage, estimatedCost: estimated } }
         : event;
     }
+  }
+
+  async uncounted(counted: UncountedUsage): Promise<ModelUsage | undefined> {
+    const chosen = await this.#account.current();
+    if (!chosen) return undefined;
+    const { cacheReadTokens, ...uncached } = counted;
+    const usage = {
+      // No provider named it, and two of them must not be taken for one.
+      requestId: `uncounted-${randomUUID()}`,
+      model: chosen.model,
+      ...uncached,
+      totalTokens: counted.inputTokens + counted.outputTokens,
+    };
+    const price = this.#provider.price?.(chosen.model, this.#region);
+    if (!price) return usage;
+    const read = { ...usage, ...(cacheReadTokens ? { cacheReadTokens } : {}) };
+    const withRead = estimateCost(price, read, this.#now());
+    if (withRead) return { ...read, estimatedCost: withRead };
+    // A list with no price for a cache read: the input is counted as new.
+    const whole = estimateCost(price, usage, this.#now());
+    return whole ? { ...usage, estimatedCost: whole } : usage;
   }
 
   settings(): Promise<ProviderSettings> {

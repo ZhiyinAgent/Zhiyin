@@ -62,6 +62,7 @@ export class TestHost implements TurnHost {
   history = true;
   capabilities = true;
   images = false;
+  reasoningOff = false;
   /**
    * Commit a write only after a save that takes a moment, as the core does.
    * Off, a write lands at once, and two writers can never overlap.
@@ -211,6 +212,10 @@ export class TestHost implements TurnHost {
     return this.images;
   }
 
+  reasoningOptional(): boolean {
+    return this.reasoningOff;
+  }
+
   /** The model's size as the app reads it from the catalogue; unknown here. */
   window: ModelWindow & {
     readonly model: string;
@@ -324,6 +329,8 @@ export type LoopTestDependencies = Omit<
      * In production the core answers this from the provider's settings.
      */
     readonly acceptsImages?: boolean;
+    /** Whether the model can be asked to answer without reasoning. */
+    readonly reasoningOptional?: boolean;
     /** The model's size as the catalogue lists it; unknown when absent. */
     readonly modelWindow?: ModelWindow & { readonly model: string };
     readonly defaultContextBudget?: ContextBudgetChoice;
@@ -417,6 +424,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     emit,
     newTaskId,
     acceptsImages,
+    reasoningOptional,
     modelWindow,
     defaultContextBudget,
     savesSlowly,
@@ -424,6 +432,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
   host.images = acceptsImages === true;
+  host.reasoningOff = reasoningOptional === true;
   if (modelWindow) host.window = modelWindow;
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   host.savesSlowly = savesSlowly === true;

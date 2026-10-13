@@ -10,12 +10,14 @@
  * withdrawn, and the working note says the answer is starting again.
  */
 
-import type {
-  ModelReplay,
-  ModelResponseRecord,
-  ModelResponseUsage,
-  ModelRetryRecord,
-  ToolSpec,
+import {
+  estimatedTokens,
+  utf8Bytes,
+  type ModelReplay,
+  type ModelResponseRecord,
+  type ModelResponseUsage,
+  type ModelRetryRecord,
+  type ToolSpec,
 } from "@zhiyin/contract";
 import type {
   ModelEvent,
@@ -51,6 +53,51 @@ const quietAfterMs = 15_000;
 
 /** Shown while nothing arrives: the turn is alive and it is the model's move. */
 const waitingForModel = "Waiting for the model";
+
+/** Shown while the model reasons and has said and called nothing yet. */
+const thinkingNote = "Thinking";
+
+/**
+ * How much one request may reason before it has answered or called anything,
+ * in tokens as the loop estimates them: three bytes each, which is within two
+ * in a hundred of what Xiaomi MiMo counted for its own reasoning. Several
+ * times what a hard step takes a model that then acts, and well short of a
+ * request that reasons for half an hour and answers nothing. The same at every
+ * reasoning effort: it is already above the reasoning a provider allows one
+ * request at its highest.
+ */
+const longestThoughtTokens = 50_000;
+
+/**
+ * How long after a request the next one is taken to read it from the
+ * provider's cache: the shortest any provider here keeps what it cached.
+ */
+const cacheLifeMs = 5 * 60_000;
+
+/** A request stopped because it reasoned at length without answering or acting. */
+export class ThoughtTooLong extends Error {
+  constructor() {
+    super("The model reasoned at length without answering or acting.");
+  }
+}
+
+/** A request stopped because the person asked for the answer now. */
+export class AnswerNow extends Error {
+  constructor() {
+    super("The person asked for the answer now.");
+  }
+}
+
+/** A request stopped because the person had what they added sent now. */
+export class SentNow extends Error {
+  constructor() {
+    super("The person had what they added sent now.");
+  }
+}
+
+/** Whether a request ended because the person stopped its reasoning. */
+const stoppedByPerson = (reason: unknown): reason is AnswerNow | SentNow =>
+  reason instanceof AnswerNow || reason instanceof SentNow;
 
 export type RoundRequest = {
   readonly messages: readonly ModelMessage[];
@@ -100,6 +147,8 @@ class Attempt {
   readonly calls = new Map<number, AssembledToolCall>();
   text = "";
   reasoning = "";
+  /** The reasoning's size, counted as it arrives. */
+  reasoningBytes = 0;
   finishReason: string | undefined;
   response: ModelResponseRecord | undefined;
   replay: ModelReplay | undefined;
@@ -122,6 +171,13 @@ export class ModelRound {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
   readonly #shown: boolean;
+  /** What each conversation's last counted request sent, and when. */
+  readonly #lastCounted = new Map<
+    string,
+    { readonly inputTokens: number; readonly at: number }
+  >();
+  /** The stop of each conversation's request that has only reasoned so far. */
+  readonly #reasoning = new Map<string, AbortController>();
 
   constructor(
     deps: AgentLoopDependencies,
@@ -131,6 +187,29 @@ export class ModelRound {
     this.#deps = deps;
     this.#records = records;
     this.#shown = audience === "conversation";
+  }
+
+  /**
+   * Stops the conversation's request where it has only reasoned so far, for
+   * the answer to be asked for again. Says whether there was one to stop.
+   */
+  answerNow(taskId: string): boolean {
+    return this.#stopReasoning(taskId, new AnswerNow());
+  }
+
+  /**
+   * Stops the same request, for what the person added to be sent with the
+   * one that follows.
+   */
+  sendNow(taskId: string): boolean {
+    return this.#stopReasoning(taskId, new SentNow());
+  }
+
+  #stopReasoning(taskId: string, why: AnswerNow | SentNow): boolean {
+    const thought = this.#reasoning.get(taskId);
+    if (!thought || thought.signal.aborted) return false;
+    thought.abort(why);
+    return true;
   }
 
   /**
@@ -186,6 +265,13 @@ export class ModelRound {
       );
     let attempt = new Attempt();
     let reveal = holding();
+    /** The thinking note is showing, and goes when the answer or a call begins. */
+    let thinking = false;
+    // The round's own stop, for reasoning that leads nowhere; the turn's
+    // stops it too.
+    const thought = new AbortController();
+    const longestThought =
+      this.#deps.longestThoughtTokens ?? longestThoughtTokens;
     /** The waiting note is showing, and goes when anything arrives. */
     let waiting = false;
     let quiet: ReturnType<typeof setTimeout> | undefined;
@@ -196,6 +282,7 @@ export class ModelRound {
       quiet = setTimeout(() => {
         if (!owns() || controller.signal.aborted) return;
         waiting = true;
+        thinking = false;
         void this.#note(taskId, waitingForModel).catch(() => undefined);
       }, forMs);
     };
@@ -204,7 +291,7 @@ export class ModelRound {
     try {
       for await (const event of this.#deps.model.send({
         ...request,
-        signal: controller.signal,
+        signal: AbortSignal.any([controller.signal, thought.signal]),
         restartable: true,
       })) {
         if (!owns()) break;
@@ -224,7 +311,7 @@ export class ModelRound {
           const shown = reveal.revealed.text.length;
           const recorded = shown + reveal.revealed.reasoning.length;
           await reveal.discard();
-          this.#account(ledger, request, attempt);
+          await this.#account(taskId, ledger, request, attempt);
           withdrawn.push(shown);
           if (recorded && this.#shown)
             await this.#records.withdrawAssistantMessage(taskId, assistantId);
@@ -239,6 +326,8 @@ export class ModelRound {
             },
           );
           noting = true;
+          thinking = false;
+          this.#reasoning.delete(taskId);
           attempt = new Attempt();
           reveal = holding();
           continue;
@@ -252,18 +341,51 @@ export class ModelRound {
           continue;
         }
         await this.#receive(taskId, event, attempt, reveal, ledger);
+        if (!this.#shown) continue;
+        if (event.kind === "textDelta" || event.kind === "toolCallDelta") {
+          // A call's composing note has already taken the thinking note's place.
+          if (thinking && event.kind === "textDelta")
+            await this.#note(taskId, undefined);
+          thinking = false;
+          this.#reasoning.delete(taskId);
+          continue;
+        }
+        if (
+          event.kind !== "reasoningDelta" ||
+          attempt.text ||
+          attempt.calls.size > 0
+        )
+          continue;
+        this.#reasoning.set(taskId, thought);
+        if (!thinking) {
+          thinking = true;
+          await this.#note(taskId, thinkingNote);
+        }
+        if (attempt.reasoningBytes / 3 > longestThought) {
+          thought.abort();
+          throw new ThoughtTooLong();
+        }
       }
+      // A stream that ends quietly once stopped was stopped all the same.
+      if (stoppedByPerson(thought.signal.reason)) throw thought.signal.reason;
     } catch (error) {
       await reveal.flush().catch(() => undefined);
-      this.#account(ledger, request, attempt);
-      throw error;
+      await this.#account(taskId, ledger, request, attempt);
+      // Whatever a stream ends with once the person stopped its reasoning,
+      // that is why it ended; their stopping the turn comes first.
+      const asked = thought.signal.reason;
+      throw stoppedByPerson(asked) && !controller.signal.aborted
+        ? asked
+        : error;
     } finally {
       clearTimeout(quiet);
+      if (this.#reasoning.get(taskId) === thought)
+        this.#reasoning.delete(taskId);
     }
     // A turn that no longer owns the conversation writes nothing more to it.
     if (owns()) await reveal.flush();
     else await reveal.discard();
-    this.#account(ledger, request, attempt);
+    await this.#account(taskId, ledger, request, attempt);
     const response = attempt.response && {
       ...attempt.response,
       ...(attempt.response.retries
@@ -308,6 +430,7 @@ export class ModelRound {
     switch (event.kind) {
       case "reasoningDelta":
         attempt.reasoning += event.text;
+        attempt.reasoningBytes += utf8Bytes(event.text);
         await reveal.add("reasoning", event.text);
         break;
       case "textDelta":
@@ -345,6 +468,10 @@ export class ModelRound {
       case "usage":
         attempt.reportedUsage = true;
         attempt.usage = event.usage;
+        this.#lastCounted.set(taskId, {
+          inputTokens: event.usage.inputTokens,
+          at: this.#deps.now().getTime(),
+        });
         ledger.record(event.usage);
         await this.#deps.host.recordUsage({
           ...event.usage,
@@ -367,21 +494,55 @@ export class ModelRound {
   /**
    * An attempt the provider did not account for is estimated, whether it
    * finished or failed: the provider bills what it read and wrote either way.
+   * Once any of an answer has arrived the request was served, so the estimate
+   * goes in the usage history too, at the price list's prices; a request that
+   * nothing came back from is counted against the work limits alone.
    */
-  #account(ledger: WorkLedger, request: RoundRequest, attempt: Attempt) {
+  async #account(
+    taskId: string,
+    ledger: WorkLedger,
+    request: RoundRequest,
+    attempt: Attempt,
+  ): Promise<void> {
     if (attempt.reportedUsage) return;
-    ledger.estimate(
-      estimatedRequestTokens(
-        [
-          ...request.messages,
-          {
-            role: "assistant",
-            content: `${attempt.reasoning}\n${attempt.text}`,
-          },
-        ],
-        request.tools,
-      ),
-    );
+    const inputTokens = estimatedRequestTokens(request.messages, request.tools);
+    const reasoningTokens = Math.ceil(attempt.reasoningBytes / 3);
+    const outputTokens =
+      reasoningTokens +
+      estimatedTokens(
+        [...attempt.calls.values()].reduce(
+          (written, call) => written + call.name + call.arguments,
+          attempt.text,
+        ),
+      );
+    const usage = attempt.firstTokenAt
+      ? await this.#deps.model
+          .uncounted?.({
+            inputTokens,
+            outputTokens,
+            ...this.#readFromCache(taskId, inputTokens),
+            ...(reasoningTokens ? { reasoningTokens } : {}),
+          })
+          .catch(() => undefined)
+      : undefined;
+    ledger.estimate(inputTokens + outputTokens, usage?.estimatedCost);
+    if (!usage) return;
+    await this.#deps.host.recordUsage({
+      ...usage,
+      conversationId: taskId,
+      purpose: this.#shown ? "turn" : "specialist",
+    });
+  }
+
+  /**
+   * What of a request the provider is taken to have read from its cache: all
+   * that the conversation's last counted request sent, while a cache would
+   * still hold it. A guess, since the provider never said.
+   */
+  #readFromCache(taskId: string, inputTokens: number) {
+    const last = this.#lastCounted.get(taskId);
+    if (!last || this.#deps.now().getTime() - last.at > cacheLifeMs) return {};
+    return { cacheReadTokens: Math.min(last.inputTokens, inputTokens) };
   }
 
   async #note(

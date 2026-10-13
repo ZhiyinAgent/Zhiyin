@@ -147,8 +147,23 @@ export type ModelEvent =
  * `code`. The name and code are the contract, not the class: a caller holding
  * only this interface recognises a failure without importing an implementation.
  */
+/** A request as its caller counted it, where the provider never did. */
+export type UncountedUsage = {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  /** Of the input, what is taken to have been read from the cache. */
+  readonly cacheReadTokens?: number;
+  readonly reasoningTokens?: number;
+};
+
 export interface ModelClient {
   send(request: ModelRequest): AsyncIterable<ModelEvent>;
+  /**
+   * What a request that ended before the provider counted it is taken to
+   * have used: the caller's own count, for the model it went to, at the
+   * price list's prices. Nothing when no model is chosen.
+   */
+  uncounted?(usage: UncountedUsage): Promise<ModelUsage | undefined>;
   settings(): Promise<ProviderSettings>;
   setApiKey(apiKey: string): Promise<void>;
   clearApiKey(): Promise<void>;

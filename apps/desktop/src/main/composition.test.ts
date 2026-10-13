@@ -339,7 +339,20 @@ describe("the application's composition", () => {
     "shows the model a picture it reads only while the chosen model can be shown pictures",
     { timeout: 60_000 },
     async () => {
-      const sent: { readonly kind?: string }[] = [];
+      const sent: {
+        readonly kind?: string;
+        readonly data?: {
+          readonly fields?: { readonly phase?: { readonly kind?: string } };
+        };
+      }[] = [];
+      // A send is answered once its message is in the conversation; the turn
+      // is over when the window is told so.
+      const turnsOver = () =>
+        sent.filter(
+          (event) =>
+            event.kind === "taskUpdated" &&
+            event.data?.fields?.phase?.kind === "completed",
+        ).length;
       const core = buildCore({
         dataDirectory,
         builtInPluginsDirectory: fileURLToPath(
@@ -370,8 +383,10 @@ describe("the application's composition", () => {
           taskId,
           "Look at the folder.",
         ]);
+        await eventually(() => turnsOver() === 1);
         await core.receive(CHANNEL.selectModel, ["z-ai/glm-5.3", []]);
         await core.receive(CHANNEL.sendMessage, [taskId, "Look again."]);
+        await eventually(() => turnsOver() === 2);
       } finally {
         await core.shutdown();
       }

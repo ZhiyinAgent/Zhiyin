@@ -52,6 +52,9 @@ export type DemoAction =
   | { type: "taskCompleted"; taskId: string; outcome: TaskOutcome }
   | { type: "taskFailed"; taskId: string; reason: string }
   | { type: "taskInterrupted"; taskId: string }
+  | { type: "answerAsked"; taskId: string }
+  | { type: "waitingSent"; taskId: string }
+  | { type: "waitingTakenBack"; taskId: string; messageId: string }
   | { type: "pluginToggled"; id: string; enabled: boolean }
   | { type: "componentToggled"; id: string; enabled: boolean }
   | { type: "pluginImported" }
@@ -287,6 +290,64 @@ export function demoReducer(
         tasks: updateTask(state, action.taskId, (task) => ({
           ...task,
           phase: { kind: "failed", reason: action.reason },
+        })),
+      };
+    // The core stops the reasoning request and asks again; here what was
+    // reasoned goes, and the status says what the core's would.
+    case "answerAsked":
+      return {
+        ...state,
+        tasks: updateTask(state, action.taskId, (task) => ({
+          ...task,
+          messages: task.messages.filter(
+            (message) =>
+              message.role !== "assistant" ||
+              message.reasoning?.status !== "streaming",
+          ),
+          phase: { kind: "working", steps: [], note: "Answering now" },
+        })),
+      };
+    // As the core does it: the reasoning goes, and what waited is read.
+    case "waitingSent":
+      return {
+        ...state,
+        tasks: updateTask(state, action.taskId, (task) => {
+          const read = task.messages.filter(
+            (message) =>
+              message.role !== "assistant" ||
+              message.reasoning?.status !== "streaming",
+          );
+          const from =
+            Math.max(-1, ...read.map((message) => message.sequence)) + 1;
+          return {
+            ...task,
+            messages: [
+              ...read,
+              ...task.guidance
+                .filter((item) => item.status === "pending")
+                .map((item, index) => ({
+                  id: item.id,
+                  role: "user" as const,
+                  text: item.text,
+                  sequence: from + index,
+                })),
+            ],
+            guidance: task.guidance.filter((item) => item.status !== "pending"),
+            phase: { kind: "working", steps: [], note: "Reading your message" },
+          };
+        }),
+      };
+    // Back to the message box, which shows a conversation's drafts.
+    case "waitingTakenBack":
+      return {
+        ...state,
+        tasks: updateTask(state, action.taskId, (task) => ({
+          ...task,
+          guidance: task.guidance.map((item) =>
+            item.id === action.messageId
+              ? { ...item, status: "draft" as const }
+              : item,
+          ),
         })),
       };
     case "taskInterrupted":

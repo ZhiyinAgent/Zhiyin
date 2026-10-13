@@ -87,7 +87,9 @@ async function* startedBy(
 
 /**
  * The same bytes, but a gap longer than `stallTimeoutMs` between them ends the
- * stream instead of waiting on it.
+ * stream instead of waiting on it, and a connection that drops while they
+ * arrive ends it as the network failure it is: the caller's own reason when
+ * the caller cancelled, never the platform's words for a closed socket.
  *
  * The underlying iterator is asked to close so the abandoned request releases
  * its socket, but that request is not waited on: an iterator suspended inside
@@ -99,6 +101,8 @@ export async function* withoutStalling(
   stallTimeoutMs: number,
   /** The provider, as the person reads its name. */
   provider: string,
+  /** The caller's cancellation, which is not a connection that failed. */
+  signal?: AbortSignal,
 ): AsyncIterable<Uint8Array> {
   const iterator = body[Symbol.asyncIterator]();
   try {
@@ -110,6 +114,14 @@ export async function* withoutStalling(
       let step: IteratorResult<Uint8Array> | "stalled";
       try {
         step = await Promise.race([iterator.next(), stalled]);
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason;
+        if (error instanceof ModelClientError) throw error;
+        throw new ModelClientError(
+          "networkFailure",
+          `The connection to ${provider} was lost partway through. Try again.`,
+          { cause: error },
+        );
       } finally {
         clearTimeout(timer);
       }

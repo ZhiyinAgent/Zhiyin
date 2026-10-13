@@ -104,12 +104,8 @@ describe.skipIf(!key)("a live reasoning stream in the installed app", () => {
       });
 
       /*
-       * Started, not waited for.
-       *
-       * `sendMessage` resolves when the whole turn is over, so awaiting it
-       * makes this test as long as the turn and measures the wrong thing. What
-       * is being measured is the window while the stream arrives, which is
-       * happening well before the turn ends.
+       * Started, not waited for: what is being measured is the window while
+       * the stream arrives.
        */
       const startedAt = Date.now();
       await window.evaluate(

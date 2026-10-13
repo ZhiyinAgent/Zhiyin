@@ -353,6 +353,8 @@ export function validateCommand(
     case CHANNEL.deleteTask:
     case CHANNEL.dismissIssue:
     case CHANNEL.interruptTask:
+    case CHANNEL.answerNow:
+    case CHANNEL.sendNow:
     case CHANNEL.runningCommands:
     case CHANNEL.readPicture:
     case CHANNEL.componentContent:
@@ -392,6 +394,7 @@ export function validateCommand(
     case CHANNEL.previewRewind:
     case CHANNEL.previewUndo:
     case CHANNEL.commitUndo:
+    case CHANNEL.takeBackMessage:
     case CHANNEL.openDocument:
     case CHANNEL.showDocumentInFolder:
       valid = args.length === 2 && text(args[0]) && text(args[1], 4000);

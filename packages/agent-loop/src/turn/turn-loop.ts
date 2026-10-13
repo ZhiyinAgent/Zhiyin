@@ -27,7 +27,13 @@ import {
 import { toolOutput } from "./notices.js";
 import { deliverBackgroundWork } from "./background-deliveries.js";
 import type { ModelHistory, SentPicture } from "../context/model-history.js";
-import { ModelRound, type RoundResult } from "./model-round.js";
+import {
+  AnswerNow,
+  ModelRound,
+  SentNow,
+  ThoughtTooLong,
+  type RoundResult,
+} from "./model-round.js";
 import { RoundResults, resultLimits } from "../context/result-size.js";
 import type { ContextGuard } from "../context/context-guard.js";
 import { modelRoundRequest, openTaskHistory } from "../plan/request-plan.js";
@@ -51,7 +57,10 @@ import type { RoundEvidence } from "../tools/tool-repair.js";
 import { deliverGuidance } from "./turn-guidance.js";
 import { completionPhase } from "./turn-completion.js";
 import {
+  recoverAnswerNow,
   recoverConnectionFailure,
+  recoverLongThought,
+  recoverSentNow,
   isOwnDefect,
   turnFailureReason,
   turnFailureRemedies,
@@ -91,6 +100,13 @@ type Turn = {
   refused: boolean;
   /** One fresh round may resume from completed tools after retry exhaustion. */
   connectionRecoveries: number;
+  /** This step's request was stopped for reasoning at length, and asked again. */
+  overthought: boolean;
+  /**
+   * The person asked for the answer now: the turn's remaining requests go
+   * without reasoning, where the model can be asked that.
+   */
+  answerNow: boolean;
 };
 
 export class TurnLoop {
@@ -137,6 +153,28 @@ export class TurnLoop {
     this.#round = new ModelRound(deps, parts.records);
     this.#context = parts.context;
     this.#plan = new PlanProgress(parts.records);
+  }
+
+  /**
+   * Stops the reasoning of the conversation's request, for the turn to ask
+   * for the answer at once. Says whether a request was only reasoning.
+   */
+  answerNow(taskId: string): boolean {
+    return this.#round.answerNow(taskId);
+  }
+
+  /**
+   * Has what the person added sent now: where a message waits and the
+   * conversation's request has only reasoned, that request is stopped and
+   * the turn asks again with the message. Says whether it was.
+   */
+  sendNow(taskId: string): boolean {
+    return (
+      this.#records
+        .task(taskId)
+        .guidance.some((item) => item.status === "pending") &&
+      this.#round.sendNow(taskId)
+    );
   }
 
   async run(
@@ -257,6 +295,8 @@ export class TurnLoop {
       delegatedChildren: options?.initialDelegatedChildren ?? 0,
       refused: false,
       connectionRecoveries: 0,
+      overthought: false,
+      answerNow: false,
     };
   }
 
@@ -303,13 +343,17 @@ export class TurnLoop {
     );
     controller.signal.throwIfAborted();
     const messages = this.#requestMessages(turn);
-    const request = modelRoundRequest(
+    const planned = modelRoundRequest(
       this.#records.task(taskId),
       messages,
       plan.tools,
       fixed.length,
       this.#lastRequestLength,
     );
+    const request =
+      turn.answerNow && this.#deps.host.reasoningOptional()
+        ? { ...planned, reasoning: { enabled: false } as const }
+        : planned;
     const shown = this.#records.task(taskId).messages.length;
     const answered = await this.#round
       .run(taskId, controller, ledger, request, () =>
@@ -321,6 +365,7 @@ export class TurnLoop {
       });
     if (!answered) return undefined;
     turn.refused = false;
+    turn.overthought = false;
     this.#context.counted(
       taskId,
       plan,
@@ -332,15 +377,47 @@ export class TurnLoop {
 
   /**
    * What a failed round is recovered from: a connection lost for good, resumed
-   * once from the tools that completed, and a request refused as too long,
-   * condensed once per step. Everything else is thrown on, and so is whatever
-   * ended a turn that was stopped.
+   * once from the tools that completed, a request refused as too long,
+   * condensed once per step, one stopped for reasoning at length, asked once
+   * per step to decide, and one the person stopped, to have the answer now
+   * or to have what they added read now.
+   * Everything else is thrown on, and so is whatever ended a turn that was
+   * stopped.
    */
   async #recover(turn: Turn, error: unknown, shown: number): Promise<void> {
     const { taskId, controller, ledger } = turn;
     // A stopped turn stays stopped, whatever its cancelled request
     // looked like when it ended: nothing here may resume it.
     if (controller.signal.aborted) throw error;
+    if (error instanceof AnswerNow) {
+      await recoverAnswerNow({
+        taskId,
+        messagesBeforeRound: shown,
+        records: this.#records,
+        history: turn.history,
+      });
+      turn.answerNow = true;
+      return;
+    }
+    if (error instanceof SentNow) {
+      await recoverSentNow({
+        taskId,
+        messagesBeforeRound: shown,
+        records: this.#records,
+      });
+      return;
+    }
+    if (error instanceof ThoughtTooLong) {
+      await recoverLongThought({
+        taskId,
+        messagesBeforeRound: shown,
+        again: turn.overthought,
+        records: this.#records,
+        history: turn.history,
+      });
+      turn.overthought = true;
+      return;
+    }
     if (
       await recoverConnectionFailure({
         error,

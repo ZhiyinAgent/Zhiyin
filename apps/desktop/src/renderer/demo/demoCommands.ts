@@ -107,6 +107,16 @@ export function demoCommands(
     condenseNow: async () => {},
     interruptTask: async (taskId) =>
       dispatch({ type: "taskInterrupted", taskId }),
+    answerNow: async (taskId) => {
+      dispatch({ type: "answerAsked", taskId });
+      return true;
+    },
+    sendNow: async (taskId) => {
+      dispatch({ type: "waitingSent", taskId });
+      return true;
+    },
+    takeBackMessage: async (taskId, messageId) =>
+      dispatch({ type: "waitingTakenBack", taskId, messageId }),
     runningCommands: async (taskId) => build.list(taskId),
     commandOutput: async (taskId, jobId) => build.output(taskId, jobId),
     stopCommand: async (taskId, jobId) => {

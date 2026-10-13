@@ -8,6 +8,7 @@ import type {
   MessageAttachment,
   ReasoningTrace as Trace,
   TaskCondensing,
+  TaskGuidance,
   TaskPlanItem,
 } from "@zhiyin/contract";
 import type { WorkStep } from "./WorkTrace.js";
@@ -58,6 +59,11 @@ export type TimelineTask<
 > = {
   readonly id: string;
   readonly messages: readonly TimelineMessage[];
+  /**
+   * Messages the person added while the turn works. Those still waiting for
+   * its next step are drawn at the end; a draft is the composer's.
+   */
+  readonly guidance?: readonly TaskGuidance[];
   readonly actions: readonly Action[];
   readonly views: readonly View[];
   readonly interactions: readonly Interaction[];

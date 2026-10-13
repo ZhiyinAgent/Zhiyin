@@ -49,6 +49,94 @@ export async function recoverConnectionFailure(options: {
   return true;
 }
 
+/**
+ * A request stopped for reasoning at length without answering or acting is
+ * asked again, once, told to decide; what it reasoned leaves no empty answer
+ * in the conversation. Stopped a second time in a row, the turn ends.
+ */
+export async function recoverLongThought(options: {
+  readonly taskId: string;
+  readonly messagesBeforeRound: number;
+  /** The request before this one was stopped the same way. */
+  readonly again: boolean;
+  readonly records: TurnRecords;
+  readonly history: ModelHistory;
+}): Promise<void> {
+  const { taskId, records, history } = options;
+  if (options.again)
+    throw new TurnFailure(
+      "The model kept reasoning without answering or acting, and was stopped twice. Try again, or choose less reasoning or another model.",
+      ["tryAgain", "chooseModel"],
+    );
+  for (const message of records
+    .task(taskId)
+    .messages.slice(options.messagesBeforeRound))
+    if (message.role === "assistant")
+      await records.withdrawAssistantMessage(taskId, message.id);
+  await records.showWorking(
+    taskId,
+    "The model reasoned at length without acting. Asking it to decide",
+    records.visibleSteps(taskId),
+  );
+  await history.notice(
+    "thinking",
+    "Your last request was stopped: you reasoned at length without answering, calling a tool or asking anything, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, give your answer, or ask the person one question.",
+  );
+}
+
+/**
+ * A request the person stopped to have the answer now is asked again, told to
+ * answer; what it reasoned leaves no empty answer in the conversation. The
+ * notice carries the words Anthropic documents for asking a model that
+ * chooses its own reasoning to skip it, which is all that can be asked of one
+ * whose reasoning cannot be turned off.
+ */
+export async function recoverAnswerNow(options: {
+  readonly taskId: string;
+  readonly messagesBeforeRound: number;
+  readonly records: TurnRecords;
+  readonly history: ModelHistory;
+}): Promise<void> {
+  const { taskId, records, history } = options;
+  for (const message of records
+    .task(taskId)
+    .messages.slice(options.messagesBeforeRound))
+    if (message.role === "assistant")
+      await records.withdrawAssistantMessage(taskId, message.id);
+  await records.showWorking(
+    taskId,
+    "Answering now",
+    records.visibleSteps(taskId),
+  );
+  await history.notice(
+    "answerNow",
+    "The person asked for your answer now. Your last request was stopped while you were reasoning, and that reasoning is gone. Answer directly without deliberating: give your answer from what you know now, or, where the task still needs a step, call the tool for it directly.",
+  );
+}
+
+/**
+ * A request the person stopped to have their message read now is asked
+ * again, and the message goes with it as any added message does; what was
+ * reasoned leaves no empty answer in the conversation.
+ */
+export async function recoverSentNow(options: {
+  readonly taskId: string;
+  readonly messagesBeforeRound: number;
+  readonly records: TurnRecords;
+}): Promise<void> {
+  const { taskId, records } = options;
+  for (const message of records
+    .task(taskId)
+    .messages.slice(options.messagesBeforeRound))
+    if (message.role === "assistant")
+      await records.withdrawAssistantMessage(taskId, message.id);
+  await records.showWorking(
+    taskId,
+    "Reading your message",
+    records.visibleSteps(taskId),
+  );
+}
+
 const remediesFor: Record<ModelClientErrorCode, readonly TurnRemedy[]> = {
   noModel: ["chooseModel"],
   missingCredential: ["updateApiKey"],

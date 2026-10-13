@@ -346,6 +346,29 @@ only where a request marks one, looks back at most 20 blocks from each mark for
 an earlier entry, and allows four marks
 ([prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)).
 
+**Reasoning turned off within a turn.** _Anthropic's prompt caching,
+thinking and effort pages read on 2026-10-13 and 2026-10-14, and four runs of
+the built app on Claude Haiku 5.5 at high effort on those days._ Anthropic
+writes the thinking setting and the effort into the prompt it caches, so a
+request that changes either reads no cached messages, and on some models no
+cached system prompt or tools either. Each run was one conversation of about
+11,000 tokens: a turn that completed, a turn stopped while it reasoned and
+asked again, then one more message.
+
+| How the stopped turn was asked again | Read from cache | Written | Reasoning tokens |
+| --- | --- | --- | --- |
+| Thinking turned off | 0 | 11,188 | 0 |
+| Setting unchanged, told "Answer directly without deliberating" | 11,085 | 104 | 21,586 |
+| The same, with effort lowered by a per-message `output_config` (beta) | 11,189 | 0 | 12,743 |
+
+Only turning thinking off stopped the reasoning, and it alone lost the cache.
+The message after it, with thinking on again, read all 11,085 tokens that came
+before the stop and wrote only what followed: the entries written with
+thinking on were still there. Haiku 5.5 accepted the per-message effort that
+Anthropic lists for Fable 5.1, Mythos 5.1 and Opus 5; whether it applied it is
+not known. One run each, on a question that asks for exhaustive work. No other
+lab has been checked.
+
 **Models in tests.** _Verified 2026-09-02 to 2026-09-14 against the
 catalogue._ The app chooses no model for the person. Most tests and live
 checks name `z-ai/glm-5.3-flash`: text, image and video in, tool calls, a

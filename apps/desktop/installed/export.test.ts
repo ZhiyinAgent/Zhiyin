@@ -4,7 +4,7 @@
  * each piece; this proves they are wired together.
  */
 
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -85,18 +85,9 @@ async function exportAs(format: RegExp, file: string) {
   await dialog.getByRole("radio", { name: format }).check();
   await dialog.getByRole("button", { name: "Export…" }).click();
 
-  await expect
-    .poll(
-      () =>
-        stat(destination).then(
-          () => true,
-          () => false,
-        ),
-      {
-        timeout: 10_000,
-      },
-    )
-    .toBe(true);
+  // The app says so once the file is written whole; a file that merely
+  // exists may still be empty.
+  await shows(dialog.getByRole("button", { name: "Done" }), "the export saved");
   return readFile(destination, "utf8");
 }
 

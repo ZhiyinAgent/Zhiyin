@@ -124,9 +124,18 @@ export class WorkLedger {
     } else this.#unpricedRequests += 1;
   }
 
-  estimate(tokens: number): void {
+  /** A request no provider counted, with what a price list makes of it. */
+  estimate(tokens: number, cost?: EstimatedCost): void {
     this.#estimatedTokens += Math.max(0, tokens);
-    this.#unpricedRequests += 1;
+    if (!cost) {
+      this.#unpricedRequests += 1;
+      return;
+    }
+    this.#pricedRequests += 1;
+    this.#estimatedCosts.set(
+      cost.currency,
+      (this.#estimatedCosts.get(cost.currency) ?? 0) + Math.max(0, cost.amount),
+    );
   }
 
   completeToolRound(): void {

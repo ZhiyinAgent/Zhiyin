@@ -1,5 +1,17 @@
-import { Fragment, useEffect, useId, useState, type ReactNode } from "react";
-import type { CoreApi, MessageAttachment } from "@zhiyin/contract";
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type {
+  CoreApi,
+  MessageAttachment,
+  TaskGuidance,
+} from "@zhiyin/contract";
 import { Icon, Logo, Notice } from "../shared/index.js";
 import { AttachedPicture } from "./AttachedPicture.js";
 import { CondensingCard } from "./CondensingCard.js";
@@ -77,6 +89,20 @@ export type TimelinePieces<Action, View, Interaction, SpecialistRun = never> = {
    * person's message that opened it, and told whether it is still working.
    */
   readonly turnEnd?: (opening: TimelineMessage, running: boolean) => ReactNode;
+  /**
+   * Asks for the answer now, while the model only reasons; the answer says
+   * whether a request was stopped for it. No offer when nothing is passed.
+   */
+  readonly answerNow?: () => Promise<boolean>;
+  /**
+   * What can be done with a message that waits for the turn's next step:
+   * take it back, and have everything waiting sent now, which answers
+   * whether a request was stopped for it. The message is drawn either way.
+   */
+  readonly waitingMessage?: {
+    readonly takeBack: (messageId: string) => Promise<void>;
+    readonly sendNow?: () => Promise<boolean>;
+  };
   /** What a failed turn offers to do next; only the reason when absent. */
   readonly failure?: (
     remedies: readonly import("@zhiyin/contract").TurnRemedy[],
@@ -89,14 +115,19 @@ export function UserTurn({
   attachments = [],
   onOpen,
   readPicture,
+  waiting = false,
 }: {
   text: string;
   attachments?: readonly MessageAttachment[];
   onOpen?: (id: string) => void;
   readPicture?: NonNullable<CoreApi["readPicture"]>;
+  /** Said, and not yet read by the model. */
+  waiting?: boolean;
 }) {
   return (
-    <div className={styles["user-turn"]}>
+    <div
+      className={`${styles["user-turn"]}${waiting ? ` ${styles["user-turn--waiting"]}` : ""}`}
+    >
       {text}
       {attachments.length > 0 && (
         <div className={styles["user-turn__attachments"]}>
@@ -168,12 +199,19 @@ function AgentTurn({
   compact,
 }: {
   children: ReactNode;
-  status?: boolean;
+  /** A status alone, or one with the model's reasoning under it. */
+  status?: boolean | "thinking";
   compact: boolean;
 }) {
+  const kind =
+    status === "thinking"
+      ? ` ${styles["agent-turn--thinking"]}`
+      : status
+        ? ` ${styles["agent-turn--status"]}`
+        : "";
   return (
     <article
-      className={`${styles["agent-turn"]}${status ? ` ${styles["agent-turn--status"]}` : ""}${compact ? ` ${styles["agent-turn--compact"]}` : ""}`}
+      className={`${styles["agent-turn"]}${kind}${compact ? ` ${styles["agent-turn--compact"]}` : ""}`}
       aria-label="Zhiyin response"
     >
       <div className={styles["agent-turn__mark"]}>
@@ -226,7 +264,7 @@ const workingSince = new Map<string, number>();
 const showTimeAfterMs = 5_000;
 
 /**
- * "Working", or what the turn is composing, and once it has gone on for a
+ * "Working", or what the turn says it is doing, and once it has gone on for a
  * while, for how long: set apart in a quieter colour rather than by a comma.
  */
 function WorkingStatus({ taskId, label }: { taskId: string; label: string }) {
@@ -251,6 +289,135 @@ function WorkingStatus({ taskId, label }: { taskId: string; label: string }) {
           {elapsed(ran)}
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Something quietly offered beside what it acts on: the answer now, a waiting
+ * message sent now or taken back. One press is taken. The offer stands again
+ * when the answer says nothing changed; when something did, what it was
+ * offered beside is gone and the offer with it.
+ */
+function QuietOffer({
+  label,
+  tip,
+  ask,
+}: {
+  label: string;
+  /** What pressing it does, said on hover and focus. */
+  tip: string;
+  ask: () => Promise<boolean | void>;
+}) {
+  const [asked, setAsked] = useState(false);
+  return (
+    <button
+      type="button"
+      className={styles["quiet-offer"]}
+      data-tip={tip}
+      disabled={asked}
+      onClick={() => {
+        setAsked(true);
+        void ask().then(
+          (changed) => {
+            if (!changed) setAsked(false);
+          },
+          () => setAsked(false),
+        );
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+/**
+ * The person's messages that wait for the turn's next step: each as they
+ * wrote it, at less emphasis, with what can be done meanwhile under it.
+ * Sending now sends all of them, so it is offered once, under the last.
+ */
+function WaitingMessages({
+  waiting,
+  pieces,
+  canSendNow,
+}: {
+  waiting: readonly TaskGuidance[];
+  pieces: Pick<
+    TimelinePieces<unknown, unknown, unknown>,
+    "openAttachment" | "readPicture" | "waitingMessage"
+  >;
+  /** The model only reasons: its request can be stopped for these. */
+  canSendNow: boolean;
+}) {
+  const offered = pieces.waitingMessage;
+  return waiting.map((message, index) => (
+    <div
+      key={message.id}
+      className={styles["waiting-turn"]}
+      role="group"
+      aria-label="Message waiting to be read"
+    >
+      <UserTurn
+        text={message.text}
+        waiting
+        {...(message.attachments ? { attachments: message.attachments } : {})}
+        {...(pieces.openAttachment ? { onOpen: pieces.openAttachment } : {})}
+        {...(pieces.readPicture ? { readPicture: pieces.readPicture } : {})}
+      />
+      <div className={styles["waiting-turn__row"]}>
+        <span className={styles["waiting-turn__note"]}>
+          <Icon name="clock" />
+          Read at the next step
+        </span>
+        {offered?.sendNow && canSendNow && index === waiting.length - 1 && (
+          <QuietOffer
+            label="Send now"
+            tip="Stop the reasoning and send this now"
+            ask={offered.sendNow}
+          />
+        )}
+        {offered && (
+          <QuietOffer
+            label="Take back"
+            tip="Return this to the message box"
+            ask={() => offered.takeBack(message.id)}
+          />
+        )}
+      </div>
+    </div>
+  ));
+}
+
+/** How much of a trace is drawn while it arrives: its end, a screen or so. */
+const shownReasoningCharacters = 4_000;
+
+/**
+ * What the model is reasoning, as it arrives: the end of it, in a few quiet
+ * lines that follow the newest. Plain text, never Markdown, and not announced
+ * as it changes.
+ */
+function ReasoningTail({ text }: { text: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [cut, setCut] = useState(false);
+  const end = text.slice(-shownReasoningCharacters);
+  // From the first whole word, when the start was left out.
+  const shown =
+    end.length < text.length ? `…${end.slice(end.search(/\s/) + 1)}` : text;
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+    setCut(element.scrollHeight > element.clientHeight + 1);
+  }, [shown]);
+  return (
+    <div
+      ref={box}
+      className={`${styles["reasoning-tail"]}${cut ? ` ${styles["reasoning-tail--cut"]}` : ""}`}
+      role="group"
+      aria-label="Reasoning"
+      aria-live="off"
+    >
+      {shown}
     </div>
   );
 }
@@ -343,6 +510,23 @@ export function ConversationTimeline<
             : undefined;
         })()
       : undefined;
+  /**
+   * What the model is reasoning, while it has not begun its answer. Drawn
+   * under the status as it arrives; reasoning that is over is not drawn.
+   */
+  const reasoningNow = task.messages.at(-1);
+  const liveReasoning =
+    task.phase.kind === "working" &&
+    reasoningNow?.role === "assistant" &&
+    !reasoningNow.text.trim() &&
+    reasoningNow.reasoning?.status === "streaming" &&
+    reasoningNow.reasoning.text.trim()
+      ? reasoningNow.reasoning.text
+      : undefined;
+  /** What the person added to this turn that the model has not read yet. */
+  const waiting = (task.guidance ?? []).filter(
+    (item) => item.status === "pending",
+  );
   const hasPlan = task.plan.length > 0;
   const showWorkingStatus =
     !task.compacting &&
@@ -359,16 +543,14 @@ export function ConversationTimeline<
     task.actions.length === 0 &&
     fallbackPhase !== undefined &&
     !fallbackPhase.retry &&
-    (fallbackPhase.steps.length > 0 || Boolean(fallbackPhase.note));
+    (fallbackPhase.steps.length > 0 ||
+      (fallbackPhase.kind === "browser" && Boolean(fallbackPhase.note)));
   /**
-   * What the turn is composing, when nothing else is drawing it.
-   *
-   * The fallback block below only appears with no plan and no actions, which is
-   * the first round and no other, and it gives way to the work trace as soon as
-   * there are steps. A real session has actions by its second round, so
-   * without this the note the loop sends would reach nobody after the first.
+   * What the turn says it is doing, when no step is drawing it: thinking,
+   * waiting for the model, composing a request. Said the way "Working" is, in
+   * a conversation's first round as in any later one.
    */
-  const composingNote =
+  const workingNote =
     task.phase.kind === "working" &&
     task.phase.note &&
     !task.phase.retry &&
@@ -499,16 +681,27 @@ export function ConversationTimeline<
         </AgentTurn>
       )}
 
-      {showWorkingStatus && (
-        <AgentTurn status compact={compact}>
-          <WorkingStatus taskId={task.id} label="Working" />
-        </AgentTurn>
-      )}
-
-      {composingNote && (
-        <AgentTurn status compact={compact}>
-          {/* The same status as "Working": this is that, with its object named. */}
-          <WorkingStatus taskId={task.id} label={composingNote} />
+      {(showWorkingStatus || workingNote || liveReasoning) && (
+        <AgentTurn status={liveReasoning ? "thinking" : true} compact={compact}>
+          <div className={styles["response-status-row"]}>
+            {/* A note is the same status as "Working", said more exactly. */}
+            <WorkingStatus
+              taskId={task.id}
+              label={
+                workingNote ?? (showWorkingStatus ? "Working" : "Thinking")
+              }
+            />
+            {liveReasoning && pieces.answerNow && (
+              // A new request's reasoning is a new offer.
+              <QuietOffer
+                key={reasoningNow?.id}
+                label="Answer now"
+                tip="Stop the reasoning and answer directly"
+                ask={pieces.answerNow}
+              />
+            )}
+          </div>
+          {liveReasoning && <ReasoningTail text={liveReasoning} />}
         </AgentTurn>
       )}
 
@@ -529,9 +722,7 @@ export function ConversationTimeline<
           ) : (
             fallbackPhase.note && (
               <div className={styles["activity-note"]}>
-                <Icon
-                  name={fallbackPhase.kind === "browser" ? "globe" : "code"}
-                />
+                <Icon name="globe" />
                 <span>{fallbackPhase.note}</span>
               </div>
             )
@@ -543,6 +734,15 @@ export function ConversationTimeline<
         <AgentTurn status compact={compact}>
           <WaitingForSpecialists waitingOn={task.waitingOn} />
         </AgentTurn>
+      )}
+
+      {/* Said after what the model is doing began, so drawn below it. */}
+      {waiting.length > 0 && (
+        <WaitingMessages
+          waiting={waiting}
+          pieces={pieces}
+          canSendNow={Boolean(liveReasoning)}
+        />
       )}
 
       {(task.phase.kind === "failed" || task.phase.kind === "interrupted") && (

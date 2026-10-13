@@ -130,6 +130,34 @@ export class AgentLoop {
     this.#deps.host.emit(event);
   }
 
+  /**
+   * Takes a message from the person: as guidance for the turn that is
+   * running, or as the start of a turn, which then runs on. It is settled once
+   * the message is in the conversation, so the next one can be sent while this
+   * one is answered; how the turn goes is told by the conversation.
+   */
+  async send(
+    taskId: string,
+    userInput: string,
+    reasoning?: ReasoningSelection,
+    attachments: readonly string[] = [],
+    delivery?: "guidance",
+  ): Promise<void> {
+    const turn = await this.#take(
+      taskId,
+      userInput,
+      reasoning,
+      attachments,
+      delivery,
+    );
+    // A turn writes its own failure into the conversation. What is left to
+    // reject is that writing failing, which nobody is waiting on any more.
+    void turn?.().catch((error: unknown) =>
+      this.#deps.recordDefect?.({ taskId, error }),
+    );
+  }
+
+  /** Sends a message as `send` does, and waits for the turn it starts to end. */
   async start(
     taskId: string,
     userInput: string,
@@ -137,6 +165,27 @@ export class AgentLoop {
     attachments: readonly string[] = [],
     delivery?: "guidance",
   ): Promise<void> {
+    const turn = await this.#take(
+      taskId,
+      userInput,
+      reasoning,
+      attachments,
+      delivery,
+    );
+    await turn?.();
+  }
+
+  /**
+   * Puts a message in its conversation. What comes back runs the turn the
+   * message started; nothing does when it was guidance, or empty.
+   */
+  async #take(
+    taskId: string,
+    userInput: string,
+    reasoning: ReasoningSelection | undefined,
+    attachments: readonly string[],
+    delivery: "guidance" | undefined,
+  ): Promise<(() => Promise<void>) | undefined> {
     // A message sent while the conversation is being condensed goes out on
     // the condensed conversation.
     await this.#condensing.get(taskId);
@@ -149,7 +198,7 @@ export class AgentLoop {
         "Wait for file recovery to finish before starting another turn.",
       );
     const message = userInput.trim();
-    if (!message && !attachments.length) return;
+    if (!message && !attachments.length) return undefined;
     if (!this.#deps.host.find(taskId))
       throw new Error("The task does not exist.");
 
@@ -173,7 +222,7 @@ export class AgentLoop {
       });
       if (!owner || !this.#activeTurns.owns(taskId, owner))
         await this.#records.releaseGuidance(taskId, guidanceId);
-      return;
+      return undefined;
     }
 
     // Registered before the first await: everything between the
@@ -232,17 +281,19 @@ export class AgentLoop {
       guidance: existing.guidance.filter((item) => item.status === "pending"),
     });
 
-    await this.#turnLoop.run(taskId, controller, ledger, {
-      beforeGather: async () => {
-        if (started.shouldGenerateInitialTitle)
-          await this.#auxiliary.nameConversation(
-            taskId,
-            modelText({ text: message, attachments: claimed }),
-            controller.signal,
-          );
-      },
-    });
-    this.#wakeIfQueued(taskId);
+    return async () => {
+      await this.#turnLoop.run(taskId, controller, ledger, {
+        beforeGather: async () => {
+          if (started.shouldGenerateInitialTitle)
+            await this.#auxiliary.nameConversation(
+              taskId,
+              modelText({ text: message, attachments: claimed }),
+              controller.signal,
+            );
+        },
+      });
+      this.#wakeIfQueued(taskId);
+    };
   }
 
   /**
@@ -393,6 +444,35 @@ export class AgentLoop {
   /** How a conversation's reasoning is settled once its turn has ended. */
   settleEndedTurn(task: WorkspaceTask): WorkspaceTask {
     return settledWhenTurnEnded(task);
+  }
+
+  /**
+   * Asks for the answer now: the conversation's request is stopped where it
+   * has only reasoned so far, and asked again. Says whether one was.
+   */
+  async answerNow(taskId: string): Promise<boolean> {
+    return this.#turnLoop.answerNow(taskId);
+  }
+
+  /**
+   * Has the messages waiting for the turn's next step sent now, where its
+   * request has only reasoned so far. Says whether that request was stopped.
+   */
+  async sendNow(taskId: string): Promise<boolean> {
+    return (
+      Boolean(this.#deps.host.find(taskId)) && this.#turnLoop.sendNow(taskId)
+    );
+  }
+
+  /**
+   * Takes back a message that waits for the turn's next step: it returns to
+   * the person as a draft, unread. One the model was already sent stays in
+   * the conversation.
+   */
+  async takeBack(taskId: string, messageId: string): Promise<void> {
+    if (!this.#deps.host.find(taskId))
+      throw new Error("The task does not exist.");
+    await this.#records.releaseGuidance(taskId, messageId);
   }
 
   async cancel(taskId: string): Promise<void> {

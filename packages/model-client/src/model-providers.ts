@@ -22,7 +22,9 @@ import type {
   ModelEvent,
   ModelFetch,
   ModelRequest,
+  ModelUsage,
   ProviderDirectory,
+  UncountedUsage,
 } from "./model-client.js";
 import { platformOf, type CatalogFetch, type Provider } from "./provider.js";
 import { everyProvider, providerOfUnnamedChoices } from "./providers/index.js";
@@ -231,6 +233,10 @@ export class ModelProviders implements ModelClient, ProviderDirectory {
 
   async *send(request: ModelRequest): AsyncIterable<ModelEvent> {
     yield* this.#client(await this.#chosen()).send(request);
+  }
+
+  async uncounted(usage: UncountedUsage): Promise<ModelUsage | undefined> {
+    return this.#client(await this.#chosen()).uncounted?.(usage);
   }
 
   async settings(): Promise<ProviderSettings> {

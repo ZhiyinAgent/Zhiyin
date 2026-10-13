@@ -59,6 +59,9 @@ const stubCommands: CoreApi = {
   commitUndo: async () => ({ files: [] }),
   compareDocument: async () => ({ after: [] }),
   interruptTask: async () => {},
+  answerNow: async () => false,
+  sendNow: async () => false,
+  takeBackMessage: async () => {},
   runningCommands: async () => [],
   commandOutput: async () => undefined,
   stopCommand: async () => {},
@@ -264,6 +267,97 @@ describe("WorkspaceShell", () => {
       ),
     ).toBeVisible();
     delete (HTMLImageElement.prototype as { decode?: unknown }).decode;
+  });
+
+  it("asks the core for the answer now, for the conversation whose model is reasoning", async () => {
+    const answerNow = vi.fn().mockResolvedValue(true);
+    const task: WorkspaceTask = {
+      id: "reasoning",
+      title: "Phone stand",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-13T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { sequence: 0, id: "u", role: "user", text: "Design a phone stand" },
+        {
+          sequence: 1,
+          id: "a",
+          role: "assistant",
+          text: "",
+          reasoning: {
+            text: "A wedge, or a folded sheet.",
+            status: "streaming",
+          },
+        },
+      ],
+      phase: { kind: "working", steps: [], note: "Thinking" },
+    };
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          tasks: [task],
+          selectedTaskId: task.id,
+        })}
+        dispatch={() => undefined}
+        commands={{ ...stubCommands, answerNow }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Answer now" }));
+
+    await waitFor(() => expect(answerNow).toHaveBeenCalledWith("reasoning"));
+  });
+
+  it("has a waiting message sent now, or taken back, in the conversation it waits in", async () => {
+    const sendNow = vi.fn().mockResolvedValue(true);
+    const takeBackMessage = vi.fn().mockResolvedValue(undefined);
+    const task: WorkspaceTask = {
+      id: "reasoning",
+      title: "Phone stand",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-14T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { sequence: 0, id: "u", role: "user", text: "Design a phone stand" },
+        {
+          sequence: 1,
+          id: "a",
+          role: "assistant",
+          text: "",
+          reasoning: {
+            text: "A wedge, or a folded sheet.",
+            status: "streaming",
+          },
+        },
+      ],
+      guidance: [
+        { id: "g1", text: "Keep it to one flat base", status: "pending" },
+      ],
+      phase: { kind: "working", steps: [], note: "Thinking" },
+    };
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          tasks: [task],
+          selectedTaskId: task.id,
+        })}
+        dispatch={() => undefined}
+        commands={{ ...stubCommands, sendNow, takeBackMessage }}
+      />,
+    );
+    const waiting = screen.getByRole("group", {
+      name: "Message waiting to be read",
+    });
+    expect(waiting).toHaveTextContent("Keep it to one flat base");
+
+    fireEvent.click(within(waiting).getByRole("button", { name: "Send now" }));
+    await waitFor(() => expect(sendNow).toHaveBeenCalledWith("reasoning"));
+    fireEvent.click(within(waiting).getByRole("button", { name: "Take back" }));
+    await waitFor(() =>
+      expect(takeBackMessage).toHaveBeenCalledWith("reasoning", "g1"),
+    );
   });
 
   it("shows task activity and lets the user stop work from the browser workspace", async () => {
@@ -717,7 +811,7 @@ describe("WorkspaceShell", () => {
     },
   );
 
-  it("keeps raw reasoning out of view and passes the selected effort to the core", async () => {
+  it("shows reasoning only while it arrives, and passes the selected effort to the core", async () => {
     const task: WorkspaceTask = {
       id: "reasoning",
       title: "Research",
@@ -761,7 +855,7 @@ describe("WorkspaceShell", () => {
       />,
     );
     expect(screen.getAllByLabelText("Zhiyin response")).toHaveLength(1);
-    expect(screen.queryByText("Comparing sources.")).not.toBeInTheDocument();
+    expect(screen.getByText("Comparing sources.")).toBeVisible();
     expect(screen.getByText("Working")).toBeVisible();
     rerender(
       <WorkspaceShell
@@ -1213,6 +1307,9 @@ describe("WorkspaceShell", () => {
           setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
+          answerNow: async () => false,
+          sendNow: async () => false,
+          takeBackMessage: async () => {},
           runningCommands: async () => [],
           commandOutput: async () => undefined,
           stopCommand: async () => {},
@@ -1784,6 +1881,9 @@ describe("WorkspaceShell", () => {
           setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
+          answerNow: async () => false,
+          sendNow: async () => false,
+          takeBackMessage: async () => {},
           runningCommands: async () => [],
           commandOutput: async () => undefined,
           stopCommand: async () => {},
@@ -2560,6 +2660,9 @@ describe("WorkspaceShell", () => {
           setPersonalInstructions: async () => {},
           condenseNow: async () => {},
           interruptTask: async () => {},
+          answerNow: async () => false,
+          sendNow: async () => false,
+          takeBackMessage: async () => {},
           runningCommands: async () => [],
           commandOutput: async () => undefined,
           stopCommand: async () => {},

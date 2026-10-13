@@ -93,6 +93,10 @@ export class ModelSettings {
   forTurns() {
     return {
       acceptsImages: () => this.current()?.acceptsImages === true,
+      reasoningOptional: () => {
+        const reasoning = this.current()?.reasoning;
+        return reasoning?.status === "available" && !reasoning.required;
+      },
       modelWindow: () => ({ model: "", ...this.current() }),
       lowerWindow: (contextWindow: number, refusedTokens: number) =>
         this.lowerWindow(contextWindow, refusedTokens),

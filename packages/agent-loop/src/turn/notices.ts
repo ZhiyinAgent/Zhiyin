@@ -46,6 +46,10 @@ export const noticeKinds = [
   "guidance",
   /** A provider interruption after completed tools; resume from their results. */
   "recovery",
+  /** A request stopped for reasoning at length without acting: decide now. */
+  "thinking",
+  /** The person asked for the answer now, and the reasoning was stopped. */
+  "answerNow",
   /** A command that carried on as a job ended by itself. */
   "job",
   /** The person put back the files an earlier turn changed. */

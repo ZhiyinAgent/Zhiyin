@@ -52,6 +52,10 @@ trust boundary.
   upstream that served it, how the stream ended, whether it produced a usable
   answer, and any retries. It may carry a replay record: what the provider
   needs back with this turn, for the caller to keep with it unread.
+- `uncounted(usage)` turns a caller's own count of a request, one that ended
+  before the provider counted it, into a usage report for the chosen model:
+  the caller's tokens, a request id of its own, and the price list's estimate
+  of the cost.
 - `settings()` returns the chosen model, the upstreams routing is restricted
   to, the context window and longest reply a request may have, the reasoning
   controls the model offers, whether it accepts pictures, the endpoint, and
@@ -189,6 +193,10 @@ sends every request to another host.
   pays that tier for all of it, and during a lab's peak hours its peak prices
   apply. A request that used a kind of token the list gives no price for, or
   a model without a price on that platform, stays unpriced.
+- **A request the provider never counted is priced the same way**, from the
+  caller's count of it. Input the caller takes as read from the cache pays the
+  cache-read price; where the list has none, all of the input pays the full
+  price and the report names no cache read.
 
 ### Reading the stream
 
@@ -212,6 +220,9 @@ sends every request to another host.
 - **A stream that goes silent is abandoned.** After five minutes with nothing
   arriving the request fails as `networkFailure`. A slow stream that keeps
   arriving is left alone.
+- **A connection that drops partway through is a network failure.** The
+  request fails as `networkFailure`, in Zhiyin's words rather than the
+  platform's for a closed socket, and is sent again like any other.
 - **An answer that never starts is abandoned, sooner where that is known to
   be safe.** The wait for the first byte, the response's headers included,
   has a limit of its own: the silence a stream may keep, or less for a

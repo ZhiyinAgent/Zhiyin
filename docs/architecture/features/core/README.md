@@ -101,6 +101,20 @@ answers every other command:
   An attached picture is PNG, JPEG, GIF or WebP of up to 12 MB. Personal
   instructions are at most 64,000 characters. Budgets, appearance, spelling
   languages and reasoning efforts are each held to their closed sets.
+- **A sent message is answered once it is in the conversation.** The window
+  sends one message at a time and waits for each to be taken, so a send never
+  waits for the turn it starts: a message typed while that turn runs is taken
+  and added to it. One that cannot be put in the conversation is refused to the
+  window. How the turn goes is told by the conversation.
+- **Asking for the answer now reaches the request that is reasoning.** Whether
+  the next request can go without reasoning is read from the chosen model's
+  own reasoning controls: optional there, it is turned off; required, it is
+  left as the conversation has it. The window is told whether anything was
+  stopped.
+- **A message that waits for a turn's next step can be sent now or taken
+  back.** The window names the conversation, and for taking back the message;
+  it is told whether sending now stopped a request, and a message taken back
+  reaches it as a draft.
 - **The window opens only the external pages the contract lists,** each a
   whole URL, so a page allowed on a site allows nothing else there.
 - **The window cannot name a folder the person never chose.** Returning to a

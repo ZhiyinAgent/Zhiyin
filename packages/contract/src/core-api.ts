@@ -191,7 +191,8 @@ export interface CoreApi extends DocumentCommands {
   dismissIssue?(message: string): Promise<void>;
 
   /**
-   * Start a model turn for a task. Streaming progress arrives as events.
+   * Start a model turn for a task. Answered once the message is in the
+   * conversation; the turn runs on, and its progress arrives as events.
    * `attachments` names pastes `keepPaste` kept; a message may be only those.
    */
   sendMessage: SendMessage;
@@ -254,6 +255,29 @@ export interface CoreApi extends DocumentCommands {
 
   /** Stop the active turn for a task and all work it owns. */
   interruptTask(taskId: string): Promise<void>;
+
+  /**
+   * Asks for the answer now, while the model has only reasoned so far: that
+   * request is stopped, what it reasoned is dropped, and the model is asked
+   * again, without reasoning where it can be. False when no request of the
+   * conversation was only reasoning, and nothing changed.
+   */
+  answerNow(taskId: string): Promise<boolean>;
+
+  /**
+   * Has the messages waiting for a running turn's next step sent now. Where
+   * the model has only reasoned so far, that request is stopped, what it
+   * reasoned is dropped, and it is asked again with the messages. False when
+   * nothing waited or the model was past reasoning, and nothing changed: the
+   * messages are read at the next step, as they would have been.
+   */
+  sendNow(taskId: string): Promise<boolean>;
+
+  /**
+   * Takes back a message that waits for a running turn's next step. It comes
+   * back as a draft, unread; one the model was already sent stays where it is.
+   */
+  takeBackMessage(taskId: string, messageId: string): Promise<void>;
 
   /** A conversation's commands that carried on as jobs and still run. */
   runningCommands(taskId: string): Promise<readonly RunningCommand[]>;

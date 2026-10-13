@@ -29,18 +29,36 @@ async function present(path, expected) {
   }
 }
 
+/** How many times one file is asked for before the fetch gives up. */
+const attempts = 4;
+
 /**
- * `download(url)` answers the file's bytes. A file whose SHA-256 is not the
- * one listed is refused and nothing is written for it.
+ * `download(url)` answers the file's bytes. One that fails is asked for
+ * again, after a wait that doubles from a second: the server answers busy now
+ * and then, and a build should not fail for it. A file whose SHA-256 is not
+ * the one listed is refused and nothing is written for it.
  */
-export async function fetchDictionaries({ manifest, folder, download }) {
+export async function fetchDictionaries({
+  manifest,
+  folder,
+  download,
+  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+}) {
   await mkdir(folder, { recursive: true });
   for (const dictionary of manifest.dictionaries) {
     const target = join(folder, dictionary.file);
     if (await present(target, dictionary.sha256)) continue;
     // Chromium asks the server for the name in lower case.
     const url = manifest.source.download + dictionary.file.toLowerCase();
-    const bytes = await download(url);
+    let bytes;
+    for (let attempt = 1; bytes === undefined; attempt += 1) {
+      try {
+        bytes = await download(url);
+      } catch (error) {
+        if (attempt === attempts) throw error;
+        await wait(1_000 * 2 ** (attempt - 1));
+      }
+    }
     if (sha256(bytes) !== dictionary.sha256)
       throw new Error(
         `${dictionary.file} from ${url} is not the dictionary listed: its SHA-256 differs.`,

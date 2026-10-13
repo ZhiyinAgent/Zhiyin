@@ -215,3 +215,61 @@ describe("a cost the provider does not report", () => {
     expect(usage?.estimatedCost).toBeUndefined();
   });
 });
+
+describe("a request that ended before the provider counted it", () => {
+  const client = (model: string) =>
+    new ProviderModelClient(reporting(used()), {
+      apiKey: async () => "key",
+      model,
+      region: "international",
+      now: () => new Date("2026-10-10T12:00:00Z"),
+    });
+
+  it("is taken to have used what the caller counted, for the chosen model, at the list's prices", async () => {
+    const counted = {
+      inputTokens: 120_000,
+      cacheReadTokens: 100_000,
+      outputTokens: 30_000,
+      reasoningTokens: 30_000,
+    };
+
+    const usage = await client("cached").uncounted(counted);
+    const again = await client("cached").uncounted(counted);
+
+    // 20k uncached at $2, 100k read at $0.20, 30k out at $10, per million.
+    expect(usage).toMatchObject({
+      model: "cached",
+      ...counted,
+      totalTokens: 150_000,
+      estimatedCost: {
+        amount: expect.closeTo(0.04 + 0.02 + 0.3, 10),
+        currency: "USD",
+        priceList: "2026-10-09",
+      },
+    });
+    expect(usage?.costUsd).toBeUndefined();
+    // Two requests are two records, whatever they are called.
+    expect(usage?.requestId).not.toBe(again?.requestId);
+  });
+
+  it("counts the input as uncached where the list has no price for a cache read", async () => {
+    const usage = await client("no-cache-price").uncounted({
+      inputTokens: 120_000,
+      cacheReadTokens: 100_000,
+      outputTokens: 30_000,
+    });
+
+    expect(usage?.cacheReadTokens).toBeUndefined();
+    expect(usage?.estimatedCost?.amount).toBeCloseTo(0.12 + 0.06, 10);
+  });
+
+  it("is counted without a cost for a model the list has no price for", async () => {
+    const usage = await client("unpriced").uncounted({
+      inputTokens: 1_000,
+      outputTokens: 500,
+    });
+
+    expect(usage).toMatchObject({ model: "unpriced", totalTokens: 1_500 });
+    expect(usage?.estimatedCost).toBeUndefined();
+  });
+});

@@ -74,7 +74,12 @@ export async function* streamedEvents(
     );
 
   yield* serverSentEvents(
-    withoutStalling(response.body, input.stallTimeoutMs, dialect.name),
+    withoutStalling(
+      response.body,
+      input.stallTimeoutMs,
+      dialect.name,
+      request.signal,
+    ),
   );
 }
 

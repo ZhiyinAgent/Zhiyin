@@ -821,6 +821,48 @@
   line-height: 1.55;
 }
 
+/* Said, and not yet read: the person's own words in outline, where a message
+   the model has read is filled. */
+.user-turn--waiting {
+  border-style: dashed;
+  border-color: var(--zy-line-strong);
+  background: transparent;
+  color: var(--zy-muted);
+}
+
+/* A waiting message with what can be done about it under its right edge. */
+.waiting-turn {
+  display: grid;
+  gap: 6px;
+}
+
+.waiting-turn__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  /* The bubble's own right edge. */
+  margin-inline: auto max(0px, calc((100% - 780px) / 2));
+}
+
+.waiting-turn__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--zy-faint);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.waiting-turn__note svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
 .agent-turn {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
@@ -856,6 +898,77 @@
 .agent-turn--status .agent-turn__body {
   justify-content: center;
   min-height: 28px;
+}
+
+/* A status with the model's reasoning under it: the mark stays level with the
+   status line, and the reasoning hangs below it. */
+.agent-turn--thinking .agent-turn__mark {
+  margin-top: 0;
+}
+
+.agent-turn--thinking .agent-turn__body {
+  gap: 4px;
+}
+
+.agent-turn--thinking .response-status {
+  min-height: 28px;
+}
+
+/* A status and what can be asked of it, on one line. */
+.response-status-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Quiet beside what it acts on: it is offered, never pressed on the person. */
+.quiet-offer {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.quiet-offer:hover:not(:disabled) {
+  border-color: var(--zy-line-strong);
+  color: var(--zy-text-soft);
+}
+
+.quiet-offer:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.quiet-offer:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* The end of what the model is reasoning: seven lines that follow the newest,
+   quieter than an answer. Older lines leave by the top, which fades once
+   there is more than fits. */
+.reasoning-tail {
+  width: min(640px, 100%);
+  max-height: 7lh;
+  overflow: hidden;
+  padding-left: 12px;
+  border-left: 2px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.reasoning-tail--cut {
+  mask-image: linear-gradient(to bottom, transparent, var(--zy-canvas) 2lh);
 }
 
 .agent-turn--compact {

@@ -73,8 +73,11 @@ export type CoreWorkspace = Pick<
 > & {
   readonly turns: Pick<
     WorkspaceTurns,
-    | "start"
+    | "send"
     | "cancel"
+    | "answerNow"
+    | "sendNow"
+    | "takeBack"
     | "condenseNow"
     | "resolveApproval"
     | "revokeConversationPermission"
@@ -206,7 +209,7 @@ export class Core {
       deleteTask: (taskId) => workspace.deleteTask(taskId),
       dismissIssue: (message) => workspace.dismissIssue(message),
       sendMessage: (taskId, message, reasoning, attachments, delivery) =>
-        turns.start(taskId, message, reasoning, attachments, delivery),
+        turns.send(taskId, message, reasoning, attachments, delivery),
       keepPaste: (text) => workspace.kept.keepPaste(text),
       keepPicture: (picture) => workspace.kept.keepPicture(picture),
       setContextBudget: (taskId, budget) =>
@@ -232,6 +235,9 @@ export class Core {
       compareDocument: (taskId, messageId, path) =>
         workspace.compareDocument(taskId, messageId, path),
       interruptTask: (taskId) => turns.cancel(taskId),
+      answerNow: (taskId) => turns.answerNow(taskId),
+      sendNow: (taskId) => turns.sendNow(taskId),
+      takeBackMessage: (taskId, messageId) => turns.takeBack(taskId, messageId),
       runningCommands: async (taskId) => commands.runningCommands(taskId),
       commandOutput: (taskId, jobId) => commands.commandOutput(taskId, jobId),
       stopCommand: (taskId, jobId) =>

@@ -190,7 +190,8 @@ runs plain `pnpm audit` and each exception has one home.
 
 `scripts/gate.ps1` is the single definition of "green". It runs ESLint, the
 theme check, knip, `pnpm audit`, Prettier, the typecheck, the test suite, the
-build and the installed-app suite. `-Full` adds packaging; a check that the
+build and the installed-app suite, which is not run when the build failed:
+there would be no app to start. `-Full` adds packaging; a check that the
 packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE` and
 `--inspect` (ADR 0001); a check that the packaged app holds every spelling
 dictionary unchanged; and the installed documents test run against the packed
@@ -199,7 +200,10 @@ document drawing fails it. Packaging is slow, so it sits behind the flag and
 runs before a release.
 
 The pre-commit hook and the CI workflow both call the script rather than
-restating its checks, so they cannot drift apart. CI runs on Windows for pull
+restating its checks, so they cannot drift apart. The CI job keeps temporary
+files on the runner's work disk: a fresh machine's system disk is busy with
+Windows' own work for its first minutes, and browsers and app copies started
+from a profile there were measured waiting on it. CI runs on Windows for pull
 requests, pushes to `main`, and weekly. Pull requests receive no provider
 credentials; live provider behavior is checked separately.
 
@@ -224,7 +228,7 @@ Building the desktop app first fetches the spelling dictionaries listed in
 git ignores. They come from the server Chromium itself downloads them from, and
 each is kept only if its SHA-256 matches the list (ADR 0023). A first build,
 and every CI run, needs that server; later local builds find the files in
-place.
+place. A file the server fails to send is asked for again, up to four times.
 
 ## Theme and style checks
 

@@ -837,16 +837,20 @@ describe("a conversation's session", () => {
   });
 
   it("stops a command while Blender is still starting, without waiting for it", async () => {
-    const { tools } = await setUp(undefined, { ready: false });
+    const { tools, blender } = await setUp(undefined, { ready: false });
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
 
-    const stopped = await call(
+    const stopping = call(
       tools(),
       "blender_open_scene",
       { path: "scene.blend", create: true },
       controller.signal,
     );
+    // Stopped once the start is under way, however long the call took to
+    // reach it: a stop that arrives sooner is another case, with other words.
+    await until(() => blender.launches.length > 0);
+    controller.abort();
+    const stopped = await stopping;
 
     expect(stopped.isError).toBe(true);
     // Stopped, not left to fail when Blender's start runs out of time.

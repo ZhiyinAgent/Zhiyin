@@ -37,6 +37,17 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.25.0 --activate
 
+      # A fresh machine's system disk is kept busy by Windows' own work for
+      # its first minutes, and a browser whose profile is there can wait half
+      # a minute on it. The runner's work disk is idle.
+      - name: Keep temporary files on the runner's work disk
+        shell: powershell
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 't'
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          "TEMP=$temp" >> $env:GITHUB_ENV
+          "TMP=$temp" >> $env:GITHUB_ENV
+
       - name: Install dependencies
         shell: powershell
         run: pnpm install --frozen-lockfile

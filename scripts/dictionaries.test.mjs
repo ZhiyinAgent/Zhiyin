@@ -79,6 +79,43 @@ describe("the dictionaries bundled with the app", () => {
     expect(await readdir(target)).toEqual([]);
   });
 
+  it("asks again for a download the server failed, waiting longer each time, and gives up after the fourth", async () => {
+    const target = await folder();
+    const waited = [];
+    let failing = 2;
+
+    await fetchDictionaries({
+      manifest,
+      folder: target,
+      wait: async (ms) => void waited.push(ms),
+      download: async (url) => {
+        if (failing-- > 0) throw new Error(`${url} answered 503.`);
+        return url.endsWith("fr-fr-3-0.bdic") ? french : german;
+      },
+    });
+
+    expect(waited).toEqual([1_000, 2_000]);
+    expect((await readdir(target)).sort()).toEqual([
+      "de-DE-3-0.bdic",
+      "fr-FR-3-0.bdic",
+    ]);
+
+    const never = await folder();
+    let asked = 0;
+    await expect(
+      fetchDictionaries({
+        manifest,
+        folder: never,
+        wait: async () => {},
+        download: async (url) => {
+          asked += 1;
+          throw new Error(`${url} answered 503.`);
+        },
+      }),
+    ).rejects.toThrow("answered 503");
+    expect(asked).toBe(4);
+  });
+
   it("are each named when a folder lacks one or holds it damaged, and none are when all are there", async () => {
     const target = await folder();
     await writeFile(join(target, "fr-FR-3-0.bdic"), Buffer.from("damaged"));

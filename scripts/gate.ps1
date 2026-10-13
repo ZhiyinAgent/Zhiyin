@@ -65,8 +65,12 @@ Invoke-Step "build"     { pnpm build }
 
 # The real app, started the way a person starts it. Needs the build above, so it
 # cannot live in the fast suite. It is not optional: an installed-app contract
-# that only runs before a release is a contract nobody checks.
-Invoke-Step "installed" { pnpm test:installed }
+# that only runs before a release is a contract nobody checks. Without a build
+# there is no app to start, and every test would wait out its limit.
+Invoke-Step "installed" {
+    if ($failures -contains "build") { throw "not run, because the build failed" }
+    pnpm test:installed
+}
 
 if ($Full) {
     Invoke-Step "package" { pnpm package }

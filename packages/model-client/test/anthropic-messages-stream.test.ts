@@ -379,4 +379,54 @@ describe("an answer over Anthropic Messages", () => {
       }),
     ).rejects.toMatchObject({ code: "networkFailure" });
   });
+
+  it("reports a connection that drops partway through as a network failure, which can be sent again", async () => {
+    const [start] = finished("end_turn");
+    // What the platform's fetch throws from a body whose socket closed.
+    const dropped = new TypeError("terminated");
+
+    await expect(
+      sendOnce(hello, {
+        fetcher: async () => ({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          body: (async function* () {
+            yield new TextEncoder().encode(sse([start ?? {}]));
+            throw dropped;
+          })(),
+        }),
+      }),
+    ).rejects.toMatchObject({
+      code: "networkFailure",
+      retryable: true,
+      message:
+        "The connection to Test Lab was lost partway through. Try again.",
+      cause: dropped,
+    });
+  });
+
+  it("gives the caller's own reason when it cancels partway through", async () => {
+    const [start] = finished("end_turn");
+    const cancel = new AbortController();
+
+    const failure: unknown = await sendOnce(
+      { ...hello, signal: cancel.signal },
+      {
+        fetcher: async () => ({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          body: (async function* () {
+            yield new TextEncoder().encode(sse([start ?? {}]));
+            cancel.abort();
+            // The body of a cancelled request fails in the platform's words.
+            throw new TypeError("terminated");
+          })(),
+        }),
+      },
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBe(cancel.signal.reason);
+  });
 });
