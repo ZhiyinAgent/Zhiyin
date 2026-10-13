@@ -19,20 +19,15 @@
  * is measured is the drawing the app does, configuration included.
  */
 
-import { createReadStream } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
-import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import type { BrowserContext, Page, Request } from "playwright-core";
-import { build } from "vite";
 import {
   playwrightBrowserLauncher,
   type BrowserTarget,
 } from "@zhiyin/interactive-browser";
 import { openProcessContainer } from "@zhiyin/process-ownership";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { serveBundle, type ServedBundle } from "./served-bundle.js";
 
 const launcher = playwrightBrowserLauncher({ open: openProcessContainer });
 const availability = await launcher.available();
@@ -54,47 +49,12 @@ const sources = [
 
 const runs = 12;
 
-const contentTypes: Record<string, string> = {
-  ".js": "text/javascript",
-  ".mjs": "text/javascript",
-  ".html": "text/html",
-  ".css": "text/css",
-  ".json": "application/json",
-};
-
-type Harness = {
-  readonly url: string;
-  close(): Promise<void>;
-};
-
 /**
  * Bundles the production drawing module for the browser and serves it beside a
  * page that calls it. Nothing about the configuration is restated here; a change
  * to how the app initialises Mermaid changes what this measures.
  */
-async function harness(): Promise<Harness> {
-  const directory = await mkdtemp(join(tmpdir(), "zhiyin-diagram-fit-"));
-  await build({
-    logLevel: "silent",
-    build: {
-      outDir: directory,
-      emptyOutDir: false,
-      lib: {
-        entry: fileURLToPath(
-          new URL(
-            "../src/renderer/ui/views/mermaidRuntime.ts",
-            import.meta.url,
-          ),
-        ),
-        formats: ["es"],
-        fileName: () => "mermaidRuntime.js",
-      },
-      // Left readable on purpose: when this test fails, the bundle it served is
-      // the first thing worth looking at.
-      minify: false,
-    },
-  });
-
+function harness(): Promise<ServedBundle> {
   const page = `<!doctype html>
 <html lang="en">
   <head><meta charset="UTF-8" /><title>Diagram fit</title></head>
@@ -156,46 +116,13 @@ async function harness(): Promise<Harness> {
   </body>
 </html>`;
 
-  const server = createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
-    if (path === "/") {
-      response.writeHead(200, { "Content-Type": "text/html" });
-      response.end(page);
-      return;
-    }
-    const file = normalize(join(directory, path));
-    if (!resolve(file).startsWith(resolve(directory) + sep)) {
-      response.writeHead(403).end();
-      return;
-    }
-    // Opened before the headers go out. A browser asks for things nobody served
-    // - a favicon, most reliably - and answering those with a 200 and then
-    // discovering there is no file leaves nothing valid left to say.
-    const stream = createReadStream(file);
-    stream.once("error", () => response.writeHead(404).end());
-    stream.once("open", () => {
-      response.writeHead(200, {
-        "Content-Type":
-          contentTypes[extname(file)] ?? "application/octet-stream",
-      });
-      stream.pipe(response);
-    });
+  return serveBundle({
+    entry: fileURLToPath(
+      new URL("../src/renderer/ui/views/mermaidRuntime.ts", import.meta.url),
+    ),
+    fileName: "mermaidRuntime.js",
+    page: () => page,
   });
-  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
-  const address = server.address();
-  if (!address || typeof address === "string") throw new Error("No port");
-
-  return {
-    url: `http://127.0.0.1:${address.port}/`,
-    close: async () => {
-      server.closeAllConnections();
-      await new Promise<void>((done, fail) => {
-        if (!server.listening) return done();
-        server.close((error) => (error ? fail(error) : done()));
-      });
-      await rm(directory, { recursive: true, force: true });
-    },
-  };
 }
 
 /**
@@ -238,7 +165,7 @@ async function openHarness(
 }
 
 describe.runIf(availability.available)("diagram fitting", () => {
-  let served: Harness;
+  let served: ServedBundle;
 
   beforeAll(async () => {
     served = await harness();
@@ -258,14 +185,16 @@ describe.runIf(availability.available)("diagram fitting", () => {
       const captures: unknown[] = [];
       for (let run = 0; run < runs; run += 1) {
         captures.push(
-          await open.evaluate(
-            (values) =>
-              (
-                window as unknown as {
-                  drawAll: (v: string[]) => Promise<unknown>;
-                }
-              ).drawAll(values),
-            [...sources],
+          await served.asking(() =>
+            open.evaluate(
+              (values) =>
+                (
+                  window as unknown as {
+                    drawAll: (v: string[]) => Promise<unknown>;
+                  }
+                ).drawAll(values),
+              [...sources],
+            ),
           ),
         );
       }
@@ -305,14 +234,16 @@ describe.runIf(availability.available)("diagram fitting", () => {
       if (!open) throw new Error("No browser page");
       await openHarness(target, open, served.url, "drawFramed");
 
-      const framed = await open.evaluate(
-        (values) =>
-          (
-            window as unknown as {
-              drawFramed: (v: string[]) => Promise<boolean[]>;
-            }
-          ).drawFramed(values),
-        [...sources],
+      const framed = await served.asking(() =>
+        open.evaluate(
+          (values) =>
+            (
+              window as unknown as {
+                drawFramed: (v: string[]) => Promise<boolean[]>;
+              }
+            ).drawFramed(values),
+          [...sources],
+        ),
       );
 
       expect(framed).toEqual(sources.map(() => true));
@@ -339,14 +270,16 @@ describe.runIf(availability.available)("diagram fitting", () => {
       const capture = async (motion: "no-preference" | "reduce") => {
         await open.emulateMedia({ reducedMotion: motion });
         await openHarness(target, open, served.url, "drawAll");
-        return open.evaluate(
-          (values) =>
-            (
-              window as unknown as {
-                drawAll: (v: string[]) => Promise<unknown>;
-              }
-            ).drawAll(values),
-          [...sources],
+        return served.asking(() =>
+          open.evaluate(
+            (values) =>
+              (
+                window as unknown as {
+                  drawAll: (v: string[]) => Promise<unknown>;
+                }
+              ).drawAll(values),
+            [...sources],
+          ),
         );
       };
 
@@ -383,14 +316,16 @@ describe.runIf(availability.available)("diagram fitting", () => {
       const widths = [1100, 1085, 900, 700, 520];
       const byWidth: Record<number, unknown> = {};
       for (const width of widths) {
-        byWidth[width] = await open.evaluate(
-          ([values, at]) =>
-            (
-              window as unknown as {
-                drawAtWidth: (v: string[], w: number) => Promise<unknown>;
-              }
-            ).drawAtWidth(values as string[], at as number),
-          [[...sources], width] as [string[], number],
+        byWidth[width] = await served.asking(() =>
+          open.evaluate(
+            ([values, at]) =>
+              (
+                window as unknown as {
+                  drawAtWidth: (v: string[], w: number) => Promise<unknown>;
+                }
+              ).drawAtWidth(values as string[], at as number),
+            [[...sources], width] as [string[], number],
+          ),
         );
       }
 

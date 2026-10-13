@@ -55,8 +55,19 @@ function png(width: number, height: number): Buffer {
   return canvas.toBuffer("image/png");
 }
 
-const settled = (ms: number) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * A fixed time, for the two things a condition cannot stand for: spacing
+ * what a test does, and giving something that must not happen the time to.
+ * What the viewer is expected to reach is waited for with `until`.
+ */
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits for the viewer to catch up, however busy the computer is. */
+async function until(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + 20_000;
+  while (!condition() && Date.now() < deadline) await pause(10);
+  expect(condition()).toBe(true);
+}
 
 describe("the documents a conversation shows", () => {
   it("shows a workspace PDF with its name, its folder and the size of each page", async () => {
@@ -315,7 +326,8 @@ describe("the documents a conversation shows", () => {
       // The filtered corner paints black: its picture is not fetched.
       expect(blue).toBe(9_900);
       expect(reddish).toBe(0);
-      await settled(300);
+      // Nothing is waited for here: a fetch, had one been made, has had time.
+      await pause(300);
       expect(reached).toEqual([]);
     } finally {
       server.close();
@@ -352,7 +364,7 @@ describe("the documents a conversation shows", () => {
         "flyer.png",
       ]),
     ).resolves.toEqual(["reports/q3.pdf", "flyer.png"]);
-    await settled(50);
+    await until(() => documents.state("c1").status === "shown");
     expect(documents.state("c1")).toMatchObject({
       status: "shown",
       path: "flyer.png",
@@ -374,15 +386,15 @@ describe("the documents a conversation shows", () => {
     for (let pages = 1; pages <= 5; pages++) {
       await writeFile(join(root, "draft.pdf"), pdf({ pages }));
       await documents.written("c1", root, ["draft.pdf"]);
-      await settled(40);
+      await pause(40);
     }
     const burst = Date.now() - started;
-    for (let waited = 0; waited < 5000; waited += 50) {
+    await until(() => {
       const last = drawn().at(-1);
-      if (last?.status === "shown" && last.pages.length === 5) break;
-      await settled(50);
-    }
-    await settled(interval + 100);
+      return last?.status === "shown" && last.pages.length === 5;
+    });
+    // A draw too many, had one been owed, has had its interval to come.
+    await pause(interval + 100);
 
     // The first write, then at most one draw per interval the burst spanned,
     // then the latest once the burst is over.
@@ -407,14 +419,8 @@ describe("the documents a conversation shows", () => {
       await Promise.all(
         attempt % 2 ? [show(), written()] : [written(), show()],
       );
-      // The written file's load may still be on its way; wait for it to land
-      // rather than for a guessed time.
-      const deadline = Date.now() + 10_000;
-      while (
-        documents.state("c1").status === "opening" &&
-        Date.now() < deadline
-      )
-        await settled(25);
+      // The written file's load may still be on its way.
+      await until(() => documents.state("c1").status !== "opening");
       const state = documents.state("c1");
       if (state.status !== "shown") throw new Error(state.status);
       drawn.push((await documents.drawPage("c1", state.revision, 1, 400)).ok);

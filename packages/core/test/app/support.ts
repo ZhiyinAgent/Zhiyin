@@ -28,12 +28,17 @@ import {
 } from "../../src/workspace.js";
 import type { ModelEvent } from "@zhiyin/model-client";
 
+/**
+ * Waits for what a test is about to check, by the clock: how many turns of
+ * the loop a save or a model's answer takes depends on the machine.
+ */
 export async function until(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (predicate()) return;
+  const deadline = performance.now() + 4_000;
+  while (!predicate()) {
+    if (performance.now() > deadline)
+      throw new Error("Condition was not reached.");
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
-  throw new Error("Condition was not reached.");
 }
 
 /** A model that makes each call in turn, one a request, then answers. */
