@@ -224,6 +224,10 @@ described in the [component library](../../component-library.md).
   or picture a task produced opens there from Files. Nothing in the space can be
   dragged out of the window. While the space is put away, the conversation says
   what is in it and opens it from there.
+- A page fitted to the document panel's width holds still. The space the pages
+  scroll in keeps a scrollbar's room whether or not one shows, so a picture
+  that almost fits the panel's height cannot bring a scrollbar that narrows it
+  until it fits, and lose it again.
 
 ### Diagrams and charts
 
@@ -284,5 +288,7 @@ State and formatting are tested on plain data; component tests render
 production components with Testing Library. Layout a DOM test cannot observe,
 such as the smallest window, chart text and diagram geometry, is checked in a
 real browser against the component lab, and the installed-app suite checks the
-built window. Visual review happens in the component lab and the composed demo,
-in both themes and at 720 × 480.
+built window. The document panel's fit is measured in a real browser on the
+production panel, bundled with the application's stylesheets. Visual review
+happens in the component lab and the composed demo, in both themes and at
+720 × 480.

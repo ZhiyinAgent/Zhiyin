@@ -215,8 +215,12 @@
   gap: 12px;
   min-width: 0;
   min-height: 0;
-  padding: 16px;
+  /* The scrollbar's room is kept whether or not it shows, out of the right
+     margin: a page sized to the width cannot bring a scrollbar that changes
+     the width, and the pages stay in the middle of the panel. */
+  padding: 16px calc(16px - var(--zy-scrollbar)) 16px 16px;
   overflow: auto;
+  scrollbar-gutter: stable;
   background: var(--zy-wash-faint);
   /* Pages are pictures: there is no text here to select. */
   user-select: none;
