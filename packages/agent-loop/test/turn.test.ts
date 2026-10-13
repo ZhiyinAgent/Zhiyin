@@ -380,7 +380,7 @@ describe("AgentLoop", () => {
     await running;
   });
 
-  it("turns model failures into a visible failed task without exposing causes", async () => {
+  it("turns a failure the model port did not explain into a visible failed task without exposing its cause", async () => {
     const loop = loopFrom({
       ...stubDependencies(() => {}),
       model: {
@@ -404,7 +404,8 @@ describe("AgentLoop", () => {
 
     expect(loop.snapshot().tasks[0]?.phase).toEqual({
       kind: "failed",
-      reason: "The model request failed. Try again.",
+      reason: "Zhiyin stopped on an error of its own. Try again.",
+      remedies: ["tryAgain"],
     });
   });
 

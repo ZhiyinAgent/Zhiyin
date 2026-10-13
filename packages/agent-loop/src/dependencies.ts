@@ -47,6 +47,14 @@ export interface AgentLoopDependencies {
    * waiting for it, in milliseconds. Defaults to the loop's own value.
    */
   readonly quietAfterMs?: number;
+  /**
+   * Keeps an error of Zhiyin's own that ended a turn, where it can be read
+   * afterwards. The conversation says only that there was one.
+   */
+  readonly recordDefect?: (defect: {
+    readonly taskId: string;
+    readonly error: unknown;
+  }) => void;
   readonly newMessageId: () => string;
   readonly newActionId: () => string;
   readonly newSpecialistRunId: () => string;

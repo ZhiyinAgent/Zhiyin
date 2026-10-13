@@ -259,9 +259,10 @@ answers every other command:
   app was started; a folder given on the command line wins.
 - A diagnostic log keeps one JSON line per event, a file per day under the
   data folder's `logs`, for two weeks, and is never sent anywhere. An
-  exception nobody handled is recorded and the process keeps running. A page
-  that crashes is loaded again, unless it crashed more than three times in a
-  minute.
+  exception nobody handled is recorded and the process keeps running. An
+  error of Zhiyin's own that ended a turn is recorded with its stack and its
+  conversation's id. A page that crashes is loaded again, unless it crashed
+  more than three times in a minute.
 
 ## Testing notes
 

@@ -722,11 +722,21 @@ describe("specialist child execution", () => {
       tools: readonly string[],
       messages: string,
     ) => readonly ModelEvent[];
+    /** Whether a tool may run; allowed when left out. */
+    readonly decide?: () => Promise<{
+      readonly outcome: "allow";
+      readonly reason: string;
+    }>;
+    readonly recordDefect?: (defect: {
+      readonly taskId: string;
+      readonly error: unknown;
+    }) => void;
   }) {
     const base = stubDependencies(() => {});
     let specialistRound = 0;
     return loopFrom({
       ...base,
+      ...(options.recordDefect ? { recordDefect: options.recordDefect } : {}),
       ...(options.workLimits ? { workLimits: options.workLimits } : {}),
       ...(options.specialistWorkLimits
         ? { specialistWorkLimits: options.specialistWorkLimits }
@@ -766,7 +776,9 @@ describe("specialist child execution", () => {
         execute: async () => ({ ok: true as const, value: "seen" }),
       },
       permissions: {
-        decide: async () => ({ outcome: "allow" as const, reason: "Read" }),
+        decide:
+          options.decide ??
+          (async () => ({ outcome: "allow" as const, reason: "Read" })),
       },
       model: {
         ...base.model,
@@ -977,6 +989,49 @@ describe("specialist child execution", () => {
       status: "interrupted",
       reason: expect.stringContaining("budget"),
     });
+  });
+
+  it("says an error of Zhiyin's own that stops a specialist is Zhiyin's, keeps its cause out of the conversation, and records it", async () => {
+    const thrown = new TypeError("Cannot read properties of undefined");
+    const kept: { taskId: string; error: unknown }[] = [];
+    const loop = delegatingLoop({
+      specialist: (round) => [readsAFile(round)],
+      decide: async () => {
+        throw thrown;
+      },
+      recordDefect: (defect) => kept.push(defect),
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "failed",
+      reason:
+        "Zhiyin stopped on an error of its own while this specialist was working.",
+    });
+    expect(JSON.stringify(loop.snapshot())).not.toContain(
+      "Cannot read properties",
+    );
+    expect(kept).toEqual([
+      { taskId: loop.snapshot().tasks[0]?.id, error: thrown },
+    ]);
+  });
+
+  it("keeps a specialist's own account of why it stopped, and records no error of Zhiyin's for it", async () => {
+    const kept: unknown[] = [];
+    const loop = delegatingLoop({
+      // It answers in words and reports nothing.
+      specialist: () => [{ kind: "textDelta", text: "All good." }],
+      recordDefect: (defect) => kept.push(defect),
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "failed",
+      reason: "The specialist stopped without returning a structured handoff.",
+    });
+    expect(kept).toEqual([]);
   });
 
   it("answers a specialist's unreadable tool input instead of failing the specialist", async () => {

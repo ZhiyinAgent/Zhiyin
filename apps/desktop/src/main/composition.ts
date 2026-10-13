@@ -92,6 +92,7 @@ import {
 } from "@zhiyin/document-viewer";
 import { createHash, randomUUID } from "node:crypto";
 import { PendingViewChecks } from "@zhiyin/views";
+import type { LogEntry } from "./diagnostic-log.js";
 
 /** What the composition needs from the Electron side. */
 export type Surroundings = {
@@ -133,6 +134,8 @@ export type Surroundings = {
   readonly startDrawing: StartDrawingProcess;
   /** Device pixels per CSS pixel where the window is now. */
   readonly pixelDensity?: () => number;
+  /** Where what went wrong is kept, on this computer. */
+  readonly log?: { record(entry: LogEntry): void };
 };
 
 /** The person's light or dark choice, read before the window is made. */
@@ -167,6 +170,7 @@ export function buildCore({
   connectionsNeverClose,
   startDrawing,
   pixelDensity,
+  log,
 }: Surroundings): Core {
   const emit = (event: AppEvent): void => send(CHANNEL.appEvent, event);
   const views = new PendingViewChecks({
@@ -440,6 +444,15 @@ export function buildCore({
         // The selected model, passed separately so the naming and labelling
         // work can go to a different one, such as a local model.
         guidanceModel: model,
+        // The conversation says only that Zhiyin stopped on an error of its
+        // own; the error itself is kept here.
+        recordDefect: ({ taskId, error }) =>
+          log?.record({
+            level: "error",
+            source: "turn",
+            message: `A turn stopped on an error of Zhiyin's own, in conversation ${taskId}.`,
+            error,
+          }),
         newMessageId: randomUUID,
         newActionId: randomUUID,
         newSpecialistRunId: randomUUID,

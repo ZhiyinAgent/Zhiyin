@@ -156,6 +156,13 @@ out still runs, and is named in the background.
 - A failed turn records the steps the person can take, from the model client's
   account of the failure. When the failure passes on its own and work was
   already done, it also offers to continue from that work.
+- A turn that stops on an error neither the model client nor the loop accounts
+  for says the error was Zhiyin's own, never that the model request failed. It
+  offers to try again, and to continue when work was already done. The error
+  is handed to `recordDefect` and its cause is not shown in the conversation.
+  A specialist that stops on such an error says the same of itself and hands
+  it over the same way; a stop it accounts for, as a spent budget or a missing
+  report is, keeps its own words.
 - Every request records its usage against its conversation, with its purpose:
   the turn, a condensing, a specialist, or background naming and repair.
 - Every quiet correction and repair is written to the audit log. If that write

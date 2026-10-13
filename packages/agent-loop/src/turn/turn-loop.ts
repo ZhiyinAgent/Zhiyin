@@ -52,6 +52,7 @@ import { deliverGuidance } from "./turn-guidance.js";
 import { completionPhase } from "./turn-completion.js";
 import {
   recoverConnectionFailure,
+  isOwnDefect,
   turnFailureReason,
   turnFailureRemedies,
 } from "./turn-recovery.js";
@@ -610,6 +611,7 @@ export class TurnLoop {
         await this.#interruptIfCurrent(taskId, controller);
         return;
       }
+      if (isOwnDefect(error)) this.#deps.recordDefect?.({ taskId, error });
       const task = this.#records.task(taskId);
       const remedies = turnFailureRemedies(error, ledger.completedToolRounds());
       await this.#records.replaceTask({

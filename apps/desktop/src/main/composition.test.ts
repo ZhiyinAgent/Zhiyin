@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHANNEL } from "@zhiyin/contract";
 import { buildCore } from "./composition.js";
+import type { LogEntry } from "./diagnostic-log.js";
 
 /** Two models of one family: one can be shown pictures, the other cannot. */
 const catalogue = {
@@ -190,6 +191,65 @@ describe("the application's composition", () => {
         requests.filter((url) => url.endsWith("/chat/completions")),
       ).toEqual([]);
       expect(JSON.stringify(sent)).toContain('"chooseModel"');
+    },
+  );
+
+  it(
+    "keeps an error of Zhiyin's own that ended a turn in the log, and tells the conversation only that there was one",
+    { timeout: 60_000 },
+    async () => {
+      const sent: unknown[] = [];
+      const logged: LogEntry[] = [];
+      const thrown = new Error("The window could not be told.");
+      let updates = 0;
+      const core = buildCore({
+        dataDirectory,
+        builtInPluginsDirectory: fileURLToPath(
+          new URL("../../../../packages/plugins/built-in", import.meta.url),
+        ),
+        workspaceDirectory,
+        version: "test",
+        // Telling the window of the turn's progress fails, once it has begun.
+        send: (_channel, payload) => {
+          if ((payload as { kind?: string }).kind === "taskUpdated") {
+            updates += 1;
+            if (updates === 2) throw thrown;
+          }
+          sent.push(payload);
+        },
+        chooseFolder: async () => undefined,
+        chooseSaveLocation: async () => undefined,
+        openExternal: async () => {},
+        openPath: async () => {},
+        showInFolder: async () => {},
+        startDrawing: async () => {
+          throw new Error("Nothing is drawn in this test.");
+        },
+        log: { record: (entry) => void logged.push(entry) },
+      });
+      core.start();
+      try {
+        await core.receive(CHANNEL.frontendReady, []);
+        const taskId = (await core.receive(CHANNEL.createTask, [])) as string;
+        await core.receive(CHANNEL.sendMessage, [taskId, "Hello"]);
+        await eventually(() =>
+          JSON.stringify(sent).includes(
+            "Zhiyin stopped on an error of its own. Try again.",
+          ),
+        );
+
+        expect(logged).toEqual([
+          {
+            level: "error",
+            source: "turn",
+            message: `A turn stopped on an error of Zhiyin's own, in conversation ${taskId}.`,
+            error: thrown,
+          },
+        ]);
+        expect(JSON.stringify(sent)).not.toContain(thrown.message);
+      } finally {
+        await core.shutdown();
+      }
     },
   );
 

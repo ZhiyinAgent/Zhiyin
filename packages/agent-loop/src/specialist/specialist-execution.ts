@@ -7,6 +7,7 @@ import type {
   ToolSpec,
   WorkspaceDescription,
 } from "@zhiyin/contract";
+import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { estimatedRequestTokens } from "../context/conversation-context.js";
 import { QuietFailures, withdrawCalls } from "../tools/quiet-failures.js";
@@ -29,6 +30,7 @@ import {
 } from "../turn/work-limits.js";
 import { RoundResults } from "../context/result-size.js";
 import { toolOutput } from "../turn/notices.js";
+import { isOwnDefect } from "../turn/turn-recovery.js";
 import { refusal, skippedAfterDecline } from "../tools/refusals.js";
 
 /**
@@ -381,7 +383,7 @@ export class SpecialistExecution {
           const input = readToolInput(finish.arguments);
           const result = input.ok ? handoff(input.arguments) : undefined;
           if (!result)
-            throw new Error(
+            throw new VisibleError(
               "The specialist returned an invalid structured handoff.",
             );
           const actionIds = ownActionIds();
@@ -400,12 +402,12 @@ export class SpecialistExecution {
         }
         if (wrappingUp) {
           spent = true;
-          throw new Error(
+          throw new VisibleError(
             `The specialist used up its work budget (${ledger.describe(this.#deps.now(), ledger.reached(this.#deps.now()))}) and did not report.`,
           );
         }
         if (calls.length === 0)
-          throw new Error(
+          throw new VisibleError(
             "The specialist stopped without returning a structured handoff.",
           );
 
@@ -534,7 +536,7 @@ export class SpecialistExecution {
               (_, message) => message,
             );
         }
-        if (nameless) throw new Error(namelessCallFailure);
+        if (nameless) throw new VisibleError(namelessCallFailure);
         ledger.completeToolRound();
         // A specialist has no one to ask for more. When its own budget is spent
         // it is given one request to report what it has, with nothing else on
@@ -550,11 +552,18 @@ export class SpecialistExecution {
         }
       }
     } catch (error) {
+      // An error neither the model client nor this loop accounts for is
+      // Zhiyin's own: it is kept for whoever looks into it, and its message
+      // stays out of the conversation, as in the main loop.
+      const own = !controller.signal.aborted && isOwnDefect(error);
+      if (own) this.#deps.recordDefect?.({ taskId: options.taskId, error });
       const reason = controller.signal.aborted
         ? "The specialist stopped before it completed."
-        : error instanceof Error
-          ? error.message
-          : "The specialist failed before returning a handoff.";
+        : own
+          ? "Zhiyin stopped on an error of its own while this specialist was working."
+          : error instanceof Error
+            ? error.message
+            : "The specialist failed before returning a handoff.";
       const actionIds = ownActionIds();
       await this.#finishRun(options.taskId, runId, {
         status: controller.signal.aborted || spent ? "interrupted" : "failed",

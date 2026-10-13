@@ -450,12 +450,73 @@ describe("AgentLoop: what a failed turn offers next", () => {
     });
   });
 
-  it("offers nothing for a failure that is not the model's", async () => {
+  it("says an error of its own is Zhiyin's, and offers to try again", async () => {
     const phase = await failedWith(new Error("The disk is full."));
 
     expect(phase).toEqual({
       kind: "failed",
-      reason: "The model request failed. Try again.",
+      reason: "Zhiyin stopped on an error of its own. Try again.",
+      remedies: ["tryAgain"],
     });
+  });
+
+  /** A turn whose first command ran, and whose second stops on `thrown`. */
+  async function failedInAToolRound(thrown: unknown) {
+    const deps = stubDependencies(() => {});
+    const kept: { taskId: string; error: unknown }[] = [];
+    let decisions = 0;
+    let requests = 0;
+    const loop = loopFrom({
+      ...deps,
+      permissions: {
+        decide: async () => {
+          decisions += 1;
+          if (decisions > 1) throw thrown;
+          return { outcome: "allow", reason: "Allowed." };
+        },
+      },
+      tools: toolReturning({ ok: true, value: "/usr/bin/python3" }),
+      model: {
+        ...deps.model,
+        send: async function* () {
+          requests += 1;
+          yield {
+            kind: "toolCallDelta" as const,
+            index: 0,
+            callId: `check-${requests}`,
+            name: "bash",
+            argumentsDelta: '{"command":"command -v python3"}',
+          };
+          yield { kind: "done" as const };
+        },
+      },
+      recordDefect: (defect) => kept.push(defect),
+    });
+    const taskId = await loop.createTask();
+    await loop.start(taskId, "Check for Python, then report.");
+    return { taskId, kept, phase: loop.snapshot().tasks[0]?.phase };
+  }
+
+  it("says an error of its own inside a tool round is Zhiyin's, offers to carry on from the work done, and keeps the error", async () => {
+    const thrown = new TypeError("Cannot read properties of undefined");
+
+    const { taskId, kept, phase } = await failedInAToolRound(thrown);
+
+    expect(phase).toEqual({
+      kind: "failed",
+      reason:
+        "Zhiyin stopped on an error of its own. Completed actions are saved. Send a follow-up to continue from here.",
+      remedies: ["continue", "tryAgain"],
+    });
+    expect(kept).toEqual([{ taskId, error: thrown }]);
+  });
+
+  it("keeps no error for a failure the model client explained", async () => {
+    const { kept, phase } = await failedInAToolRound(
+      new ModelClientError("rateLimited", "The provider is busy."),
+    );
+
+    expect(phase).toMatchObject({ kind: "failed" });
+    expect(kept).toEqual([]);
   });
 });

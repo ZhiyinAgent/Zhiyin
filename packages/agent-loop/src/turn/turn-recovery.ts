@@ -77,9 +77,18 @@ const passing: ReadonlySet<ModelClientErrorCode> = new Set([
 ]);
 
 /**
+ * An error neither the model client nor the loop accounts for: a defect of
+ * Zhiyin's own, which nothing the person set up is the cause of.
+ */
+export function isOwnDefect(error: unknown): boolean {
+  return !modelFailure(error) && !(error instanceof VisibleError);
+}
+
+/**
  * What a person can do about a failed turn, from the model client's account of
  * the failure. Starting again would redo work already done, so a failure that
- * passes on its own also offers to carry on from it.
+ * passes on its own also offers to carry on from it, and so does a defect of
+ * Zhiyin's own.
  */
 export function turnFailureRemedies(
   error: unknown,
@@ -87,7 +96,12 @@ export function turnFailureRemedies(
 ): readonly TurnRemedy[] {
   if (error instanceof TurnFailure) return error.remedies;
   const failure = modelFailure(error);
-  if (!failure) return [];
+  if (!failure)
+    return isOwnDefect(error)
+      ? completedToolRounds > 0
+        ? ["continue", "tryAgain"]
+        : ["tryAgain"]
+      : [];
   if (passing.has(failure.code) && completedToolRounds > 0)
     return ["continue", "tryAgain"];
   return remediesFor[failure.code];
@@ -102,10 +116,10 @@ export function turnFailureReason(
     return completedToolRounds > 0
       ? "The model connection stopped. Completed actions are saved. Send a follow-up to continue from here."
       : "The model connection stopped. Try again.";
-  return (
-    failure?.message ??
-    (error instanceof VisibleError
-      ? error.message
-      : "The model request failed. Try again.")
-  );
+  if (failure) return failure.message;
+  if (error instanceof VisibleError) return error.message;
+  // Its cause is kept for whoever looks into it, and is not the person's to fix.
+  return completedToolRounds > 0
+    ? "Zhiyin stopped on an error of its own. Completed actions are saved. Send a follow-up to continue from here."
+    : "Zhiyin stopped on an error of its own. Try again.";
 }

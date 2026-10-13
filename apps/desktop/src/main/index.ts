@@ -229,6 +229,7 @@ void app.whenReady().then(async () => {
       if (failure) throw new Error(failure);
     },
     showInFolder: async (path) => shell.showItemInFolder(path),
+    log,
     // When to notify is the core's; this only shows one, and brings the
     // window forward when it is clicked.
     notifier: {
