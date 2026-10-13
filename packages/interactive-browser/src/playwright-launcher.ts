@@ -134,16 +134,25 @@ function releasePipes(pipes: ProcessPipes | undefined): void {
   pipes?.fromProcess.destroy();
 }
 
-function targetFrom(
-  browser: Browser,
-  context: BrowserContext,
-  page: Page,
-  cdp: CDPSession,
-  channel: string,
-  pid: number | undefined,
-  viewport: BrowserViewport,
-  closeOwner: () => Promise<void>,
-): BrowserTarget {
+function targetFrom({
+  browser,
+  context,
+  page,
+  cdp,
+  channel,
+  pid,
+  viewport,
+  closeOwner,
+}: {
+  readonly browser: Browser;
+  readonly context: BrowserContext;
+  readonly page: Page;
+  readonly cdp: CDPSession;
+  readonly channel: string;
+  readonly pid: number | undefined;
+  readonly viewport: BrowserViewport;
+  readonly closeOwner: () => Promise<void>;
+}): BrowserTarget {
   let closed = false;
   return {
     pid,
@@ -253,7 +262,7 @@ async function connectedTarget(
   await page.setViewportSize(viewport);
   const cdp = await context.newCDPSession(page);
   await cdp.send("Page.enable");
-  return targetFrom(
+  return targetFrom({
     browser,
     context,
     page,
@@ -262,7 +271,7 @@ async function connectedTarget(
     pid,
     viewport,
     closeOwner,
-  );
+  });
 }
 
 async function atomicLaunch(

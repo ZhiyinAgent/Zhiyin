@@ -94,6 +94,13 @@ export type ToolGathering =
   | { readonly ok: true; readonly value: ConversationTools }
   | { readonly ok: false; readonly reason: string };
 
+/** What running a tool may be given beside the call itself. */
+export type ExecuteOptions = {
+  readonly signal?: AbortSignal | undefined;
+  /** A connector tool as it was when the call was approved. */
+  readonly identity?: string | undefined;
+};
+
 export interface Capabilities {
   /**
    * Gathers the tools a conversation may call. A source that cannot answer
@@ -133,8 +140,7 @@ export interface Capabilities {
     owner: ToolOwner,
     name: string,
     args: unknown,
-    signal?: AbortSignal,
-    identity?: string,
+    options?: ExecuteOptions,
   ): Promise<ToolInvocationResult>;
   /** Present only when the built-in tools can accept a person's answer. */
   readonly completeUserInput:
@@ -467,20 +473,17 @@ export class ComposedCapabilities implements Capabilities {
     owner: ToolOwner,
     name: string,
     args: unknown,
-    signal?: AbortSignal,
-    identity?: string,
+    { signal, identity }: ExecuteOptions = {},
   ): Promise<ToolInvocationResult> {
     if (owner === "built-in")
       return this.#members.tools.execute(name, args, signal, conversationId);
     if (owner === "mcp")
-      return this.#members.mcp.execute(
-        name,
-        args,
+      return this.#members.mcp.execute(name, args, {
         signal,
-        identity,
-        conversationId,
-        await this.#withheldFor(conversationId),
-      );
+        expectedIdentity: identity,
+        scope: conversationId,
+        excludedServerIds: await this.#withheldFor(conversationId),
+      });
     if (owner === "plugin") {
       const id = singleIdArg(args);
       if (!id) return { ok: false, reason: "Choose one enabled plugin by id." };

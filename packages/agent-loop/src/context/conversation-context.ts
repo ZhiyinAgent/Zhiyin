@@ -15,14 +15,21 @@ import { harnessNotice } from "../turn/notices.js";
  * plugins it may inspect or activate. It changes only when these do, so the
  * cached start of a conversation's requests survives from turn to turn.
  */
-export function fixedModelMessages(
-  workspace: WorkspaceDescription,
-  skills: ConversationTools["skills"],
-  pluginDirectory: ConversationTools["pluginDirectory"],
-  now: Date,
-  tools: ConversationTools["tools"],
-  reader: "agent" | "specialist" = "agent",
-): readonly ModelMessage[] {
+export function fixedModelMessages({
+  workspace,
+  skills,
+  pluginDirectory,
+  now,
+  tools,
+  reader = "agent",
+}: {
+  readonly workspace: WorkspaceDescription;
+  readonly skills: ConversationTools["skills"];
+  readonly pluginDirectory: ConversationTools["pluginDirectory"];
+  readonly now: Date;
+  readonly tools: ConversationTools["tools"];
+  readonly reader?: "agent" | "specialist";
+}): readonly ModelMessage[] {
   const offered = tools.map((tool) => tool.name);
   return [
     {

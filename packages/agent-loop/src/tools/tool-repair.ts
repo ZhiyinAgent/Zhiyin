@@ -128,11 +128,19 @@ export class ToolCallRepair {
   async repair(
     taskId: string,
     call: AssembledToolCall,
-    proposed: unknown,
-    owner: ToolOwner,
-    refusal: Extract<ToolCallInspection, { readonly ok: false }>,
-    round: RoundEvidence,
-    signal: AbortSignal,
+    {
+      proposed,
+      owner,
+      refusal,
+      round,
+      signal,
+    }: {
+      readonly proposed: unknown;
+      readonly owner: ToolOwner;
+      readonly refusal: Extract<ToolCallInspection, { readonly ok: false }>;
+      readonly round: RoundEvidence;
+      readonly signal: AbortSignal;
+    },
   ): Promise<RepairedCall | undefined> {
     let current = proposed;
     let currentRefusal = refusal;
@@ -163,28 +171,24 @@ export class ToolCallRepair {
       if (!preservesContent(current, proposal, preserve)) {
         // The one rejection that is a finding rather than a shrug: something
         // tried to change what an approved action would write.
-        await this.#reject(
-          taskId,
-          call.name,
-          currentRefusal.reason,
-          "content-changed",
-          current,
-          proposal,
-        );
+        await this.#reject(taskId, call.name, {
+          reason: currentRefusal.reason,
+          cause: "content-changed",
+          before: current,
+          after: proposal,
+        });
         return undefined;
       }
 
       const serialized = JSON.stringify(proposal);
       // No progress: it has proposed something already refused.
       if (seen.has(serialized)) {
-        await this.#reject(
-          taskId,
-          call.name,
-          currentRefusal.reason,
-          "no-progress",
-          current,
-          proposal,
-        );
+        await this.#reject(taskId, call.name, {
+          reason: currentRefusal.reason,
+          cause: "no-progress",
+          before: current,
+          after: proposal,
+        });
         return undefined;
       }
       seen.add(serialized);
@@ -206,26 +210,22 @@ export class ToolCallRepair {
       }
       // Only a refusal of the same kind is worth another attempt.
       if (!inspection.correctable) {
-        await this.#reject(
-          taskId,
-          call.name,
-          inspection.reason,
-          "still-refused",
-          current,
-          proposal,
-        );
+        await this.#reject(taskId, call.name, {
+          reason: inspection.reason,
+          cause: "still-refused",
+          before: current,
+          after: proposal,
+        });
         return undefined;
       }
       current = proposal;
       currentRefusal = inspection;
     }
-    await this.#reject(
-      taskId,
-      call.name,
-      currentRefusal.reason,
-      "still-refused",
-      current,
-    );
+    await this.#reject(taskId, call.name, {
+      reason: currentRefusal.reason,
+      cause: "still-refused",
+      before: current,
+    });
     return undefined;
   }
 
@@ -258,14 +258,12 @@ export class ToolCallRepair {
     );
     if (!decision) return undefined;
     if (!keepsRawText(raw, decision.arguments)) {
-      await this.#reject(
-        taskId,
-        call.name,
+      await this.#reject(taskId, call.name, {
         reason,
-        "content-changed",
-        raw,
-        decision.arguments,
-      );
+        cause: "content-changed",
+        before: raw,
+        after: decision.arguments,
+      });
       return undefined;
     }
     await this.#audit(taskId, call.name, "repair-applied", reason, {
@@ -305,7 +303,11 @@ export class ToolCallRepair {
       recent: recentCalls(question.round.messages),
     });
     if (!prompt) {
-      await this.#reject(taskId, call.name, reason, "too-large", before);
+      await this.#reject(taskId, call.name, {
+        reason,
+        cause: "too-large",
+        before,
+      });
       return undefined;
     }
 
@@ -336,17 +338,15 @@ export class ToolCallRepair {
       : undefined;
     if (decision?.kind === "repair") return decision;
     // Out of room is its own finding: the cap, not the repairer, failed.
-    await this.#reject(
-      taskId,
-      call.name,
+    await this.#reject(taskId, call.name, {
       reason,
-      decision
+      cause: decision
         ? "handover"
         : response.outOfRoom
           ? "out-of-room"
           : "unusable-answer",
       before,
-    );
+    });
     return undefined;
   }
 
@@ -354,10 +354,17 @@ export class ToolCallRepair {
   #reject(
     taskId: string,
     toolName: string,
-    reason: string,
-    cause: RepairRejection,
-    before: unknown,
-    after?: unknown,
+    {
+      reason,
+      cause,
+      before,
+      after,
+    }: {
+      readonly reason: string;
+      readonly cause: RepairRejection;
+      readonly before: unknown;
+      readonly after?: unknown;
+    },
   ): Promise<void> {
     return this.#audit(taskId, toolName, "repair-rejected", reason, {
       cause,

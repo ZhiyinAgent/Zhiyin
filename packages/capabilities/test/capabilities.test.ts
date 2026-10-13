@@ -241,8 +241,9 @@ function membersRecording(
         command: name,
       };
     },
-    execute: async (name, _args, _signal, identity, scope, excluded) => {
-      asked.push(["mcp.execute", name, scope, excluded]);
+    execute: async (name, _args, options = {}) => {
+      const { expectedIdentity: identity, scope, excludedServerIds } = options;
+      asked.push(["mcp.execute", name, scope, excludedServerIds]);
       return { ok: true, value: { name, identity, scope } };
     },
     shutdownScope: note("mcp.shutdownScope"),
@@ -791,8 +792,7 @@ describe("a call handed back", () => {
       "mcp",
       "mcp__software-engineering__github__search",
       {},
-      undefined,
-      "server-identity",
+      { identity: "server-identity" },
     );
 
     expect(inspection).toMatchObject({ ok: true, target: "conversation-7" });

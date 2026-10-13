@@ -137,21 +137,17 @@ export class PluginActivation {
         "Make this plugin's components available in this conversation.",
     };
     const actionId = this.#records.nextActionId(options.taskId);
-    await this.#records.recordToolAction(
-      options.taskId,
-      actionId,
+    await this.#records.recordToolAction(options.taskId, actionId, {
       inspection,
       presentation,
-      "running",
-      {
-        call: options.call,
-        approval: {
-          by: "no-approval-needed",
-          at: this.#deps.now().toISOString(),
-          reason: "Activating a plugin in this conversation.",
-        },
+      status: "running",
+      call: options.call,
+      approval: {
+        by: "no-approval-needed",
+        at: this.#deps.now().toISOString(),
+        reason: "Activating a plugin in this conversation.",
       },
-    );
+    });
     const activatedPlugins = [...options.activatedPlugins, resolved.id];
     const task = this.#records.task(options.taskId);
     await this.#records.replaceTask({ ...task, activatedPlugins });
@@ -174,14 +170,15 @@ export class PluginActivation {
       options.taskId,
       options.call,
       actionId,
-      inspection,
-      presentation,
-      "completed",
-      undefined,
       {
-        ok: true,
-        value: result,
-        details: this.#deps.capabilities.describePluginContents(reached),
+        inspection,
+        presentation,
+        status: "completed",
+        result: {
+          ok: true,
+          value: result,
+          details: this.#deps.capabilities.describePluginContents(reached),
+        },
       },
     );
     return {

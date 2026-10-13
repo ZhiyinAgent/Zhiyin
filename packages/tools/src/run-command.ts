@@ -265,9 +265,15 @@ export async function runShellCommand(
   shell: string,
   root: string,
   args: unknown,
-  signal?: AbortSignal,
-  containment?: CommandContainment,
-  context: CommandContext = {},
+  {
+    signal,
+    containment,
+    context = {},
+  }: {
+    readonly signal?: AbortSignal | undefined;
+    readonly containment?: CommandContainment | undefined;
+    readonly context?: CommandContext;
+  } = {},
 ): Promise<ToolInvocationResult> {
   const input = commandArguments(args);
   if (!input) {

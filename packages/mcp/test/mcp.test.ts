@@ -362,8 +362,7 @@ describe("ManagedMcpServers", () => {
       await servers.execute(
         "mcp__browser__navigate",
         {},
-        undefined,
-        inspected.ok ? inspected.identity : undefined,
+        { expectedIdentity: inspected.ok ? inspected.identity : undefined },
       ),
     ).toMatchObject({
       ok: false,
@@ -374,8 +373,7 @@ describe("ManagedMcpServers", () => {
       await servers.execute(
         "mcp__browser__navigate",
         {},
-        undefined,
-        inspected.ok ? inspected.identity : undefined,
+        { expectedIdentity: inspected.ok ? inspected.identity : undefined },
       ),
     ).toMatchObject({
       ok: false,
@@ -577,8 +575,7 @@ describe("ManagedMcpServers", () => {
         await servers.execute(
           "mcp__docs__read",
           {},
-          undefined,
-          approval.identity,
+          { expectedIdentity: approval.identity },
         )
       ).ok,
     ).toBe(false);
@@ -780,12 +777,16 @@ describe("ManagedMcpServers", () => {
     const before = new AbortController();
     before.abort();
     await expect(
-      servers.execute("mcp__docs__write", {}, before.signal),
+      servers.execute("mcp__docs__write", {}, { signal: before.signal }),
     ).resolves.toEqual({ ok: false, reason: "The action was stopped." });
     expect(dispatched).toBe(0);
 
     const after = new AbortController();
-    const running = servers.execute("mcp__docs__write", {}, after.signal);
+    const running = servers.execute(
+      "mcp__docs__write",
+      {},
+      { signal: after.signal },
+    );
     await vi.waitFor(() => expect(dispatched).toBe(1));
     after.abort();
     release({ content: [{ type: "text", text: "Written" }] });
@@ -819,7 +820,11 @@ describe("ManagedMcpServers", () => {
     });
 
     const controller = new AbortController();
-    const running = servers.execute("mcp__docs__write", {}, controller.signal);
+    const running = servers.execute(
+      "mcp__docs__write",
+      {},
+      { signal: controller.signal },
+    );
     await vi.waitFor(() => expect(reject).toBeTypeOf("function"));
     controller.abort();
     reject(new Error("connection lost"));
@@ -1005,10 +1010,7 @@ describe("ManagedMcpServers", () => {
       servers.execute(
         tool!.name,
         { city: "Paris" },
-        undefined,
-        undefined,
-        undefined,
-        ["local-weather"],
+        { excludedServerIds: ["local-weather"] },
       ),
     ).resolves.toEqual({
       ok: false,
@@ -1676,25 +1678,13 @@ describe("ManagedMcpServers", () => {
 
     expect(opened).toEqual(["first", "second"]);
     expect(
-      await servers.execute(
-        "mcp__browser__navigate",
-        {},
-        undefined,
-        undefined,
-        "first",
-      ),
+      await servers.execute("mcp__browser__navigate", {}, { scope: "first" }),
     ).toEqual({
       ok: true,
       value: { content: [{ type: "text", text: "first" }] },
     });
     expect(
-      await servers.execute(
-        "mcp__browser__navigate",
-        {},
-        undefined,
-        undefined,
-        "second",
-      ),
+      await servers.execute("mcp__browser__navigate", {}, { scope: "second" }),
     ).toEqual({
       ok: true,
       value: { content: [{ type: "text", text: "second" }] },
@@ -1978,9 +1968,7 @@ describe("connectors connect when they are used", () => {
         };
       },
       new InMemoryMcpCredentials(),
-      [],
-      async () => [search, github],
-      ...(now ? [now] : []),
+      { declared: async () => [search, github], now },
     );
     return { servers, dialed };
   }

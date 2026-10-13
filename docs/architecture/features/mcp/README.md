@@ -37,9 +37,10 @@ says about itself is shown as its claim.
 
 - `ManagedMcpServers` implements `McpServers`. It is constructed with a data
   directory, a connection factory (`connectHttpMcpServer` in production), a
-  credential store (`KeyringMcpCredentials`, Windows Credential Manager), the
-  built-in connections, the declaration source, a clock, and how to open the
-  person's browser for a sign-in.
+  credential store (`KeyringMcpCredentials`, Windows Credential Manager) and,
+  each given by name where it is needed, the built-in connections, the
+  declaration source, a clock, and how to open the person's browser for a
+  sign-in.
 - The declaration source lists every declared connector as
   `{ id, name, url, enabled, requestsPerMinute?, readOnlyTools? }`. This
   feature stores no definition of its own: it remembers only the endpoint a
@@ -61,9 +62,10 @@ says about itself is shown as its claim.
   nothing.
 - Calls: `availableTools(scope?, withheld?, onConnecting?)`,
   `inspect(name, args, scope?, withheld?)` and
-  `execute(name, args, signal?, expectedIdentity?, scope?, withheld?)`. The
-  scope is the conversation, `withheld` the connections the caller does not
-  allow, and `onConnecting` hears each connection the call waits for.
+  `execute(name, args, { signal, expectedIdentity, scope, excludedServerIds })`.
+  The scope is the conversation, `withheld` (`excludedServerIds` to
+  `execute`) the connections the caller does not allow, and `onConnecting`
+  hears each connection the call waits for.
 - `builtInIds()`, `shutdownScope(conversationId)` and `shutdownAll()`.
 
 ## Invariants

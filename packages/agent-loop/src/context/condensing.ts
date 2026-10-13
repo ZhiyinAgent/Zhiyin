@@ -544,7 +544,7 @@ export class Condensing {
     const when = this.#deps.now().toISOString();
     for (const [index, path] of files.entries()) {
       const result = await this.#deps.capabilities
-        .execute(taskId, "built-in", "read_file", { path }, signal)
+        .execute(taskId, "built-in", "read_file", { path }, { signal })
         .catch(() => ({ ok: false as const, reason: "It could not be read." }));
       if (result.ok) read.push(path);
       const answered = result.ok

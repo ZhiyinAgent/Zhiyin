@@ -27,17 +27,14 @@ export function managed(
 ): DeclaringServers {
   let declared: DeclaredMcpServer[] = [];
   let failing = false;
-  const servers = new ManagedMcpServers(
-    directory,
-    connect,
-    credentials,
+  const servers = new ManagedMcpServers(directory, connect, credentials, {
     builtIns,
-    async () => {
+    declared: async () => {
       if (failing) throw new Error("packages are unreadable");
       return declared.map((server) => ({ ...server }));
     },
-    ...(now ? [now] : []),
-  );
+    now,
+  });
   const settle = async () => {
     await servers.manage();
   };

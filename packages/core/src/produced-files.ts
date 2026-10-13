@@ -47,10 +47,17 @@ export async function exportArtifact(
 export async function exportView(
   artifacts: Artifacts,
   tasks: readonly WorkspaceTask[],
-  taskId: string,
-  viewId: string,
-  svg: string,
-  chooseDestination: DestinationChooser,
+  {
+    taskId,
+    viewId,
+    svg,
+    chooseDestination,
+  }: {
+    readonly taskId: string;
+    readonly viewId: string;
+    readonly svg: string;
+    readonly chooseDestination: DestinationChooser;
+  },
 ): Promise<ArtifactExport> {
   const view = taskView(tasks, taskId, viewId);
   if (!view)

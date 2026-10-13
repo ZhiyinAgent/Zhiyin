@@ -58,12 +58,18 @@ async function setUp(
     directory,
     connectHttpMcpServer,
     credentials,
-    [],
-    async () => [
-      { id: "work/tracker", name: "Tracker", url: service.url, enabled: true },
-    ],
-    Date.now,
-    { openBrowser, timeoutMs: 5_000 },
+    {
+      declared: async () => [
+        {
+          id: "work/tracker",
+          name: "Tracker",
+          url: service.url,
+          enabled: true,
+        },
+      ],
+      now: Date.now,
+      signInOptions: { openBrowser, timeoutMs: 5_000 },
+    },
   );
   const state = () => servers.check("work/tracker");
   return { service, credentials, openBrowser, servers, state, directory };

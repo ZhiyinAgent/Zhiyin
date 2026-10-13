@@ -434,10 +434,21 @@ export class TurnRecords {
   async recordToolAction(
     taskId: string,
     id: string,
-    inspection: Extract<ToolCallInspection, { readonly ok: true }>,
-    presentation: PresentedAction,
-    status: TaskAction["status"],
-    record: {
+    {
+      inspection,
+      presentation,
+      status,
+      reason,
+      call,
+      approval,
+      specialistRunId,
+      evidence,
+      readOnly,
+      recovery,
+    }: {
+      readonly inspection: Extract<ToolCallInspection, { readonly ok: true }>;
+      readonly presentation: PresentedAction;
+      readonly status: TaskAction["status"];
       readonly reason?: string;
       readonly call?: AssembledToolCall;
       readonly approval?: ActionApproval;
@@ -448,17 +459,8 @@ export class TurnRecords {
       readonly readOnly?: boolean;
       /** The copy taken before the change, when one was. */
       readonly recovery?: ActionRecovery;
-    } = {},
+    },
   ): Promise<void> {
-    const {
-      reason,
-      call,
-      approval,
-      specialistRunId,
-      evidence,
-      readOnly,
-      recovery,
-    } = record;
     const task = this.task(taskId);
     const actions = task.actions;
     const existing = actions.find((item) => item.id === id);
@@ -529,13 +531,22 @@ export class TurnRecords {
     taskId: string,
     call: AssembledToolCall,
     actionId: string,
-    inspection: Extract<ToolCallInspection, { readonly ok: true }>,
-    presentation: PresentedAction,
-    status: "completed" | "reported" | "failed",
-    reason?: string,
-    result?: ToolInvocationResult,
-    /** Whose pictures these are: a connector's are kept apart from the tools'. */
-    from: "tool" | "connector" = "tool",
+    {
+      inspection,
+      presentation,
+      status,
+      reason,
+      result,
+      from = "tool",
+    }: {
+      readonly inspection: Extract<ToolCallInspection, { readonly ok: true }>;
+      readonly presentation: PresentedAction;
+      readonly status: "completed" | "reported" | "failed";
+      readonly reason?: string | undefined;
+      readonly result?: ToolInvocationResult;
+      /** Whose pictures these are: a connector's are kept apart from the tools'. */
+      readonly from?: "tool" | "connector";
+    },
   ): Promise<void> {
     const task = this.task(taskId);
     const existing = task.actions.find((item) => item.id === actionId);

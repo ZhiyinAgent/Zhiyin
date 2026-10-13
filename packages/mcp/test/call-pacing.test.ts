@@ -150,7 +150,7 @@ describe("a connector's declared request rate", () => {
     const waiting = servers.execute(
       "mcp__search__search",
       { query: "y" },
-      stop.signal,
+      { signal: stop.signal },
     );
     await first;
     stop.abort();

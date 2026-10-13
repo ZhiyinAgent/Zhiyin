@@ -52,6 +52,14 @@ type RecordFailure = (
   specialistRunId?: string,
 ) => Promise<void>;
 
+/** What reading a call's input needs beside the call itself. */
+export type InputReading = {
+  readonly round: RoundEvidence;
+  readonly quietRetriesLeft: number;
+  readonly signal: AbortSignal;
+  readonly specialistRunId?: string;
+};
+
 export class CallInputs {
   readonly #repair: ToolCallRepair;
   readonly #audit: AuditCorrection;
@@ -70,10 +78,7 @@ export class CallInputs {
   async read(
     taskId: string,
     call: AssembledToolCall,
-    round: RoundEvidence,
-    quietRetriesLeft: number,
-    signal: AbortSignal,
-    specialistRunId?: string,
+    { round, quietRetriesLeft, signal, specialistRunId }: InputReading,
   ): Promise<CallInput> {
     const raw = call.arguments;
     const input = readToolInput(raw);

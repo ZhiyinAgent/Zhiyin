@@ -7,11 +7,20 @@ import type {
 
 export async function sendComposerMessage(
   send: CoreApi["sendMessage"],
-  taskId: string,
-  message: string,
-  reasoning: ReasoningSelection | undefined,
-  attachments: readonly MessageAttachment[] | undefined,
-  running: boolean,
+  {
+    taskId,
+    message,
+    reasoning,
+    attachments,
+    running,
+  }: {
+    readonly taskId: string;
+    readonly message: string;
+    readonly reasoning: ReasoningSelection | undefined;
+    readonly attachments: readonly MessageAttachment[] | undefined;
+    /** While a turn runs, the message is guidance for it. */
+    readonly running: boolean;
+  },
 ): Promise<void> {
   const ids = attachments?.map((attachment) => attachment.id);
   if (running) return send(taskId, message, reasoning, ids, "guidance");

@@ -571,7 +571,7 @@ async function compilingApp(root: string) {
         throw new Error("No remote connections here.");
       },
       new InMemoryMcpCredentials(),
-      [documentsConnection(compiler)],
+      { builtIns: [documentsConnection(compiler)] },
     ),
     recovery: new FileRecovery(
       await mkdtemp(join(tmpdir(), "zhiyin-loop-recovery-")),

@@ -41,11 +41,20 @@ function cut(line: string): string {
 
 export async function readPage(
   path: string,
-  startLine: number,
-  lineCount: number,
-  signal?: AbortSignal,
-  notice = "",
-  tokens = pageTokens,
+  {
+    startLine,
+    lineCount,
+    signal,
+    notice = "",
+    tokens = pageTokens,
+  }: {
+    readonly startLine: number;
+    readonly lineCount: number;
+    readonly signal?: AbortSignal | undefined;
+    /** Said before the page; its size comes out of the page's. */
+    readonly notice?: string | undefined;
+    readonly tokens?: number | undefined;
+  },
 ): Promise<Page> {
   const budget = tokens - reservedTokens - estimatedTokens(notice);
   const numbered: string[] = [];

@@ -414,13 +414,10 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
             signal?: AbortSignal,
             conversationId?: string,
           ) =>
-            runShellCommand(
-              this.#shell as string,
-              this.#root,
-              args,
+            runShellCommand(this.#shell as string, this.#root, args, {
               signal,
-              this.#containment,
-              {
+              containment: this.#containment,
+              context: {
                 ...(conversationId ? { conversationId } : {}),
                 ...(this.#items ? { items: this.#items } : {}),
                 jobs: this.#jobs,
@@ -429,7 +426,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
                   ? {}
                   : { promoteAfterMs: options.promoteCommandsAfterMs }),
               },
-            ),
+            }),
         },
       ],
       // Only a contained command can become a job, so without containment

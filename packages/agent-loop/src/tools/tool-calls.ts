@@ -12,7 +12,7 @@ import {
   ToolCallRepair,
   maximumRepairAttempts,
 } from "./tool-repair.js";
-import { type CallInput, CallInputs } from "./call-input.js";
+import { type CallInput, CallInputs, type InputReading } from "./call-input.js";
 import { readableToolName } from "./invocation.js";
 import { correctableByModel, refusal, unknownTool } from "./refusals.js";
 import { closedForPerson, shownToPerson } from "./document-reads.js";
@@ -122,13 +122,11 @@ export class ToolCalls {
       audit: (taskId, toolName, kind, reason, extra) =>
         this.#audit(taskId, toolName, kind, reason, extra),
       fail: (taskId, call, reason, _signal, specialistRunId) =>
-        this.recordFailedProposal(
-          taskId,
-          call,
-          "The requested action used invalid input.",
+        this.recordFailedProposal(taskId, call, {
+          description: "The requested action used invalid input.",
           reason,
           specialistRunId,
-        ),
+        }),
     });
   }
 
@@ -139,46 +137,45 @@ export class ToolCalls {
   readInput(
     taskId: string,
     call: AssembledToolCall,
-    round: RoundEvidence,
-    quietRetriesLeft: number,
-    signal: AbortSignal,
-    specialistRunId?: string,
+    reading: InputReading,
   ): Promise<CallInput> {
-    return this.#inputs.read(
-      taskId,
-      call,
-      round,
-      quietRetriesLeft,
-      signal,
-      specialistRunId,
-    );
+    return this.#inputs.read(taskId, call, reading);
   }
 
   async runToolCall(
     taskId: string,
     call: AssembledToolCall,
-    proposedArguments: unknown,
-    owner: ToolOwner | undefined,
-    controller: AbortController,
-    quietRetriesLeft: number,
-    round: RoundEvidence,
-    said: SelfDescription = {},
-    specialistRunId?: string,
+    {
+      proposedArguments,
+      owner,
+      controller,
+      quietRetriesLeft,
+      round,
+      said = {},
+      specialistRunId,
+    }: {
+      readonly proposedArguments: unknown;
+      /** Absent for a tool nobody offers. */
+      readonly owner: ToolOwner | undefined;
+      readonly controller: AbortController;
+      readonly quietRetriesLeft: number;
+      readonly round: RoundEvidence;
+      readonly said?: SelfDescription;
+      readonly specialistRunId?: string;
+    },
   ): Promise<ToolCallOutcome> {
     if (!owner) {
       const result = unknownTool(
         call.name,
         round.tools.map((tool) => tool.name),
       );
-      await this.recordFailedProposal(
-        taskId,
-        call,
-        "Zhiyin requested a capability that is not connected.",
-        result.reason,
+      await this.recordFailedProposal(taskId, call, {
+        description: "Zhiyin requested a capability that is not connected.",
+        reason: result.reason,
         specialistRunId,
-        "failed",
-        result,
-      );
+        status: "failed",
+        answer: result,
+      });
       return { result };
     }
 
@@ -193,15 +190,13 @@ export class ToolCalls {
     // Before the main model is troubled with it, a small model is given the
     // refusal and the last few observations and allowed to re-aim the call.
     if (!inspection.ok && inspection.correctable) {
-      const repair = await this.#repair.repair(
-        taskId,
-        call,
-        args,
+      const repair = await this.#repair.repair(taskId, call, {
+        proposed: args,
         owner,
-        inspection,
+        refusal: inspection,
         round,
-        controller.signal,
-      );
+        signal: controller.signal,
+      });
       controller.signal.throwIfAborted();
       if (repair) {
         args = repair.arguments;
@@ -228,15 +223,13 @@ export class ToolCalls {
         });
         return { result, quiet: true };
       }
-      await this.recordFailedProposal(
-        taskId,
-        call,
-        "The requested action could not be inspected.",
-        result.reason,
+      await this.recordFailedProposal(taskId, call, {
+        description: "The requested action could not be inspected.",
+        reason: result.reason,
         specialistRunId,
-        "failed",
-        result,
-      );
+        status: "failed",
+        answer: result,
+      });
       return { result };
     }
 
@@ -289,15 +282,13 @@ export class ToolCalls {
         !checked.ok && attempt < maximumRepairAttempts;
         attempt += 1
       ) {
-        const repair = await this.#repair.repair(
-          taskId,
-          call,
-          args,
+        const repair = await this.#repair.repair(taskId, call, {
+          proposed: args,
           owner,
-          { ok: false, reason: checked.reason, correctable: true },
+          refusal: { ok: false, reason: checked.reason, correctable: true },
           round,
-          controller.signal,
-        );
+          signal: controller.signal,
+        });
         if (
           !repair ||
           repair.inspection.requiresApproval !== false ||
@@ -332,23 +323,19 @@ export class ToolCalls {
           inspection.detail ?? "Add a reviewable view to this conversation.",
       };
       const actionId = this.#records.nextActionId(taskId);
-      await this.#records.recordToolAction(
-        taskId,
-        actionId,
+      await this.#records.recordToolAction(taskId, actionId, {
         inspection,
         presentation,
-        "running",
-        {
-          call,
-          approval: {
-            by: "no-approval-needed",
-            at: this.#deps.now().toISOString(),
-            reason: "Inert conversation view.",
-          },
-          ...(specialistRunId ? { specialistRunId } : {}),
-          readOnly: true,
+        status: "running",
+        call,
+        approval: {
+          by: "no-approval-needed",
+          at: this.#deps.now().toISOString(),
+          reason: "Inert conversation view.",
         },
-      );
+        ...(specialistRunId ? { specialistRunId } : {}),
+        readOnly: true,
+      });
       let result: ToolInvocationResult;
       try {
         result = await this.#deps.capabilities.execute(
@@ -356,7 +343,7 @@ export class ToolCalls {
           "built-in",
           call.name,
           args,
-          controller.signal,
+          { signal: controller.signal },
         );
       } catch {
         result = {
@@ -373,16 +360,13 @@ export class ToolCalls {
           ok: false,
           reason: "The produced view did not match the validated source.",
         };
-      await this.#records.finishToolAction(
-        taskId,
-        call,
-        actionId,
+      await this.#records.finishToolAction(taskId, call, actionId, {
         inspection,
         presentation,
-        outcomeStatus(result),
-        result.ok ? undefined : result.reason,
+        status: outcomeStatus(result),
+        reason: result.ok ? undefined : result.reason,
         result,
-      );
+      });
       return { result };
     }
 
@@ -462,23 +446,19 @@ export class ToolCalls {
             reason,
             "Choose an action permitted by the current policy.",
           );
-      await this.#records.recordToolAction(
-        taskId,
-        actionId,
+      await this.#records.recordToolAction(taskId, actionId, {
         inspection,
         presentation,
-        userDenied ? "denied" : "blocked",
-        {
+        status: userDenied ? "denied" : "blocked",
+        reason,
+        approval: {
+          by: userDenied ? "you" : "blocked",
+          at: this.#deps.now().toISOString(),
           reason,
-          approval: {
-            by: userDenied ? "you" : "blocked",
-            at: this.#deps.now().toISOString(),
-            reason,
-          },
-          ...(specialistRunId ? { specialistRunId } : {}),
-          readOnly: changesNothing(owner, inspection),
         },
-      );
+        ...(specialistRunId ? { specialistRunId } : {}),
+        readOnly: changesNothing(owner, inspection),
+      });
       await this.#records.showWorking(
         taskId,
         undefined,
@@ -498,25 +478,21 @@ export class ToolCalls {
         reason,
         "Nothing was changed. Look at the target again and propose the change from what it holds now; the person will be asked again. If it cannot be reached, tell the person why.",
       );
-      await this.#records.recordToolAction(
-        taskId,
-        actionId,
+      await this.#records.recordToolAction(taskId, actionId, {
         inspection,
         presentation,
-        "failed",
-        {
-          reason,
-          call,
-          approval: approvalRecord(
-            permission,
-            decision,
-            appliedRule,
-            this.#deps.now().toISOString(),
-          ),
-          ...(specialistRunId ? { specialistRunId } : {}),
-          readOnly: changesNothing(owner, inspection),
-        },
-      );
+        status: "failed",
+        reason,
+        call,
+        approval: approvalRecord(
+          permission,
+          decision,
+          appliedRule,
+          this.#deps.now().toISOString(),
+        ),
+        ...(specialistRunId ? { specialistRunId } : {}),
+        readOnly: changesNothing(owner, inspection),
+      });
       await this.#records.showWorking(
         taskId,
         undefined,
@@ -556,20 +532,16 @@ export class ToolCalls {
       appliedRule,
       this.#deps.now().toISOString(),
     );
-    await this.#records.recordToolAction(
-      taskId,
-      actionId,
+    await this.#records.recordToolAction(taskId, actionId, {
       inspection,
       presentation,
-      "running",
-      {
-        call,
-        approval,
-        ...(specialistRunId ? { specialistRunId } : {}),
-        readOnly: changesNothing(owner, inspection),
-        ...(backup ? { recovery: { files: backup.files } } : {}),
-      },
-    );
+      status: "running",
+      call,
+      approval,
+      ...(specialistRunId ? { specialistRunId } : {}),
+      readOnly: changesNothing(owner, inspection),
+      ...(backup ? { recovery: { files: backup.files } } : {}),
+    });
     await this.#records.showToolProgress(
       taskId,
       call,
@@ -585,8 +557,7 @@ export class ToolCalls {
         owner,
         call.name,
         args,
-        controller.signal,
-        inspection.identity,
+        { signal: controller.signal, identity: inspection.identity },
       );
     } catch {
       result = {
@@ -613,17 +584,14 @@ export class ToolCalls {
     if (beside && inspection.closesDocument)
       result = await closedForPerson(this.#deps.host, taskId, result);
     if (!controller.signal.aborted) {
-      await this.#records.finishToolAction(
-        taskId,
-        call,
-        actionId,
+      await this.#records.finishToolAction(taskId, call, actionId, {
         inspection,
         presentation,
-        outcomeStatus(result),
-        result.ok ? undefined : result.reason,
+        status: outcomeStatus(result),
+        reason: result.ok ? undefined : result.reason,
         result,
-        owner === "mcp" ? "connector" : "tool",
-      );
+        from: owner === "mcp" ? "connector" : "tool",
+      });
     }
     return {
       result,
@@ -674,12 +642,20 @@ export class ToolCalls {
   async recordFailedProposal(
     taskId: string,
     call: AssembledToolCall,
-    description: string,
-    reason: string,
-    specialistRunId?: string,
-    status: "failed" | "blocked" = "failed",
-    /** What the model was answered; the reason alone when nothing more was said. */
-    answer: unknown = { ok: false, reason },
+    {
+      description,
+      reason,
+      specialistRunId,
+      status = "failed",
+      answer = { ok: false, reason },
+    }: {
+      readonly description: string;
+      readonly reason: string;
+      readonly specialistRunId?: string | undefined;
+      readonly status?: "failed" | "blocked";
+      /** What the model was answered; the reason alone when nothing more was said. */
+      readonly answer?: unknown;
+    },
   ): Promise<void> {
     // The call as it was made, so the record can be unfolded to what was asked
     // and what came back. Nothing about the tool is known here, and no target
@@ -694,10 +670,10 @@ export class ToolCalls {
     await this.#records.recordToolAction(
       taskId,
       this.#records.nextActionId(taskId),
-      inspection,
-      presentation,
-      status,
       {
+        inspection,
+        presentation,
+        status,
         reason,
         call,
         ...(status === "blocked"

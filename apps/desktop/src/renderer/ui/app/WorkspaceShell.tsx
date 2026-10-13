@@ -281,14 +281,13 @@ export function WorkspaceShell({
     let taskId = selectedTask?.id;
     if (!taskId) await budget.adopt((taskId = await commands.createTask()));
     setComposerDraft(undefined);
-    await sendComposerMessage(
-      commands.sendMessage,
+    await sendComposerMessage(commands.sendMessage, {
       taskId,
       message,
       reasoning,
       attachments,
-      isRunning,
-    );
+      running: isRunning,
+    });
   }
 
   function openSurface(surface: WorkspaceState["surface"]) {

@@ -270,10 +270,18 @@ async function pdfCoverage(
   }
 }
 
+/**
+ * A file as it was found: by the path asked for, where it really is, and its
+ * size and date.
+ */
+type FoundFile = {
+  readonly target: string;
+  readonly realTarget: string;
+  readonly file: { readonly mtimeMs: number; readonly size: number };
+};
+
 async function readPdf(
-  target: string,
-  realTarget: string,
-  file: { readonly mtimeMs: number; readonly size: number },
+  { target, realTarget, file }: FoundFile,
   input: ReadArguments,
   signal: AbortSignal | undefined,
   context: DocumentReadContext,
@@ -372,9 +380,7 @@ async function readPdf(
 }
 
 async function readPicture(
-  target: string,
-  realTarget: string,
-  file: { readonly size: number },
+  { target, realTarget, file }: FoundFile,
   kind: { readonly named?: string; readonly mediaType: string },
   sample: Buffer,
   signal: AbortSignal | undefined,
@@ -477,12 +483,10 @@ export async function runReadDocument(
         reason: `${target} is a text file. Read it with read_file.`,
       };
     if (kind.named === "a PDF document")
-      return readPdf(target, realTarget, file, input, signal, context);
+      return readPdf({ target, realTarget, file }, input, signal, context);
     if (kind.mediaType)
       return readPicture(
-        target,
-        realTarget,
-        file,
+        { target, realTarget, file },
         {
           mediaType: kind.mediaType,
           ...(kind.named ? { named: kind.named } : {}),

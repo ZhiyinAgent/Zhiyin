@@ -133,16 +133,29 @@ export class TurnWaits {
 
   async waitForApproval(
     taskId: string,
-    inspection: Extract<ToolCallInspection, { readonly ok: true }>,
-    presentation: PresentedAction,
-    backup: FileBackup | undefined,
-    signal: AbortSignal,
-    call?: AssembledToolCall,
-    /** A label being written in the background, shown once it arrives. */
-    labelled?: Promise<
-      { readonly title: string; readonly description: string } | undefined
-    >,
-    conversationRule?: PermissionScope,
+    {
+      inspection,
+      presentation,
+      backup,
+      signal,
+      call,
+      labelled,
+      conversationRule,
+    }: {
+      readonly inspection: Extract<ToolCallInspection, { readonly ok: true }>;
+      readonly presentation: PresentedAction;
+      /** The copy taken before the change, when one was. */
+      readonly backup?: FileBackup | undefined;
+      readonly signal: AbortSignal;
+      readonly call?: AssembledToolCall | undefined;
+      /** A label being written in the background, shown once it arrives. */
+      readonly labelled?:
+        | Promise<
+            { readonly title: string; readonly description: string } | undefined
+          >
+        | undefined;
+      readonly conversationRule?: PermissionScope | undefined;
+    },
   ): Promise<ApprovalAnswer> {
     return this.#withPromptSlot(taskId, async () => {
       const task = this.#records.task(taskId);
@@ -285,14 +298,12 @@ export class TurnWaits {
       ...checkpoint,
       ...(reason ? { reason } : {}),
     };
-    return this.#choose(
-      taskId,
-      request,
-      workBudgetQuestionId,
-      ["continue", "pause"],
-      "Choose Continue or Pause.",
+    return this.#choose(taskId, request, {
+      questionId: workBudgetQuestionId,
+      choices: ["continue", "pause"],
+      refusal: "Choose Continue or Pause.",
       signal,
-    );
+    });
   }
 
   /**
@@ -313,10 +324,12 @@ export class TurnWaits {
         text: folder.text,
         truncated: folder.truncated,
       },
-      folderInstructionsQuestionId,
-      ["use", "ignore"],
-      "Choose Use or Ignore.",
-      signal,
+      {
+        questionId: folderInstructionsQuestionId,
+        choices: ["use", "ignore"],
+        refusal: "Choose Use or Ignore.",
+        signal,
+      },
     );
   }
 
@@ -324,10 +337,18 @@ export class TurnWaits {
   async #choose<Choice extends string>(
     taskId: string,
     request: WorkBudgetRequest | FolderInstructionsRequest,
-    questionId: string,
-    choices: readonly Choice[],
-    refusal: string,
-    signal: AbortSignal,
+    {
+      questionId,
+      choices,
+      refusal,
+      signal,
+    }: {
+      readonly questionId: string;
+      readonly choices: readonly Choice[];
+      /** What is said to an answer that is none of them. */
+      readonly refusal: string;
+      readonly signal: AbortSignal;
+    },
   ): Promise<Choice | "cancelled"> {
     const outcome = await this.waitForUserInput(
       taskId,

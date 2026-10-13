@@ -92,16 +92,15 @@ export async function decideToolPermission(options: {
       : undefined;
   const decision: ApprovalAnswer =
     permission.outcome === "ask" && !appliedRule
-      ? await waits.waitForApproval(
-          taskId,
+      ? await waits.waitForApproval(taskId, {
           inspection,
-          options.presentation,
-          options.backup,
-          options.signal,
+          presentation: options.presentation,
+          backup: options.backup,
+          signal: options.signal,
           call,
-          options.labelled,
-          candidate,
-        )
+          labelled: options.labelled,
+          conversationRule: candidate,
+        })
       : permission.outcome === "deny"
         ? { kind: "deny" }
         : "allow";

@@ -770,14 +770,12 @@ export class Workspace {
     svg: string,
     choose: DestinationChooser,
   ): Promise<ArtifactExport> =>
-    produced.exportView(
-      this.#deps.artifacts,
-      this.#tasks,
+    produced.exportView(this.#deps.artifacts, this.#tasks, {
       taskId,
       viewId,
       svg,
-      choose,
-    );
+      chooseDestination: choose,
+    });
 
   /**
    * The workspace's own change to a conversation, held to the same rule as a

@@ -49,7 +49,7 @@ activating it.
   `skill` or `plugin`). It refuses when two sources claim one name.
   `onConnecting` hears each connector the gathering waits for.
 - `inspect(conversationId, owner, name, args)` and
-  `execute(conversationId, owner, name, args, signal?, identity?)` take the
+  `execute(conversationId, owner, name, args, { signal, identity })` take the
   owner back with the call and reach only that member. A connection is always
   reached in the conversation's own scope. `completeUserInput` passes a
   person's answer to the tool that asked; `builtInTool(name)` returns a

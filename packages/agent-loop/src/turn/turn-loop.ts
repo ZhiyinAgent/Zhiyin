@@ -162,13 +162,13 @@ export class TurnLoop {
       // start for the provider to cache, not one now and another next turn.
       const startedAt = this.#deps.now();
       const fixedStart = () =>
-        fixedModelMessages(
+        fixedModelMessages({
           workspace,
           skills,
           pluginDirectory,
-          startedAt,
-          availableTools,
-        );
+          now: startedAt,
+          tools: availableTools,
+        });
       let fixedMessages = fixedStart();
       let history = await this.#openHistory(taskId);
       const requestMessages = (): ModelMessage[] => [
@@ -439,13 +439,11 @@ export class TurnLoop {
           }
           const quietRetriesLeft =
             maximumQuietRetries - quiet.attempts(call.name);
-          const input = await this.#toolCalls.readInput(
-            taskId,
-            call,
+          const input = await this.#toolCalls.readInput(taskId, call, {
             round,
             quietRetriesLeft,
-            controller.signal,
-          );
+            signal: controller.signal,
+          });
           await history.rewriteCall(call.callId, call.arguments);
           if (!input.ok) {
             await history.result(
@@ -472,14 +470,14 @@ export class TurnLoop {
               delegatedChildren,
               tools: availableTools,
               ownerOf: toolOwner,
-              fixedMessages: fixedModelMessages(
+              fixedMessages: fixedModelMessages({
                 workspace,
                 skills,
                 pluginDirectory,
-                this.#deps.now(),
-                availableTools,
-                "specialist",
-              ),
+                now: this.#deps.now(),
+                tools: availableTools,
+                reader: "specialist",
+              }),
               workspace,
             });
             delegatedChildren = delegation.delegatedChildren;
@@ -532,16 +530,14 @@ export class TurnLoop {
             continue;
           }
           const owner = toolOwner(call.name);
-          const outcome = await this.#toolCalls.runToolCall(
-            taskId,
-            call,
-            parsed,
+          const outcome = await this.#toolCalls.runToolCall(taskId, call, {
+            proposedArguments: parsed,
             owner,
             controller,
             quietRetriesLeft,
             round,
             said,
-          );
+          });
           if (outcome.denied) declinedInBatch = true;
           guard.observe(call.name, parsed, outcome);
           if (controller.signal.aborted) {

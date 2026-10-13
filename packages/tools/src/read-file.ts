@@ -206,14 +206,13 @@ async function pagedResult(
   } = {},
 ): Promise<ToolInvocationResult> {
   const start = input.startLine ?? 1;
-  const page = await readPage(
-    path,
-    start,
-    input.lineCount ?? pageLines,
+  const page = await readPage(path, {
+    startLine: start,
+    lineCount: input.lineCount ?? pageLines,
     signal,
     notice,
     tokens,
-  );
+  });
   if (start > 1 && start > page.totalLines)
     return {
       ok: false,

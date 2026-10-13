@@ -299,69 +299,70 @@ export function buildCore({
       dataDirectory,
       connectHttpMcpServer,
       new KeyringMcpCredentials(),
-      [
-        browserConnection(
-          (conversationId) =>
-            browserAutomation(browsers.browser(conversationId), {
-              acceptsImages: async () =>
-                (await model.settings()).acceptsImages === true,
-              outputDirectory: join(
-                dataDirectory,
-                "browser-output",
-                createHash("sha256").update(conversationId).digest("hex"),
-              ),
+      {
+        builtIns: [
+          browserConnection(
+            (conversationId) =>
+              browserAutomation(browsers.browser(conversationId), {
+                acceptsImages: async () =>
+                  (await model.settings()).acceptsImages === true,
+                outputDirectory: join(
+                  dataDirectory,
+                  "browser-output",
+                  createHash("sha256").update(conversationId).digest("hex"),
+                ),
+              }),
+            () =>
+              describeBrowserAutomation(browserLauncher, {
+                acceptsImages: async () =>
+                  (await model.settings()).acceptsImages === true,
+                // Every conversation's browser is given the workspace to preview.
+                workspacePreview: true,
+              }),
+          ),
+          gitConnection(
+            gitAutomation({
+              workspaceRoot: () => workspace.workspaceRoot(),
+              containment,
             }),
-          () =>
-            describeBrowserAutomation(browserLauncher, {
-              acceptsImages: async () =>
-                (await model.settings()).acceptsImages === true,
-              // Every conversation's browser is given the workspace to preview.
-              workspacePreview: true,
+          ),
+          documentsConnection(
+            documentCompiler({
+              workspaceRoot: () => workspace.workspaceRoot(),
+              programs: async () => ({
+                ...(await executable("typst")),
+                ...(await executable("tectonic")),
+              }),
+              containment,
             }),
-        ),
-        gitConnection(
-          gitAutomation({
-            workspaceRoot: () => workspace.workspaceRoot(),
-            containment,
-          }),
-        ),
-        documentsConnection(
-          documentCompiler({
-            workspaceRoot: () => workspace.workspaceRoot(),
-            programs: async () => ({
-              ...(await executable("typst")),
-              ...(await executable("tectonic")),
+          ),
+          pythonConnection(
+            pythonSandbox({
+              workspaceRoot: () => workspace.workspaceRoot(),
+              directory: join(dataDirectory, "python-sandbox"),
+              uv: async () => toolchains.executable("uv"),
+              containment,
             }),
-            containment,
-          }),
-        ),
-        pythonConnection(
-          pythonSandbox({
-            workspaceRoot: () => workspace.workspaceRoot(),
-            directory: join(dataDirectory, "python-sandbox"),
-            uv: async () => toolchains.executable("uv"),
-            containment,
-          }),
-        ),
-        ...(scenes
-          ? [
-              sceneConnection(
-                (conversationId) =>
-                  sceneAutomation(scenes.scene(conversationId), {
-                    workspaceRoot: () => workspace.workspaceRoot(),
-                    blender,
-                    directory: scenes.directory(conversationId),
-                    openToBlender,
-                  }),
-                () => describeSceneTools(blender),
-              ),
-            ]
-          : []),
-      ],
-      () => declaredConnectionsOf(plugins),
-      Date.now,
-      // A connector's sign-in opens in the person's own browser.
-      { openBrowser: openExternal },
+          ),
+          ...(scenes
+            ? [
+                sceneConnection(
+                  (conversationId) =>
+                    sceneAutomation(scenes.scene(conversationId), {
+                      workspaceRoot: () => workspace.workspaceRoot(),
+                      blender,
+                      directory: scenes.directory(conversationId),
+                      openToBlender,
+                    }),
+                  () => describeSceneTools(blender),
+                ),
+              ]
+            : []),
+        ],
+        declared: () => declaredConnectionsOf(plugins),
+        now: Date.now,
+        signInOptions: { openBrowser: openExternal },
+      },
     ),
     plugins,
     toolchains,

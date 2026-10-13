@@ -45,15 +45,16 @@ async function activatingResearch(connect: McpConnectionFactory) {
       await mkdtemp(join(tmpdir(), "zhiyin-loop-connectors-")),
       connect,
       new InMemoryMcpCredentials(),
-      [],
-      async () => [
-        {
-          id: "research/tavily",
-          name: "Tavily",
-          url: "https://mcp.example.test/mcp",
-          enabled: true,
-        },
-      ],
+      {
+        declared: async () => [
+          {
+            id: "research/tavily",
+            name: "Tavily",
+            url: "https://mcp.example.test/mcp",
+            enabled: true,
+          },
+        ],
+      },
     ),
     model: {
       ...deps.model,

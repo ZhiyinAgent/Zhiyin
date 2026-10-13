@@ -57,23 +57,19 @@ describe("TurnWaits prompt slot", () => {
     const controllerA = new AbortController();
     const controllerB = new AbortController();
 
-    const first = waits.waitForApproval(
-      "task-1",
-      { ...inspection, target: "first.txt" },
-      { title: "Do it", description: "Writes the file." },
-      undefined,
-      controllerA.signal,
-    );
+    const first = waits.waitForApproval("task-1", {
+      inspection: { ...inspection, target: "first.txt" },
+      presentation: { title: "Do it", description: "Writes the file." },
+      signal: controllerA.signal,
+    });
     // Give the first call's own `replaceTask` a turn to run before the second
     // is issued, so ordering below reflects the slot, not call order alone.
     await Promise.resolve();
-    const second = waits.waitForApproval(
-      "task-1",
-      { ...inspection, target: "second.txt" },
-      { title: "Do it", description: "Writes the file." },
-      undefined,
-      controllerB.signal,
-    );
+    const second = waits.waitForApproval("task-1", {
+      inspection: { ...inspection, target: "second.txt" },
+      presentation: { title: "Do it", description: "Writes the file." },
+      signal: controllerB.signal,
+    });
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(phases).toEqual(["first.txt"]);

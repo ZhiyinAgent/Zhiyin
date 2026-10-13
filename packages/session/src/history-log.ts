@@ -200,10 +200,17 @@ export class HistoryLog {
   private constructor(
     path: string,
     files: HistoryFiles,
-    header: LogHeader,
-    bytes: number,
-    tail: boolean,
-    stateBytes: number,
+    {
+      header,
+      bytes,
+      tail,
+      stateBytes,
+    }: {
+      readonly header: LogHeader;
+      readonly bytes: number;
+      readonly tail: boolean;
+      readonly stateBytes: number;
+    },
   ) {
     this.#path = path;
     this.#files = files;
@@ -226,7 +233,12 @@ export class HistoryLog {
     const line = stateLine(state, header);
     await files.create(path, line);
     const bytes = Buffer.byteLength(line, "utf8");
-    return new HistoryLog(path, files, header, bytes, false, bytes);
+    return new HistoryLog(path, files, {
+      header,
+      bytes,
+      tail: false,
+      stateBytes: bytes,
+    });
   }
 
   /**
@@ -246,14 +258,12 @@ export class HistoryLog {
       state,
       header: found,
       lost,
-      log: new HistoryLog(
-        path,
-        files,
+      log: new HistoryLog(path, files, {
         header,
-        goodBytes,
-        goodBytes < bytes.length,
-        firstLine,
-      ),
+        bytes: goodBytes,
+        tail: goodBytes < bytes.length,
+        stateBytes: firstLine,
+      }),
     };
   }
 

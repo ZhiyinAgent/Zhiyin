@@ -78,6 +78,16 @@ export type DeclaredMcpServer = {
 
 export type DeclaredMcpServers = () => Promise<readonly DeclaredMcpServer[]>;
 
+/** What running a connector's tool may be given beside its name and arguments. */
+export type McpExecuteOptions = {
+  readonly signal?: AbortSignal | undefined;
+  /** The tool as it was when the call was approved; another is refused. */
+  readonly expectedIdentity?: string | undefined;
+  /** The conversation whose connections the call may use. */
+  readonly scope?: string | undefined;
+  readonly excludedServerIds?: readonly string[];
+};
+
 export interface McpServers {
   /** Every connection's state, after reaching each enabled one. */
   manage(): Promise<readonly McpServerState[]>;
@@ -121,10 +131,7 @@ export interface McpServers {
   execute(
     name: string,
     args: unknown,
-    signal?: AbortSignal,
-    expectedIdentity?: string,
-    scope?: string,
-    excludedServerIds?: readonly string[],
+    options?: McpExecuteOptions,
   ): Promise<ToolInvocationResult>;
   shutdownScope(scope: string): Promise<void>;
   shutdownAll(): Promise<void>;
@@ -214,10 +221,17 @@ export class ManagedMcpServers implements McpServers {
     directory: string,
     connect: McpConnectionFactory,
     store: McpCredentialStore,
-    builtIns: readonly BuiltInMcpServer[] = [],
-    declared: DeclaredMcpServers = async () => [],
-    now: () => number = Date.now,
-    signInOptions?: SignInOptions,
+    {
+      builtIns = [],
+      declared = async () => [],
+      now = Date.now,
+      signInOptions,
+    }: {
+      readonly builtIns?: readonly BuiltInMcpServer[];
+      readonly declared?: DeclaredMcpServers;
+      readonly now?: (() => number) | undefined;
+      readonly signInOptions?: SignInOptions | undefined;
+    } = {},
   ) {
     this.#now = now;
     this.#signIns = new ConnectionSignIns(signInOptions);
@@ -629,10 +643,12 @@ export class ManagedMcpServers implements McpServers {
   async execute(
     name: string,
     args: unknown,
-    signal?: AbortSignal,
-    expectedIdentity?: string,
-    scope?: string,
-    excludedServerIds: readonly string[] = [],
+    {
+      signal,
+      expectedIdentity,
+      scope,
+      excludedServerIds = [],
+    }: McpExecuteOptions = {},
   ): Promise<ToolInvocationResult> {
     if (signal?.aborted)
       return { ok: false, reason: "The action was stopped." };

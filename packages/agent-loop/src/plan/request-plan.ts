@@ -133,13 +133,13 @@ export async function condenseBetweenTurns(
   if (!gathered.ok) throw new VisibleError(gathered.reason);
   const { skills, pluginDirectory, tools } = gathered.value;
   const plan: RequestPlan = {
-    fixed: fixedModelMessages(
+    fixed: fixedModelMessages({
       workspace,
       skills,
       pluginDirectory,
-      deps.now(),
+      now: deps.now(),
       tools,
-    ),
+    }),
     tools: advertisedTools(gathered.value),
   };
   const open = () => openTaskHistory(deps, records, taskId);

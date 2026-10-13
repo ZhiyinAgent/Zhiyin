@@ -466,15 +466,13 @@ export class SpecialistExecution {
               reason,
               "Use a tool allowed for this specialist or report the limitation.",
             );
-            await this.#toolCalls.recordFailedProposal(
-              options.taskId,
-              call,
-              "The specialist requested a tool outside its role.",
+            await this.#toolCalls.recordFailedProposal(options.taskId, call, {
+              description: "The specialist requested a tool outside its role.",
               reason,
-              runId,
-              "blocked",
-              result,
-            );
+              specialistRunId: runId,
+              status: "blocked",
+              answer: result,
+            });
             messages.push({
               role: "tool",
               toolCallId: call.callId,
@@ -485,27 +483,22 @@ export class SpecialistExecution {
           }
           const quietRetriesLeft =
             maximumQuietRetries - quiet.attempts(call.name);
-          const input = await this.#toolCalls.readInput(
-            options.taskId,
-            call,
+          const input = await this.#toolCalls.readInput(options.taskId, call, {
             round,
             quietRetriesLeft,
-            controller.signal,
-            runId,
-          );
+            signal: controller.signal,
+            specialistRunId: runId,
+          });
           rewriteCallArguments(messages, call);
           const outcome = input.ok
-            ? await this.#toolCalls.runToolCall(
-                options.taskId,
-                call,
-                input.arguments,
-                options.ownerOf(call.name),
+            ? await this.#toolCalls.runToolCall(options.taskId, call, {
+                proposedArguments: input.arguments,
+                owner: options.ownerOf(call.name),
                 controller,
                 quietRetriesLeft,
                 round,
-                {},
-                runId,
-              )
+                specialistRunId: runId,
+              })
             : { result: input.result, quiet: input.quiet };
           if ("denied" in outcome && outcome.denied) declinedInBatch = true;
           controller.signal.throwIfAborted();
