@@ -59,6 +59,7 @@ export function ActionHistory({
               .includes(action.target.toLocaleLowerCase())
               ? action.target
               : undefined;
+          const permissionId = action.approval?.permissionId;
           const inspectable = Boolean(
             action.command ||
             action.evidence ||
@@ -82,15 +83,13 @@ export function ActionHistory({
                 <span className={styles["action-history__summary"]}>
                   <strong>{lead}</strong>
                   {action.approval?.by === "conversation-permission" &&
-                    (onOpenPermission && action.approval.permissionId ? (
+                    (onOpenPermission && permissionId ? (
                       <button
                         className={styles["action-history__permission"]}
                         type="button"
                         aria-label="Allowed for this conversation. Open permissions"
                         data-tooltip="Allowed for this conversation"
-                        onClick={() =>
-                          onOpenPermission(action.approval!.permissionId!)
-                        }
+                        onClick={() => onOpenPermission(permissionId)}
                       >
                         <Icon name="info" />
                       </button>

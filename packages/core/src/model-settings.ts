@@ -73,10 +73,13 @@ export class ModelSettings {
   }
 
   current(): ProviderSettings | undefined {
-    const current = this.#current;
+    return this.#current && this.#asPlanned(this.#current);
+  }
+
+  /** Settings with the window a refusal showed to be smaller, if one did. */
+  #asPlanned(current: ProviderSettings): ProviderSettings {
     const lowered = this.#lowered;
-    if (!current || !lowered || lowered.choice !== choiceOf(current))
-      return current;
+    if (!lowered || lowered.choice !== choiceOf(current)) return current;
     if (lowered.contextWindow >= (current.contextWindow ?? Infinity))
       return current;
     return {
@@ -105,7 +108,10 @@ export class ModelSettings {
     if (!current) return;
     if (contextWindow >= (this.current()?.contextWindow ?? Infinity)) return;
     this.#lowered = { choice: choiceOf(current), contextWindow, refusedTokens };
-    this.#emit({ kind: "providerSettingsChanged", data: this.current()! });
+    this.#emit({
+      kind: "providerSettingsChanged",
+      data: this.#asPlanned(current),
+    });
   }
 
   /**
@@ -118,7 +124,10 @@ export class ModelSettings {
     const settings = await this.#model.settings();
     if (read !== this.#reads) return;
     this.#current = settings;
-    this.#emit({ kind: "providerSettingsChanged", data: this.current()! });
+    this.#emit({
+      kind: "providerSettingsChanged",
+      data: this.#asPlanned(settings),
+    });
   }
 
   /**

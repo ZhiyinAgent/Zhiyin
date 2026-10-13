@@ -7,27 +7,21 @@
  */
 
 import type { ModelChoiceValue } from "../../choice.js";
-import {
-  ModelClientError,
-  refusalBody,
-  type FailureReport,
-  type ProviderError,
-} from "../../failures.js";
-import type {
-  ModelEvent,
-  ModelFetchResponse,
-  ModelRequest,
-} from "../../model-client.js";
+import { ModelClientError, type ProviderError } from "../../failures.js";
+import type { ModelEvent, ModelRequest } from "../../model-client.js";
 import type { SendInput } from "../../provider.js";
-import { serverSentEvents, withoutStalling } from "../../stream.js";
+import {
+  endedEarly,
+  eventIn,
+  streamedEvents,
+  type StreamingDialect,
+} from "../streamed-request.js";
 import { AnswerReader, type StopDetails, type StreamEvent } from "./answer.js";
 import { anthropicConversation } from "./messages.js";
 import { replayOf } from "./replay.js";
 
 /** How one provider speaks Anthropic Messages. */
-export type AnthropicMessagesDialect = {
-  /** How the person reads the provider's name in a failure. */
-  readonly name: string;
+export type AnthropicMessagesDialect = StreamingDialect & {
   /** The provider a turn's replay record names, so it goes back only there. */
   readonly provider: string;
   /**
@@ -40,7 +34,6 @@ export type AnthropicMessagesDialect = {
    * would only make it bill a cache write.
    */
   readonly cacheMarks?: false;
-  headers(apiKey: string): Readonly<Record<string, string>>;
   /**
    * Everything the request carries beside the conversation, the tools and
    * streaming: the model, the longest reply, how it thinks.
@@ -49,7 +42,6 @@ export type AnthropicMessagesDialect = {
     chosen: ModelChoiceValue,
     request: ModelRequest,
   ): Readonly<Record<string, unknown>>;
-  classify(failure: FailureReport): ModelClientError;
 };
 
 /** A stop reason the client reads as an answer cut off before its end. */
@@ -98,53 +90,12 @@ export async function* sendAnthropicMessages(
     ...(conversation.tools.length ? { tools: conversation.tools } : {}),
   };
 
-  let response: ModelFetchResponse;
-  try {
-    response = await input.fetcher(input.endpoint, {
-      method: "POST",
-      headers: dialect.headers(input.apiKey),
-      body: JSON.stringify(body),
-      ...(request.signal ? { signal: request.signal } : {}),
-    });
-  } catch (error) {
-    // Cancelled by the caller, which is not a connection that failed.
-    if (request.signal?.aborted) throw request.signal.reason;
-    throw new ModelClientError(
-      "networkFailure",
-      `Could not reach ${dialect.name}. Check the connection and try again.`,
-      { cause: error },
-    );
-  }
-
-  if (!response.ok)
-    throw dialect.classify({
-      status: response.status,
-      headers: response.headers,
-      model: chosen.model,
-      ...(await refusalBody(response.body).then((error) =>
-        error ? { error } : {},
-      )),
-    });
-  if (!response.body)
-    throw new ModelClientError(
-      "malformedResponse",
-      `${dialect.name} returned an empty response stream.`,
-    );
-
   const answer = new AnswerReader();
-  for await (const data of serverSentEvents(
-    withoutStalling(response.body, input.stallTimeoutMs, dialect.name),
-  )) {
-    let event: StreamEvent & { readonly error?: ProviderError };
-    try {
-      event = JSON.parse(data) as typeof event;
-    } catch (error) {
-      throw new ModelClientError(
-        "malformedResponse",
-        `${dialect.name} returned an unreadable response.`,
-        { cause: error },
-      );
-    }
+  for await (const data of streamedEvents(dialect, input, body)) {
+    const event = eventIn<StreamEvent & { readonly error?: ProviderError }>(
+      data,
+      dialect,
+    );
     // A failure after the status line went out as 200. What arrived before it
     // was passed on; the request still ends as the failure it is.
     if (event.type === "error")
@@ -161,10 +112,7 @@ export async function* sendAnthropicMessages(
   // The stop reason or `message_stop` ends an answer; a connection that
   // closed before either left one that cannot be trusted as finished.
   if (answer.stopReason === undefined && !answer.stopped)
-    throw new ModelClientError(
-      "malformedResponse",
-      `${dialect.name} ended the response before completion.`,
-    );
+    throw endedEarly(dialect);
   const usage = answer.usage();
   if (usage) yield { kind: "usage", usage };
   if (answer.stopReason === "refusal")

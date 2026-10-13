@@ -12,31 +12,26 @@
  */
 
 import type { ModelChoiceValue } from "../../choice.js";
-import {
-  ModelClientError,
-  refusalBody,
-  type FailureReport,
-  type ProviderError,
-} from "../../failures.js";
+import type { ProviderError } from "../../failures.js";
 import type {
   ModelEvent,
-  ModelFetchResponse,
   ModelRequest,
   ModelUsage,
 } from "../../model-client.js";
 import type { SendInput } from "../../provider.js";
-import { serverSentEvents, withoutStalling } from "../../stream.js";
+import {
+  endedEarly,
+  eventIn,
+  streamedEvents,
+  type StreamingDialect,
+} from "../streamed-request.js";
 import { responsesFormat, type ResponsesReplayData } from "./input.js";
 
 /** How one provider speaks the Responses API. */
-export type ResponsesDialect = {
-  /** How the person reads the provider's name in a failure. */
-  readonly name: string;
+export type ResponsesDialect = StreamingDialect & {
   /** The provider's id, which names it in the replay records it writes. */
   readonly provider: string;
-  headers(apiKey: string): Readonly<Record<string, string>>;
   body(chosen: ModelChoiceValue, request: ModelRequest): unknown;
-  classify(failure: FailureReport): ModelClientError;
 };
 
 type Item = Readonly<Record<string, unknown>> & { readonly type: string };
@@ -142,40 +137,6 @@ export async function* sendResponses(
   input: SendInput,
 ): AsyncIterable<ModelEvent> {
   const { chosen, request } = input;
-  let response: ModelFetchResponse;
-  try {
-    response = await input.fetcher(input.endpoint, {
-      method: "POST",
-      headers: dialect.headers(input.apiKey),
-      body: JSON.stringify(dialect.body(chosen, request)),
-      ...(request.signal ? { signal: request.signal } : {}),
-    });
-  } catch (error) {
-    // Cancelled by the caller, which is not a connection that failed.
-    if (request.signal?.aborted) throw request.signal.reason;
-    throw new ModelClientError(
-      "networkFailure",
-      `Could not reach ${dialect.name}. Check the connection and try again.`,
-      { cause: error },
-    );
-  }
-
-  if (!response.ok)
-    throw dialect.classify({
-      status: response.status,
-      headers: response.headers,
-      model: chosen.model,
-      ...(await refusalBody(response.body).then((error) =>
-        error ? { error } : {},
-      )),
-    });
-  if (!response.body) {
-    throw new ModelClientError(
-      "malformedResponse",
-      `${dialect.name} returned an empty response stream.`,
-    );
-  }
-
   let requestId: string | undefined;
   let responseModel: string | undefined;
   const noteResponse = (about: ResponseObject | undefined) => {
@@ -223,19 +184,12 @@ export async function* sendResponses(
     yield { kind: "toolCallDelta", index: call.index, argumentsDelta: rest };
   }
 
-  for await (const data of serverSentEvents(
-    withoutStalling(response.body, input.stallTimeoutMs, dialect.name),
+  for await (const data of streamedEvents(
+    dialect,
+    input,
+    dialect.body(chosen, request),
   )) {
-    let event: StreamEvent;
-    try {
-      event = JSON.parse(data) as StreamEvent;
-    } catch (error) {
-      throw new ModelClientError(
-        "malformedResponse",
-        `${dialect.name} returned an unreadable response.`,
-        { cause: error },
-      );
-    }
+    const event = eventIn<StreamEvent>(data, dialect);
     const at = count(event.output_index);
 
     switch (event.type) {
@@ -314,12 +268,7 @@ export async function* sendResponses(
     if (ended) break;
   }
 
-  if (!ended) {
-    throw new ModelClientError(
-      "malformedResponse",
-      `${dialect.name} ended the response before completion.`,
-    );
-  }
+  if (!ended) throw endedEarly(dialect);
   noteResponse(ended.response);
   const usage = usageOf(ended.response, requestId, responseModel);
   if (usage) yield { kind: "usage", usage };

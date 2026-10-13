@@ -252,7 +252,8 @@ out still runs, and is named in the background.
   starts the count again at four.
 - The answer is shown five seconds behind the model, so a provider restart
   before then is unseen. After it, the shown text is withdrawn openly and
-  exactly one answer remains.
+  exactly one answer remains. A specialist, the background work and
+  condensing keep nothing of an attempt a restart replaced either.
 - When the model has sent nothing for fifteen seconds, the conversation says
   the turn is waiting for the model, and the note goes as soon as anything
   arrives. The wait before a repeated request is counted down instead, and

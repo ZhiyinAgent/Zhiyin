@@ -227,8 +227,9 @@ export class DocumentViewer {
           }
         : { ok: false, reason: sentences.pageUndrawn(page) };
     if (drawn.ok && conversation.revision === revision) {
-      if (conversation.pages.size >= maximumKeptPages)
-        conversation.pages.delete(conversation.pages.keys().next().value!);
+      const [oldest] = conversation.pages.keys();
+      if (conversation.pages.size >= maximumKeptPages && oldest !== undefined)
+        conversation.pages.delete(oldest);
       conversation.pages.set(key, drawn);
     }
     return drawn;

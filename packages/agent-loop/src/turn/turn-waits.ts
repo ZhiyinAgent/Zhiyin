@@ -350,26 +350,31 @@ export class TurnWaits {
       readonly signal: AbortSignal;
     },
   ): Promise<Choice | "cancelled"> {
+    // Set by the answer that is accepted, which is the only one that settles.
+    let chosen: Choice | undefined;
     const outcome = await this.waitForUserInput(
       taskId,
       request,
       async (response) => {
         const answer = response.answers?.[0];
-        const decision = answer?.answerIds?.[0];
+        const given = answer?.answerIds?.[0];
+        const decision = choices.find((choice) => choice === given);
         if (
           response.answers.length !== 1 ||
           answer?.questionId !== questionId ||
           answer.answerIds?.length !== 1 ||
           answer.text !== undefined ||
-          !choices.includes(decision as Choice)
+          decision === undefined
         )
           return { ok: false, reason: refusal };
+        chosen = decision;
         return { ok: true, value: { decision } };
       },
       signal,
     );
-    if (outcome.kind === "cancelled") return "cancelled";
-    return outcome.response.answers[0]!.answerIds![0] as Choice;
+    return outcome.kind === "cancelled" || chosen === undefined
+      ? "cancelled"
+      : chosen;
   }
 
   /** The prompt still showing, given the label written for it. */

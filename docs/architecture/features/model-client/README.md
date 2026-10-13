@@ -28,7 +28,9 @@ trust boundary.
 - **Inside, each provider is a folder of its own** (ADR 0024). A provider uses
   the wire formats and the shared client and never another provider; the
   shared client decides whether and when a request is sent, and reaches
-  providers only through their one list. Lint holds both directions.
+  providers only through their one list. Lint holds both directions. Every
+  wire format sends its request and reads its stream through one shared path,
+  so a failure before an answer begins reads the same on all of them.
 
 ## Public interface
 

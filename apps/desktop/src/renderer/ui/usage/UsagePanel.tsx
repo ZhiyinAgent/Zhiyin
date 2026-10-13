@@ -75,9 +75,10 @@ export function UsagePanel({
   const currency = charted?.currency ?? "USD";
   const anyEstimated = spent.some((each) => each.estimated);
   const totalTokens = usage ? usage.inputTokens + usage.outputTokens : 0;
-  const inputShare = totalTokens
-    ? Math.round((usage!.inputTokens / totalTokens) * 100)
-    : 0;
+  const inputShare =
+    usage && totalTokens
+      ? Math.round((usage.inputTokens / totalTokens) * 100)
+      : 0;
 
   return (
     <SurfacePanel
@@ -351,16 +352,15 @@ export function UsagePanel({
                         </em>
                       </>
                     );
+                    const conversationId = spent.conversationId;
                     return (
-                      <li key={spent.conversationId ?? ""}>
-                        {title && spent.conversationId && onOpenConversation ? (
+                      <li key={conversationId ?? ""}>
+                        {title && conversationId && onOpenConversation ? (
                           <button
                             type="button"
                             className={styles["conversation-costs__row"]}
                             aria-label={`Open ${title}`}
-                            onClick={() =>
-                              onOpenConversation(spent.conversationId!)
-                            }
+                            onClick={() => onOpenConversation(conversationId)}
                           >
                             {row}
                           </button>

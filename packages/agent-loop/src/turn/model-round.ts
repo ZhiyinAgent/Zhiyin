@@ -276,7 +276,7 @@ export class ModelRound {
 
   async #receive(
     taskId: string,
-    event: ModelEvent,
+    event: Exclude<ModelEvent, { readonly kind: "retrying" | "restarting" }>,
     attempt: Attempt,
     reveal: HeldReveal,
     ledger: WorkLedger,
@@ -288,51 +288,62 @@ export class ModelRound {
         event.kind === "toolCallDelta")
     )
       attempt.firstTokenAt = this.#deps.now().toISOString();
-    if (event.kind === "reasoningDelta") {
-      attempt.reasoning += event.text;
-      await reveal.add("reasoning", event.text);
-    } else if (event.kind === "textDelta") {
-      attempt.text += event.text;
-      await reveal.add("text", event.text);
-    } else if (event.kind === "toolCallDelta") {
-      const current = attempt.calls.get(event.index) ?? {
-        index: event.index,
-        callId: "",
-        name: "",
-        arguments: "",
-      };
-      if (event.callId) current.callId = event.callId;
-      if (event.name) current.name += event.name;
-      if (event.argumentsDelta) current.arguments += event.argumentsDelta;
-      attempt.calls.set(event.index, current);
-      /*
-       * Zero at first, so the first fragment says so at once: the note is
-       * there because nothing else shows for a while, and waiting to show it
-       * would only lengthen that silence. After that it is paced, because the
-       * note only has to stay true.
-       */
-      if (Date.now() - attempt.composingSaidAt >= composingIntervalMs) {
-        attempt.composingSaidAt = Date.now();
-        await this.#note(
-          taskId,
-          current.name
-            ? `Composing a request: ${this.#records.humanizeIdentifier(current.name)}`
-            : "Composing a request",
-        );
+    switch (event.kind) {
+      case "reasoningDelta":
+        attempt.reasoning += event.text;
+        await reveal.add("reasoning", event.text);
+        break;
+      case "textDelta":
+        attempt.text += event.text;
+        await reveal.add("text", event.text);
+        break;
+      case "toolCallDelta": {
+        const current = attempt.calls.get(event.index) ?? {
+          index: event.index,
+          callId: "",
+          name: "",
+          arguments: "",
+        };
+        if (event.callId) current.callId = event.callId;
+        if (event.name) current.name += event.name;
+        if (event.argumentsDelta) current.arguments += event.argumentsDelta;
+        attempt.calls.set(event.index, current);
+        /*
+         * Zero at first, so the first fragment says so at once: the note is
+         * there because nothing else shows for a while, and waiting to show it
+         * would only lengthen that silence. After that it is paced, because the
+         * note only has to stay true.
+         */
+        if (Date.now() - attempt.composingSaidAt >= composingIntervalMs) {
+          attempt.composingSaidAt = Date.now();
+          await this.#note(
+            taskId,
+            current.name
+              ? `Composing a request: ${this.#records.humanizeIdentifier(current.name)}`
+              : "Composing a request",
+          );
+        }
+        break;
       }
-    } else if (event.kind === "usage") {
-      attempt.reportedUsage = true;
-      attempt.usage = event.usage;
-      ledger.record(event.usage);
-      await this.#deps.host.recordUsage({
-        ...event.usage,
-        conversationId: taskId,
-        purpose: "turn",
-      });
-    } else if (event.kind === "done") {
-      attempt.finishReason = event.finishReason;
-      attempt.response = event.response;
-      attempt.replay = event.replay;
+      case "usage":
+        attempt.reportedUsage = true;
+        attempt.usage = event.usage;
+        ledger.record(event.usage);
+        await this.#deps.host.recordUsage({
+          ...event.usage,
+          conversationId: taskId,
+          purpose: "turn",
+        });
+        break;
+      case "done":
+        attempt.finishReason = event.finishReason;
+        attempt.response = event.response;
+        attempt.replay = event.replay;
+        break;
+      default: {
+        const unnamed: never = event;
+        return unnamed;
+      }
     }
   }
 

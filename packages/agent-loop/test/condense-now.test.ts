@@ -98,6 +98,47 @@ describe("condensing on request", () => {
     expect(task?.phase.kind).toBe("completed");
   });
 
+  it("condenses from the answer that followed a restart, and nothing of the attempt it replaced", async () => {
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      modelWindow: smallWindow,
+      model: {
+        ...deps.model,
+        send: async function* () {
+          yield {
+            kind: "textDelta" as const,
+            text: '{"summary":"The older mat',
+          };
+          // The connection dropped mid-answer: what came before is void.
+          yield {
+            kind: "restarting" as const,
+            restart: 1,
+            maximumRestarts: 2,
+            delayMs: 0,
+            reason: "networkFailure" as const,
+            message: "The connection dropped.",
+          };
+          yield {
+            kind: "textDelta" as const,
+            text: JSON.stringify({ summary: "The older material was read." }),
+          };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    loop.restore([settledTask()]);
+
+    await loop.condenseNow("task-1");
+
+    expect(loop.snapshot().tasks[0]?.condensings).toEqual([
+      expect.objectContaining({
+        outcome: "condensed",
+        summary: "The older material was read.",
+      }),
+    ]);
+  });
+
   it("says once in the conversation when there is nothing old enough, however often it is asked", async () => {
     const requests: ModelRequest[] = [];
     const loop = model(requests);

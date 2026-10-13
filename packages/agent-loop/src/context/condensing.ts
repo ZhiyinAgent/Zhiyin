@@ -475,14 +475,33 @@ export class Condensing {
         ],
         signal,
       })) {
-        if (event.kind === "textDelta") text += event.text;
-        else if (event.kind === "toolCallDelta") return failed("unusable");
-        else if (event.kind === "usage")
-          await this.#deps.host.recordUsage({
-            ...event.usage,
-            conversationId: taskId,
-            purpose: "condensing",
-          });
+        switch (event.kind) {
+          case "textDelta":
+            text += event.text;
+            break;
+          case "toolCallDelta":
+            return failed("unusable");
+          case "usage":
+            await this.#deps.host.recordUsage({
+              ...event.usage,
+              conversationId: taskId,
+              purpose: "condensing",
+            });
+            break;
+          case "restarting":
+            // Everything the replaced attempt sent is void.
+            text = "";
+            break;
+          case "reasoningDelta":
+          case "retrying":
+          case "done":
+            // The summary is the answer's words alone, read once it ends.
+            break;
+          default: {
+            const unnamed: never = event;
+            return unnamed;
+          }
+        }
       }
     } catch (error) {
       return signal.aborted

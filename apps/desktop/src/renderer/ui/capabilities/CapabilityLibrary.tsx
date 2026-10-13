@@ -321,9 +321,10 @@ export function CapabilityLibrary({
         </Dialog>
       );
     const fullId = (localId: string) => `${opened.pluginId}/${localId}`;
+    const localId = opened.localId;
     const server =
-      opened.localId !== undefined
-        ? mcpServers.find((item) => item.id === fullId(opened.localId!))
+      localId !== undefined
+        ? mcpServers.find((item) => item.id === fullId(localId))
         : undefined;
     return (
       <ComponentEditor

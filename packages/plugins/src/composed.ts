@@ -213,7 +213,7 @@ export class ComposedPlugins implements Plugins {
         throw new InvalidPluginError("A specialist needs a name.");
       const edited: EditableContent = {
         id,
-        name: kind === "specialist" ? name! : shipped.name,
+        name: kind === "specialist" && name ? name : shipped.name,
         description: content.description.trim(),
         instructions: content.instructions.trim(),
       };

@@ -179,11 +179,13 @@ export async function matchingPermission(
     return;
   const files = await changedFiles(inspection, workspaceRoot);
   if (!files) return;
-  return permissions.find(
-    (rule) =>
+  return permissions.find((rule) => {
+    const folder = rule.folder;
+    return (
       rule.kind === "file-folder" &&
       rule.workspaceRoot === files.canonicalRoot &&
-      !!rule.folder &&
-      files.targets.every((target) => inside(rule.folder!, target)),
-  );
+      !!folder &&
+      files.targets.every((target) => inside(folder, target))
+    );
+  });
 }

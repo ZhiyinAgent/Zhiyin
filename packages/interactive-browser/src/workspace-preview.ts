@@ -27,13 +27,17 @@ const maxBytes = 20 * 1024 * 1024;
 
 /** Whether the workspace itself holds this file, without following it out. */
 async function has(root: string, name: string): Promise<boolean> {
-  return containedFile(root, name).then(
+  return servedFile(root, name).then(
     () => true,
     () => false,
   );
 }
 
-async function containedFile(root: string, input: string): Promise<string> {
+/** A file the preview serves: where it really is, and the type it is sent as. */
+async function servedFile(
+  root: string,
+  input: string,
+): Promise<{ readonly file: string; readonly type: string }> {
   const segments = input.replaceAll("\\", "/").split("/");
   if (
     isAbsolute(input) ||
@@ -49,9 +53,10 @@ async function containedFile(root: string, input: string): Promise<string> {
     file = await realpath(resolve(file, "index.html"));
   if (!staysInside(root, file))
     throw new Error("Preview files must stay inside the selected workspace.");
-  if (!types[extname(file).toLowerCase()])
+  const type = types[extname(file).toLowerCase()];
+  if (!type)
     throw new Error("This file type is not supported by the static preview.");
-  return file;
+  return { file, type };
 }
 
 export class WorkspacePreview {
@@ -72,7 +77,7 @@ export class WorkspacePreview {
     if (!selected)
       throw new Error("Choose a workspace before previewing a file.");
     const root = await realpath(selected);
-    const file = await containedFile(root, path);
+    const { file } = await servedFile(root, path);
     return { root, path: relative(root, file).replaceAll("\\", "/") };
   }
 
@@ -86,12 +91,12 @@ export class WorkspacePreview {
           "The preview target changed after approval. Request approval again.",
         );
       signal?.throwIfAborted();
-      if (selection !== this.#workspace())
+      if (!selection || selection !== this.#workspace())
         throw new Error("The workspace changed before preview started.");
       if (this.#server && this.#root !== checked.root) await this.#stop();
       if (!this.#server) {
         this.#root = checked.root;
-        this.#selected = selection!;
+        this.#selected = selection;
         this.#token = randomBytes(24).toString("hex");
         const server = createServer((request, response) => {
           void (async () => {
@@ -140,7 +145,7 @@ export class WorkspacePreview {
               response.writeHead(204).end();
               return;
             }
-            const file = await containedFile(this.#root, name);
+            const { file, type } = await servedFile(this.#root, name);
             if ((await stat(file)).size > maxBytes) {
               response.writeHead(413).end("Preview file is too large.");
               return;
@@ -155,10 +160,7 @@ export class WorkspacePreview {
                 "Set-Cookie",
                 `zhiyin-preview=${this.#token}; HttpOnly; SameSite=Strict; Path=/`,
               );
-            response.setHeader(
-              "Content-Type",
-              types[extname(file).toLowerCase()]!,
-            );
+            response.setHeader("Content-Type", type);
             response
               .writeHead(200)
               .end(request.method === "HEAD" ? undefined : bytes);

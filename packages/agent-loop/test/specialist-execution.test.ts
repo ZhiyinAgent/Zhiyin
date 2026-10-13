@@ -892,6 +892,38 @@ describe("specialist child execution", () => {
     });
   });
 
+  it("takes a specialist's report from the answer that followed a restart, and nothing of the attempt it replaced", async () => {
+    const loop = delegatingLoop({
+      specialist: () => [
+        { kind: "textDelta", text: "I will rep" },
+        {
+          kind: "toolCallDelta",
+          index: 0,
+          callId: "finish",
+          name: "finish_specialist",
+          argumentsDelta: '{"summary":"Half a rep',
+        },
+        // The connection dropped mid-answer: what came before is void.
+        {
+          kind: "restarting",
+          restart: 1,
+          maximumRestarts: 2,
+          delayMs: 0,
+          reason: "networkFailure",
+          message: "The connection dropped.",
+        },
+        finishes("The whole report."),
+      ],
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "completed",
+      handoff: { summary: "The whole report." },
+    });
+  });
+
   it("keeps a specialist's card where it was delegated, ahead of everything that came after", async () => {
     const loop = delegatingLoop({
       specialist: (round) =>

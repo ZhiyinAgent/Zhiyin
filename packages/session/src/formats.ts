@@ -53,17 +53,27 @@ export function formatOf(value: unknown): FileFormat | undefined {
 
 /**
  * How a file stands against this version: one it reads, one a step brings to
- * the current format, one a newer version wrote, or one it cannot place.
+ * the current format, one a newer version wrote, or one it cannot place. A
+ * file it can place comes with the format it was placed by.
  */
+export type Standing =
+  | {
+      readonly standing: "current" | "older" | "newer";
+      readonly format: FileFormat;
+    }
+  | { readonly standing: "unknown"; readonly format?: undefined };
+
 export function standingOf(
   known: Formats,
   format: FileFormat | undefined,
-): "current" | "older" | "newer" | "unknown" {
-  if (!format) return "unknown";
+): Standing {
+  if (!format) return { standing: "unknown" };
   const current = currentFormat(known);
-  if (format.format === current) return "current";
-  if (format.format > current) return "newer";
-  return format.format >= known.first ? "older" : "unknown";
+  if (format.format === current) return { standing: "current", format };
+  if (format.format > current) return { standing: "newer", format };
+  return format.format >= known.first
+    ? { standing: "older", format }
+    : { standing: "unknown" };
 }
 
 /** Settings saved in format `from`, as the current format holds them. */

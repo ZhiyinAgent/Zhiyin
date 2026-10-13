@@ -100,6 +100,43 @@ describe("auxiliary model calls", () => {
     });
   });
 
+  it("reads the name from the answer that followed a restart, and nothing of the attempt it replaced", async () => {
+    const requests: ModelRequest[] = [];
+    const deps = stubDependencies(() => {}, [{ kind: "done" }]);
+    const loop = loopFrom({
+      ...deps,
+      guidanceModel: guidance(requests, () => [
+        {
+          kind: "toolCallDelta",
+          index: 0,
+          callId: "call-1",
+          name: "record_conversation_title",
+          argumentsDelta: '{"title":"Review la',
+        },
+        { kind: "textDelta", text: "Review la" },
+        // The connection dropped mid-answer: what came before is void.
+        {
+          kind: "restarting",
+          restart: 1,
+          maximumRestarts: 2,
+          delayMs: 0,
+          reason: "networkFailure",
+          message: "The connection dropped.",
+        },
+        ...toolCall("record_conversation_title", {
+          title: "Review launch readiness",
+        }),
+      ]),
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Review the launch readiness material");
+
+    expect(loop.snapshot().tasks[0]).toMatchObject({
+      title: "Review launch readiness",
+    });
+  });
+
   /**
    * Without `tool_choice`, a model may answer in prose instead of calling the
    * tool. The parsers read the same object from the message body, and treat

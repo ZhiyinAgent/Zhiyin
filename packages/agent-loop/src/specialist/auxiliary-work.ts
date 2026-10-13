@@ -247,16 +247,38 @@ export class AuxiliaryWork {
     try {
       for await (const event of model.send(request)) {
         if (signal.aborted) return { text: "", toolArguments: "" };
-        if (event.kind === "textDelta") text += event.text;
-        else if (event.kind === "toolCallDelta")
-          toolArguments += event.argumentsDelta ?? "";
-        else if (event.kind === "usage")
-          await this.#deps.host.recordUsage({
-            ...event.usage,
-            conversationId: taskId,
-            purpose: "background",
-          });
-        else if (event.kind === "done") finishReason = event.finishReason;
+        switch (event.kind) {
+          case "textDelta":
+            text += event.text;
+            break;
+          case "toolCallDelta":
+            toolArguments += event.argumentsDelta ?? "";
+            break;
+          case "usage":
+            await this.#deps.host.recordUsage({
+              ...event.usage,
+              conversationId: taskId,
+              purpose: "background",
+            });
+            break;
+          case "done":
+            finishReason = event.finishReason;
+            break;
+          case "restarting":
+            // Everything the replaced attempt sent is void.
+            text = "";
+            toolArguments = "";
+            finishReason = undefined;
+            break;
+          case "reasoningDelta":
+          case "retrying":
+            // Background work keeps no reasoning and shows no waiting.
+            break;
+          default: {
+            const unnamed: never = event;
+            return unnamed;
+          }
+        }
       }
     } catch (error) {
       const refusedReasoning =

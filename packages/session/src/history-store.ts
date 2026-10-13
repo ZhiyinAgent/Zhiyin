@@ -311,13 +311,12 @@ export class HistoryStore {
    * older format is brought to this one, and a newer one is refused.
    */
   #settingsIn(value: unknown): SavedSettings {
-    const format = formatOf(value);
-    const standing = standingOf(this.#formats, format);
+    const { standing, format } = standingOf(this.#formats, formatOf(value));
     if (standing === "newer")
       throw new SessionStoreError(
         "newer",
-        `Saved task history was saved by Zhiyin ${format!.writtenBy}, a newer version, and was left as it is.`,
-        { writtenBy: format!.writtenBy },
+        `Saved task history was saved by Zhiyin ${format.writtenBy}, a newer version, and was left as it is.`,
+        { writtenBy: format.writtenBy },
       );
     let settings: unknown = value;
     if (standing === "older")
@@ -325,7 +324,7 @@ export class HistoryStore {
         settings = migratedSettings(
           this.#formats,
           value as Record<string, unknown>,
-          format!.format,
+          format.format,
         );
       } catch {
         settings = undefined;
@@ -383,8 +382,10 @@ export class HistoryStore {
         { cause: error },
       );
     }
-    const metaFormat = formatOf(meta);
-    const metaStanding = standingOf(this.#formats, metaFormat);
+    const { standing: metaStanding, format: metaFormat } = standingOf(
+      this.#formats,
+      formatOf(meta),
+    );
     const summary =
       metaStanding === "current" &&
       isConversationSummary(meta) &&
@@ -400,9 +401,9 @@ export class HistoryStore {
     ) {
       if (summary) return { kind: "listed", summary };
       if (metaStanding === "newer")
-        return { kind: "newer", writtenBy: metaFormat!.writtenBy };
+        return { kind: "newer", writtenBy: metaFormat.writtenBy };
       if (metaStanding === "older")
-        return this.#waitingIn(name, meta.id, meta, metaFormat!);
+        return this.#waitingIn(name, meta.id, meta, metaFormat);
     }
     try {
       const read = await HistoryLog.open(
@@ -410,10 +411,12 @@ export class HistoryStore {
         this.#files,
         this.#format,
       );
-      const format = formatOf(read.header);
-      const standing = standingOf(this.#formats, format);
+      const { standing, format } = standingOf(
+        this.#formats,
+        formatOf(read.header),
+      );
       if (standing === "newer")
-        return { kind: "newer", writtenBy: format!.writtenBy };
+        return { kind: "newer", writtenBy: format.writtenBy };
       const id = isRecord(read.state) ? read.state.id : undefined;
       if (
         standing === "older" &&
@@ -424,7 +427,7 @@ export class HistoryStore {
           name,
           id,
           read.state as Record<string, unknown>,
-          format!,
+          format,
         );
       if (
         standing !== "current" ||
@@ -556,19 +559,21 @@ export class HistoryStore {
         { cause: error },
       );
     }
-    const format = formatOf(read.header);
-    const standing = standingOf(this.#formats, format);
+    const { standing, format } = standingOf(
+      this.#formats,
+      formatOf(read.header),
+    );
     if (standing === "newer")
       throw new SessionStoreError(
         "newer",
-        `This conversation was saved by Zhiyin ${format!.writtenBy}, a newer version, and was left as it is.`,
-        { writtenBy: format!.writtenBy },
+        `This conversation was saved by Zhiyin ${format.writtenBy}, a newer version, and was left as it is.`,
+        { writtenBy: format.writtenBy },
       );
     if (standing === "older")
       throw new SessionStoreError(
         "outdated",
-        `This conversation was saved by Zhiyin ${format!.writtenBy} and needs an update before it opens.`,
-        { writtenBy: format!.writtenBy },
+        `This conversation was saved by Zhiyin ${format.writtenBy} and needs an update before it opens.`,
+        { writtenBy: format.writtenBy },
       );
     const problem =
       standing !== "current"
@@ -725,7 +730,7 @@ export class HistoryStore {
           this.#files,
           this.#format,
         );
-        const standing = standingOf(this.#formats, formatOf(read.header));
+        const { standing } = standingOf(this.#formats, formatOf(read.header));
         if (standing === "older" || standing === "newer") continue;
         if (standing !== "current" || !isWorkspaceTask(read.state))
           throw new Error("Not a conversation.");
@@ -906,13 +911,16 @@ export class HistoryStore {
   async #update(id: string, waiting: Waiting): Promise<Written> {
     const path = this.#logOf(join(this.#conversationsFolder, waiting.name));
     const read = await HistoryLog.open(path, this.#files);
-    const format = formatOf(read.header);
-    if (standingOf(this.#formats, format) !== "older")
+    const { standing, format } = standingOf(
+      this.#formats,
+      formatOf(read.header),
+    );
+    if (standing !== "older")
       throw new Error("This conversation is not waiting for an update.");
     const state = migratedConversation(
       this.#formats,
       read.state,
-      format!.format,
+      format.format,
     );
     if (!isWorkspaceTask(state) || (state as WorkspaceTask).id !== id)
       throw new Error("The update does not make a conversation this reads.");
@@ -922,7 +930,8 @@ export class HistoryStore {
       const back = await HistoryLog.open(copy, this.#files);
       if (
         back.lost ||
-        standingOf(this.#formats, formatOf(back.header)) !== "current" ||
+        standingOf(this.#formats, formatOf(back.header)).standing !==
+          "current" ||
         JSON.stringify(back.state) !== JSON.stringify(state)
       )
         throw new Error("The updated copy does not read back as written.");
