@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   CommandFileChanges,
   McpServerState,
+  ToolchainState,
   ToolSpec,
 } from "@zhiyin/contract";
 import type { BrowserAutomation } from "@zhiyin/interactive-browser";
@@ -604,6 +605,158 @@ describe("inspecting a plugin", () => {
           { id },
         ),
       ).toEqual({ ok: false, reason: `“${id}” is not an enabled plugin.` });
+  });
+
+  it("says which connector cannot run yet and what the person does about it", async () => {
+    const { capabilities } = membersRecording({
+      connections: [
+        connection("software-engineering/github"),
+        connection("browser", { builtIn: true }),
+      ],
+      overrides: {
+        connectionToolchains: { browser: ["chromium"] },
+        toolchains: {
+          state: async () => ({
+            status: "missing",
+            downloads: [
+              {
+                name: "Chromium",
+                version: "1",
+                bytes: 10,
+                source: "example.test",
+              },
+            ],
+          }),
+          install: async () => {},
+          executable: async () => undefined,
+        },
+      },
+    });
+    const browserNeeds =
+      "Browser needs setting up: on the Plugins page, open Software Engineering and, under Connectors, select Set up, then Install.";
+
+    const answer = await capabilities.execute(
+      "conversation-1",
+      "plugin",
+      "inspect_plugin",
+      { id: "software-engineering" },
+    );
+
+    expect(answer).toMatchObject({
+      ok: true,
+      value: {
+        connectors: [
+          {
+            id: "software-engineering/github",
+            name: "GitHub",
+            description: "Repositories, issues, and pull requests.",
+          },
+          {
+            id: "software-engineering/browser",
+            name: "Browser",
+            description: "Opens pages to test them.",
+            notReady: browserNeeds,
+          },
+        ],
+        note: "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+      },
+    });
+    if (!answer.ok) throw new Error(answer.reason);
+    expect(
+      (answer.value as { connectors: object[] }).connectors[0],
+    ).not.toHaveProperty("notReady");
+    expect(answer.details).toContainEqual({
+      kind: "list",
+      label: "Not ready yet",
+      items: [browserNeeds],
+    });
+  });
+
+  it("says nothing more about a plugin whose connectors are all ready", async () => {
+    const { capabilities } = membersRecording({
+      connections: [
+        connection("software-engineering/github"),
+        connection("browser", { builtIn: true }),
+      ],
+      overrides: { connectionToolchains: { browser: ["chromium"] } },
+    });
+
+    const answer = await capabilities.execute(
+      "conversation-1",
+      "plugin",
+      "inspect_plugin",
+      { id: "software-engineering" },
+    );
+
+    expect(JSON.stringify(answer)).not.toMatch(/notReady|note|Not ready/);
+  });
+
+  it("puts each reason a connector cannot run in the words of the Plugins page", async () => {
+    const where =
+      "the Plugins page, open Software Engineering and, under Connectors,";
+    const needs = async (
+      github: Partial<McpServerState>,
+      browser: Partial<McpServerState>,
+      toolchain?: ToolchainState,
+    ) => {
+      const { capabilities } = membersRecording({
+        connections: [
+          connection("software-engineering/github", github),
+          connection("browser", { builtIn: true, ...browser }),
+        ],
+        overrides: {
+          connectionToolchains: { browser: ["chromium"] },
+          ...(toolchain
+            ? {
+                toolchains: {
+                  state: async () => toolchain,
+                  install: async () => {},
+                  executable: async () => undefined,
+                },
+              }
+            : {}),
+        },
+      });
+      const contents = await capabilities.pluginContents(
+        "software-engineering",
+      );
+      return contents?.connectors.map((connector) => connector.notReady);
+    };
+
+    expect(await needs({ status: "unauthorized" }, {})).toEqual([
+      `GitHub needs setting up: on ${where} select Set up.`,
+      undefined,
+    ]);
+    expect(
+      await needs(
+        { status: "failed", reason: "The server did not answer" },
+        {
+          status: "disconnected",
+          reason: "Chromium could not start.",
+        },
+      ),
+    ).toEqual([
+      `GitHub could not connect: The server did not answer. On ${where} select Check again.`,
+      `Browser could not start: Chromium could not start. Once that is put right, on ${where} select Check again.`,
+    ]);
+    expect(await needs({}, {}, { status: "installing" })).toEqual([
+      undefined,
+      "Browser is being installed and can be used once that has finished.",
+    ]);
+    expect(
+      await needs(
+        {},
+        {},
+        { status: "failed", reason: "The download stopped." },
+      ),
+    ).toEqual([
+      undefined,
+      `Browser could not be set up: The download stopped. On ${where} select Try again, then Install.`,
+    ]);
+    // Not reached yet is not a problem: a first use says.
+    expect(
+      await needs({ status: "unchecked" }, { status: "disconnected" }),
+    ).toEqual([undefined, undefined]);
   });
 });
 

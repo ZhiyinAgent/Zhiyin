@@ -381,7 +381,12 @@ export class ComposedCapabilities implements Capabilities {
 
   async pluginContents(id: string): Promise<PluginContents | undefined> {
     const view = await this.#view(id);
-    return view?.enabled ? pluginContentsOf(view) : undefined;
+    if (!view?.enabled) return undefined;
+    const states = await this.pluginStates();
+    return pluginContentsOf(
+      view,
+      states.find((state) => state.id === id),
+    );
   }
 
   describePluginContents(contents: PluginContents): readonly ActionDetail[] {

@@ -27,12 +27,19 @@ export type PluginContents = {
   readonly skills: readonly PluginContentItem[];
   readonly specialists: readonly PluginContentItem[];
   readonly connectors: readonly PluginContentItem[];
+  /** Said to the model once, when a connector here cannot run yet. */
+  readonly note?: string;
 };
 
 export type PluginContentItem = {
   readonly id: string;
   readonly name: string;
   readonly description: string;
+  /**
+   * On a connector that cannot run yet: why, and what the person does about
+   * it on the Plugins page.
+   */
+  readonly notReady?: string;
 };
 
 /** The one `id` string a skill or plugin call names, or nothing for any other shape. */
@@ -179,7 +186,55 @@ export function activeSpecialists(
   );
 }
 
-export function pluginContentsOf(view: PluginView): PluginContents {
+/** A reason as a sentence, whatever punctuation it came with. */
+function said(reason: string): string {
+  const text = reason.trim();
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
+/**
+ * What stands between a connector and its tools, and the control that
+ * settles it, named as the Plugins page names it. Nothing for a connector
+ * that is ready, off, absent from this build or simply not reached yet.
+ */
+function connectorNeeds(
+  component: PluginComponentState,
+  pluginName: string,
+): string | undefined {
+  if (component.status !== "setup-required" && component.status !== "failed")
+    return undefined;
+  const { name, toolchain, detail } = component;
+  const where = `the Plugins page, open ${pluginName} and, under Connectors,`;
+  if (toolchain?.status === "installing")
+    return `${name} is being installed and can be used once that has finished.`;
+  if (toolchain?.status === "missing")
+    return `${name} needs setting up: on ${where} select Set up, then Install.`;
+  if (toolchain?.status === "failed")
+    return `${name} could not be set up: ${said(toolchain.reason)} On ${where} select Try again, then Install.`;
+  if (component.appConnector)
+    // Without a reason nothing is known to be wrong: a first use says.
+    return detail
+      ? `${name} could not start: ${said(detail)} Once that is put right, on ${where} select Check again.`
+      : undefined;
+  if (component.status === "setup-required")
+    return `${name} needs setting up: on ${where} select Set up.`;
+  return `${name} could not connect${detail ? `: ${said(detail)}` : "."} On ${where} select Check again.`;
+}
+
+/**
+ * A plugin's components as the model is told of them. Given the plugin's
+ * current state, each connector that cannot run yet says so.
+ */
+export function pluginContentsOf(
+  view: PluginView,
+  state?: PluginState,
+): PluginContents {
+  const needs = new Map(
+    (state?.components ?? []).flatMap((component) => {
+      const what = connectorNeeds(component, view.manifest.displayName);
+      return what ? [[component.id, what] as const] : [];
+    }),
+  );
   return {
     skills: view.skills.map(({ id, name, description }) => ({
       id,
@@ -192,8 +247,16 @@ export function pluginContentsOf(view: PluginView): PluginContents {
       description,
     })),
     connectors: [...view.mcpServers, ...view.appConnectors].map(
-      ({ id, name, description }) => ({ id, name, description }),
+      ({ id, name, description }) => {
+        const notReady = needs.get(id);
+        return { id, name, description, ...(notReady ? { notReady } : {}) };
+      },
     ),
+    ...(needs.size
+      ? {
+          note: "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+        }
+      : {}),
   };
 }
 
@@ -201,22 +264,30 @@ export function pluginContentsOf(view: PluginView): PluginContents {
 export function pluginContentsDetails(
   contents: PluginContents,
 ): readonly ActionDetail[] {
+  const notReady = contents.connectors.flatMap((connector) =>
+    connector.notReady ? [connector.notReady] : [],
+  );
   return [
-    ["Skills", contents.skills],
-    ["Specialists", contents.specialists],
-    ["Connectors", contents.connectors],
-  ].flatMap(([label, items]) => {
-    const listed = items as readonly PluginContentItem[];
-    return listed.length
-      ? [
-          {
-            kind: "list" as const,
-            label: label as string,
-            items: listed.map((item) => `${item.name} — ${item.description}`),
-          },
-        ]
-      : [];
-  });
+    ...[
+      ["Skills", contents.skills],
+      ["Specialists", contents.specialists],
+      ["Connectors", contents.connectors],
+    ].flatMap(([label, items]) => {
+      const listed = items as readonly PluginContentItem[];
+      return listed.length
+        ? [
+            {
+              kind: "list" as const,
+              label: label as string,
+              items: listed.map((item) => `${item.name} — ${item.description}`),
+            },
+          ]
+        : [];
+    }),
+    ...(notReady.length
+      ? [{ kind: "list" as const, label: "Not ready yet", items: notReady }]
+      : []),
+  ];
 }
 
 /** An app-made plugin's whole content, for its edit form. */

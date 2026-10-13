@@ -161,10 +161,14 @@ export class PluginActivation {
       options.taskId,
       activatedPlugins,
     );
+    // Read again: gathering the tools reached the plugin's connectors for
+    // the first time, and one that refused now says what it needs.
+    const reached =
+      (await this.#deps.capabilities.pluginContents(resolved.id)) ?? contents;
     const result: ActivatePluginResult = {
       ok: true,
       id: resolved.id,
-      ...contents,
+      ...reached,
     };
     await this.#records.finishToolAction(
       options.taskId,
@@ -177,7 +181,7 @@ export class PluginActivation {
       {
         ok: true,
         value: result,
-        details: this.#deps.capabilities.describePluginContents(contents),
+        details: this.#deps.capabilities.describePluginContents(reached),
       },
     );
     return {

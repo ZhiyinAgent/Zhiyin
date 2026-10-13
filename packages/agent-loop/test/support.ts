@@ -722,6 +722,12 @@ export function pluginOffering(options: {
     tools?: readonly string[];
   }[];
   readonly connectors?: readonly { id: string; url: string }[];
+  /** Connectors the application provides, each by the connection it names. */
+  readonly appConnectors?: readonly {
+    id: string;
+    connector: string;
+    name: string;
+  }[];
   readonly enabled?: boolean;
 }): PluginView {
   const full = (id: string) => `${options.name}/${id}`;
@@ -760,7 +766,15 @@ export function pluginOffering(options: {
       dataDestination: connector.url,
       enabled: true,
     })),
-    appConnectors: [],
+    appConnectors: (options.appConnectors ?? []).map((connector) => ({
+      id: full(connector.id),
+      connector: connector.connector,
+      name: connector.name,
+      description: `The ${connector.name} connector.`,
+      access: "Runs on this computer.",
+      dataDestination: "Nothing leaves this computer.",
+      enabled: true,
+    })),
   };
 }
 

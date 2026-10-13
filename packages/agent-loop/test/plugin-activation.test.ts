@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { McpServerState, ToolchainState } from "@zhiyin/contract";
 import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
 import {
   loopFrom,
+  type LoopTestDependencies,
   pluginOffering,
   pluginsOffering,
   stubDependencies,
@@ -262,5 +264,136 @@ describe("plugin activation", () => {
       "software-engineering",
       "research",
     ]);
+  });
+});
+
+describe("a plugin whose connector cannot run yet", () => {
+  const rendering = pluginOffering({
+    name: "3d-rendering",
+    connectors: [{ id: "assets", url: "https://assets.example.test/mcp/" }],
+    appConnectors: [{ id: "studio", connector: "blender", name: "3D studio" }],
+  });
+  const state = (
+    id: string,
+    overrides: Partial<McpServerState>,
+  ): McpServerState =>
+    ({
+      id,
+      name: id,
+      url: "",
+      enabled: true,
+      status: "connected",
+      toolCount: 0,
+      tools: [],
+      credential: { status: "none" },
+      ...overrides,
+    }) as McpServerState;
+
+  /** What the model reads back from activating the plugin. */
+  async function activationAnswer(
+    members: Partial<LoopTestDependencies>,
+  ): Promise<string> {
+    const requests: ModelRequest[] = [];
+    const loop = loopFrom({
+      ...stubDependencies(() => {}),
+      plugins: pluginsOffering([rendering]),
+      ...members,
+      model: {
+        ...stubDependencies(() => {}).model,
+        send: async function* (request) {
+          requests.push(request);
+          if (requests.length === 1) {
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "activate-1",
+              name: "activate_plugin",
+              argumentsDelta: JSON.stringify({ id: "3d-rendering" }),
+            };
+            yield { kind: "done" };
+            return;
+          }
+          yield { kind: "textDelta", text: "Done." };
+          yield { kind: "done" };
+        },
+      },
+    });
+    await loop.start(await loop.createTask(), "Model my flat in 3D.");
+    const answer = requests[1]?.messages.find(
+      (message) =>
+        message.role === "tool" &&
+        "toolCallId" in message &&
+        message.toolCallId === "activate-1",
+    );
+    return (answer as { content: string }).content;
+  }
+
+  const blender = (toolchain: ToolchainState) => {
+    const base = stubDependencies(() => {});
+    return {
+      mcp: {
+        ...base.mcp,
+        states: async () => [
+          state("3d-rendering/assets", {}),
+          state("blender", { builtIn: true }),
+        ],
+      },
+      connectionToolchains: { blender: ["blender"] },
+      toolchains: { ...base.toolchains, state: async () => toolchain },
+    };
+  };
+
+  it("tells the model which connector needs setting up, and where the person does it", async () => {
+    const answer = await activationAnswer(
+      blender({
+        status: "missing",
+        downloads: [
+          {
+            name: "Blender",
+            version: "5.1",
+            bytes: 400_000_000,
+            source: "download.blender.org",
+          },
+        ],
+      }),
+    );
+
+    expect(answer).toContain(
+      "3D studio needs setting up: on the Plugins page, open 3d-rendering and, under Connectors, select Set up, then Install.",
+    );
+    expect(answer).toContain(
+      "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+    );
+  });
+
+  it("says nothing of setting up when the connector's program is installed", async () => {
+    const answer = await activationAnswer(blender({ status: "ready" }));
+
+    expect(answer).toContain("3D studio");
+    expect(answer).not.toMatch(/setting up|not ready|notReady/);
+  });
+
+  it("says what a service refused when activating the plugin first reached it", async () => {
+    const base = stubDependencies(() => {});
+    let reached = false;
+    const answer = await activationAnswer({
+      mcp: {
+        ...base.mcp,
+        states: async () => [
+          state("3d-rendering/assets", {
+            status: reached ? "unauthorized" : "unchecked",
+          }),
+          state("blender", { builtIn: true }),
+        ],
+        availableTools: async (_scope, excluded = []) => {
+          if (!excluded.includes("3d-rendering/assets")) reached = true;
+          return [];
+        },
+      },
+    });
+
+    expect(answer).toContain(
+      "assets needs setting up: on the Plugins page, open 3d-rendering and, under Connectors, select Set up.",
+    );
   });
 });

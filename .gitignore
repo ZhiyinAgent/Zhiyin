@@ -31,3 +31,6 @@ tasks/
 evaluation/
 trailer/
 docs/reference/prior-art-lessons.md
+.agents/
+.claude/skills/
+skills-lock.json

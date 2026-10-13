@@ -86,11 +86,13 @@ read, the exact link to cite it with. None of this can fail the turn.
 The loop answers some tools itself: `update_plan`; `delegate_specialist`,
 offered when the turn has specialists, with its `id` limited to exactly those;
 `activate_plugin`, offered while an enabled plugin is inactive; and, inside a
-specialist, `finish_specialist`. In a turn, every other tool is offered with a
-`purpose` argument, listed among what a call has to give. The loop takes it off
-before the tool sees its input and shows it as the action's description and the
-approval's reason. A call that leaves it out still runs, and is named in the
-background.
+specialist, `finish_specialist`. An activation's answer is the plugin's
+contents as they stand once its connectors have been reached for the first
+time, so one that refused says what it needs in that same answer. In a turn,
+every other tool is offered with a `purpose` argument, listed among what a call
+has to give. The loop takes it off before the tool sees its input and shows it
+as the action's description and the approval's reason. A call that leaves it
+out still runs, and is named in the background.
 
 ## Invariants
 

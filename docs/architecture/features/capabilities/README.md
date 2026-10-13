@@ -122,6 +122,14 @@ activating it.
   run without asking the person each time (ADR 0006). Inspecting a plugin
   never activates it, and its result lists the plugin's skills, specialists
   and connectors as readable lists.
+- **A connector that cannot run yet says so to the model.** A plugin's
+  contents, read when it is inspected or activated, name each connector whose
+  program is not installed, whose service wants a key or a sign-in, or that
+  failed, with the control on the Plugins page that settles it, and say once
+  that such a connector adds no tools and that the person should hear what it
+  needs. A connector that is ready, switched off, or not reached yet adds
+  nothing, and the same sentences are listed for the person in the action's
+  result.
 - **What a conversation was offered is forgotten with the conversation.**
 - **Plugin readiness is derived, never stored.** A connector that needs a key
   or a sign-in needs setup and says which; one nothing has reached yet is
