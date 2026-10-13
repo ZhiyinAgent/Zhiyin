@@ -34,9 +34,10 @@ import { withdrawCalls } from "../tools/quiet-failures.js";
 
 /**
  * How many pictures one request may hold, and how many are kept when that is
- * passed, counting whole messages from the newest. Letting go of several at
- * once breaks the cached start once for the next few pictures instead of once
- * for each of them.
+ * passed, counting whole messages from the newest. Eight is the fewest any lab
+ * Zhiyin reaches accepts in one request (Mistral), and every lab is held to
+ * it. Letting go of several at once breaks the cached start once for the next
+ * few pictures instead of once for each of them.
  */
 const picturesKeptInOneRequest = 8;
 const picturesKeptAfterLettingGo = 4;

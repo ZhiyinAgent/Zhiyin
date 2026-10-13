@@ -315,6 +315,37 @@ fits inside 2048 × 2048, and Anthropic asks for under 2000 pixels once a reques
 holds more than 20 images. Zhiyin sends pictures at most 2000 pixels on the long
 side.
 
+**Pictures in one request.** _Verified 2026-10-13 against each lab's
+documentation._ The most pictures one request may hold is 8 at Mistral (its
+[vision guide](https://docs.mistral.ai/studio/conversations/vision), in the
+questions at its end; its
+[known limitations](https://docs.mistral.ai/resources/known-limitations) say
+only that it depends on the model and the token budget). It is 50 for Z.ai's
+GLM-5.3-Flash series
+([bigmodel.cn's reference](https://docs.bigmodel.cn/api-reference/模型-api/对话补全);
+z.ai's own states none for it), 100 at Anthropic for a model with a 200k
+window and 600 for the others
+([vision](https://platform.claude.com/docs/en/build-with-claude/vision)), 250
+as Base64 at Qwen
+([vision guide](https://docs.qwencloud.com/developer-guides/multimodal/vision)),
+600 at DeepSeek, where from 15 pictures each may be at most 4096 pixels a side
+([vision guide](https://api-docs.deepseek.com/guides/vision)), and 1,500 at
+OpenAI
+([images and vision](https://developers.openai.com/docs/guides/images-vision)).
+Moonshot sets none below a 100 MB request
+([vision guide](https://platform.kimi.ai/docs/guide/use-kimi-vision-model)),
+and Xiaomi none below the model's context
+([image understanding](https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/multimodal-understanding/image-understanding)).
+Zhiyin keeps to 8 for every lab.
+
+What dropping pictures costs was measured on 2026-10-12 from the usage records
+of real runs through Anthropic's API. The request after a drop reads only the
+fixed start from the cache and writes the rest again: in a run of 41 requests
+on Opus 5.5 that was $0.40 and $0.43 of $4.16. Anthropic writes a cache entry
+only where a request marks one, looks back at most 20 blocks from each mark for
+an earlier entry, and allows four marks
+([prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching)).
+
 **Models in tests.** _Verified 2026-09-02 to 2026-09-14 against the
 catalogue._ The app chooses no model for the person. Most tests and live
 checks name `z-ai/glm-5.3-flash`: text, image and video in, tool calls, a

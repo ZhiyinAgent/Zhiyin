@@ -202,7 +202,12 @@ out still runs, and is named in the background.
 - A long paste reaches the model as an `attachment://` address. Pictures travel
   as pictures, fitted to what the model accepts, and a model that cannot see
   them gets a line saying one was there. When a request would carry more than
-  8 pictures, all but the newest 4 are dropped.
+  8 pictures, all but the newest 4 are dropped. Eight is the fewest any lab
+  Zhiyin reaches accepts in one request (Mistral; the others accept 50 or
+  more), and the same limit is kept for all of them. Four go at once because
+  dropping a picture changes the conversation from where it stood, and the
+  provider's cache is written again from that point: it happens once every few
+  pictures rather than with each one.
 
 ### Context budget
 
