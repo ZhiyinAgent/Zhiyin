@@ -245,20 +245,17 @@ describe("WorkspaceTools", () => {
     const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
     const root = join(parent, "workspace");
     await mkdir(root);
-    await writeFile(join(parent, "secret.txt"), "outside", "utf8");
-    try {
-      await symlink(join(parent, "secret.txt"), join(root, "innocent.txt"));
-    } catch {
-      // Creating a link can require a privilege this machine has not granted.
-      return;
-    }
+    await mkdir(join(parent, "outside"));
+    await writeFile(join(parent, "outside", "secret.txt"), "outside", "utf8");
+    // A junction: Windows makes one without any privilege.
+    await symlink(join(parent, "outside"), join(root, "innocent"), "junction");
     const tools = new WorkspaceTools(root);
 
     expect(
-      await tools.inspect("read_file", { path: "innocent.txt" }),
+      await tools.inspect("read_file", { path: "innocent/secret.txt" }),
     ).toMatchObject({ scope: "workspace" });
     await expect(
-      tools.execute("read_file", { path: "innocent.txt" }),
+      tools.execute("read_file", { path: "innocent/secret.txt" }),
     ).resolves.toEqual({
       ok: false,
       reason: "The file leads outside the current workspace.",
@@ -282,23 +279,21 @@ describe("WorkspaceTools", () => {
     // Distinctive on purpose: the refusal says the word "outside" itself, so a
     // leak check against that word would pass on the refusal and prove nothing.
     const secret = "secret-contents-that-must-not-leak";
-    await writeFile(join(parent, "secret.txt"), secret, "utf8");
-    await writeFile(join(root, "note.txt"), "inside", "utf8");
+    await mkdir(join(parent, "outside"));
+    await writeFile(join(parent, "outside", "note.txt"), secret, "utf8");
+    await mkdir(join(root, "notes"));
+    await writeFile(join(root, "notes", "note.txt"), "inside", "utf8");
     const tools = new WorkspaceTools(root);
 
     expect(
-      await tools.inspect("read_file", { path: "note.txt" }),
+      await tools.inspect("read_file", { path: "notes/note.txt" }),
     ).toMatchObject({ scope: "workspace" });
 
-    await rm(join(root, "note.txt"));
-    try {
-      await symlink(join(parent, "secret.txt"), join(root, "note.txt"));
-    } catch {
-      // Creating a link can require a privilege this machine has not granted.
-      return;
-    }
+    // A junction: Windows makes one without any privilege.
+    await rm(join(root, "notes"), { recursive: true });
+    await symlink(join(parent, "outside"), join(root, "notes"), "junction");
 
-    const result = await tools.execute("read_file", { path: "note.txt" });
+    const result = await tools.execute("read_file", { path: "notes/note.txt" });
 
     expect(result).toEqual({
       ok: false,

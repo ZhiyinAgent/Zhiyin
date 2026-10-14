@@ -118,7 +118,10 @@ describe("the plugins the app ships with", () => {
       dialog.getByText("What gets downloaded"),
       "that something would be downloaded",
     );
-    await shows(dialog.getByText(/^\d+ MB$/).first(), "the download size");
+    await shows(
+      dialog.getByText(/^\d+(\.\d)? MB$/).first(),
+      "the download size",
+    );
     await shows(dialog.getByText("Typst 0.15.1"), "which Typst version");
     await shows(
       dialog.getByText("github.com/typst/typst"),

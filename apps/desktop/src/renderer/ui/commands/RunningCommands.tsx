@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CoreApi, RunningCommand } from "@zhiyin/contract";
-import { Dialog, Icon } from "../shared/index.js";
+import { Dialog, elapsedTime, Icon } from "../shared/index.js";
 import styles from "./commands.module.css";
 
 type Commands = Pick<
@@ -179,7 +179,7 @@ function CommandRow({
         <span>
           {stopping
             ? "Stopping…"
-            : `Running for ${elapsed(now - command.startedAt)}`}
+            : `Running for ${elapsedTime(now - command.startedAt)}`}
         </span>
       </p>
       {error && (
@@ -206,13 +206,4 @@ function lastLines(printed: { stdout: string; stderr: string }): string {
     .filter(Boolean)
     .join("\n");
   return text.split(/\r?\n/).slice(-shownLines).join("\n");
-}
-
-function elapsed(ms: number): string {
-  const seconds = Math.max(0, Math.floor(ms / 1000));
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours} h ${minutes % 60} min`;
 }

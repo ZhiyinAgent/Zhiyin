@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -209,6 +216,25 @@ describe("write_file", () => {
       ok: false,
       reason: "reports is a folder in this workspace, not a file.",
     });
+  });
+
+  it("leaves nothing of its own behind when the file cannot be replaced", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "locked.md"), "Kept.", "utf8");
+    // Windows refuses to replace a read-only file.
+    await chmod(join(root, "locked.md"), 0o444);
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("write_file", {
+      path: "locked.md",
+      content: "Replaced.",
+    });
+
+    expect(result).toMatchObject({ ok: false });
+    expect(await readdir(root)).toEqual(["locked.md"]);
+    await expect(readFile(join(root, "locked.md"), "utf8")).resolves.toBe(
+      "Kept.",
+    );
   });
 
   it("takes the contents as content, and refuses them under any other name", async () => {

@@ -30,6 +30,10 @@ plans to file recovery, and the core saves the result.
   refusal.
 - `applyUndo(task, plan, files, at)` records the undo and its per-file results
   on the task, and changes nothing else.
+- `ConversationRewind(newId)` implements `RewindPlanner`, naming each review
+  with an id it makes.
+- The types these take and return: `RewindPreview`, `RewindRefusal`,
+  `RewindPlanning`, `RewindApplication`, `UndoPlanning`.
 
 ## Invariants
 

@@ -92,7 +92,7 @@ A live check against the model provider runs only when asked, since it spends
 credit on a real account:
 
 ```powershell
-$env:ZHIYIN_SMOKE = "1"; pnpm exec vitest run --project packages packages/core/test/app/live-smoke.test.ts
+$env:ZHIYIN_SMOKE = "1"; pnpm exec vitest run --project live packages/core/test/app/live-smoke.test.ts
 ```
 
 It needs `ZHIYIN_OPENROUTER_API_KEY`. Each lab's own live check runs with

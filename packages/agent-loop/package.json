@@ -16,18 +16,18 @@
     "@zhiyin/artifacts": "workspace:*",
     "@zhiyin/audit": "workspace:*",
     "@zhiyin/capabilities": "workspace:*",
-    "@zhiyin/plugins": "workspace:*",
     "@zhiyin/contract": "workspace:*",
-    "@zhiyin/conversation-rewind": "workspace:*",
     "@zhiyin/permission-engine": "workspace:*",
     "@zhiyin/rewind": "workspace:*",
-    "@zhiyin/recovery": "workspace:*",
     "@zhiyin/usage": "workspace:*",
     "@zhiyin/views": "workspace:*",
     "@zhiyin/session": "workspace:*",
     "@zhiyin/model-client": "workspace:*"
   },
   "devDependencies": {
+    "@zhiyin/conversation-rewind": "workspace:*",
+    "@zhiyin/plugins": "workspace:*",
+    "@zhiyin/recovery": "workspace:*",
     "@zhiyin/tools": "workspace:*"
   }
 }

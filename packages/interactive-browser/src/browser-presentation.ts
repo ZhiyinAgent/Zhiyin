@@ -14,7 +14,6 @@ const names: Record<string, string> = {
   browser_press_key: "Press a key",
   browser_snapshot: "Read page",
   browser_take_screenshot: "Capture page",
-  browser_tabs: "Manage browser tabs",
   browser_close: "Close browser",
   browser_evaluate: "Run code on page",
   browser_hover: "Point to an element",
@@ -52,6 +51,9 @@ const acting =
  * can — which is every control this app puts on where a picture goes, undone
  * from inside. The need it would serve here, a screenshot of a named element,
  * is met by the screenshot tool, which is offered.
+ *
+ * Managing tabs is absent too: the panel shows one page, and an approval
+ * names that page, so the agent never moves to one the person cannot see.
  */
 const consequences: Record<string, string> = {
   browser_navigate:
@@ -74,7 +76,6 @@ const consequences: Record<string, string> = {
   browser_evaluate:
     "Runs this code inside the page, with everything the page can reach.",
   browser_close: "Closes Zhiyin’s browser and the page it is showing.",
-  browser_tabs: "Changes which pages Zhiyin’s browser has open.",
   browser_resize: "Changes the size of the browser window.",
   browser_wait_for: "Waits for the page to change. Nothing is sent to it.",
   browser_preview:
@@ -125,8 +126,6 @@ const inputs: Record<string, string> = {
   promptText: "Reply",
   width: "Width",
   height: "Height",
-  action: "Tab action",
-  index: "Tab number",
   fullPage: "Whole page",
   type: "Image format",
   startElement: "Dragged from",
@@ -165,6 +164,7 @@ export async function inspectBrowser(
   let target =
     typeof args.url === "string" ? args.url : page || "Zhiyin’s browser";
   let identity: string | undefined;
+  let shown = args;
   if (
     name === "browser_navigate" &&
     typeof args.url === "string" &&
@@ -202,6 +202,38 @@ export async function inspectBrowser(
       };
     }
   }
+  // Without paths, the file chooser is cancelled and nothing is sent.
+  if (name === "browser_file_upload" && args.paths !== undefined) {
+    const paths = args.paths;
+    if (!Array.isArray(paths) || paths.some((path) => typeof path !== "string"))
+      return {
+        ok: false,
+        correctable: true,
+        reason:
+          "Name the files to upload by their paths inside the open folder.",
+      };
+    if (paths.length) {
+      if (!browser.uploads)
+        return {
+          ok: false,
+          reason: "Choose a folder first: only its files can be uploaded.",
+        };
+      try {
+        const files = await browser.uploads.inspect(paths as string[]);
+        identity = JSON.stringify(files);
+        shown = { ...args, paths: files.map((file) => file.path) };
+      } catch (error) {
+        return {
+          ok: false,
+          correctable: true,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "These files cannot be uploaded.",
+        };
+      }
+    }
+  }
   /**
    * The page comes first when the action works on whatever is already open:
    * which site is being clicked or typed into is the question, and the
@@ -223,7 +255,7 @@ export async function inspectBrowser(
       name: action,
       arguments: [
         ...(onCurrentPage ? [{ name: "Page", value: page }] : []),
-        ...Object.entries(args)
+        ...Object.entries(shown)
           .filter(([key]) => key in inputs)
           .map(([key, value]) => ({
             name: inputs[key] as string,

@@ -29,6 +29,7 @@ copied into each.
 The agent loop and the core sit above the feature layer and import only types
 from below (ADR 0002), so each restates the short lexical check. A change to
 the rule is made there too.
+- The types these take and return: `Located`.
 
 ## Invariants
 

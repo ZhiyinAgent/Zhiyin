@@ -27,6 +27,7 @@ file the conversation produced.
 
 The suggested file name is the conversation's title, in any script, reduced to
 letters, digits and dashes.
+- The types these take and return: `ExportAbout`, `DestinationChooser`.
 
 ## Invariants
 

@@ -187,6 +187,8 @@ export class KeptItems {
   readonly #root: string;
   readonly #limits: Readonly<Record<KeptKind, KeptLimits>>;
   readonly #now: () => Date;
+  /** Each conversation's record of reads, written one change at a time. */
+  readonly #noting = new Map<string, Promise<void>>();
 
   constructor(
     root: string,
@@ -442,14 +444,37 @@ export class KeptItems {
       : undefined;
   }
 
-  async noteRead(
+  /**
+   * Adds one read to the conversation's record. Reads that finish together
+   * are added in turn, so none replaces another, and the record is swapped in
+   * whole, so a crash leaves the old one or the new.
+   */
+  noteRead(
     conversationId: string,
     path: string,
     read: FileRead,
   ): Promise<void> {
-    const reads = { ...(await this.#reads(conversationId)), [path]: read };
-    await mkdir(join(this.#root, "file-reads"), { recursive: true });
-    await writeFile(this.#readsFile(conversationId), JSON.stringify(reads));
+    const noted = (this.#noting.get(conversationId) ?? Promise.resolve())
+      .catch(() => {})
+      .then(async () => {
+        const reads = { ...(await this.#reads(conversationId)), [path]: read };
+        const file = this.#readsFile(conversationId);
+        const temporary = `${file}.${randomUUID()}.tmp`;
+        await mkdir(join(this.#root, "file-reads"), { recursive: true });
+        await writeFile(temporary, JSON.stringify(reads));
+        await rename(temporary, file).catch(async (error: unknown) => {
+          await rm(temporary, { force: true });
+          throw error;
+        });
+      });
+    this.#noting.set(conversationId, noted);
+    void noted
+      .finally(() => {
+        if (this.#noting.get(conversationId) === noted)
+          this.#noting.delete(conversationId);
+      })
+      .catch(() => {});
+    return noted;
   }
 
   async #removalReason(kind: KeptKind, path: string): Promise<string> {

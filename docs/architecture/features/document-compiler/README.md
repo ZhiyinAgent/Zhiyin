@@ -31,6 +31,11 @@ land, and can turn a compiler's output into errors a model can act on.
   runs is picked up without a restart.
 - Engines run through the process-ownership mechanism, so a compile lives in a
   Job Object and ends with the app (ADR 0004). Tests may replace the runner.
+- `diagnosticsFrom(output)`, the lines of a compiler's output a person or a
+  model needs: the diagnostics, not the chatter.
+- The types these take and return: `ProgramContainer`, `ProgramContainment`,
+  `ProgramRun`, `RunProgram`, `CompilerPrograms`, `CompilerTool`,
+  `DocumentCompilerOptions`.
 
 ## Invariants
 

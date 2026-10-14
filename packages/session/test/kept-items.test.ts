@@ -274,6 +274,24 @@ describe("when a file was last read", () => {
     ).toBeUndefined();
   });
 
+  it("is remembered for every file when reads finish together", async () => {
+    const root = await temporaryRoot();
+    const sessions = new FileSessions(root);
+    const read = {
+      modifiedMs: 1_700_000_000_000,
+      size: 42,
+      readAt: "2026-09-23T10:00:00.000Z",
+    };
+    const paths = ["one.md", "two.md", "three.md", "four.md"];
+
+    await Promise.all(
+      paths.map((path) => sessions.noteRead("task-1", path, read)),
+    );
+
+    for (const path of paths)
+      expect(await sessions.lastRead("task-1", path)).toEqual(read);
+  });
+
   it("keeps the digest and shown ranges for an interrupted conversation", async () => {
     const root = await temporaryRoot();
     const read = {

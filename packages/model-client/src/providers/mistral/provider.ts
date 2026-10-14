@@ -21,6 +21,7 @@ import {
   sendChatCompletions,
   type ChatCompletionsDialect,
 } from "../../wires/chat-completions/send.js";
+import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure, failedFinish, refusalFrom } from "./failures.js";
 import { mistralModels } from "./models.js";
 
@@ -150,13 +151,7 @@ async function checkKey(
  */
 const listedByApi: ListedByApi = async (options) => {
   const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch =
-    options.fetcher ??
-    ((url, init) =>
-      fetch(url, {
-        headers: init.headers,
-        signal: AbortSignal.timeout(15_000),
-      }));
+  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
   const response = await fetcher(`${host}/v1/models`, {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
   });

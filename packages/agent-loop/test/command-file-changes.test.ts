@@ -182,6 +182,20 @@ describe("what changed while a command ran", () => {
     expect(host.writtenFiles).toEqual([{ taskId, paths: ["brief.pdf"] }]);
   });
 
+  it("keeps the files an action wrote before it failed", async () => {
+    const { loop, host } = running({
+      ok: false,
+      reason:
+        "plan.md could not be written. These files were already changed: notes.md. These were not: plan.md.",
+      produced: [{ path: "notes.md", change: "updated", bytes: 12 }],
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Rename the owner");
+
+    expect(host.writtenFiles).toEqual([{ taskId, paths: ["notes.md"] }]);
+  });
+
   it("tells the app around the turn what a job wrote when it ends", async () => {
     const { loop, host, announce } = running({
       ok: true,

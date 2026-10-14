@@ -81,6 +81,38 @@ describe("test()", () => {
     expect(result).toMatchObject({ ok: false });
   });
 
+  it.each([
+    [
+      "http://search.example/mcp",
+      "MCP endpoints must use HTTPS unless the server runs on this computer.",
+    ],
+    [
+      "https://example.com/mcp?apiKey=secret",
+      "Use an endpoint without embedded credentials. Save the access token separately.",
+    ],
+  ])(
+    "sends no token to %s, which a saved connection could not use either",
+    async (url, reason) => {
+      let dialled = false;
+      const servers = managed(
+        await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+        async () => {
+          dialled = true;
+          throw new Error("must not be reached");
+        },
+        new InMemoryMcpCredentials(),
+      );
+
+      const result = await servers.test(
+        { id: "draft", name: "Draft", url, enabled: true },
+        "a-token",
+      );
+
+      expect(result).toEqual({ ok: false, reason });
+      expect(dialled).toBe(false);
+    },
+  );
+
   it("does not disturb an already-connected server with the same id", async () => {
     let closedTest = false;
     const servers = managed(
@@ -112,5 +144,23 @@ describe("test()", () => {
     expect(await servers.manage()).toEqual([
       expect.objectContaining({ id: "live", status: "connected" }),
     ]);
+  });
+});
+
+describe("saveToken()", () => {
+  it("keeps no token for a connection nothing declares", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = managed(
+      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      async () => {
+        throw new Error("must not be reached");
+      },
+      credentials,
+    );
+
+    await expect(servers.saveToken("invented", "a-token")).rejects.toThrow(
+      "The MCP server no longer exists.",
+    );
+    expect(await credentials.get("invented")).toBeUndefined();
   });
 });

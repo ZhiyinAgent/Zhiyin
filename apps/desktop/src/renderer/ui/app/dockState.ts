@@ -33,7 +33,6 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
   return {
     title: prompt.action,
     target: prompt.target,
-    command: prompt.command,
     ...(prompt.reason ? { description: prompt.reason } : {}),
     ...(prompt.effect ? { effect: prompt.effect } : {}),
     ...(prompt.detail ? { detail: prompt.detail } : {}),
@@ -49,13 +48,10 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
 }
 
 /**
- * Why the composer is closed, when it is: the task is waiting on the person,
- * or there is nothing connected to run a task at all.
+ * Why the composer is closed, when it is: there is nothing connected to run a
+ * task at all.
  */
-export function composerLock(
-  _task: WorkspaceTask | null,
-  tasksAvailable: boolean,
-) {
+export function composerLock(tasksAvailable: boolean) {
   if (!tasksAvailable)
     return {
       disabledReason: "Task execution is not connected yet",

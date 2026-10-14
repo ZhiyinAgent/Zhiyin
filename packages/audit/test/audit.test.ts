@@ -112,17 +112,6 @@ describe("FileAuditLog", () => {
     );
   });
 
-  it("returns only the most recent entries when asked for a limit", async () => {
-    const log = new FileAuditLog(await directory());
-    for (let index = 0; index < 5; index += 1)
-      await log.record(entry({ at: `2026-09-05T10:00:0${index}.000Z` }));
-
-    expect((await log.read(2)).map((item) => item.at)).toEqual([
-      "2026-09-05T10:00:03.000Z",
-      "2026-09-05T10:00:04.000Z",
-    ]);
-  });
-
   it("keeps the newest 5,000 corrections and drops the oldest", async () => {
     const home = await directory();
     const at = (index: number) =>

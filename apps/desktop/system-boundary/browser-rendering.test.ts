@@ -153,7 +153,6 @@ describe.runIf(availability.available)("browser frames in the renderer", () => {
                       createElement(ApprovalPrompt, {
                         title: "Read page",
                         target: "Zhiyin’s browser",
-                        command: "browser_snapshot({})",
                         detail: "Reads the current page in Zhiyin’s browser.",
                         compact: true,
                         onDecision: () => undefined,

@@ -39,7 +39,15 @@ crash interrupted, and takes the backup around each file change. It is a group
 - `restoring(conversationId)` says whether files are being put back.
 - `resume(host)` finishes interrupted rewinds and undos at startup.
 - `backUp`, `checkBackup`, `completeBackup` and `discardBackup` wrap a file
-  change.
+  change; `backUp` names the conversation the change belongs to.
+- `forgetConversation(conversationId)` throws away every backup taken for a
+  deleted conversation.
+- `ComposedRewind({ conversation, recovery, journal, now })` implements `Rewind`
+  from a planner and file recovery, and `FileRewindJournal(dataDirectory)` keeps
+  its journal in the data folder.
+- The types these take and return: `PendingRewind`, `RewindJournal`,
+  `RewindMembers`, `FileBackup`, `RewindHost`, `RewindPreviewing`,
+  `UndoPreviewing`, `RewindCommitting`.
 
 ## Invariants
 

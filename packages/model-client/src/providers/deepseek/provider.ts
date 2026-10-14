@@ -21,7 +21,8 @@ import {
   sendChatCompletions,
   type ChatCompletionsDialect,
 } from "../../wires/chat-completions/send.js";
-import { classifyFailure } from "./failures.js";
+import { catalogFetch } from "../../keyed-fetch.js";
+import { classifyFailure, failedFinish } from "./failures.js";
 import { deepSeekModels } from "./models.js";
 
 const host = "https://api.deepseek.com";
@@ -66,6 +67,7 @@ const dialect: ChatCompletionsDialect = {
     ...(request.tools?.length ? { tools: chatTools(request.tools) } : {}),
   }),
   classify: classifyFailure,
+  failedFinish,
 };
 
 /** Each platform's currency, which its accounts are billed in. */
@@ -132,13 +134,7 @@ function currencyOf(balance: unknown): string | undefined {
 /** The models the account can use now, by DeepSeek's own listing. */
 const listedByApi: ListedByApi = async (options) => {
   const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch =
-    options.fetcher ??
-    ((url, init) =>
-      fetch(url, {
-        headers: init.headers,
-        signal: AbortSignal.timeout(15_000),
-      }));
+  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
   const response = await fetcher(`${host}/models`, {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
   });

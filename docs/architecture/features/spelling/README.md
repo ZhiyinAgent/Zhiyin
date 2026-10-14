@@ -23,8 +23,8 @@ dictionary are checked, plus American English when none of them is English.
   through `SpellcheckEngine`; saving the person's choice, which the core keeps
   with their other choices; the Settings controls (renderer); drawing the
   menu, which the main process does with Electron's; or fetching the
-  dictionaries at build time and checking the packaged ones, which
-  `scripts/dictionaries.mjs` does from the same list.
+  dictionaries at build time and checking the packaged ones, which the build
+  does from the same list.
 - **Talks to other features only through:** the interface below.
 
 ## Public interface
@@ -53,6 +53,8 @@ dictionary are checked, plus American English when none of them is English.
   language that loaded or could not.
 - `textMenu(request)` answers the right-click menu for a point in the page, as
   items the main process turns into Electron's menu.
+- The types these take and return: `BundledDictionary`, `Placement`,
+  `TextMenuItem`, `TextMenuRequest`.
 
 ## Invariants
 

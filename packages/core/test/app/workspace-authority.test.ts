@@ -214,7 +214,6 @@ describe("AgentLoop folder authority across a restart", () => {
         ...deps.sessions,
         loadWorkspace: () => sessions.loadWorkspace(),
         saveWorkspace: (snapshot) => sessions.saveWorkspace(snapshot),
-        list: () => sessions.list(),
       },
       workspace: {
         describeWorkspace: () => tools.describeWorkspace(),
@@ -277,7 +276,6 @@ describe("a conversation whose folder moved", () => {
         ...deps.sessions,
         loadWorkspace: () => sessions.loadWorkspace(),
         saveWorkspace: (snapshot) => sessions.saveWorkspace(snapshot),
-        list: () => sessions.list(),
       },
       workspace: {
         describeWorkspace: () => tools.describeWorkspace(),

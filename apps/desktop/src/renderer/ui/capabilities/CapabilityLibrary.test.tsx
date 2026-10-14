@@ -726,7 +726,7 @@ describe("CapabilityLibrary", () => {
     });
     expect(within(dialog).getByText("Typst 0.15.1")).toBeVisible();
     expect(within(dialog).getByText("github.com/typst/typst")).toBeVisible();
-    expect(within(dialog).getAllByText("22 MB")).toHaveLength(2);
+    expect(within(dialog).getAllByText("21.4 MB")).toHaveLength(2);
     expect(
       within(dialog).getByText(/checked against its published fingerprint/),
     ).toBeVisible();
@@ -1161,6 +1161,26 @@ describe("CapabilityLibrary", () => {
         screen.queryByText(/No shell was found\./),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("says why commands cannot run where no install would help, offering nothing to do", async () => {
+    render(
+      <CapabilityLibrary
+        plugins={[engineering]}
+        {...handlers}
+        onCheckShell={async () => ({
+          available: false,
+          reason:
+            "Zhiyin cannot contain what a command starts on this computer, so it runs none. Access is denied.",
+        })}
+      />,
+    );
+
+    const notice = await screen.findByRole("status");
+    expect(notice).toHaveTextContent(
+      "Shell commands are unavailable. Zhiyin cannot contain what a command starts on this computer, so it runs none. Access is denied.",
+    );
+    expect(within(notice).queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("shows no shell notice once the shell is available", () => {

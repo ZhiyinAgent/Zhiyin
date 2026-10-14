@@ -41,10 +41,15 @@ extraResources:
     to: THIRD_PARTY_LICENSES.md
 # The installed executable starts only as Zhiyin. Honouring
 # ELECTRON_RUN_AS_NODE or --inspect would let another program run its own code
-# as this executable. Nothing in Zhiyin starts itself either way.
+# as this executable. Nothing in Zhiyin starts itself either way. It also runs
+# only its own code: the app is loaded from its archive alone, and the archive
+# is checked against the hash built into the executable, so code put in the
+# install folder in its place does not run under Zhiyin's name.
 electronFuses:
   runAsNode: false
   enableNodeCliInspectArguments: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
 win:
   target: nsis
   icon: build/icon.ico

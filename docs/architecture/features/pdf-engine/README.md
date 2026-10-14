@@ -28,6 +28,9 @@ neither may import the other, so this sits below them both.
 Both libraries load on first use, so a launch that opens no PDF does not pay
 for them.
 
+- The types these take and return: `PdfViewport`, `PdfPage`, `PdfDocument`,
+  `PdfLoadingTask`, `Pdfjs`, `CanvasContext`, `Canvas`, `CanvasModule`.
+
 ## Invariants
 
 - Nothing in a document runs as code. The pdf.js build in use contains no

@@ -1,8 +1,5 @@
 /**
  * Structural containment for processes Zhiyin starts.
- *
- * Boundaries and invariants:
- * docs/architecture/features/process-ownership/README.md
  */
 
 export * from "./process-ownership.js";

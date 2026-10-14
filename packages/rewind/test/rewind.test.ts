@@ -82,6 +82,7 @@ function recoveryRecording(overrides: Partial<Recovery> = {}) {
       return { files: [{ path: "notes.md", status: "restored" }] };
     },
     cleanup: async () => {},
+    forgetConversation: async () => {},
     ...overrides,
   } as Recovery;
   return { asked, recovery };
@@ -495,7 +496,9 @@ describe("backing up a file change", () => {
     const { recovery } = recoveryRecording();
     const rewind = new ComposedRewind({ conversation: planner(), recovery });
 
-    expect(await rewind.backUp("action-1", "C:/work", changes)).toEqual({
+    expect(
+      await rewind.backUp("action-1", "C:/work", changes, "conversation-1"),
+    ).toEqual({
       actionId: "action-1",
       files: [{ path: "notes.md", status: "protected" }],
     });
@@ -509,7 +512,9 @@ describe("backing up a file change", () => {
     });
     const rewind = new ComposedRewind({ conversation: planner(), recovery });
 
-    expect(await rewind.backUp("action-1", undefined, changes)).toEqual({
+    expect(
+      await rewind.backUp("action-1", undefined, changes, "conversation-1"),
+    ).toEqual({
       actionId: "action-1",
       files: [
         {
@@ -519,7 +524,9 @@ describe("backing up a file change", () => {
         },
       ],
     });
-    expect(await rewind.backUp("action-2", "C:/work", changes)).toEqual({
+    expect(
+      await rewind.backUp("action-2", "C:/work", changes, "conversation-1"),
+    ).toEqual({
       actionId: "action-2",
       files: [
         {

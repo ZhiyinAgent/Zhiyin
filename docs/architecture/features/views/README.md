@@ -32,6 +32,9 @@ the conversation.
 The agent loop is given `ViewValidator`, which has `validate` only, and never
 learns that a renderer exists.
 
+- `PendingViewChecks` implements `ViewValidator`: each view is checked by the
+  window that draws it, within a time limit.
+
 ## Invariants
 
 - An answer reaches the question that asked it, in whatever order answers

@@ -18,16 +18,18 @@ export interface ToolSpec {
 }
 
 /**
- * Whether the `bash` tool can run here. Absent a shell, it is a capability
- * that does not exist and is never advertised to the model — this is what a
- * person is told instead, so the gap is not silent.
+ * Whether the `bash` tool can run here. Absent a shell, or where commands
+ * cannot be contained, it is a capability that does not exist and is never
+ * advertised to the model — this is what a person is told instead, so the gap
+ * is not silent.
  */
 export type ShellAvailability =
   | { readonly available: true }
   | {
       readonly available: false;
       readonly reason: string;
-      readonly installUrl: string;
+      /** Where to get what is missing, when installing something helps. */
+      readonly installUrl?: string;
     };
 
 /**

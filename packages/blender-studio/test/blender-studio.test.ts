@@ -925,10 +925,13 @@ describe("a conversation's session", () => {
 
   it("says a change Blender saved before it was stopped is in the scene file", async () => {
     let scenePath = "";
+    const controller = new AbortController();
     const { tools } = await setUp(async (request) => {
       if (request.op === "open") scenePath = String(request.args["path"]);
       if (request.op === "script") {
         await writeFile(scenePath, "saved by the script");
+        // Stopped once the script has saved, and before it answers.
+        controller.abort();
         return "silent";
       }
       return { ok: true, text: `did ${request.op}` };
@@ -938,8 +941,6 @@ describe("a conversation's session", () => {
       create: true,
     });
 
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
     const stopped = await call(
       tools(),
       "blender_run_script",

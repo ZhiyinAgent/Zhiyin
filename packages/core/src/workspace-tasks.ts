@@ -22,7 +22,6 @@ export type WorkspaceTurns = Pick<
   | "resolveUserInput"
   | "running"
   | "anyRunning"
-  | "accepts"
   | "settleAfterRestart"
   | "wakeSaved"
   | "settleEndedTurn"

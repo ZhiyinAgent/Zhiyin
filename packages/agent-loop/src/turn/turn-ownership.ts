@@ -28,6 +28,17 @@ export class TurnOwnership {
     return this.#turns.has(id);
   }
 
+  /**
+   * Whether a conversation's turn, or anything started under it, runs. Work
+   * under a conversation is named after it (`<id>:…`), so a specialist that
+   * outlived its turn, or the one that started it, is still found.
+   */
+  runningUnder(conversationId: string): boolean {
+    return [...this.#turns.keys()].some(
+      (id) => id === conversationId || id.startsWith(`${conversationId}:`),
+    );
+  }
+
   anyRunning(exceptId?: string): boolean {
     return [...this.#turns.keys()].some((id) => id !== exceptId);
   }

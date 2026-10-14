@@ -10,11 +10,11 @@
  * It is skipped by default and is not part of the gate, because it costs money
  * and needs a network. Run it deliberately:
  *
- *   ZHIYIN_SMOKE=1 npx vitest run --project packages packages/core/test/app/live-smoke.test.ts
+ *   ZHIYIN_SMOKE=1 npx vitest run --project live packages/core/test/app/live-smoke.test.ts
  *
  * on Windows PowerShell:
  *
- *   $env:ZHIYIN_SMOKE = "1"; npx vitest run --project packages packages/core/test/app/live-smoke.test.ts
+ *   $env:ZHIYIN_SMOKE = "1"; npx vitest run --project live packages/core/test/app/live-smoke.test.ts
  *
  * It needs ZHIYIN_OPENROUTER_API_KEY in the environment.
  *
@@ -41,7 +41,6 @@ import {
   OpenRouterModelClient,
   ProviderCredentials,
 } from "@zhiyin/model-client";
-import { AskPermissionEngine } from "@zhiyin/permission-engine";
 import { FileSessions } from "@zhiyin/session";
 import {
   ComposedPlugins,
@@ -83,7 +82,13 @@ async function realLoop(workspaceDirectory: string, data: string) {
   // Real parts where the turn reaches them; the shared stubs for the rest.
   const loop = loopFrom({
     ...stubDependencies(() => {}),
-    permissions: new AskPermissionEngine(),
+    // The strictest policy: every action asks.
+    permissions: {
+      decide: async () => ({
+        outcome: "ask" as const,
+        reason: "Every action asks in this test.",
+      }),
+    },
     tools: workspace,
     workspace,
     artifacts: new WorkspaceArtifacts(() => workspace.workspaceRoot()),

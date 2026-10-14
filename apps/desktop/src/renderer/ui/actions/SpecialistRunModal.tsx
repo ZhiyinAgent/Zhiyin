@@ -1,7 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CoreApi, SpecialistRun, TaskAction } from "@zhiyin/contract";
 import { ActionHistory } from "./ActionHistory.js";
-import { Icon, WindowLayer, useModalFocus } from "../shared/index.js";
+import {
+  elapsedTime,
+  Icon,
+  WindowLayer,
+  useModalFocus,
+} from "../shared/index.js";
 import styles from "./actions.module.css";
 
 export const statusPresentation: Record<
@@ -238,11 +243,6 @@ function paragraphs(text: string): string[] {
 
 function duration(start: string, end: string | undefined): string | undefined {
   if (!end) return undefined;
-  const seconds = Math.round((Date.parse(end) - Date.parse(start)) / 1_000);
-  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  return minutes < 60
-    ? `${minutes} min ${seconds % 60} s`
-    : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+  const took = Date.parse(end) - Date.parse(start);
+  return Number.isFinite(took) && took >= 0 ? elapsedTime(took) : undefined;
 }

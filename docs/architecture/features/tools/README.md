@@ -23,7 +23,9 @@ Display and input tools work without a folder. The others need one, except
 reading what the conversation kept by its `output://` or `attachment://`
 address. The searches are offered only when the bundled ripgrep is present.
 `bash` is offered only where a bash is found, normally the one Git for Windows
-installs, and, in the app, where process containment is available.
+installs, and, in the app, where process containment is available. Where it
+is not, the shell is said to be unavailable with that reason, and checking
+for a shell again does not change it.
 
 ## Boundaries
 
@@ -47,7 +49,8 @@ installs, and, in the app, where process containment is available.
 - `WorkspaceTools(workspaceRoot?, options)` implements `ToolRegistry` and
   `WorkspaceContext`. The application supplies, through `options`, whether the
   chosen model accepts pictures (asked on every call; no answer means no), the
-  bash path, process containment, `ConversationItems`, a PDF pages source
+  bash path, process containment or why there is none, `ConversationItems`, a
+  PDF pages source
   (ADR 0018), the Recycle Bin, and the ripgrep path.
 - `ToolRegistry`: `list()`, `inspect(name, args, conversationId?)`,
   `execute(name, args, signal?, conversationId?)`, and
@@ -84,6 +87,12 @@ installs, and, in the app, where process containment is available.
 - `CanvasPictureFitting` is the picture fitting the agent loop applies before
   a picture reaches a model. `checkRecyclable` is the Windows Recycle Bin
   check the application passes back in.
+- `resolveShell()` finds the shell commands run in, once, when the tools are
+  built: a shell that is not there is a capability that does not exist.
+- The types these take and return: `FileRead`, `CommandContainer`,
+  `CommandContainment`, `RecycleBin`, `OpenedPdf`, `PdfPagesSource`,
+  `ToolResult`, `ShellAvailability`, `ToolCallInspection`, `ToolSpec`,
+  `WorkspaceToolsOptions`.
 
 ## Invariants
 
@@ -132,9 +141,10 @@ installs, and, in the app, where process containment is available.
   block's indentation and line numbers copied from a read, and nothing about
   the words; an exact match always wins. A file keeps its line endings and
   byte-order mark through an edit; a new file is written exactly as given.
-- Each file is written to a temporary file and renamed into place. If a
-  multi-file edit fails partway, the result names the files already changed
-  and those that were not.
+- Each file is written to a temporary file and renamed into place; a write
+  that fails removes its temporary file. If a multi-file edit fails partway,
+  the result names the files already changed and those that were not, and
+  still declares the changed ones as produced.
 
 ### Deleting (ADR 0008)
 

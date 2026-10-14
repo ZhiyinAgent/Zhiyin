@@ -105,7 +105,29 @@ const ownDescriptions: Readonly<Record<string, string>> = {
     "Close Zhiyin's browser and the page it shows. Use it when browsing for this task is finished, so the space beside the conversation goes back to the conversation or to a document. Pages are not kept.",
   browser_take_screenshot:
     "Take a picture of the current page. Without a target it shows what the window shows, or the whole page with fullPage. With a target it shows that one element, scrolled into view first, so a section of a long page needs no scrolling code. The target must match exactly one element: for several sections, take one picture of each, or target one element that contains them all. A picture cannot be acted on; use browser_snapshot for actions.",
+  browser_file_upload:
+    "Give files from the open folder to the file chooser a click on the page opened. Only files in the open folder can be uploaded. Without paths, the file chooser is cancelled.",
 };
+
+/**
+ * Inputs whose meaning Zhiyin decides: an upload names files inside the open
+ * folder, never anywhere on the computer.
+ */
+const ownSchemas: Readonly<Record<string, Readonly<Record<string, unknown>>>> =
+  {
+    browser_file_upload: {
+      type: "object",
+      properties: {
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "The files to upload, each by its path inside the open folder, such as reports/q3.csv. Omit to cancel the file chooser.",
+        },
+      },
+      additionalProperties: false,
+    },
+  };
 
 /**
  * Inputs that name a place on disk. A picture is kept with the conversation
@@ -195,9 +217,11 @@ function offeredTools(
         return {
           name: tool.name,
           ...(description ? { description } : {}),
-          inputSchema: withoutHiddenInputs(
-            tool.inputSchema as Readonly<Record<string, unknown>>,
-          ),
+          inputSchema:
+            ownSchemas[tool.name] ??
+            withoutHiddenInputs(
+              tool.inputSchema as Readonly<Record<string, unknown>>,
+            ),
         };
       }),
     ...(preview
@@ -413,10 +437,44 @@ export function browserAutomation(
         await browser.close();
         return { content: [{ type: "text", text: "Browser closed." }] };
       }
+      let given = modelArguments(name, args);
+      if (
+        name === "browser_file_upload" &&
+        Array.isArray(args.paths) &&
+        args.paths.length
+      ) {
+        try {
+          if (!browser.uploads || !options.outputDirectory)
+            throw new Error(
+              "Choose a folder first: only its files can be uploaded.",
+            );
+          given = {
+            ...given,
+            paths: await browser.uploads.stage(
+              args.paths as string[],
+              options.outputDirectory,
+              binding,
+            ),
+          };
+        } catch (error) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text:
+                  error instanceof Error
+                    ? error.message
+                    : "The files could not be uploaded.",
+              },
+            ],
+          };
+        }
+      }
       const result = await (
         await ready()
       ).callTool(
-        { name, arguments: modelArguments(name, args) },
+        { name, arguments: given },
         { ...(signal ? { signal } : {}), timeout: 120_000 },
       );
       await browser.refresh();

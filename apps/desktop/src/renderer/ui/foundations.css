@@ -48,7 +48,6 @@
   --zy-green: #5ed6a4;
   --zy-green-line: rgba(94, 214, 164, 0.35);
   --zy-green-fill: rgba(94, 214, 164, 0.12);
-  --zy-green-ring: rgba(94, 214, 164, 0.14);
   --zy-amber: #e8b23a;
   --zy-amber-line: rgba(232, 178, 58, 0.4);
   --zy-amber-fill: rgba(232, 178, 58, 0.13);
@@ -123,7 +122,6 @@
   --zy-sidebar-width: 242px;
   --zy-radius-sm: 11px;
   --zy-radius-md: 18px;
-  --zy-radius-lg: 24px;
   --zy-font-display: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
   --zy-font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   --zy-font-instrument: "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -164,7 +162,6 @@
     --zy-green: #10734b;
     --zy-green-line: rgba(16, 115, 75, 0.35);
     --zy-green-fill: rgba(16, 115, 75, 0.1);
-    --zy-green-ring: rgba(16, 115, 75, 0.14);
     --zy-amber: #8a5d00;
     --zy-amber-line: rgba(176, 120, 0, 0.42);
     --zy-amber-fill: rgba(214, 150, 20, 0.14);

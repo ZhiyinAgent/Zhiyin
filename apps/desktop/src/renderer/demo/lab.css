@@ -105,7 +105,7 @@ body {
   min-height: 150px;
   padding: 26px 30px;
   border: 1px solid var(--zy-line);
-  border-radius: var(--zy-radius-lg);
+  border-radius: 24px;
   background: var(--zy-panel);
 }
 

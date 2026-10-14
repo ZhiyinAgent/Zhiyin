@@ -1,6 +1,7 @@
 import { copyFile, readFile, stat, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { locateInside } from "@zhiyin/workspace-containment";
+import { isStillPicture } from "./still-picture.js";
 import type {
   ArtifactExport,
   ArtifactPreview,
@@ -213,13 +214,7 @@ export class WorkspaceArtifacts implements Artifacts {
     svg: string,
     chooseDestination: DestinationChooser,
   ): Promise<ArtifactExport> {
-    if (
-      svg.length > 2_000_000 ||
-      !/^\s*<svg[\s>]/i.test(svg) ||
-      /<(?:script|foreignObject|iframe|object|embed)\b/i.test(svg) ||
-      /\son[a-z]+\s*=/i.test(svg) ||
-      /\b(?:href|src)\s*=\s*["'](?!#)[^"']+/i.test(svg)
-    )
+    if (svg.length > 2_000_000 || !isStillPicture(svg))
       return {
         status: "failed",
         reason:

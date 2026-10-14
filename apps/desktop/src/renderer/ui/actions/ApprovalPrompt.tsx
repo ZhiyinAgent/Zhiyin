@@ -19,7 +19,6 @@ type ApprovalPromptProps = {
   title: string;
   target: string;
   description?: string;
-  command: string;
   invocation?: ToolInvocation;
   changes?: readonly FileChange[];
   recovery?: ApprovalRequest["recovery"];

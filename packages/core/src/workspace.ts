@@ -154,6 +154,9 @@ export class Workspace {
   /** Conversations being compacted now: only true while the app runs. */
   readonly #compacting = new Set<string>();
   #connectionsReady: Promise<void> = Promise.resolve();
+  /** Saved specialist reports wait for this: the turn that takes one may use
+   * a connector. */
+  #connected = false;
   #capabilitiesAvailable = true;
   #mcpServers: McpServerState[] = [];
   #plugins: PluginState[] = [];
@@ -270,7 +273,6 @@ export class Workspace {
       refreshConnections: () => this.#refreshMcpServers(),
       recordUsage: (usage) => this.#recordUsage(usage),
       reportIssue: (notice) => this.#reportIssue(notice),
-      emit: (event) => this.emit(event),
       compacting: (taskId, running) => {
         if (running) this.#compacting.add(taskId);
         else this.#compacting.delete(taskId);
@@ -315,6 +317,7 @@ export class Workspace {
 
   async initialize(): Promise<void> {
     if (this.turns.anyRunning()) return;
+    this.#connected = false;
     const restored = await startup.loadStartup(this.#deps, {
       tasks: this.#tasks,
       conversations: this.#listed(),
@@ -351,7 +354,10 @@ export class Workspace {
         this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
       },
     );
-    void this.#connectionsReady.then(() => this.turns.wakeSaved(this.#tasks));
+    void this.#connectionsReady.then(() => {
+      this.#connected = true;
+      this.turns.wakeSaved(this.#tasks);
+    });
     // Provider settings look the model up in the provider's catalogue, so like
     // connections they arrive when they arrive.
     void this.settings
@@ -416,6 +422,8 @@ export class Workspace {
       this.#tasks = [...this.#tasks, opened.task];
     if (opened.changed) await this.#persistence.save();
     this.emit({ kind: "taskChanged", data: opened.task });
+    // One read before the connections arrive is woken with the rest.
+    if (this.#connected) this.turns.wakeSaved([opened.task]);
     return true;
   }
 
@@ -580,9 +588,11 @@ export class Workspace {
       this.#selectedTaskId =
         next && (await this.#ensureOpen(next)) ? next : null;
     await this.#persistence.save();
-    // What it kept beside itself goes with it: its pictures, pastes and saved
-    // outputs. A file that will not go yet does not keep the conversation.
+    // What it kept beside itself goes with it: its pictures, pastes, saved
+    // outputs and the copies taken before its file changes. A file that will
+    // not go yet does not keep the conversation.
     await this.#deps.sessions.forgetConversation(taskId).catch(() => {});
+    await this.#deps.rewind.forgetConversation(taskId).catch(() => {});
     if (this.#selectedTaskId) {
       this.#browser.announce(this.#selectedTaskId);
       this.#scene.announce(this.#selectedTaskId);
@@ -778,16 +788,14 @@ export class Workspace {
     });
 
   /**
-   * The workspace's own change to a conversation, held to the same rule as a
-   * turn's: a conversation whose turn was stopped takes nothing but the record
-   * of its stopping.
+   * The workspace's own change to a conversation, the person's: no turn owns
+   * it, so it is always kept.
    */
   async #replaceTask(task: WorkspaceTask): Promise<void> {
-    if (!this.turns.accepts(task)) return;
     await this.#store(task, {
       persist: true,
-      commit: () => this.turns.accepts(task),
-      announce: () => this.turns.accepts(task),
+      commit: () => true,
+      announce: () => true,
     });
   }
 

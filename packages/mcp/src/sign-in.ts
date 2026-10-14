@@ -18,6 +18,7 @@ import {
   type OAuthDiscoveryState,
   type OAuthTokens,
 } from "@modelcontextprotocol/client";
+import { travelsSecurely } from "@zhiyin/contract";
 import type { SignedIn } from "./signed-in.js";
 
 export type SignInOptions = {
@@ -72,18 +73,6 @@ export async function offersSignIn(serverUrl: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-/**
- * A page the person is sent to must be one their browser shows as secure; a
- * plain address is allowed only on this computer, where nothing travels.
- */
-function securePage(url: URL): boolean {
-  if (url.protocol === "https:") return true;
-  return (
-    url.protocol === "http:" &&
-    (url.hostname === "127.0.0.1" || url.hostname === "localhost")
-  );
 }
 
 const landing = `<!doctype html><meta charset="utf-8"><title>Zhiyin</title>
@@ -173,7 +162,9 @@ export async function signIn(
       tokens = issued;
     },
     redirectToAuthorization: async (url) => {
-      if (!securePage(url)) {
+      // A page the person is sent to must be one their browser shows as
+      // secure; a plain address only on this computer, where nothing travels.
+      if (!travelsSecurely(url)) {
         refusedPage = true;
         throw new SignInProblem(
           "The service's sign-in page is not a secure address, so it was not opened.",

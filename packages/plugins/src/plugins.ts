@@ -1,4 +1,8 @@
-import type { AuthoredPluginContents, ConnectorSetup } from "@zhiyin/contract";
+import {
+  travelsSecurely,
+  type AuthoredPluginContents,
+  type ConnectorSetup,
+} from "@zhiyin/contract";
 
 export const AGENT_PLUGINS_SCHEMA =
   "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
@@ -313,6 +317,10 @@ export function validatePluginPackage(plugin: PluginPackage): void {
     )
       throw new InvalidPluginError(
         `MCP server “${server.id}” must have an http(s) URL without credentials.`,
+      );
+    if (!travelsSecurely(url))
+      throw new InvalidPluginError(
+        `MCP server “${server.id}” must use https unless it runs on this computer.`,
       );
   }
   for (const connector of plugin.appConnectors) {

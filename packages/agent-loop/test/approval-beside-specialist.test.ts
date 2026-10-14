@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ToolCallInspection, WorkspaceTask } from "@zhiyin/contract";
-import type { ModelEvent } from "@zhiyin/model-client";
+import { ModelClientError, type ModelEvent } from "@zhiyin/model-client";
 import {
   loopFrom,
   pluginOffering,
@@ -171,6 +171,56 @@ describe("an approval beside a specialist", () => {
 
     // The parent has streamed, read a file and finished; the specialist is
     // still waiting, and its question is still the one on screen.
+    expect(specialistIs(loop, "running")).toBe(true);
+    expect(conversation(loop).phase).toMatchObject({
+      kind: "approval",
+      prompt: { target: "npm test" },
+    });
+
+    const phase = conversation(loop).phase;
+    if (phase.kind !== "approval") throw new Error("No approval showing.");
+    await loop.resolveApproval(taskId, phase.prompt.id, "allow");
+    await eventually(() => specialistIs(loop, "completed"));
+    await eventually(() =>
+      conversation(loop).messages.some((message) =>
+        message.text.includes("All checked."),
+      ),
+    );
+  });
+
+  it("keeps a specialist's approval on screen when its parent's turn fails", async () => {
+    // Read by the model stand-in, which runs only after the loop exists.
+    const loop: TurnTestApp = loopFrom(
+      dependencies(async function* (text) {
+        if (text.includes("You are the Checker specialist")) {
+          yield text.includes("spec-command")
+            ? finish
+            : call("spec-command", "run_command", { command: "npm test" });
+          yield done;
+          return;
+        }
+        if (!text.includes("Check the site.")) {
+          yield call("delegate-1", "delegate_specialist", {
+            id: "engineering/checker",
+            task: "Check the site.",
+          });
+        } else if (!text.includes("finished in the background")) {
+          // The parent fails only once the specialist's prompt is showing.
+          await eventually(() => asking(loop, "npm test"));
+          throw new ModelClientError("rateLimited", "The provider is busy.");
+        } else {
+          yield { kind: "textDelta", text: "All checked." };
+        }
+        yield done;
+      }),
+    );
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Build the site and have it checked");
+
+    // The parent's turn has failed; the specialist is still waiting, and its
+    // question is still the one on screen, so it can be answered.
+    expect(loop.running(taskId)).toBe(true);
     expect(specialistIs(loop, "running")).toBe(true);
     expect(conversation(loop).phase).toMatchObject({
       kind: "approval",

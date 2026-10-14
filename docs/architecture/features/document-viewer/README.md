@@ -61,6 +61,9 @@ shows live pages.
   answers each page's words, or nothing when the document cannot be read; the
   core uses it to compare a changed PDF. `close()` ends its process. The
   composition root hands it to the tools as their PDF pages source.
+- The types these take and return: `DrawingPort`, `DrawingReply`,
+  `DrawingRequest`, `DrawingProcess`, `LocatedDocument`, `ShowOutcome`,
+  `ContainedPdf`.
 
 ## Invariants
 

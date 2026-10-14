@@ -20,7 +20,12 @@ async function fixture() {
   const recovery = new FileRecovery(storage, {
     now: () => new Date("2026-09-07T10:00:00.000Z"),
   });
-  return { root, recovery };
+  return { root, storage, recovery };
+}
+
+/** The folders kept for actions, one each. */
+async function keptFolders(storage: string): Promise<string[]> {
+  return readdir(join(storage, "recovery")).catch(() => []);
 }
 
 // Real files and real processes, so these are slow by design rather than by
@@ -35,10 +40,15 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       Buffer.from([0, 1, 2]),
     );
 
-    const prepared = await recovery.prepare("action-1", root, [
-      { path: "notes/existing.txt", change: "updated" },
-      { path: "notes/created.txt", change: "created" },
-    ]);
+    const prepared = await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "notes/existing.txt", change: "updated" },
+        { path: "notes/created.txt", change: "created" },
+      ],
+      "conversation-1",
+    );
     expect(prepared.files.map((file) => file.status)).toEqual([
       "protected",
       "protected",
@@ -54,6 +64,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Edit files",
         target: "2 files",
         status: "completed",
+        sequence: 0,
         changes: [
           { path: "notes/existing.txt", change: "updated" },
           { path: "notes/created.txt", change: "created" },
@@ -84,10 +95,15 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "one.txt"), "before one");
     await writeFile(join(root, "two.txt"), "before two");
-    await recovery.prepare("action-1", root, [
-      { path: "one.txt", change: "updated" },
-      { path: "two.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "one.txt", change: "updated" },
+        { path: "two.txt", change: "updated" },
+      ],
+      "conversation-1",
+    );
     await writeFile(join(root, "one.txt"), "after one");
     await writeFile(join(root, "two.txt"), "after two");
     await recovery.commit("action-1");
@@ -97,6 +113,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Edit files",
         target: "2 files",
         status: "completed",
+        sequence: 0,
         changes: [
           { path: "one.txt", change: "updated" },
           { path: "two.txt", change: "updated" },
@@ -126,7 +143,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       { path: "notes/plan.md", change: "recycled" as const },
       { path: "budget.csv", change: "deleted" as const },
     ];
-    await recovery.prepare("action-1", root, changes);
+    await recovery.prepare("action-1", root, changes, "conversation-1");
     await rm(join(root, "notes"), { recursive: true });
     await rm(join(root, "budget.csv"));
     await recovery.commit("action-1");
@@ -137,6 +154,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Delete files",
         target: "2 files",
         status: "completed",
+        sequence: 0,
         changes,
       },
     ]);
@@ -160,7 +178,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "plan.md"), "the plan");
     const changes = [{ path: "plan.md", change: "deleted" as const }];
-    await recovery.prepare("action-1", root, changes);
+    await recovery.prepare("action-1", root, changes, "conversation-1");
     await rm(join(root, "plan.md"));
     await recovery.commit("action-1");
     const review = await recovery.review("review-1", root, [
@@ -169,6 +187,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Delete files",
         target: "plan.md",
         status: "completed",
+        sequence: 0,
         changes,
       },
     ]);
@@ -203,9 +222,12 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
   it("refuses to overwrite a file changed after the recorded action", async () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "note.txt"), "before");
-    await recovery.prepare("action-1", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(join(root, "note.txt"), "agent result");
     await recovery.commit("action-1");
     await writeFile(join(root, "note.txt"), "newer user edit");
@@ -216,6 +238,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Write file",
         target: "note.txt",
         status: "completed",
+        sequence: 0,
         changes: [{ path: "note.txt", change: "updated" }],
       },
     ]);
@@ -237,6 +260,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       action: "Compile document",
       target: "paper.pdf",
       status: "completed" as const,
+      sequence: 0,
       changes: [{ path: "paper.pdf", change: "updated" as const }],
     });
     await writeFile(join(root, "paper.pdf"), Buffer.from([0, 1, 2]));
@@ -244,7 +268,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       ["compile-1", [3, 4]],
       ["compile-2", [5, 6, 7]],
     ] as const) {
-      await recovery.prepare(id, root, compiled(id).changes);
+      await recovery.prepare(id, root, compiled(id).changes, "conversation-1");
       await writeFile(join(root, "paper.pdf"), Buffer.from(bytes));
       await recovery.commit(id);
     }
@@ -271,13 +295,14 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       action: "Compile document",
       target: "2 files",
       status: "completed" as const,
+      sequence: 0,
       changes: [
         { path: "paper.pdf", change: "created" as const },
         { path: "large.pdf", change: "updated" as const },
       ],
     };
     await writeFile(join(root, "large.pdf"), Buffer.alloc(11 * 1024 * 1024));
-    await recovery.prepare(action.id, root, action.changes);
+    await recovery.prepare(action.id, root, action.changes, "conversation-1");
     await writeFile(join(root, "paper.pdf"), Buffer.from([1]));
     await writeFile(join(root, "large.pdf"), Buffer.from([2]));
     await recovery.commit(action.id);
@@ -295,10 +320,15 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
   it("marks undeclared and oversized effects as unprotected", async () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "large.txt"), Buffer.alloc(11 * 1024 * 1024));
-    const prepared = await recovery.prepare("action-1", root, [
-      { path: "../outside.txt", change: "updated" },
-      { path: "large.txt", change: "updated" },
-    ]);
+    const prepared = await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "../outside.txt", change: "updated" },
+        { path: "large.txt", change: "updated" },
+      ],
+      "conversation-1",
+    );
     expect(prepared.files).toEqual([
       expect.objectContaining({
         path: "../outside.txt",
@@ -311,9 +341,12 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
   it("invalidates a capture when its source changes before execution", async () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "note.txt"), "reviewed");
-    await recovery.prepare("action-1", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(join(root, "note.txt"), "changed while waiting");
     await expect(recovery.validate("action-1")).resolves.toMatchObject({
       ok: false,
@@ -327,9 +360,12 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
    */
   it("says Windows denied access, not that a path left the workspace", async () => {
     const { root, recovery } = await fixture();
-    await recovery.prepare("action-1", root, [
-      { path: "letter.md", change: "created" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "letter.md", change: "created" }],
+      "conversation-1",
+    );
     const who = `${process.env["USERDOMAIN"]}\\${process.env["USERNAME"]}`;
     const icacls = (...args: string[]) =>
       new Promise<void>((resolve, reject) => {
@@ -362,16 +398,22 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       limits: { versionsPerPath: 1, maximumAgeMs: 24 * 60 * 60 * 1000 },
     });
     await writeFile(join(root, "note.txt"), "zero");
-    await recovery.prepare("action-1", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(join(root, "note.txt"), "one");
     await recovery.commit("action-1");
 
     now = new Date("2026-09-01T11:00:00.000Z");
-    await recovery.prepare("action-2", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-2",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(join(root, "note.txt"), "two");
     await recovery.commit("action-2");
     const versionReview = await recovery.review("versions", root, [
@@ -380,6 +422,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Write",
         target: "note.txt",
         status: "completed",
+        sequence: 0,
         changes: [{ path: "note.txt", change: "updated" }],
       },
     ]);
@@ -393,20 +436,234 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Write",
         target: "note.txt",
         status: "completed",
+        sequence: 0,
         changes: [{ path: "note.txt", change: "updated" }],
       },
     ]);
     expect(ageReview.files[0]).toMatchObject({ status: "unprotected" });
   });
 
+  it("removes an action's folder once none of its copies remain", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-recovery-workspace-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-recovery-store-"));
+    let now = new Date("2026-09-01T10:00:00.000Z");
+    const recovery = new FileRecovery(storage, {
+      now: () => now,
+      limits: { versionsPerPath: 1 },
+    });
+    await writeFile(join(root, "note.txt"), "zero");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "note.txt"), "one");
+    await recovery.commit("action-1");
+    expect(await keptFolders(storage)).toHaveLength(1);
+
+    now = new Date("2026-09-01T11:00:00.000Z");
+    await recovery.prepare(
+      "action-2",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "note.txt"), "two");
+    await recovery.commit("action-2");
+
+    expect(await keptFolders(storage)).toHaveLength(1);
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-2",
+        action: "Write",
+        target: "note.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "note.txt", change: "updated" }],
+      },
+    ]);
+    expect(review.files).toEqual([
+      { path: "note.txt", action: "restore", status: "recoverable" },
+    ]);
+  });
+
+  it("removes everything kept for an action past the age limit, a created file's record included", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-recovery-workspace-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-recovery-store-"));
+    let now = new Date("2026-09-01T10:00:00.000Z");
+    const recovery = new FileRecovery(storage, {
+      now: () => now,
+      limits: { maximumAgeMs: 24 * 60 * 60 * 1000 },
+    });
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "new.txt", change: "created" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "new.txt"), "made by the action");
+    await recovery.commit("action-1");
+
+    now = new Date("2026-09-03T10:00:00.000Z");
+    await recovery.cleanup();
+
+    expect(await keptFolders(storage)).toEqual([]);
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "new.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "new.txt", change: "created" }],
+      },
+    ]);
+    expect(review.files).toEqual([
+      {
+        path: "new.txt",
+        action: "unknown",
+        status: "unprotected",
+        reason:
+          "No copy of this file is kept: none was taken, or it was removed by the storage limits.",
+      },
+    ]);
+  });
+
+  it("removes a folder left without its record", async () => {
+    const { storage, recovery } = await fixture();
+    const leftBehind = join(storage, "recovery", "left-behind");
+    await mkdir(leftBehind, { recursive: true });
+    await writeFile(join(leftBehind, "0.bin"), "a copy nothing names");
+
+    await recovery.cleanup();
+
+    expect(await keptFolders(storage)).toEqual([]);
+  });
+
+  it("forgets what was kept for a deleted conversation and keeps the others'", async () => {
+    const { root, storage, recovery } = await fixture();
+    await writeFile(join(root, "one.txt"), "before one");
+    await writeFile(join(root, "two.txt"), "before two");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "one.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "one.txt"), "after one");
+    await recovery.commit("action-1");
+    await recovery.prepare(
+      "action-2",
+      root,
+      [{ path: "two.txt", change: "updated" }],
+      "conversation-2",
+    );
+    await writeFile(join(root, "two.txt"), "after two");
+    await recovery.commit("action-2");
+
+    await recovery.forgetConversation("conversation-1");
+
+    expect(await keptFolders(storage)).toHaveLength(1);
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "one.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "one.txt", change: "updated" }],
+      },
+      {
+        id: "action-2",
+        action: "Write",
+        target: "two.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "two.txt", change: "updated" }],
+      },
+    ]);
+    expect(review.files).toEqual([
+      {
+        path: "one.txt",
+        action: "unknown",
+        status: "unprotected",
+        reason:
+          "No copy of this file is kept: none was taken, or it was removed by the storage limits.",
+      },
+      { path: "two.txt", action: "restore", status: "recoverable" },
+    ]);
+  });
+
+  it("puts back only files inside the reviewed folder, and only from copies it kept", async () => {
+    const { root, recovery } = await fixture();
+    const elsewhere = await mkdtemp(join(tmpdir(), "zhiyin-recovery-else-"));
+    await writeFile(join(root, "note.txt"), "before");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "note.txt"), "after");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "note.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "note.txt", change: "updated" }],
+      },
+    ]);
+    const target = review.targets[0]!;
+    const refused = {
+      path: "note.txt",
+      status: "unprotected",
+      reason:
+        "The restore named a file outside its folder or a copy Zhiyin did not keep, so the file was left as it is.",
+    };
+
+    // A file elsewhere that matches what the action left.
+    await writeFile(join(elsewhere, "note.txt"), "after");
+    const redirected = {
+      ...review,
+      targets: [{ ...target, absolute: join(elsewhere, "note.txt") }],
+    };
+    expect((await recovery.restore(redirected)).files).toEqual([refused]);
+    expect(await readFile(join(elsewhere, "note.txt"), "utf8")).toBe("after");
+
+    // The same bytes as the kept copy, but not where copies are kept.
+    await writeFile(
+      join(elsewhere, "copy.bin"),
+      await readFile(target.backup!),
+    );
+    const borrowed = {
+      ...review,
+      targets: [{ ...target, backup: join(elsewhere, "copy.bin") }],
+    };
+    expect((await recovery.restore(borrowed)).files).toEqual([refused]);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("after");
+
+    expect((await recovery.restore(review)).files).toEqual([
+      { path: "note.txt", status: "restored" },
+    ]);
+  });
+
   it("reports a missing retained copy without preventing other files from restoring", async () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "one.txt"), "before one");
     await writeFile(join(root, "two.txt"), "before two");
-    await recovery.prepare("action-1", root, [
-      { path: "one.txt", change: "updated" },
-      { path: "two.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "one.txt", change: "updated" },
+        { path: "two.txt", change: "updated" },
+      ],
+      "conversation-1",
+    );
     await writeFile(join(root, "one.txt"), "after one");
     await writeFile(join(root, "two.txt"), "after two");
     await recovery.commit("action-1");
@@ -416,6 +673,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Edit files",
         target: "2 files",
         status: "completed",
+        sequence: 0,
         changes: [
           { path: "one.txt", change: "updated" },
           { path: "two.txt", change: "updated" },
@@ -442,7 +700,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       { path: "edited.txt", change: "updated" as const },
       { path: "deleted.txt", change: "deleted" as const },
     ];
-    await recovery.prepare("action-1", root, changes);
+    await recovery.prepare("action-1", root, changes, "conversation-1");
     await writeFile(join(root, "edited.txt"), "after the edit");
     await rm(join(root, "deleted.txt"));
     await recovery.commit("action-1");
@@ -452,6 +710,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Edit files",
         target: "2 files",
         status: "completed",
+        sequence: 0,
         changes,
       },
     ]);
@@ -480,9 +739,12 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     const { root, recovery } = await fixture();
     const path = join(root, "note.txt");
     await writeFile(path, "before");
-    await recovery.prepare("action-1", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(path, "agent result");
     await recovery.commit("action-1");
     const review = await recovery.review("review-1", root, [
@@ -491,6 +753,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Write",
         target: "note.txt",
         status: "completed",
+        sequence: 0,
         changes: [{ path: "note.txt", change: "updated" }],
       },
     ]);
@@ -534,6 +797,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
       "action-1",
       root,
       paths.map((path) => ({ path, change: "updated" as const })),
+      "conversation-1",
     );
     for (const path of paths) await writeFile(join(root, path), "after");
     await recovery.commit("action-1");
@@ -543,6 +807,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Edit files",
         target: "20 files",
         status: "completed",
+        sequence: 0,
         changes: paths.map((path) => ({ path, change: "updated" as const })),
       },
     ]);
@@ -568,9 +833,12 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     const { root, recovery } = await fixture();
     const path = join(root, "note.txt");
     await writeFile(path, "before");
-    await recovery.prepare("action-1", root, [
-      { path: "note.txt", change: "updated" },
-    ]);
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
     await writeFile(path, "agent result");
     await recovery.commit("action-1");
     const review = await recovery.review("review-1", root, [
@@ -579,6 +847,7 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
         action: "Write",
         target: "note.txt",
         status: "completed",
+        sequence: 0,
         changes: [{ path: "note.txt", change: "updated" }],
       },
     ]);

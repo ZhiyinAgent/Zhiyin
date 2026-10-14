@@ -29,11 +29,8 @@ async function temporaryRoot() {
  * this process's id; the test supplies one so that "another copy of the app"
  * is a real second owner rather than the same one twice.
  */
-function launch(root: string, pid: number, running: readonly number[] = [pid]) {
-  return new FileSessions(root, {
-    pid,
-    processIsRunning: (candidate) => running.includes(candidate),
-  });
+function launch(root: string, pid: number) {
+  return new FileSessions(root, { pid });
 }
 
 afterEach(async () => {
@@ -58,7 +55,7 @@ describe("FileSessions single ownership", () => {
     const first = launch(root, 1111);
     await first.claim();
 
-    const second = launch(root, 2222, [1111, 2222]);
+    const second = launch(root, 2222);
 
     await expect(second.claim()).rejects.toMatchObject({ code: "in-use" });
   });
@@ -69,7 +66,7 @@ describe("FileSessions single ownership", () => {
     await first.claim();
     await first.saveWorkspace({ ...snapshot, selectedTaskId: "the-owner" });
 
-    const second = launch(root, 2222, [1111, 2222]);
+    const second = launch(root, 2222);
     await expect(second.claim()).rejects.toBeInstanceOf(SessionStoreError);
     await expect(
       second.saveWorkspace({ ...snapshot, selectedTaskId: "the-intruder" }),
@@ -86,7 +83,7 @@ describe("FileSessions single ownership", () => {
     await first.claim();
     await first.release();
 
-    const second = launch(root, 2222, [2222]);
+    const second = launch(root, 2222);
 
     await expect(second.claim()).resolves.toBeUndefined();
     await expect(
@@ -104,7 +101,7 @@ describe("FileSessions single ownership", () => {
       "utf8",
     );
 
-    const next = launch(root, 2222, [2222]);
+    const next = launch(root, 2222);
 
     await expect(next.claim()).resolves.toBeUndefined();
     await expect(next.saveWorkspace(snapshot)).resolves.toBeUndefined();
@@ -116,7 +113,7 @@ describe("FileSessions single ownership", () => {
     await owner.claim();
     await owner.saveWorkspace({ ...snapshot, selectedTaskId: "the-owner" });
 
-    const onlooker = launch(root, 2222, [1111, 2222]);
+    const onlooker = launch(root, 2222);
 
     await expect(onlooker.loadWorkspace()).resolves.toMatchObject({
       selectedTaskId: "the-owner",

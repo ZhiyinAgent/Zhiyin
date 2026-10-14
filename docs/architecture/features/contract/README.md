@@ -71,6 +71,26 @@ single feature can own it.
   window's change review and an exported conversation, so the two read alike.
 - `oneOf` and `byKind`, the checks that data from outside is one of the
   values, or a record of one of the kinds, a contract type names.
+- `applyTaskChange` and `applyWorkspaceChange` apply one `TaskChange` or
+  `WorkspaceChange` to a conversation or to the snapshot.
+- `attachablePictureTypes`, the kinds of picture a person may attach, the ones
+  every vision model reads, and `picturesPerMessage`, as many as one request
+  keeps, so a message never loses its own.
+- `viewKinds`, what a view is made of. A view is kept as its source, never as a
+  picture (ADR 0003).
+- `OPENROUTER_KEYS_URL` and `OPENROUTER_CREDITS_URL`, OpenRouter's pages for
+  keys and credits, and `RELEASES_URL`, where every release of Zhiyin is
+  published.
+- `fixedShare`, the share of the budget the fixed start of every request may
+  take, and `fixedPartFits`, whether the last request's fixed start leaves room
+  under the target.
+- `standingInstructionBytes`, the most of one source of standing instructions
+  the model is sent.
+- `credentialOmitted`, what a removed credential reads as.
+- `travelsSecurely(address)`, whether an address uses HTTPS, or HTTP to this
+  computer only.
+- Every record the bullets above describe is exported under its own name, with
+  the types of the commands, settings and states it holds.
 
 ## Invariants
 

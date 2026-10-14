@@ -128,6 +128,11 @@ const page = () =>
         onSetConnectionToolEnabled: async () => undefined,
         onSaveConnectionToken: async () => undefined,
         onClearConnectionToken: async () => undefined,
+        onSignInToConnection: async () => ({ status: "cancelled" as const }),
+        onCancelConnectionSignIn: async () => undefined,
+        onCheckConnection: async () => {
+          throw new Error("No connection is checked on this page.");
+        },
         onRefreshConnections: async () => undefined,
         onCheckShell: async () => ({ available: true as const }),
         onRecheckShell: async () => ({ available: true as const }),

@@ -65,6 +65,10 @@ a process that may write only where it is let in (ADR 0028).
 - `holdExclusively(path)` opens a file only one holder can have, which Windows
   deletes when its holder goes. It answers the hold, `held-elsewhere`, or
   `unavailable` for any other reason.
+- The types these take and return: `ContainedProcess`,
+  `ContainedProcessOptions`, `ContainerOptions`, `ProcessPipes`,
+  `ContainmentAvailability`, `HeldFile`, `HoldAttempt`, `ProcessContainment`,
+  `ProcessRun`, `RunProcess`, `LiveRun`.
 
 ## Invariants
 
@@ -103,7 +107,10 @@ a process that may write only where it is let in (ADR 0028).
   command line, so quotes, trailing backslashes, spaces and empty arguments
   arrive as given.
 - **The environment is exactly what the caller gives**, or Zhiyin's own when
-  it gives none.
+  it gives none, never with a model key Zhiyin was given: variables named
+  `ZHIYIN_…API_KEY` are left out either way.
+- **An uncontained run is ended by Windows' own `taskkill`**, named by its full
+  path, so a program of that name earlier on the search path never runs.
 - **A memory limit covers native allocations too.** A process in a container
   with `processMemoryLimit` is refused memory past it and ends; nothing
   outside the container is touched.

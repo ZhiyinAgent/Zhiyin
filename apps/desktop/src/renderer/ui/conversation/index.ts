@@ -3,7 +3,6 @@ export { MarkdownMessage } from "./MarkdownMessage.js";
 export { OpenCitation } from "./citation.js";
 export { PlanPill } from "./PlanPill.js";
 export { WorkTrace } from "./WorkTrace.js";
-export type { WorkStep } from "./WorkTrace.js";
 export {
   ConversationTimeline,
   UserTurn,

@@ -50,7 +50,7 @@ function setUp(
     );
   const add = (taskId: string, text: string) =>
     loop.send(taskId, text, undefined, [], "guidance");
-  return { loop, requests, conversation, reasoning, add };
+  return { loop, host, requests, conversation, reasoning, add };
 }
 
 const said = (request: ModelRequest | undefined) =>
@@ -208,6 +208,68 @@ describe("a message added while the model reasons", () => {
     ).toEqual([
       ["user", "Design a phone stand"],
       ["assistant", "A wedge."],
+    ]);
+  });
+
+  it("is not sent once taken back while an earlier one is being handed over", async () => {
+    let decide!: () => void;
+    const decided = new Promise<void>((resolve) => {
+      decide = resolve;
+    });
+    const { loop, host, requests, conversation, reasoning, add } = setUp(
+      async function* (_request, number) {
+        if (number > 1) return yield* answers("Done.");
+        yield { kind: "reasoningDelta", text: "Weighing it. " };
+        await decided;
+        yield {
+          kind: "toolCallDelta",
+          index: 0,
+          callId: "call-1",
+          name: "list_directory",
+          argumentsDelta: '{"path":"."}',
+        };
+        yield { kind: "done", finishReason: "tool_calls" };
+      },
+    );
+    // Saving the first message's hand-over finishes only when the test lets
+    // it go.
+    let handingOver = false;
+    let letGo!: () => void;
+    const held = new Promise<void>((resolve) => {
+      letGo = resolve;
+    });
+    const store = host.store.bind(host);
+    host.store = async (task, saving) => {
+      await store(task, saving);
+      if (
+        !handingOver &&
+        task.modelHistory.some(
+          (entry) =>
+            entry.kind === "notice" && entry.content.includes("one flat base"),
+        )
+      ) {
+        handingOver = true;
+        await held;
+      }
+    };
+    const taskId = await loop.createTask();
+    const turn = loop.start(taskId, "Design a phone stand");
+    await reasoning();
+    await add(taskId, "Keep it simple: one flat base.");
+    await add(taskId, "And make it red.");
+    const second = conversation()?.guidance[1]?.id ?? "";
+    decide();
+    await until(() => handingOver);
+
+    const takingBack = loop.takeBack(taskId, second);
+    letGo();
+    await takingBack;
+    await turn;
+
+    expect(said(requests[1])).toContain("one flat base");
+    expect(said(requests[1])).not.toContain("make it red");
+    expect(conversation()?.guidance).toMatchObject([
+      { text: "And make it red.", status: "draft" },
     ]);
   });
 

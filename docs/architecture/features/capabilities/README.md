@@ -93,6 +93,11 @@ activating it.
   `documentsConnection` and `pythonConnection` turn an application automation
   into a built-in connection the MCP feature serves. The browser and the 3D
   studio get one automation per conversation; the others share one.
+- `pluginContentsDetails`, a plugin's components as a person reads them in an
+  action result.
+- The types these take and return: `ToolOwner`, `PluginContents`,
+  `PluginContentItem`, `Skill`, `ConnectionToolchains`, `CapabilityMembers`,
+  `ConversationTools`, `ToolGathering`, `ExecuteOptions`.
 
 ## Invariants
 

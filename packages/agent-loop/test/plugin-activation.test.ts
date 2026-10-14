@@ -265,6 +265,67 @@ describe("plugin activation", () => {
       "research",
     ]);
   });
+
+  it("leaves a plugin inactive, and says why, when its tools cannot be gathered once it is active", async () => {
+    const requests: ModelRequest[] = [];
+    const base = dependenciesWithPlugin(async function* (request) {
+      requests.push(request);
+      if (requests.length === 1) {
+        yield {
+          kind: "toolCallDelta",
+          index: 0,
+          callId: "activate-1",
+          name: "activate_plugin",
+          argumentsDelta: JSON.stringify({ id: "software-engineering" }),
+        };
+        yield { kind: "done" };
+        return;
+      }
+      yield { kind: "textDelta", text: "It could not be activated." };
+      yield { kind: "done" };
+    });
+    const search = {
+      name: "mcp__software-engineering__tavily__search",
+      description: "Search the web with Tavily.",
+      inputSchema: { type: "object" },
+    };
+    const loop = loopFrom({
+      ...base,
+      mcp: {
+        ...base.mcp,
+        // Its connector offers one name twice, which gathering refuses.
+        availableTools: async (
+          _scope?: string,
+          excluded: readonly string[] = [],
+        ) =>
+          excluded.includes("software-engineering/tavily")
+            ? []
+            : [search, search],
+      },
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Activate the software engineering plugin.");
+
+    const answer = requests[1]?.messages.find(
+      (message) =>
+        message.role === "tool" &&
+        "toolCallId" in message &&
+        message.toolCallId === "activate-1",
+    );
+    expect(unfenced((answer as { content: string }).content)).toEqual({
+      ok: false,
+      reason:
+        "The plugin could not be activated: The tool “mcp__software-engineering__tavily__search” is registered more than once.",
+    });
+    expect(requests[1]?.tools?.map((tool) => tool.name)).not.toContain(
+      "load_skill",
+    );
+    const task = loop.snapshot().tasks[0];
+    expect(task?.activatedPlugins ?? []).toEqual([]);
+    expect(task?.actions?.map((action) => action.status)).toEqual(["failed"]);
+    expect(task?.phase.kind).toBe("completed");
+  });
 });
 
 describe("a plugin whose connector cannot run yet", () => {

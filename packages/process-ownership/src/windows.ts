@@ -8,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { Socket } from "node:net";
 import type { Readable, Writable } from "node:stream";
 import koffi from "koffi";
+import { childEnvironment } from "./child-environment.js";
 import { createProcessAs, lowIntegrityToken } from "./integrity.js";
 import {
   BELOW_NORMAL_PRIORITY_CLASS,
@@ -73,7 +74,8 @@ export type ContainedProcessOptions = {
   readonly stderr: string;
   /**
    * Everything the process is given, replacing ours. Absent, it inherits
-   * Zhiyin's own environment.
+   * Zhiyin's own environment. Either way, without a model key Zhiyin was
+   * given.
    */
   readonly environment?: Readonly<Record<string, string | undefined>>;
   /**
@@ -391,7 +393,7 @@ export function openProcessContainer(
             (options.priority === "below-normal"
               ? BELOW_NORMAL_PRIORITY_CLASS
               : 0),
-          options.environment ? environmentBlock(options.environment) : null,
+          environmentBlock(childEnvironment(options.environment)),
           options.cwd,
           {
             StartupInfo: {

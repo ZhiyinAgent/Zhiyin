@@ -84,6 +84,15 @@ const dialect: ChatCompletionsDialect = {
     ...(request.tools?.length ? { tools: chatTools(request.tools) } : {}),
   }),
   classify: classifyFailure,
+  // OpenRouter's own name for an upstream that failed partway through, beside
+  // the content filter (API overview, checked 2026-10-14).
+  failedFinish: (reason) =>
+    reason === "error"
+      ? new ModelClientError(
+          "unexplainedError",
+          "The model failed partway through the answer without saying why.",
+        )
+      : undefined,
 };
 
 /**

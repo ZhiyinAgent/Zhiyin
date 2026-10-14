@@ -36,6 +36,8 @@ and every call needs the person's approval.
 - Programs run through the process-ownership mechanism (ADR 0004). A script
   may run for five minutes, and building the environment for fifteen. Tests
   may replace the runner.
+- The types these take and return: `ProgramContainer`, `ProgramContainment`,
+  `ProgramRun`, `RunProgram`, `SandboxTool`, `PythonSandboxOptions`.
 
 ## Invariants
 

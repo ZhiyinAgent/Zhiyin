@@ -55,9 +55,11 @@ some sites refuse headless browsers.
   - `automation()`: the browser context the automation server attaches to, or
     nothing when no browser is running.
   - `preview`: the conversation's workspace preview.
-- `BrowserSessions` implements `ConversationBrowsers`: `browser(id)` gives
-  each conversation its own session, and `close(id)`, `forget(id)` and
-  `closeAll()` end them.
+  - `uploads`: the open folder's files a page's file chooser may be given.
+- `BrowserSessions(create, { outputDirectory })` implements
+  `ConversationBrowsers`: `browser(id)` gives each conversation its own
+  session, and `close(id)`, `forget(id)` and `closeAll()` end them; `forget`
+  also deletes the conversation's browser folder.
 - `browserAutomation(browser, { acceptsImages, outputDirectory })` is the
   automation server for one session, the one `browserConnection()` serves:
   `listTools`, `inspect`, `callTool`, `describeResult`, `close`.
@@ -67,6 +69,12 @@ some sites refuse headless browsers.
 - `playwrightBrowserLauncher(containment, { pixelDensity })` is the production
   `BrowserLauncher`. A session takes a launcher, so the session is testable
   with no browser and the browser is testable with no session.
+- `WorkspaceUploads(root)` checks that each file a page asks for is in the open
+  folder, and stages the approved copy the upload sends.
+- The types these take and return: `UploadFile`, `BrowserAutomation`,
+  `AutomationTool`, `BrowserFrame`, `BrowserSessionState`,
+  `BrowserAvailability`, `BrowserViewport`, `BrowserTarget`,
+  `BrowserContainment`, `BrowserSessionOptions`.
 
 ## Invariants
 
@@ -74,7 +82,9 @@ some sites refuse headless browsers.
 
 - **The browser is Zhiyin's, never the person's.** Edge when it is installed,
   Chrome otherwise, headless, on a temporary profile removed when it closes. A
-  page in it cannot reach the person's own sign-ins.
+  page in it cannot reach the person's own sign-ins. A profile left by a
+  Zhiyin that was killed is removed before the next browser starts; one whose
+  Zhiyin still runs is kept.
 - **Nothing else runs in it.** Extensions installed by other programs or by
   policy, built-in extensions with background pages, and default apps are
   switched off.
@@ -94,7 +104,12 @@ some sites refuse headless browsers.
   others running.
 - **A second tab is not a second session.** One page is bound at launch, so a
   tab or popup the page opens does not change what the person watches and
-  drives.
+  drives. Managing tabs is not offered to the agent, so it never moves to a
+  page the person cannot see.
+- **A download stays with the conversation.** It lands in the conversation's
+  own browser folder, never the person's Downloads folder, and the answer
+  names it. That folder, with the copies of what was uploaded, is deleted
+  with the conversation.
 - **A browser that goes away is reported.** When the page or the connection
   is lost, the session becomes `failed` with a reason and the automation
   context is withdrawn. A closed session refuses navigation and takeover input
@@ -139,6 +154,12 @@ some sites refuse headless browsers.
 - **An approval names the page an action lands on and what the action does to
   the live site.** The address is the target; an element description is shown
   as an input; internal element references are never shown.
+- **Only the open folder's files can be uploaded.** The model names each by
+  its path inside the folder; an absolute path, `..` or a link leading out is
+  refused before anyone is asked. The approval shows the files and is bound to
+  their size and last change, so a file changed since is not sent. The page is
+  given a copy kept in the conversation's browser folder, the one place the
+  browser reads from.
 - **Each agent action is announced before it runs**, through
   `markAgentAction`; a refused tool is not announced. Closing the automation
   server leaves the page open for whoever is still reading it.

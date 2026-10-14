@@ -56,7 +56,8 @@ export function fittedSvg(
   const text = Buffer.from(bytes).toString("utf8");
   const root = rootElement.exec(text);
   if (!root) return undefined;
-  const [whole, before, tag] = root as unknown as [string, string, string];
+  // Both groups always take part in a match; the first may be empty.
+  const [whole, before = "", tag = ""] = root;
   const box = attribute(tag, "viewBox")
     ?.trim()
     .split(/[\s,]+/)

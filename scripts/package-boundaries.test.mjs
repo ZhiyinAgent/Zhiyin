@@ -299,3 +299,121 @@ describe("model providers", { timeout: 60_000 }, () => {
     ).toEqual([]);
   });
 });
+
+const ui = "apps/desktop/src/renderer/ui";
+
+describe("the window", { timeout: 60_000 }, () => {
+  it("reaches the core through the bridge, never by importing a backend package", async () => {
+    const found = await refusals(
+      'import { FileSessions } from "@zhiyin/session"; void FileSessions;',
+      `${ui}/app/violation.tsx`,
+    );
+    expect(includes(found, "through the preload bridge")).toBe(true);
+  });
+
+  it("has no Electron of its own", async () => {
+    const found = await refusals(
+      'import { shell } from "electron"; void shell;',
+      `${ui}/app/violation.tsx`,
+    );
+    expect(includes(found, "no Node or Electron access")).toBe(true);
+  });
+
+  it("may use the contract", async () => {
+    expect(
+      await refusals(
+        'import { RELEASES_URL } from "@zhiyin/contract"; void RELEASES_URL;',
+        `${ui}/app/allowed.tsx`,
+      ),
+    ).toEqual([]);
+  });
+
+  it("never imports the main process", async () => {
+    const found = await pathRefusals(
+      'import { buildCore } from "../../../main/composition.js"; void buildCore;',
+      `${ui}/app/violation.tsx`,
+    );
+    expect(includes(found, "never by importing the main process")).toBe(true);
+  });
+
+  it("keeps one module from importing another", async () => {
+    const found = await pathRefusals(
+      'import { ApprovalPrompt } from "../actions/index.js"; void ApprovalPrompt;',
+      `${ui}/conversation/violation.tsx`,
+    );
+    expect(includes(found, "does not import another module")).toBe(true);
+  });
+
+  it("lets the app shell use a module through its entry point only", async () => {
+    expect(
+      await pathRefusals(
+        'import { ApprovalPrompt } from "../actions/index.js"; void ApprovalPrompt;',
+        `${ui}/app/allowed.tsx`,
+      ),
+    ).toEqual([]);
+    const found = await pathRefusals(
+      'import { ApprovalPrompt } from "../actions/ApprovalPrompt.js"; void ApprovalPrompt;',
+      `${ui}/app/violation.tsx`,
+    );
+    expect(includes(found, "Use actions through its index.ts")).toBe(true);
+  });
+
+  it("keeps shared pieces from depending on a module", async () => {
+    const found = await pathRefusals(
+      'import { ApprovalPrompt } from "../actions/index.js"; void ApprovalPrompt;',
+      `${ui}/shared/violation.tsx`,
+    );
+    expect(includes(found, "Shared presentation holds neutral pieces")).toBe(
+      true,
+    );
+  });
+});
+
+describe("the drawing process", { timeout: 60_000 }, () => {
+  const drawing = "apps/desktop/src/drawing/violation.ts";
+
+  it("runs the document viewer's drawing service and no other package", async () => {
+    const found = await refusals(
+      'import { FileSessions } from "@zhiyin/session"; void FileSessions;',
+      drawing,
+    );
+    expect(includes(found, "drawing service only")).toBe(true);
+    expect(
+      await refusals(
+        'import { drawingService } from "@zhiyin/document-viewer"; void drawingService;',
+        drawing,
+      ),
+    ).toEqual([]);
+  });
+
+  it("imports nothing from the main process, the bridge or the window", async () => {
+    const found = await pathRefusals(
+      'import { buildCore } from "../main/composition.js"; void buildCore;',
+      drawing,
+    );
+    expect(includes(found, "imports nothing from the main process")).toBe(true);
+  });
+});
+
+describe("inside a package", { timeout: 60_000 }, () => {
+  it("keeps the entry point to re-exports", async () => {
+    const found = await refusals(
+      'export { FileRecovery } from "./recovery.js";\nexport const limit = 1;',
+      "packages/recovery/src/index.ts",
+    );
+    expect(includes(found, "index.ts only re-exports")).toBe(true);
+  });
+
+  it("refuses two files that import each other", async () => {
+    // The file on disk imports this one, so importing it back closes a loop.
+    const [result] = await eslint.lintText(
+      'import { FileRecovery } from "./recovery.js"; export const recovery = FileRecovery;',
+      { filePath: "packages/recovery/src/exclusive-restore.ts" },
+    );
+    expect(
+      (result?.messages ?? []).filter(
+        (message) => message.ruleId === "import-x/no-cycle",
+      ),
+    ).toHaveLength(1);
+  });
+});

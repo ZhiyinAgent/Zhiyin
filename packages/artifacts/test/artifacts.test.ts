@@ -213,6 +213,99 @@ describe("WorkspaceArtifacts", () => {
     ).resolves.toMatchObject({ status: "failed" });
   });
 
+  it("saves a diagram made of what a still picture is made of", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-export-"));
+    const artifacts = new WorkspaceArtifacts(() => undefined);
+    // As the window saves a flowchart: its own stylesheet, markers, a
+    // gradient, a shadow filter, and colours carried as inline style.
+    const diagram = [
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" role="graphics-document document" aria-roledescription="flowchart-v2">',
+      "<style>#d{font-family:Inter,sans-serif;}#d .node > rect{fill:#202624;}#d .edge{marker-end:url(#d-pointEnd);}</style>",
+      '<defs><marker id="d-pointEnd" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z"/></marker>',
+      '<linearGradient id="d-gradient" gradientUnits="objectBoundingBox"><stop offset="0%" stop-color="#202624"/></linearGradient>',
+      '<filter id="d-drop"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.2"/></filter></defs>',
+      '<g class="node" transform="translate(40, 40)" data-id="A"><rect x="-30" y="-15" width="60" height="30" style="fill: url(&quot;#d-gradient&quot;); stroke: rgb(83, 98, 93);"/>',
+      '<text text-anchor="middle" dominant-baseline="middle"><tspan x="0" dy="0.3em">Start &amp; go</tspan></text></g>',
+      '<path class="edge" d="M70,40L130,40" marker-end="url(#d-pointEnd)"/><title>Release flow</title>',
+      "</svg>",
+    ].join("");
+
+    await expect(
+      artifacts.exportView("Release flow", diagram, async () =>
+        join(outside, "flow.svg"),
+      ),
+    ).resolves.toMatchObject({ status: "saved" });
+  });
+
+  it.each([
+    [
+      "an animation that turns a link into script",
+      '<svg><a><animate attributeName="href" values="javascript:alert(1)"/><text>Go</text></a></svg>',
+    ],
+    [
+      "an element a still picture has no use for",
+      '<svg><set attributeName="fill" to="red"/></svg>',
+    ],
+    [
+      "a picture fetched from elsewhere",
+      '<svg><image href="https://example.com/x.png"/></svg>',
+    ],
+    [
+      "a link out of the drawing",
+      '<svg><use href="https://example.com/x.svg#a"/></svg>',
+    ],
+    [
+      "a link written in character codes",
+      '<svg><use href="&#106;avascript:alert(1)"/></svg>',
+    ],
+    [
+      "a stylesheet that imports another",
+      "<svg><style>@import url(https://example.com/x.css);</style></svg>",
+    ],
+    [
+      "a style that fetches from elsewhere",
+      '<svg><rect style="fill: url(https://example.com/x.svg#p)"/></svg>',
+    ],
+    [
+      "a paint that fetches from elsewhere",
+      '<svg><rect fill="url(https://example.com/x.svg#p)"/></svg>',
+    ],
+    [
+      "a style written in escapes",
+      '<svg><rect style="fill: u\\72l(https://example.com/p)"/></svg>',
+    ],
+    ["an event handler", '<svg onload="alert(1)"><rect/></svg>'],
+    [
+      "HTML inside the drawing",
+      "<svg><foreignObject><div>Hi</div></foreignObject></svg>",
+    ],
+    [
+      "a document type that declares entities",
+      '<svg><!DOCTYPE svg [<!ENTITY a "b">]><rect/></svg>',
+    ],
+    [
+      "a processing instruction",
+      '<svg><?xml-stylesheet href="https://example.com/x.css"?><rect/></svg>',
+    ],
+    ["something that is not a drawing", "<html><svg></svg></html>"],
+  ])("refuses to save %s", async (_case, svg) => {
+    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-export-"));
+    const artifacts = new WorkspaceArtifacts(() => undefined);
+    let asked = false;
+
+    await expect(
+      artifacts.exportView("Unsafe", svg, async () => {
+        asked = true;
+        return join(outside, "unsafe.svg");
+      }),
+    ).resolves.toEqual({
+      status: "failed",
+      reason:
+        "The rendered image contains content that cannot be saved safely.",
+    });
+    expect(asked).toBe(false);
+  });
+
   it("names an exported view's file from its title", async () => {
     const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-name-"));
     const artifacts = new WorkspaceArtifacts(() => undefined);

@@ -5,7 +5,7 @@ import {
   type ArtifactPreview,
   type TaskArtifact,
 } from "@zhiyin/contract";
-import { Icon } from "../shared/index.js";
+import { fileSize, Icon } from "../shared/index.js";
 import styles from "./artifacts.module.css";
 
 type ArtifactPanelProps = {
@@ -22,12 +22,6 @@ type ArtifactPanelProps = {
 type PreviewState = { status: "loading" } | ArtifactPreview;
 
 type ExportState = { status: "saving" } | ArtifactExport;
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * The list of produced files, where each can be read and taken away. Shows
@@ -135,7 +129,7 @@ export function ArtifactPanel({
                     ? "Created by this task"
                     : "Replaced an existing file"}
                   {" · "}
-                  {formatBytes(artifact.bytes)}
+                  {fileSize(artifact.bytes)}
                 </span>
                 <button
                   className={`button button--small ${styles.artifacts__save}`}

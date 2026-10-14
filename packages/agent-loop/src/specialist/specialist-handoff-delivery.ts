@@ -5,6 +5,7 @@ import type { TurnRecords } from "../turn/turn-records.js";
 import {
   completeHandoffMessage,
   handoffMessage,
+  handoffReportTool,
 } from "./specialist-execution.js";
 
 /** Saves a bounded notice; a long report and timeline can be paged with read_file. */
@@ -34,14 +35,14 @@ export async function deliverPendingHandoffs(
           complete.length > 12_000
             ? await sessions.keep("output", taskId, { text: complete })
             : undefined;
-        await history.notice(
-          "handoff",
-          handoffMessage(
-            settled,
-            actions,
-            saved?.status === "kept" ? `output://${saved.id}` : undefined,
-          ),
+        const { notice, report } = handoffMessage(
+          settled,
+          actions,
+          saved?.status === "kept" ? `output://${saved.id}` : undefined,
         );
+        await history.notice("handoff", notice, {
+          output: { tool: handoffReportTool, content: report },
+        });
       }
       await records.markHandoffDelivered(taskId, settled.runId);
     } catch (error) {

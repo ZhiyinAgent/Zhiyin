@@ -3,10 +3,10 @@
 ## Purpose
 
 Keeps an exact copy of what a declared file change will overwrite, taken
-before the change runs, and puts it back later on request. Its lifecycle is
-separate from conversations: a copy exists before an action runs, survives
-restarts, and expires under storage limits. The rewind group uses it for
-rewinds and undos.
+before the change runs, and puts it back later on request. A copy exists
+before an action runs, survives restarts, and goes when its storage limits
+remove it or the conversation it was taken for is deleted. The rewind group
+uses it for rewinds and undos.
 
 ## Boundaries
 
@@ -21,8 +21,8 @@ rewinds and undos.
 
 ## Public interface
 
-- `prepare(actionId, workspaceRoot, changes)` copies the declared paths before
-  approval and says which are protected.
+- `prepare(actionId, workspaceRoot, changes, conversationId)` copies the
+  declared paths before approval and says which are protected.
 - `validate(actionId)` confirms, immediately before the action runs, that the
   protected files still match their copies, and refuses if one changed after
   approval.
@@ -34,9 +34,16 @@ rewinds and undos.
 - `versions(workspaceRoot, actions, path)` gives one file as it was before the
   first of the actions and as the last one left it.
 - `cleanup()` applies the age, versions-per-path and total-size limits.
+- `forgetConversation(conversationId)` removes everything kept for a deleted
+  conversation's actions.
 
 Copies live in the app's data folder, within these limits: 10 MiB per file,
 256 MiB in all, 10 versions per path, and 30 days.
+
+- `FileRecovery(dataDirectory, { limits, now })` implements `Recovery` in the
+  app's data folder.
+- The types these take and return: `RecoveryLimits`, `RecoveryPreparation`,
+  `RecoveryReview`, `FileVersions`.
 
 ## Invariants
 
@@ -60,11 +67,19 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
   before it replaces or remakes a file, and a damaged copy leaves the file as
   it is and is reported as damaged.
 - A copy is used only for the workspace it was taken in.
+- A restore writes only inside the folder it was reviewed in, and copies only
+  from the copies this store kept, even when the review was read back from
+  disk; any other file is left as it is and reported.
 - A file's versions are given only while they are the recorded ones: the copy
   from before the first action, and the file on disk only while it is still
   what the last action left. Otherwise the reason is given.
 - A restore can be repeated. A path already back in its restored state counts
   as done, so a restore interrupted halfway finishes on the next try.
+- What is kept stays bounded. An action past the age limit loses everything
+  kept for it, a file it created included; one whose copies were all evicted
+  loses its folder; and a folder a capture left unfinished is removed.
+- Deleting a conversation removes everything kept for its actions, and nothing
+  kept for another's (ADR 0030).
 
 ## Testing notes
 

@@ -175,8 +175,6 @@ describe("the core and a turn together", () => {
         ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
         saveWorkspace: async (snapshot) => void saved.push(snapshot),
-        list: async () => [],
-        undo: async () => {},
       },
     });
 
@@ -227,8 +225,6 @@ describe("the core and a turn together", () => {
         ...stubDependencies(() => {}).sessions,
         loadWorkspace: async () => restored,
         saveWorkspace: async (snapshot) => void saved.push(snapshot),
-        list: async () => [],
-        undo: async () => {},
       },
     });
 

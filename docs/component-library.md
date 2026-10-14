@@ -16,10 +16,13 @@ pnpm --filter desktop demo
 This serves the lab at `component-lab.html` and the composed workspace at
 `zhiyin-demo.html`. The demo's `?scenario=` picks a starting state: `new`,
 `thinking`, `required-reasoning` (a model whose reasoning cannot be turned off),
-`working` (the default), `quiz`, `approval`, `browser`, `document`, `done`,
-`condensing`, `loading`, `plugins`, `long` (a 300-entry conversation that keeps
-streaming, for measuring typing while text arrives) and `damaged` (two
-conversations that cannot be opened and a report about the app).
+`waiting-message` (the same, with two messages sent during the turn waiting to
+be delivered), `working` (the default), `quiz`, `folder-instructions` (a
+folder's instructions, long enough to scroll, asked about before the first
+answer), `approval`, `browser`, `document`, `done`, `condensing`, `loading`,
+`plugins`, `long` (a 300-entry conversation that keeps streaming, for
+measuring typing while text arrives) and `damaged` (two conversations that
+cannot be opened and a report about the app).
 
 Restart the server after `pnpm install`. Vite pre-bundles dependencies when it
 starts, and a server left running across an install can answer with 504
@@ -81,8 +84,23 @@ other module. Use them rather than drawing a new frame, dialog or placeholder.
   layer closes. `closeOnBlur` (on by default) also closes it when the window
   loses focus. While a layer is open, the top bar stops dragging the window, so
   a click there closes the layer instead.
+- **`ChoiceSwitch`**: a few choices side by side, one of them on, such as a
+  theme or a lab's platform. Its `choices` are real radio buttons, so the arrow
+  keys move between them; `value` is the one on and `onChange` is told of a new
+  one. Name it with `aria-label` or `aria-labelledby`.
+- **`WindowLayer`**: puts its `children`, a dialog, over the whole window, so a
+  dialog opened inside the conversation is not clipped by it or drawn under the
+  browser, document or 3D view beside it.
 - **`countWords`** and **`wordCount`**: instructions are measured for people in
   words, never in bytes.
+- **`fileSize`** and **`elapsedTime`**: a size (`240 bytes`, `47 KB`,
+  `10.0 MB`) and a length of time (`5 s`, `1 min 20 s`, `1 h 5 min`), written
+  the same everywhere.
+- **`formatMoney`** and **`currencySymbol`**: an amount in its own currency,
+  never converted; cents for anything worth a cent.
+- **`visibleText`**: a text with every character that draws nothing or changes
+  the order of the rest written as its code, so what a person approves reads as
+  what will run.
 
 ## Theme and shared styles
 
@@ -92,9 +110,10 @@ the light theme; a stylesheet never writes a literal colour. The grounds are
 `--zy-text-soft`, `--zy-muted` and `--zy-faint`. `--zy-accent` is the red for
 text, icons and borders, and `--zy-accent-fill` the darker red a control is
 filled with, under `--zy-on-accent` text. States use `--zy-running`,
-`--zy-green`, `--zy-amber` and `--zy-danger`. Radii (`--zy-radius-sm`, `-md`,
-`-lg`) and fonts (`--zy-font-display`, `--zy-font-body`, `--zy-font-data`) are
-tokens too. Text is never set under 12 px.
+`--zy-green`, `--zy-amber` and `--zy-danger`. Radii (`--zy-radius-sm`, `-md`)
+and fonts (`--zy-font-display`, `--zy-font-body`, `--zy-font-data`) are tokens
+too. Text is never set under 12 px; a size relative to its parent is written
+as `max(12px, …)`.
 
 The global stylesheet also holds the shared basics any module may use as plain
 class names: `button`, with `button--accent` for the primary action,
@@ -121,7 +140,8 @@ Module, and a module never names another module's classes.
 An entry is an `id`, a `title`, a `description` and a `render` function, kept
 in the catalog file for its area: the conversation, condensing, user input,
 views, actions, tool calls, the app shell, capabilities, produced files, the
-model and usage, the browser, and documents. A test renders the whole lab and
+model and usage, the browser, documents, and the 3D scene. A test renders the
+whole lab and
 checks that every entry appears.
 
 ## Change workflow

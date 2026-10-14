@@ -12,15 +12,21 @@ export async function deliverGuidance(
   const pending = records
     .task(taskId)
     .guidance.filter((item) => item.status === "pending");
-  for (const item of pending) {
+  let delivered = 0;
+  for (const { id } of pending) {
+    // Read again: the person may have taken it back while an earlier one
+    // was being handed over.
+    const item = records.task(taskId).guidance.find((each) => each.id === id);
+    if (item?.status !== "pending") continue;
+    delivered += 1;
     await history.notice(
       "guidance",
       `The user added this while you were working: ${modelText(item)}\nAcknowledge this briefly and give the updated plan in this response or immediately alongside it. Preserve completed work and useful progress. Revise only what the new guidance changes. If the goal or completion criteria changed, update the plan checklist before further dependent actions. A small correction needs no separate planning call.`,
-      item.id,
+      { messageId: item.id },
     );
     await records.deliverGuidance(taskId, item.id);
   }
-  return pending.length > 0;
+  return delivered > 0;
 }
 
 /** Recover guidance after a stop or restart without sending it twice. */

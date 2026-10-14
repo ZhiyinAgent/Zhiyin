@@ -98,8 +98,21 @@ and the limit where the provider stated them. The codes are `noModel`,
 The composition root builds `ModelProviders` with `FileModelChoice` (the
 stored choice). For a test run or the benchmark, `ZHIYIN_MODEL` fixes the
 model instead, on the provider and region named by `ZHIYIN_PROVIDER` and
-`ZHIYIN_REGION` (OpenRouter when unnamed), and `ZHIYIN_MODEL_ENDPOINT`
-sends every request to another host.
+`ZHIYIN_REGION` (OpenRouter when unnamed). Outside an installed app,
+`ZHIYIN_MODEL_ENDPOINT` sends every request to another host; an installed app
+ignores it.
+- `ProviderCredentials`, one platform's key as the person saved it.
+- `fetchOpenRouterCatalog` and `fetchOpenRouterModelProviders`, OpenRouter's
+  model catalogue and the upstreams one model may be routed to.
+- `ModelChoiceError`, a model choice that could not be read or saved.
+- The types these take and return: `CredentialEntry`,
+  `ProviderCredentialsOptions`, `RestartingEvent`, `RetryingEvent`,
+  `RetryOptions`, `ModelClientErrorCode`, `ProviderFailureDetail`,
+  `TokenLimitDetail`, `CatalogFetch`, `CatalogOptions`,
+  `OpenRouterModelClientOptions`, `ModelProvidersOptions`, `ModelChoice`,
+  `ModelChoiceValue`, `ModelToolCall`, `ModelContentPart`, `ModelMessage`,
+  `ModelTool`, `ModelRequest`, `ModelUsage`, `UncountedUsage`, `KeptApiKey`,
+  `ModelFetchResponse`, `ModelFetch`.
 
 ## Invariants
 
@@ -211,15 +224,19 @@ sends every request to another host.
   finish reason is kept even when the connection closed before `[DONE]`. One
   that ended with usage only is marked incomplete, with what arrived intact;
   one with none of the three fails as `malformedResponse`. A finish reason of
-  `length` marks an answer cut off at the output limit.
+  `length` marks an answer cut off at the output limit. Over Chat Completions,
+  only `stop` and `tool_calls` make an answer complete; any other reason a
+  provider adds marks it incomplete.
 - **A failure inside a 200 stream is a failure.** OpenRouter sends the status
   with the headers, so a later failure arrives as a chunk carrying an `error`
   object. It ends the request with the outcome the matching status would have
   produced, in the provider's own words. Text that arrived before it is kept,
   and no `done` follows. Anthropic Messages and Responses report it as an
-  error event. Z.ai and Mistral name it as the reason the answer stopped; it
-  ends the request as that failure once the usage that came with it is passed
-  on. An answer Anthropic or MiniMax stops as a refusal ends as `refused`.
+  error event. Z.ai, Mistral, DeepSeek and OpenRouter name it as the reason
+  the answer stopped; it ends the request as that failure once the usage that
+  came with it is passed on. A Chat Completions answer stopped as
+  `content_filter`, and one Anthropic or MiniMax stops as a refusal, ends as
+  `refused`.
 - **A stream that goes silent is abandoned.** After five minutes with nothing
   arriving the request fails as `networkFailure`. A slow stream that keeps
   arriving is left alone.
@@ -267,8 +284,8 @@ sends every request to another host.
   sentence.
 - **A retryable failure is sent again while nothing was passed on.** Rate
   limits, network failures, malformed responses, unexplained errors, a busy
-  model, and an in-flight spending budget (402 with Retry-After) are
-  retryable. The client waits as long as the provider's Retry-After asks, up
+  model, an in-flight spending budget (402 with Retry-After) and a lookup of
+  the model's reasoning settings that failed are retryable. The client waits as long as the provider's Retry-After asks, up
   to a minute, or else a random wait under a ceiling that doubles from one
   second to thirty. It stops after five attempts or two minutes of waiting in
   all, and stops waiting the moment the request is cancelled. Time spent
@@ -301,8 +318,11 @@ sends every request to another host.
   reached, or answers in a way that says nothing about the key, the key is
   kept and the answer says it could not be checked, so someone offline is not
   told their key is wrong.
-- **The key never appears in errors, events or settings.** A key supplied by
-  the environment shows as the active source, without its value.
+- **The key never appears in errors, events or settings**, even where a lab's
+  own sentence quotes it. A key supplied by the environment shows as the
+  active source, without its value.
+- **A request carrying a key follows no redirect.** It fails instead, so a key
+  in a header of a lab's own naming never reaches another host.
 - **A credential store that cannot be used becomes a status**, `unavailable`
   with a reason, rather than a crash.
 

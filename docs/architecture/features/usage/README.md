@@ -27,6 +27,11 @@ because request accounting has its own retention and failure behavior.
   counted, whose id says so.
 - `state(now)` returns seven- and thirty-day summaries by UTC day, or an
   `unavailable` state with a reason before the first request.
+- `FileUsageTelemetry` keeps usage as one file a month, one request a line,
+  appended. `aggregate` adds requests up into the usage page's totals, `isUsage`
+  checks that a stored line is a request, and `UsageStoreError` is usage that
+  could not be read or kept.
+- The types these take and return: `UsageTelemetry`.
 
 ## Invariants
 

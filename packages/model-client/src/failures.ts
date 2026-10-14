@@ -100,6 +100,43 @@ export class ModelClientError extends Error {
 }
 
 /**
+ * The same failure with every quotation of the key taken out. Its cause, which
+ * may hold the lab's answer as it came, is left behind.
+ */
+export function withoutKey(
+  error: ModelClientError,
+  key: string,
+): ModelClientError {
+  const hide = (text: string) => text.replaceAll(key, "[your key]");
+  const detail = error.provider;
+  const quoted = [
+    error.message,
+    detail?.errorType,
+    detail?.code,
+    detail?.name,
+    ...(detail?.reasons ?? []),
+  ].some((text) => text?.includes(key));
+  if (!key || !quoted) return error;
+  return new ModelClientError(error.code, hide(error.message), {
+    retryable: error.retryable,
+    ...(error.retryAfterMs === undefined
+      ? {}
+      : { retryAfterMs: error.retryAfterMs }),
+    ...(error.tokens ? { tokens: error.tokens } : {}),
+    ...(detail
+      ? {
+          provider: {
+            ...(detail.errorType ? { errorType: hide(detail.errorType) } : {}),
+            ...(detail.code ? { code: hide(detail.code) } : {}),
+            ...(detail.name ? { name: hide(detail.name) } : {}),
+            ...(detail.reasons ? { reasons: detail.reasons.map(hide) } : {}),
+          },
+        }
+      : {}),
+  });
+}
+
+/**
  * The phrasings providers use for a conversation that no longer fits, in the
  * form OpenAI's API gave it and others copied. Only these make an untyped 400
  * a size problem: anything else reported as "too large" sends somebody to

@@ -482,6 +482,72 @@ describe("ManagedMcpServers", () => {
     }
   });
 
+  it("cuts a tool description too long to be honest, so one server cannot fill the model's window", async () => {
+    const opening = "Searches the catalogue. ";
+    const server = createServer(async (request, response) => {
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : {
+              tools: [
+                {
+                  name: "search",
+                  description: opening + "x".repeat(200_000),
+                  inputSchema: { type: "object" },
+                },
+              ],
+            };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    try {
+      const connection = await connectHttpMcpServer(
+        {
+          id: "fixture",
+          name: "Fixture",
+          enabled: true,
+          url: `http://127.0.0.1:${address.port}/mcp`,
+        },
+        async () => undefined,
+      );
+      try {
+        const [tool] = await connection.listTools();
+        expect(tool?.description?.startsWith(opening)).toBe(true);
+        expect(tool?.description?.endsWith("…")).toBe(true);
+        expect(tool?.description?.length).toBe(4_000);
+      } finally {
+        await connection.close();
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("reads an HTTP 429 from the production adapter as a rate refusal, with the wait the server asks for", async () => {
     const server = createServer(async (request, response) => {
       if (request.method !== "POST") {
@@ -1562,6 +1628,40 @@ describe("ManagedMcpServers", () => {
       }),
     ]);
     expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("refuses to send a token across the network over plain http, and connects to this computer over it", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const connect = vi.fn(async () => ({
+      listTools: async () => [],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    }));
+    const servers = managed(directory, connect, new InMemoryMcpCredentials());
+
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "http://search.example/mcp",
+      enabled: true,
+    });
+    await servers.declare({
+      id: "local",
+      name: "Local",
+      url: "http://[::1]:3100/mcp",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "search",
+        status: "failed",
+        reason:
+          "MCP endpoints must use HTTPS unless the server runs on this computer.",
+      }),
+      expect.objectContaining({ id: "local", status: "connected" }),
+    ]);
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 
   it("offers a built-in connection's tools without any saved definition", async () => {

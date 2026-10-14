@@ -26,6 +26,7 @@ import {
   sendAnthropicMessages,
   type AnthropicMessagesDialect,
 } from "../../wires/anthropic-messages/send.js";
+import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { miniMaxModels } from "./models.js";
 
@@ -119,13 +120,7 @@ async function checkKey(
 /** The models the account can use now, by MiniMax's own listing. */
 const listedByApi: ListedByApi = async (options) => {
   const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch =
-    options.fetcher ??
-    ((url, init) =>
-      fetch(url, {
-        headers: init.headers,
-        signal: AbortSignal.timeout(15_000),
-      }));
+  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
   const response = await fetcher(
     `${hostOf(options.region)}/anthropic/v1/models`,
     { headers: apiKey ? signed(apiKey) : {} },

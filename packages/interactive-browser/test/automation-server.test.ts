@@ -1,12 +1,17 @@
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   browserAutomation,
   describeBrowserAutomation,
 } from "../src/automation-server.js";
-import type {
-  BrowserLauncher,
-  BrowserSessionState,
-  InteractiveBrowser,
+import { inspectBrowser } from "../src/browser-presentation.js";
+import {
+  WorkspaceUploads,
+  type BrowserLauncher,
+  type BrowserSessionState,
+  type InteractiveBrowser,
 } from "../src/index.js";
 
 /**
@@ -408,6 +413,172 @@ describe("which browser tools are offered at all", () => {
     await expect(
       automation.callTool("browser_run_code_unsafe", { code: "() => {}" }),
     ).rejects.toThrow(/not available/i);
+  });
+
+  it("keeps the agent on the page the person watches: switching tabs is not offered", async () => {
+    const server = fakeAutomationServer([
+      {
+        name: "browser_tabs",
+        description: "List, create, close, or select a tab.",
+      },
+    ]);
+    const automation = browserAutomation(fakeBrowser(), {
+      createConnection: server.createConnection,
+    });
+
+    const offered = (await automation.listTools()).map((tool) => tool.name);
+
+    expect(offered).not.toContain("browser_tabs");
+    await expect(
+      automation.callTool("browser_tabs", { action: "select", index: 1 }),
+    ).rejects.toThrow(/not available/i);
+  });
+});
+
+describe("files a page asks for", () => {
+  async function folder(): Promise<{ root: string; output: string }> {
+    const parent = await mkdtemp(join(tmpdir(), "zhiyin-uploads-"));
+    const root = join(parent, "workspace");
+    await mkdir(join(root, "reports"), { recursive: true });
+    await writeFile(join(root, "reports", "q3.csv"), "region,total\n", "utf8");
+    await mkdir(join(parent, "outside"));
+    await writeFile(join(parent, "outside", "secret.txt"), "secret", "utf8");
+    await symlink(join(parent, "outside"), join(root, "linked"), "junction");
+    return { root, output: join(parent, "browser-output") };
+  }
+
+  function watching(root: string) {
+    return Object.assign(fakeBrowser(), {
+      uploads: new WorkspaceUploads(() => root),
+    });
+  }
+
+  it("asks the model for paths inside the open folder", async () => {
+    const server = fakeAutomationServer([
+      { name: "browser_file_upload", description: "Upload one or more files." },
+    ]);
+    const automation = browserAutomation(fakeBrowser(), {
+      createConnection: server.createConnection,
+    });
+
+    const upload = (await automation.listTools()).find(
+      (tool) => tool.name === "browser_file_upload",
+    );
+
+    expect(upload?.description).toMatch(/open folder/);
+    expect(upload?.inputSchema).toMatchObject({
+      properties: {
+        paths: { description: expect.stringMatching(/inside the open folder/) },
+      },
+    });
+  });
+
+  it("shows the files from the open folder that would be sent, bound to how they are now", async () => {
+    const { root } = await folder();
+
+    const inspection = await inspectBrowser(
+      watching(root),
+      "browser_file_upload",
+      { paths: ["reports/q3.csv"] },
+    );
+
+    expect(inspection).toMatchObject({
+      ok: true,
+      action: "Upload files",
+      invocation: { arguments: [{ name: "Files", value: "reports/q3.csv" }] },
+    });
+    if (!inspection.ok) throw new Error("unreachable");
+    expect(JSON.parse(inspection.identity ?? "")).toEqual([
+      { path: "reports/q3.csv", bytes: 13, modifiedMs: expect.any(Number) },
+    ]);
+  });
+
+  it.each([
+    ["a path out of the folder", "../outside/secret.txt"],
+    ["a path through a link out of the folder", "linked/secret.txt"],
+    ["a full path", "C:/Windows/win.ini"],
+  ])("refuses %s before anyone is asked", async (_case, path) => {
+    const { root } = await folder();
+
+    expect(
+      await inspectBrowser(watching(root), "browser_file_upload", {
+        paths: [path],
+      }),
+    ).toEqual({
+      ok: false,
+      correctable: true,
+      reason:
+        "Only files in the open folder can be uploaded. Name each by its path inside the folder.",
+    });
+  });
+
+  it("hands the page a copy kept in the conversation's own browser folder", async () => {
+    const { root, output } = await folder();
+    const server = fakeAutomationServer();
+    const browser = watching(root);
+    const automation = browserAutomation(browser, {
+      createConnection: server.createConnection,
+      outputDirectory: output,
+    });
+    const approved = await inspectBrowser(browser, "browser_file_upload", {
+      paths: ["reports/q3.csv"],
+    });
+    if (!approved.ok) throw new Error("unreachable");
+
+    await automation.callTool(
+      "browser_file_upload",
+      { paths: ["reports/q3.csv"] },
+      undefined,
+      approved.identity,
+    );
+
+    const [sent] = (server.lastArguments() as { paths: string[] }).paths;
+    expect(sent?.startsWith(output)).toBe(true);
+    expect(await readFile(sent as string, "utf8")).toBe("region,total\n");
+  });
+
+  it("sends nothing when a file changed after its upload was approved", async () => {
+    const { root, output } = await folder();
+    const server = fakeAutomationServer();
+    const browser = watching(root);
+    const automation = browserAutomation(browser, {
+      createConnection: server.createConnection,
+      outputDirectory: output,
+    });
+    const approved = await inspectBrowser(browser, "browser_file_upload", {
+      paths: ["reports/q3.csv"],
+    });
+    if (!approved.ok) throw new Error("unreachable");
+    await writeFile(join(root, "reports", "q3.csv"), "region,total\nnorth,9\n");
+
+    const result = await automation.callTool(
+      "browser_file_upload",
+      { paths: ["reports/q3.csv"] },
+      undefined,
+      approved.identity,
+    );
+
+    expect(result).toEqual({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "A file changed after its upload was approved. Ask again.",
+        },
+      ],
+    });
+    expect(server.lastArguments()).toBeUndefined();
+  });
+
+  it("cancels the file chooser when no file is named", async () => {
+    const server = fakeAutomationServer();
+    const automation = browserAutomation(fakeBrowser(), {
+      createConnection: server.createConnection,
+    });
+
+    await automation.callTool("browser_file_upload", {});
+
+    expect(server.lastArguments()).toEqual({});
   });
 });
 

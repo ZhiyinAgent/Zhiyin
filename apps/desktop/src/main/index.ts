@@ -22,15 +22,19 @@ import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { COMMAND_CHANNELS } from "@zhiyin/contract";
-import { buildCore, savedAppearance } from "./composition.js";
+import {
+  buildCore,
+  savedAppearance,
+  startDiagnosticLog,
+  testSwitchesOf,
+  watchForCrashes,
+} from "./composition.js";
 import { drawingProcesses } from "./drawing-process.js";
-import { DiagnosticLog, recordCrashes } from "./diagnostic-log.js";
 import { fromOwnWindow } from "./ipc-policy.js";
 import { appUserModelId, developmentAppDetails } from "./app-identity.js";
 import { iconCandidates } from "./icon.js";
 import { titleBarOverlay } from "./title-bar.js";
 import { electronSpellchecker, showTextMenus } from "./electron-spelling.js";
-import { reloadAfterCrash } from "./window-recovery.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -46,14 +50,8 @@ const developmentServer = app.isPackaged
 // folder given on the command line still wins.
 app.setName("Zhiyin");
 
-/**
- * Local only, beside the saved history. Started before anything else so that
- * whatever fails from here on leaves a line behind, and the main process keeps
- * running rather than dying on an error nobody caught.
- */
-const log = new DiagnosticLog(join(app.getPath("userData"), "logs"));
-log.prune();
-recordCrashes(process, log);
+// Local only, beside the saved history, and started before anything else.
+const log = startDiagnosticLog(join(app.getPath("userData"), "logs"));
 
 /**
  * No application menu at all. Every page is reached from the window itself, so
@@ -158,7 +156,27 @@ function createWindow(): BrowserWindow {
       });
     }
   };
-  reloadAfterCrash(window, load, log);
+  watchForCrashes(
+    window,
+    {
+      load,
+      stuck: async ({ title, detail }) =>
+        (
+          await dialog.showMessageBox(window, {
+            type: "error",
+            title,
+            message: title,
+            detail,
+            buttons: ["Open it again", "Quit Zhiyin"],
+            defaultId: 0,
+            cancelId: 1,
+            noLink: true,
+          })
+        ).response === 0,
+      quit: () => app.quit(),
+    },
+    log,
+  );
   load(false);
 
   return window;
@@ -184,11 +202,10 @@ void app.whenReady().then(async () => {
   const dataDirectory = app.getPath("userData");
   // Before the window exists, so its first frame is already the right theme.
   nativeTheme.themeSource = (await savedAppearance(dataDirectory)) ?? "system";
-  // Tests only: where a dictionary that is not bundled would be fetched from.
-  const dictionaryServer = process.env["ZHIYIN_TEST_DICTIONARY_SERVER"];
-  if (dictionaryServer)
+  const testing = testSwitchesOf(process.env, app.isPackaged);
+  if (testing.dictionaryServer)
     session.defaultSession.setSpellCheckerDictionaryDownloadURL(
-      dictionaryServer,
+      testing.dictionaryServer,
     );
   const spellchecker = electronSpellchecker(session.defaultSession);
   const window = createWindow();
@@ -208,6 +225,7 @@ void app.whenReady().then(async () => {
       process.env["ZHIYIN_WORKSPACE"] ??
       (developmentServer ? join(app.getAppPath(), "../..") : undefined),
     version: app.getVersion(),
+    packaged: app.isPackaged,
     send: (channel, payload) => {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);
     },
@@ -270,15 +288,14 @@ void app.whenReady().then(async () => {
       installed: join(app.getPath("sessionData"), "Dictionaries"),
       systemLanguages: app.getPreferredSystemLanguages(),
     },
-    connectionsNeverClose:
-      process.env["ZHIYIN_TEST_CONNECTIONS_NEVER_CLOSE"] === "1",
+    connectionsNeverClose: testing.connectionsNeverClose,
     // Built beside this file, as an entry of its own.
     startDrawing: drawingProcesses(join(here, "drawing.js")),
     pixelDensity: () =>
       window.isDestroyed()
         ? screen.getPrimaryDisplay().scaleFactor
         : screen.getDisplayMatching(window.getBounds()).scaleFactor,
-    ...(process.env["ZHIYIN_TEST_CREDENTIALS_UNAVAILABLE"] === "1"
+    ...(testing.credentialsUnavailable
       ? {
           credentialEntry: () => ({
             getPassword: async () => {
@@ -307,10 +324,6 @@ void app.whenReady().then(async () => {
     });
 
   window.on("closed", () => core.windowClosed());
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
 });
 
 app.on("child-process-gone", (_event, details) => {

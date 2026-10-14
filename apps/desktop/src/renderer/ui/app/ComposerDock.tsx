@@ -144,7 +144,7 @@ export function ComposerDock({
                 : {})}
             />
           }
-          {...composerLock(task, state.runtime.tasks !== "unavailable")}
+          {...composerLock(state.runtime.tasks !== "unavailable")}
         />
       </div>
     </div>

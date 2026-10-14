@@ -174,6 +174,8 @@ export type ToolInvocationResult =
       readonly details?: readonly ActionDetail[];
       /** A command that failed may still have changed files before it did. */
       readonly commandChanges?: CommandFileChanges;
+      /** The files an action wrote before it failed. */
+      readonly produced?: readonly ProducedFile[];
       /**
        * What the person sees beside the conversation: a document whose read
        * failed is still shown, with the same failure (ADR 0018).

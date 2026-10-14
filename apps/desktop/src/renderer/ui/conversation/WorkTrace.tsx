@@ -1,14 +1,8 @@
+import type { WorkStep } from "@zhiyin/contract";
 import { Icon } from "../shared/index.js";
 import styles from "./conversation.module.css";
 
-export type WorkStep = {
-  id: string;
-  label: string;
-  detail?: string;
-  status: "complete" | "active" | "queued" | "failed";
-};
-
-export function WorkTrace({ steps }: { steps: WorkStep[] }) {
+export function WorkTrace({ steps }: { steps: readonly WorkStep[] }) {
   const completed = steps.filter((step) => step.status === "complete").length;
   const failed = steps.filter((step) => step.status === "failed").length;
   const active = steps.some((step) => step.status === "active");

@@ -15,6 +15,7 @@
   "dependencies": {
     "@zhiyin/agent-loop": "workspace:*",
     "@zhiyin/artifacts": "workspace:*",
+    "@zhiyin/audit": "workspace:*",
     "@zhiyin/blender-studio": "workspace:*",
     "@zhiyin/capabilities": "workspace:*",
     "@zhiyin/contract": "workspace:*",
@@ -25,17 +26,16 @@
     "@zhiyin/rewind": "workspace:*",
     "@zhiyin/session": "workspace:*",
     "@zhiyin/spelling": "workspace:*",
-    "@zhiyin/tools": "workspace:*",
     "@zhiyin/usage": "workspace:*"
   },
   "devDependencies": {
-    "@zhiyin/audit": "workspace:*",
     "@zhiyin/conversation-rewind": "workspace:*",
     "@zhiyin/document-compiler": "workspace:*",
     "@zhiyin/mcp": "workspace:*",
     "@zhiyin/permission-engine": "workspace:*",
     "@zhiyin/plugins": "workspace:*",
+    "@zhiyin/recovery": "workspace:*",
     "@zhiyin/toolchains": "workspace:*",
-    "@zhiyin/recovery": "workspace:*"
+    "@zhiyin/tools": "workspace:*"
   }
 }

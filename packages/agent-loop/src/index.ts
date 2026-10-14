@@ -9,8 +9,6 @@
  * performed. If a change here needs to know which tool it is calling, which
  * MCP server is behind it, or what a skill contains, the change belongs in
  * that feature instead.
- *
- * Boundaries and invariants: docs/architecture/features/agent-loop/README.md
  */
 
 export * from "./agent-loop.js";

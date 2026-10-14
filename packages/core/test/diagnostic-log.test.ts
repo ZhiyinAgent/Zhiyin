@@ -1,10 +1,9 @@
-// @vitest-environment node
 import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { DiagnosticLog, recordCrashes } from "./diagnostic-log.js";
+import { DiagnosticLog, recordCrashes } from "../src/index.js";
 
 /**
  * What is left behind for whoever has to find out what went wrong on a

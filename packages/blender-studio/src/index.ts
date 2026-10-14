@@ -1,9 +1,6 @@
 /**
  * 3D scenes built and rendered in Zhiyin's own Blender, one session per
  * conversation (ADR 0026).
- *
- * Boundaries and invariants:
- * docs/architecture/features/blender-studio/README.md
  */
 
 export {

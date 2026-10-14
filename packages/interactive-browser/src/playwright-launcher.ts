@@ -20,6 +20,7 @@ import type {
 } from "playwright-core";
 import type { ProcessPipes } from "@zhiyin/process-ownership";
 import { chromium } from "playwright-core";
+import { clearAbandonedProfiles } from "./abandoned-profiles.js";
 import type {
   BrowserAvailability,
   BrowserContainment,
@@ -399,6 +400,7 @@ export function playwrightBrowserLauncher(
     const asked = options.pixelDensity?.() ?? 1;
     return Number.isFinite(asked) ? Math.min(4, Math.max(1, asked)) : 1;
   };
+  let cleared: Promise<void> | undefined;
   return {
     async available(): Promise<BrowserAvailability> {
       try {
@@ -419,6 +421,10 @@ export function playwrightBrowserLauncher(
         };
       }
     },
-    launch: (viewport) => atomicLaunch(containment, viewport, density()),
+    launch: async (viewport) => {
+      // Once a run, before its first browser: what a killed Zhiyin left.
+      await (cleared ??= clearAbandonedProfiles(tmpdir()));
+      return atomicLaunch(containment, viewport, density());
+    },
   };
 }

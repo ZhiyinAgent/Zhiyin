@@ -184,15 +184,6 @@ describe("AgentLoop", () => {
     ).toHaveLength(1);
     expect(loop.snapshot().tasks[0]?.guidance?.[0]?.status).toBe("draft");
   });
-  it("sends everything user-visible through the event stream it was given", () => {
-    const seen: AppEvent[] = [];
-    const loop = loopFrom(stubDependencies((event) => seen.push(event)));
-
-    loop.emit({ kind: "coreReady", data: { version: "0.1.0" } });
-
-    expect(seen).toEqual([{ kind: "coreReady", data: { version: "0.1.0" } }]);
-  });
-
   it("runs a first model turn through authoritative task events", async () => {
     const seen: AppEvent[] = [];
     const { host } = loopAndHost(

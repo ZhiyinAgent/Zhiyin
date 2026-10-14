@@ -71,6 +71,12 @@ export class TurnWaits {
     this.#records = parts.records;
   }
 
+  /** Whether this question is still waiting for the person's answer. */
+  awaitsAnswer(taskId: string, requestId: string): boolean {
+    const key = this.#approvalKey(taskId, requestId);
+    return this.#pendingApprovals.has(key) || this.#pendingUserInputs.has(key);
+  }
+
   async resolveApproval(
     taskId: string,
     requestId: string,

@@ -75,5 +75,6 @@ export type {
 } from "./file-change.js";
 export type { PluginDirectoryEntry } from "./plugin-directory.js";
 export * from "./credentials.js";
+export * from "./secure-address.js";
 export * from "./text-diff.js";
 export * from "./spelling.js";

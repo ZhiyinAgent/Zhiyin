@@ -13,9 +13,11 @@ import {
 import { browserAutomation } from "../src/automation-server.js";
 import { playwrightBrowserLauncher } from "../src/playwright-launcher.js";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { openProcessContainer } from "@zhiyin/process-ownership";
 
@@ -609,6 +611,80 @@ describe.runIf(availability.available)("a real browser session", () => {
     }
   }, 180_000);
 
+  it("hands a page a file from the open folder, and keeps a download in the conversation's folder", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "zhiyin-browser-files-"));
+    const root = join(parent, "workspace");
+    const output = join(parent, "browser-output");
+    await mkdir(root);
+    await writeFile(join(root, "report.csv"), "region,total\n", "utf8");
+    const downloaded = `zhiyin-${randomUUID()}.txt`;
+    const server = createServer((request, response) => {
+      if (request.url === "/file") {
+        response.writeHead(200, {
+          "Content-Disposition": `attachment; filename="${downloaded}"`,
+        });
+        response.end("kept");
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        `<title>Files</title><input type="file" aria-label="Pick" onchange="document.title='picked ' + this.files[0].name"><a href="/file">Get it</a>`,
+      );
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher,
+      viewport: { width: 800, height: 600 },
+      workspaceRoot: () => root,
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const text = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = text(await automation.callTool("browser_snapshot", {}));
+      const reference = (name: string) =>
+        snapshot.match(new RegExp(`"${name}"[^\\n]*\\[ref=(e\\d+)\\]`))?.[1];
+
+      await automation.callTool("browser_click", {
+        element: "Pick",
+        target: reference("Pick"),
+      });
+      const approved = await automation.inspect("browser_file_upload", {
+        paths: ["report.csv"],
+      });
+      if (!approved.ok) throw new Error(approved.reason);
+      await automation.callTool(
+        "browser_file_upload",
+        { paths: ["report.csv"] },
+        undefined,
+        approved.identity,
+      );
+      await waitFor(() => session.state().title === "picked report.csv");
+
+      await automation.callTool("browser_click", {
+        element: "Get it",
+        target: reference("Get it"),
+      });
+      await waitFor(async () =>
+        (await readdir(output).catch((): string[] => [])).includes(downloaded),
+      );
+      expect(existsSync(join(homedir(), "Downloads", downloaded))).toBe(false);
+    } finally {
+      await automation.close();
+      await session.close();
+      server.close();
+    }
+  }, 180_000);
+
   /**
    * A page styled with `scroll-behavior: smooth` animates every scroll its
    * code asks for, so a position read straight after the scroll, or a picture
@@ -629,17 +705,15 @@ describe.runIf(availability.available)("a real browser session", () => {
       await waitFor(() => session.state().title === "Smooth");
       const shown = (session.automation() as BrowserContext).pages()[0]!;
 
+      // Run in the page, where its own globals are; written as text, since
+      // this package is checked without the page's types.
       expect(
-        await shown.evaluate(() => {
-          window.scrollTo(0, 900);
-          return window.scrollY;
-        }),
+        await shown.evaluate("window.scrollTo(0, 900), window.scrollY"),
       ).toBe(900);
       expect(
-        await shown.evaluate(() => {
-          document.scrollingElement!.scrollTop = 1800;
-          return document.scrollingElement!.scrollTop;
-        }),
+        await shown.evaluate(
+          "(document.scrollingElement.scrollTop = 1800), document.scrollingElement.scrollTop",
+        ),
       ).toBe(1800);
     } finally {
       await session.close();

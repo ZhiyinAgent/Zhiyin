@@ -31,6 +31,22 @@ function streamOf(chunks: readonly unknown[]): ModelFetch {
   });
 }
 
+/** An answer that begins, then stops for `reason`. */
+export function endingWith(reason: string): ModelFetch {
+  return streamOf([
+    {
+      id: "answer-1",
+      model: "deepseek-flash",
+      choices: [{ index: 0, delta: { content: "Part" } }],
+    },
+    {
+      id: "answer-1",
+      model: "deepseek-flash",
+      choices: [{ index: 0, delta: {}, finish_reason: reason }],
+    },
+  ]);
+}
+
 /** A refusal in the status line, with DeepSeek's sentence. */
 export function refusing(
   status: number,

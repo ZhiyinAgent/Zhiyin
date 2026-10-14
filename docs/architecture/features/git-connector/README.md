@@ -38,6 +38,10 @@ there is no second implementation of git's storage format to audit.
   `close`.
 - `GitAutomation` and `GitConnectionTool` are the shapes `gitConnection()`
   adapts.
+- `gitInstallUrl`, where Git for Windows is downloaded, offered when Git is
+  missing.
+- The types these take and return: `GitContainer`, `GitContainment`,
+  `GitAutomationOptions`.
 
 ## Invariants
 
@@ -63,6 +67,12 @@ there is no second implementation of git's storage format to audit.
   work tree (`GIT_DIR`, `GIT_INDEX_FILE`, `GIT_WORK_TREE` and the others
   `git rev-parse --local-env-vars` lists) are removed; variables that only
   configure git are kept.
+- A call that only reads (status, diffs, log, show, branches, the stash list,
+  and the look at what is staged before a commit) starts no program the
+  repository's own settings name: no file monitor, outside diff tool, diff
+  converter, filter or signature checker. A folder can arrive with its `.git`
+  from anywhere. Staging, committing and stashing run as git runs them for
+  the person, hooks and filters included, after approval.
 - Each git call runs through the process-ownership mechanism, with a
   30-second limit.
 

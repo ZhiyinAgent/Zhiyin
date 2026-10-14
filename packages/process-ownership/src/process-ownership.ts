@@ -12,6 +12,7 @@ import {
   OutputEnds,
 } from "./output.js";
 import type { ProcessContainer } from "./windows.js";
+import { childEnvironment } from "./child-environment.js";
 
 export type ProcessContainment = {
   open(): ProcessContainer;
@@ -37,7 +38,10 @@ export type RunProcess = (options: {
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
   readonly containment?: ProcessContainment;
-  /** Everything the program is given; absent, it inherits Zhiyin's own. */
+  /**
+   * Everything the program is given; absent, it inherits Zhiyin's own. Either
+   * way, without a model key Zhiyin was given.
+   */
   readonly environment?: Readonly<Record<string, string | undefined>>;
   /** Characters kept of each stream, split between its start and its end. */
   readonly maximumOutputCharacters?: number;
@@ -79,7 +83,14 @@ async function killTree(pid: number): Promise<void> {
     return;
   }
   await new Promise<void>((resolve) => {
-    const killer = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+    // By its full path: a program named taskkill earlier in the search path,
+    // or in the working folder, must not be what runs.
+    const taskkill = join(
+      process.env["SystemRoot"] ?? "C:\\Windows",
+      "System32",
+      "taskkill.exe",
+    );
+    const killer = spawn(taskkill, ["/pid", String(pid), "/T", "/F"], {
       windowsHide: true,
       stdio: "ignore",
     });
@@ -278,7 +289,7 @@ function runStreams(
       cwd: options.cwd,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
-      ...(options.environment ? { env: options.environment } : {}),
+      env: childEnvironment(options.environment),
     });
     const stdout = new OutputEnds(edgeOf(options));
     const stderr = new OutputEnds(edgeOf(options));

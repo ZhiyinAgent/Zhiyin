@@ -64,11 +64,15 @@ type CapturedFile = {
 type Manifest = {
   readonly version: 1;
   readonly actionId: string;
+  /** Whose action it was. A manifest without one goes by age alone. */
+  readonly conversationId?: string;
   readonly workspaceRoot: string;
   readonly createdAt: string;
   readonly phase: "prepared" | "committed";
   readonly files: readonly CapturedFile[];
 };
+
+type KeptAction = { readonly folder: string; readonly manifest: Manifest };
 
 type RestoreTarget = {
   readonly path: string;
@@ -105,6 +109,7 @@ export interface Recovery {
     actionId: string,
     workspaceRoot: string,
     changes: readonly FileChange[],
+    conversationId: string,
   ): Promise<RecoveryPreparation>;
   validate(
     actionId: string,
@@ -129,6 +134,8 @@ export interface Recovery {
     path: string,
   ): Promise<FileVersions>;
   cleanup(): Promise<void>;
+  /** Removes everything kept for a deleted conversation's actions. */
+  forgetConversation(conversationId: string): Promise<void>;
 }
 
 function digest(bytes: Uint8Array): string {
@@ -202,6 +209,8 @@ export class FileRecovery implements Recovery {
   readonly #limits: RecoveryLimits;
   readonly #now: () => Date;
   readonly #prepared = new Map<string, Manifest>();
+  /** Folders whose copies are being taken, before they have a manifest. */
+  readonly #preparing = new Set<string>();
 
   constructor(
     dataDirectory: string,
@@ -219,10 +228,32 @@ export class FileRecovery implements Recovery {
     actionId: string,
     workspaceRoot: string,
     changes: readonly FileChange[],
+    conversationId: string,
   ): Promise<RecoveryPreparation> {
     await this.cleanup();
-    const root = await realpath(workspaceRoot);
     const folder = join(this.#root, key(actionId));
+    this.#preparing.add(folder);
+    try {
+      return await this.#capture(
+        actionId,
+        conversationId,
+        workspaceRoot,
+        changes,
+        folder,
+      );
+    } finally {
+      this.#preparing.delete(folder);
+    }
+  }
+
+  async #capture(
+    actionId: string,
+    conversationId: string,
+    workspaceRoot: string,
+    changes: readonly FileChange[],
+    folder: string,
+  ): Promise<RecoveryPreparation> {
+    const root = await realpath(workspaceRoot);
     await rm(folder, { recursive: true, force: true });
     await mkdir(folder, { recursive: true });
     const files: CapturedFile[] = [];
@@ -304,6 +335,7 @@ export class FileRecovery implements Recovery {
     const manifest: Manifest = {
       version: 1,
       actionId,
+      conversationId,
       workspaceRoot: root,
       createdAt: this.#now().toISOString(),
       phase: "prepared",
@@ -411,7 +443,7 @@ export class FileRecovery implements Recovery {
           unprotected.set(
             path,
             captured?.reason ??
-              "No completed recovery capture exists for this action.",
+              "No copy of this file is kept: none was taken, or it was removed by the storage limits.",
           );
           continue;
         }
@@ -483,6 +515,17 @@ export class FileRecovery implements Recovery {
         continue;
       }
       const target = review.targets.find((item) => item.path === file.path);
+      // A review can come back from the rewind journal on disk, so where it
+      // writes and what it copies from are checked again here.
+      if (target && !(await this.#ownTarget(review.workspaceRoot, target))) {
+        results.push({
+          path: file.path,
+          status: "unprotected",
+          reason:
+            "The restore named a file outside its folder or a copy Zhiyin did not keep, so the file was left as it is.",
+        });
+        continue;
+      }
       const current = target ? await currentDigest(target.absolute) : "other";
       if (target && current === target.restored) {
         results.push({
@@ -554,9 +597,33 @@ export class FileRecovery implements Recovery {
     };
   }
 
+  /**
+   * Applies the limits. An action past the age limit loses everything kept
+   * for it, and one whose copies were all evicted loses its folder; a folder a
+   * capture left without its manifest goes too. An action still being prepared
+   * is never touched.
+   */
   async cleanup(): Promise<void> {
-    const loaded = await this.#manifests();
+    const found = await this.#folders();
     const cutoff = this.#now().getTime() - this.#limits.maximumAgeMs;
+    const removed = new Set<string>();
+    for (const item of found) {
+      if (this.#inUse(item.folder)) continue;
+      if (item.manifest && Date.parse(item.manifest.createdAt) >= cutoff)
+        continue;
+      // Looked for again: it may have been written since the first read.
+      if (
+        !item.manifest &&
+        (await kind(join(item.folder, "manifest.json"))) !== "absent"
+      )
+        continue;
+      await rm(item.folder, { recursive: true, force: true });
+      removed.add(item.folder);
+    }
+    const loaded = found.filter(
+      (item): item is KeptAction =>
+        item.manifest !== undefined && !removed.has(item.folder),
+    );
     const expired = new Set<string>();
     for (const item of loaded) {
       if (Date.parse(item.manifest.createdAt) >= cutoff) continue;
@@ -640,9 +707,46 @@ export class FileRecovery implements Recovery {
           };
         }),
       );
-      if (changed)
-        await this.#writeManifest(item.folder, { ...item.manifest, files });
+      if (!changed) continue;
+      if (
+        !this.#inUse(item.folder) &&
+        files.every((file) => file.status !== "protected")
+      )
+        await rm(item.folder, { recursive: true, force: true });
+      else await this.#writeManifest(item.folder, { ...item.manifest, files });
     }
+  }
+
+  async forgetConversation(conversationId: string): Promise<void> {
+    for (const item of await this.#manifests()) {
+      if (item.manifest.conversationId !== conversationId) continue;
+      this.#prepared.delete(item.manifest.actionId);
+      await rm(item.folder, { recursive: true, force: true });
+    }
+  }
+
+  /** Whether a target writes inside its folder and copies from this store. */
+  async #ownTarget(
+    workspaceRoot: string,
+    target: RestoreTarget,
+  ): Promise<boolean> {
+    const absolute = await safeAbsolute(workspaceRoot, target.path).catch(
+      () => undefined,
+    );
+    return (
+      absolute === target.absolute &&
+      (target.backup === undefined || staysInside(this.#root, target.backup))
+    );
+  }
+
+  /** Whether an action in this folder is being prepared or awaits its run. */
+  #inUse(folder: string): boolean {
+    return (
+      this.#preparing.has(folder) ||
+      [...this.#prepared.keys()].some(
+        (actionId) => join(this.#root, key(actionId)) === folder,
+      )
+    );
   }
 
   async #manifest(actionId: string): Promise<Manifest | undefined> {
@@ -680,8 +784,15 @@ export class FileRecovery implements Recovery {
     });
   }
 
-  async #manifests(): Promise<
-    { readonly folder: string; readonly manifest: Manifest }[]
+  async #manifests(): Promise<KeptAction[]> {
+    return (await this.#folders()).filter(
+      (item): item is KeptAction => item.manifest !== undefined,
+    );
+  }
+
+  /** Each action's folder, with its manifest when one can be read. */
+  async #folders(): Promise<
+    { readonly folder: string; readonly manifest?: Manifest }[]
   > {
     let names: string[];
     try {
@@ -690,7 +801,7 @@ export class FileRecovery implements Recovery {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
     }
-    const manifests = await Promise.all(
+    return Promise.all(
       names.map(async (name) => {
         const folder = join(this.#root, name);
         try {
@@ -701,13 +812,9 @@ export class FileRecovery implements Recovery {
             ) as Manifest,
           };
         } catch {
-          return undefined;
+          return { folder };
         }
       }),
-    );
-    return manifests.filter(
-      (item): item is { folder: string; manifest: Manifest } =>
-        item !== undefined,
     );
   }
 

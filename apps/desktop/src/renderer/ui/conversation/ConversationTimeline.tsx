@@ -12,7 +12,7 @@ import type {
   MessageAttachment,
   TaskGuidance,
 } from "@zhiyin/contract";
-import { Icon, Logo, Notice } from "../shared/index.js";
+import { elapsedTime, Icon, Logo, Notice } from "../shared/index.js";
 import { AttachedPicture } from "./AttachedPicture.js";
 import { CondensingCard } from "./CondensingCard.js";
 import { ConversationSkeleton } from "./ConversationSkeleton.js";
@@ -286,7 +286,7 @@ function WorkingStatus({ taskId, label }: { taskId: string; label: string }) {
       {ran >= showTimeAfterMs && (
         // Ticking every second; not announced each time it changes.
         <span className={styles["response-status__time"]} aria-live="off">
-          {elapsed(ran)}
+          {elapsedTime(ran)}
         </span>
       )}
     </div>
@@ -422,15 +422,6 @@ function ReasoningTail({ text }: { text: string }) {
   );
 }
 
-/** "5 s", "1 min 20 s", "1 h 5 min". */
-function elapsed(milliseconds: number): string {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1_000));
-  if (seconds < 60) return `${seconds} s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
-  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}
-
 function listed(names: readonly string[]): string {
   return names.length < 2
     ? (names[0] ?? "")
@@ -452,7 +443,7 @@ function WaitingForSpecialists({ waitingOn }: { waitingOn: WaitingOn }) {
         {/* Ticking every second; announced once, with the rest. */}
         <span aria-live="off">
           {" "}
-          · {elapsed(now - Date.parse(waitingOn.since))}
+          · {elapsedTime(now - Date.parse(waitingOn.since))}
         </span>
       </span>
     </div>

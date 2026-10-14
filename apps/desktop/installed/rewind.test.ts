@@ -53,8 +53,11 @@ async function plantInterruptedRewind(options: {
   const changed = "changed by discarded work";
   const restored = "original bytes";
   const target = join(options.workspaceDirectory, "notes.txt");
-  const backup = join(options.dataDirectory, "rewind-backup.bin");
+  // Where the app keeps its copies: a restore takes one from nowhere else.
+  const copies = join(options.dataDirectory, "recovery", "rewind-action");
+  const backup = join(copies, "0.bin");
   await mkdir(options.workspaceDirectory, { recursive: true });
+  await mkdir(copies, { recursive: true });
   await writeFile(
     target,
     options.conversationSaved ? restored : changed,

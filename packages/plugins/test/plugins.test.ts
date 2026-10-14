@@ -105,6 +105,32 @@ describe("plugin package validation", () => {
     ).toThrow(/streamable-http/i);
   });
 
+  it("refuses an MCP server reached over plain http, unless it runs on this computer", () => {
+    const serving = (url: string) =>
+      packageWith({
+        mcpServers: [
+          {
+            id: "software-engineering/search",
+            name: "Search",
+            description: "Searches the web.",
+            type: "streamable-http",
+            url,
+            access: "Reads public pages.",
+            dataDestination: "The search service.",
+          },
+        ],
+      });
+
+    expect(() =>
+      validatePluginPackage(serving("http://search.example/mcp")),
+    ).toThrow(
+      "MCP server “software-engineering/search” must use https unless it runs on this computer.",
+    );
+    expect(() =>
+      validatePluginPackage(serving("http://127.0.0.1:3100/mcp")),
+    ).not.toThrow();
+  });
+
   it("lets only a built-in package name an application connector", () => {
     const appConnectors = [
       {

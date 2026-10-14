@@ -52,10 +52,20 @@ function retryAfterMs(value: string | null): number | undefined {
   return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 
+/**
+ * Five times the longest of Zhiyin's own tool descriptions: room for any
+ * honest one, while no server can fill the model's window with its own.
+ */
+const maximumDescription = 4_000;
+
 function described(tool: Tool): McpConnectionTool {
+  const description =
+    tool.description && tool.description.length > maximumDescription
+      ? `${tool.description.slice(0, maximumDescription - 1)}…`
+      : tool.description;
   return {
     name: tool.name,
-    ...(tool.description ? { description: tool.description } : {}),
+    ...(description ? { description } : {}),
     inputSchema: tool.inputSchema as Readonly<Record<string, unknown>>,
   };
 }

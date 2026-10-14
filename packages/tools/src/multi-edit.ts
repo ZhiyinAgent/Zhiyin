@@ -519,6 +519,8 @@ export async function runMultiEdit(
   if (!("inspection" in planned)) return planned;
 
   const produced: ProducedFile[] = [];
+  // What was written before a failure stays declared, so it is still shown.
+  const written = () => (produced.length ? { produced: [...produced] } : {});
   for (const file of planned.files) {
     const encoded = encodeText(file.decoded, file.text);
     try {
@@ -533,6 +535,7 @@ export async function runMultiEdit(
         return {
           ok: false,
           reason: `${unseen.reason} ${produced.length ? `Earlier files changed: ${produced.map((item) => item.path).join(", ")}.` : "No file was changed."}`,
+          ...written(),
         };
       await writeFileAtomically(file.absolute, encoded, signal);
       await noteOwnEdit(
@@ -555,6 +558,7 @@ export async function runMultiEdit(
             ? `These files were already changed: ${changed.join(", ")}. These were not: ${untouched.join(", ")}.`
             : "No file was changed."
         }`,
+        ...written(),
       };
     }
     produced.push({

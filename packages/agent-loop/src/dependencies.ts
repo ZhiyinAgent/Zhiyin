@@ -1,5 +1,4 @@
 import type {
-  AppEvent,
   ContextBudgetChoice,
   ModelWindow,
   PictureFitting,
@@ -138,5 +137,4 @@ export interface TurnHost {
       : never,
   ): Promise<void>;
   reportIssue(notice: string): void;
-  emit(event: AppEvent): void;
 }

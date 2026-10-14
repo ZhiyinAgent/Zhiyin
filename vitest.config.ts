@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 /*
  * A time limit catches a test that hangs; no test here measures speed by it.
@@ -8,6 +8,13 @@ import { defineConfig } from "vitest/config";
  * room for that without letting a hang pass unnoticed.
  */
 const parallelLimits = { testTimeout: 30_000, hookTimeout: 30_000 };
+
+/**
+ * Tests that call a model provider's real API. They spend credit on a real
+ * account, so they are kept out of every other project and run only in their
+ * own, by `pnpm test:live`, whatever keys the shell happens to hold.
+ */
+const liveTests = ["packages/**/live*.test.ts", "packages/**/*.live.test.ts"];
 
 // One test runner for the whole workspace. Projects keep the renderer's DOM
 // environment from being paid for by the packages, which need no DOM at all.
@@ -23,8 +30,17 @@ export default defineConfig({
             // Each model provider keeps its tests in its own folder (ADR 0024).
             "packages/model-client/src/providers/*/test/**/*.test.ts",
           ],
+          exclude: [...configDefaults.exclude, ...liveTests],
           environment: "node",
           sequence: { groupOrder: 0 },
+        },
+      },
+      {
+        test: {
+          name: "live",
+          ...parallelLimits,
+          include: liveTests,
+          environment: "node",
         },
       },
       {

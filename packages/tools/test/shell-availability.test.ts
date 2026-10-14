@@ -44,6 +44,28 @@ describe("WorkspaceTools shell availability", () => {
     expect(tools.list().map((tool) => tool.name)).toContain("bash");
   });
 
+  it("stays off where commands cannot be contained, even when a recheck finds a shell", () => {
+    const withheld =
+      "Zhiyin cannot contain what a command starts on this computer, so it runs none. Access is denied.";
+    const tools = new WorkspaceTools(".", {
+      shell: process.execPath,
+      uncontained: "Access is denied.",
+    });
+    expect(tools.list().map((tool) => tool.name)).not.toContain("bash");
+
+    const rechecked = tools.recheckShell?.({
+      ...emptyEnvironment,
+      ZHIYIN_BASH: process.execPath,
+    });
+
+    expect(rechecked).toEqual({ available: false, reason: withheld });
+    expect(tools.shellAvailability?.()).toEqual({
+      available: false,
+      reason: withheld,
+    });
+    expect(tools.list().map((tool) => tool.name)).not.toContain("bash");
+  });
+
   it("goes back to unavailable when a recheck finds nothing", () => {
     const tools = new WorkspaceTools(".", {
       shell: process.execPath,

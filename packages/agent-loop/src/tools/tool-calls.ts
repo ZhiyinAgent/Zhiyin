@@ -18,6 +18,7 @@ import { correctableByModel, refusal, unknownTool } from "./refusals.js";
 import { closedForPerson, shownToPerson } from "./document-reads.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 import type { TurnRecords } from "../turn/turn-records.js";
+import { isOwnDefect } from "../turn/turn-recovery.js";
 import type { AuxiliaryWork } from "../specialist/auxiliary-work.js";
 import type { TurnWaits } from "../turn/turn-waits.js";
 import type {
@@ -244,6 +245,7 @@ export class ToolCalls {
         actionId,
         this.#deps.workspace.workspaceRoot(),
         inspection.changes,
+        taskId,
       );
 
     const checkedPermission = await decideToolPermission({
@@ -401,7 +403,11 @@ export class ToolCalls {
         args,
         { signal: controller.signal, identity: inspection.identity },
       );
-    } catch {
+    } catch (error) {
+      // A tool answers its failures; one that throws is kept for whoever
+      // looks into it, and the model is told only that the action failed.
+      if (!controller.signal.aborted && isOwnDefect(error))
+        this.#deps.recordDefect?.({ taskId, error });
       result = {
         ok: false,
         reason: "The requested action failed while it was running.",

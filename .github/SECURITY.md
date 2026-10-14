@@ -126,7 +126,9 @@ only Zhiyin holds, and the browser listens on no network port. While it runs,
 its profile is on disk and readable by programs running as your account.
 
 Web pages are untrusted. What they say reaches the model marked as untrusted
-tool output, and it grants nothing. To preview files from your folder, Zhiyin
+tool output, and it grants nothing. A specialist's report reaches the main
+agent marked the same way, since the specialist may have read such a page. To
+preview files from your folder, Zhiyin
 serves them read-only from a loopback address with a random token, and only
 files inside the folder.
 

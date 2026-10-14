@@ -20,6 +20,12 @@ importers:
       '@types/node':
         specifier: 26.4.1
         version: 26.4.1
+      '@zhiyin/model-client':
+        specifier: workspace:*
+        version: link:packages/model-client
+      desktop:
+        specifier: workspace:*
+        version: link:apps/desktop
       eslint:
         specifier: 10.9.1
         version: 10.9.1(jiti@2.7.0)(supports-color@7.2.0)
@@ -222,21 +228,12 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
-      '@zhiyin/conversation-rewind':
-        specifier: workspace:*
-        version: link:../conversation-rewind
       '@zhiyin/model-client':
         specifier: workspace:*
         version: link:../model-client
       '@zhiyin/permission-engine':
         specifier: workspace:*
         version: link:../permission-engine
-      '@zhiyin/plugins':
-        specifier: workspace:*
-        version: link:../plugins
-      '@zhiyin/recovery':
-        specifier: workspace:*
-        version: link:../recovery
       '@zhiyin/rewind':
         specifier: workspace:*
         version: link:../rewind
@@ -250,6 +247,15 @@ importers:
         specifier: workspace:*
         version: link:../views
     devDependencies:
+      '@zhiyin/conversation-rewind':
+        specifier: workspace:*
+        version: link:../conversation-rewind
+      '@zhiyin/plugins':
+        specifier: workspace:*
+        version: link:../plugins
+      '@zhiyin/recovery':
+        specifier: workspace:*
+        version: link:../recovery
       '@zhiyin/tools':
         specifier: workspace:*
         version: link:../tools
@@ -332,6 +338,9 @@ importers:
       '@zhiyin/artifacts':
         specifier: workspace:*
         version: link:../artifacts
+      '@zhiyin/audit':
+        specifier: workspace:*
+        version: link:../audit
       '@zhiyin/blender-studio':
         specifier: workspace:*
         version: link:../blender-studio
@@ -362,16 +371,10 @@ importers:
       '@zhiyin/spelling':
         specifier: workspace:*
         version: link:../spelling
-      '@zhiyin/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@zhiyin/usage':
         specifier: workspace:*
         version: link:../usage
     devDependencies:
-      '@zhiyin/audit':
-        specifier: workspace:*
-        version: link:../audit
       '@zhiyin/conversation-rewind':
         specifier: workspace:*
         version: link:../conversation-rewind
@@ -393,6 +396,9 @@ importers:
       '@zhiyin/toolchains':
         specifier: workspace:*
         version: link:../toolchains
+      '@zhiyin/tools':
+        specifier: workspace:*
+        version: link:../tools
 
   packages/document-compiler:
     dependencies:
@@ -414,12 +420,13 @@ importers:
       '@zhiyin/pdf-engine':
         specifier: workspace:*
         version: link:../pdf-engine
-      '@zhiyin/process-ownership':
-        specifier: workspace:*
-        version: link:../process-ownership
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/process-ownership':
+        specifier: workspace:*
+        version: link:../process-ownership
 
   packages/git-connector:
     dependencies:

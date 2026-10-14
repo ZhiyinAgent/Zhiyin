@@ -259,9 +259,13 @@ export class ModelHistory {
   async notice(
     kind: NoticeKind,
     text: string,
-    messageId?: string,
+    options: {
+      readonly messageId?: string;
+      readonly output?: { readonly tool: string; readonly content: string };
+    } = {},
   ): Promise<void> {
-    const content = harnessNotice(kind, text);
+    const { messageId, output } = options;
+    const content = harnessNotice(kind, text, output);
     await this.#add({ role: "user", content }, (id) => ({
       id,
       kind: "notice",

@@ -11,8 +11,9 @@
  * arriving the other way: the light theme would paint it dark. So the dark
  * block and the light block must name the same tokens.
  *
- * Two readability floors are checked with them: no text under 12 px, and every
- * text colour at 4.5:1 or more on every ground of its theme.
+ * Two readability floors are checked with them: no text under 12 px, whatever
+ * unit it is written in, and every text colour at 4.5:1 or more on every
+ * ground of its theme.
  *
  * ESLint does not read CSS, so this stands where a lint rule would.
  */
@@ -44,8 +45,31 @@ const lightRule = "@media (prefers-color-scheme: light)";
  * readable.
  */
 const smallestText = 12;
-/** The size in `font-size`, or the first size in a `font` shorthand. */
-const fontSize = /\bfont(?:-size)?:[^;]*?(?<![\d.])(\d+(?:\.\d+)?)px/;
+/** What a rem is measured against: the page's own text, which nothing sets. */
+const rootText = 16;
+/** The value of a `font-size` declaration or a `font` shorthand. */
+const fontDeclaration = /\bfont(?:-size)?\s*:\s*([^;}]+)/;
+const relativeSize =
+  /(?<![\w.-])\d*\.?\d+(?:em|%)(?![\w-])|(?<![\w-])(?:xx-small|x-small|small|smaller)(?![\w-])/;
+
+/**
+ * What is wrong with a declared text size, if anything. A size in px or rem
+ * is measured. One relative to its parent, in em, % or a keyword, cannot be,
+ * so it has to hold the floor itself, written as `max(12px, …)`.
+ */
+function sizeProblem(value) {
+  const tooSmall = `text smaller than ${smallestText} px`;
+  const floor = value.match(/\bmax\(\s*(\d+(?:\.\d+)?)px\b/);
+  if (floor) return Number(floor[1]) < smallestText ? tooSmall : undefined;
+  if (relativeSize.test(value))
+    return `text sized against its parent; write it as max(${smallestText}px, …)`;
+  const px = value.match(/(?<![\d.])(\d+(?:\.\d+)?)px/);
+  if (px) return Number(px[1]) < smallestText ? tooSmall : undefined;
+  const rem = value.match(/(?<![\w.])(\d*\.?\d+)rem\b/);
+  if (rem)
+    return Number(rem[1]) * rootText < smallestText ? tooSmall : undefined;
+  return undefined;
+}
 
 /**
  * The colours text is painted in, and the grounds it is painted on. Each must
@@ -159,9 +183,9 @@ export function themeProblems(sheets, setInCode = new Set()) {
           if (hex) values[theme].set(name, hex);
         }
       }
-      const size = line.match(fontSize);
-      if (size && Number(size[1]) < smallestText)
-        problems.push(`${where}: text smaller than ${smallestText} px`);
+      const size = line.match(fontDeclaration);
+      const sizing = size && sizeProblem(size[1]);
+      if (sizing) problems.push(`${where}: ${sizing}`);
       for (const [, name] of line.matchAll(/var\((--[a-z][a-z0-9-]*)/g))
         if (!referenced.has(name)) referenced.set(name, where);
 

@@ -19,7 +19,6 @@ describe("ApprovalPrompt", () => {
         key="write"
         title="Write report"
         target="reports/one.md"
-        command="write_file(...)"
         conversationRule={{ label: "Changes to files in reports/" }}
         onDecision={onDecision}
       />,
@@ -45,7 +44,6 @@ describe("ApprovalPrompt", () => {
         key="shell"
         title="Run a command"
         target="pwd"
-        command="bash(...)"
         onDecision={onDecision}
       />,
     );
@@ -58,7 +56,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Add objects to a 3D scene"
         target="mug.blend"
-        command="blender_add_objects(...)"
         conversationRule={{ label: "3D studio · Changes to mug.blend" }}
         onDecision={vi.fn()}
       />,
@@ -79,7 +76,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Write report"
         target="reports/one.md"
-        command="write_file(...)"
         conversationRule={{ label: "Changes to files in reports/" }}
         onDecision={vi.fn()}
       />,
@@ -97,7 +93,6 @@ describe("ApprovalPrompt", () => {
         effect="Run a command"
         claim="List the tables."
         target="python parse.py"
-        command={'bash({"command":"python parse.py"})'}
         invocation={{
           name: "bash",
           arguments: [
@@ -121,7 +116,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Run a command"
         target="echo done"
-        command="bash"
         invocation={{
           name: "bash",
           arguments: [
@@ -146,7 +140,6 @@ describe("ApprovalPrompt", () => {
         title="Post a message"
         destination="Chat"
         target="post"
-        command="post"
         invocation={{
           name: "post",
           via: "Chat",
@@ -171,7 +164,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Write a file"
         target="invoice"
-        command="write_file"
         changes={[
           {
             path: "bills/invoice\u202Efdp.exe",
@@ -195,7 +187,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Edit a file"
         target="src/access.ts"
-        command="edit_file"
         changes={[
           {
             path: "src/access.ts",
@@ -224,7 +215,6 @@ describe("ApprovalPrompt", () => {
         destination="Tavily"
         claim="Find the total raised at ZEvent 2026."
         target="tavily_search"
-        command={'tavily_search({"query":"ZEvent 2026 montant récolté"})'}
         invocation={{
           name: "tavily_search",
           via: "Tavily",
@@ -247,7 +237,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Rewrite the project brief"
         target="docs/brief.md"
-        command="write_file(...)"
         changes={[
           { path: "docs/brief.md", change: "updated", before: "a", after: "b" },
         ]}
@@ -271,7 +260,6 @@ describe("ApprovalPrompt", () => {
         title="Read page"
         target="Zhiyin’s browser"
         detail="Uses Zhiyin’s isolated browser, without your personal browser sign-ins."
-        command="browser_snapshot({})"
         invocation={{ name: "Read page", arguments: [] }}
         onDecision={onDecision}
       />,
@@ -289,7 +277,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Open page"
         target="https://example.com/a-page"
-        command={'browser_navigate({"url":"https://example.com/a-page"})'}
         invocation={{
           name: "Open page",
           arguments: [{ name: "Address", value: "https://example.com/a-page" }],
@@ -309,7 +296,6 @@ describe("ApprovalPrompt", () => {
         title="Publish the release notes"
         target="pnpm docs:publish --production"
         description="This sends the reviewed draft to the public documentation site."
-        command="pnpm docs:publish --production"
         onDecision={onDecision}
       />,
     );
@@ -337,7 +323,6 @@ describe("ApprovalPrompt", () => {
         detail="This runs in TestZhiyin and can read, change, or delete files there."
         claim="Check whether Python 3 with pandas is installed."
         target="command -v python3"
-        command={'bash({"command":"command -v python3"})'}
         onDecision={() => undefined}
       />,
     );
@@ -365,7 +350,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Run a command"
         target="rm report.txt"
-        command="bash({})"
         claim="Clean up a draft."
         onDecision={() => undefined}
       />,
@@ -395,7 +379,6 @@ describe("ApprovalPrompt", () => {
         detail="This runs in TestZhiyin and cannot be undone."
         claim="Check the installed data libraries."
         target={command}
-        command={`bash({"command":${JSON.stringify(command)}})`}
         onDecision={() => undefined}
       />,
     );
@@ -409,7 +392,6 @@ describe("ApprovalPrompt", () => {
         title="Run a command"
         detail="This runs in TestZhiyin and cannot be undone."
         target="git status --short"
-        command={'bash({"command":"git status --short"})'}
         onDecision={() => undefined}
       />,
     );
@@ -429,7 +411,6 @@ describe("ApprovalPrompt", () => {
         title="Overwrite an existing workspace file"
         target="brief.md"
         detail="This replaces the current contents of brief.md."
-        command={'write_file({"path":"brief.md","text":"New draft.\n"})'}
         changes={[
           {
             path: "brief.md",
@@ -466,7 +447,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Edit a workspace file"
         target="theme.css"
-        command="edit_file(...)"
         changes={[
           {
             path: "theme.css",
@@ -509,7 +489,6 @@ describe("ApprovalPrompt", () => {
         title="Create a workspace file"
         target="reports/2026/brief.md"
         detail="This creates a new file and the folder reports/2026. Nothing is replaced."
-        command={'write_file({"path":"reports/2026/brief.md"})'}
         changes={[
           {
             path: "reports/2026/brief.md",
@@ -540,7 +519,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Edit workspace files"
         target="docs/brief.md, notes.md"
-        command="edit_files(…)"
         changes={[
           {
             path: "docs/brief.md",
@@ -579,7 +557,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Update workspace files"
         target="brief.md, archive.zip"
-        command="write_files(…)"
         recovery={{
           files: [
             { path: "brief.md", status: "protected" },
@@ -610,7 +587,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Overwrite an existing workspace file"
         target="brief.md"
-        command="write_file(…)"
         changes={[
           { path: "brief.md", change: "created", after: "One line.\n" },
         ]}
@@ -634,7 +610,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Overwrite an existing workspace file"
         target="dump.csv"
-        command="write_file(…)"
         changes={[
           {
             path: "dump.csv",
@@ -658,7 +633,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Set a material in a 3D scene"
         target="mug.blend"
-        command="blender_set_material(…)"
         invocation={{
           name: "Set a material in a 3D scene",
           arguments: [
@@ -694,7 +668,6 @@ describe("ApprovalPrompt", () => {
         title="Delete 2 items: 1 to the Recycle Bin, 1 permanently"
         target="2 items"
         detail="Deleted permanently; this cannot be restored from the Recycle Bin: disk.iso (4 GB). Windows would not move disk.iso to the Recycle Bin: it is too large for it, or on a drive without one."
-        command="delete_file(...)"
         changes={[
           { path: "notes/old.md", change: "recycled" },
           { path: "disk.iso", change: "deleted" },
@@ -715,7 +688,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Run a command"
         target="git status --short"
-        command={'bash({"command":"git status --short"})'}
         onDecision={vi.fn()}
       />,
     );
@@ -730,7 +702,6 @@ describe("ApprovalPrompt", () => {
         title="Publish the release notes"
         target="docs.zhiyin.app"
         description="This sends the reviewed draft to the public documentation site."
-        command="pnpm docs:publish --production"
         onDecision={onDecision}
       />,
     );
@@ -753,7 +724,6 @@ describe("ApprovalPrompt", () => {
       <ApprovalPrompt
         title="Run a command"
         target="echo hello"
-        command="echo hello"
         onDecision={onDecision}
       />,
     );
@@ -784,7 +754,6 @@ describe("ApprovalPrompt", () => {
         title="Read project manifest"
         target="package.json"
         description="I need package.json to identify the project."
-        command={'read_file({"path":"package.json"})'}
         onDecision={onDecision}
       />,
     );

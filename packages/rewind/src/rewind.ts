@@ -227,6 +227,7 @@ export interface Rewind {
     actionId: string,
     workspaceRoot: string | undefined,
     changes: readonly FileChange[],
+    conversationId: string,
   ): Promise<FileBackup>;
   /** Whether the files a backup protects are still what was copied. */
   checkBackup(actionId: string): Promise<{ readonly ok: true } | Refusal>;
@@ -234,6 +235,8 @@ export interface Rewind {
   completeBackup(actionId: string): Promise<void>;
   /** Throws away the backup of a change that did not run. */
   discardBackup(actionId: string): Promise<void>;
+  /** Throws away every backup taken for a deleted conversation. */
+  forgetConversation(conversationId: string): Promise<void>;
 }
 
 type Pending = { readonly plan: RewindPlan; readonly review?: RecoveryReview };
@@ -516,6 +519,7 @@ export class ComposedRewind implements Rewind {
     actionId: string,
     workspaceRoot: string | undefined,
     changes: readonly FileChange[],
+    conversationId: string,
   ): Promise<FileBackup> {
     const unprotected = (reason: string): FileBackup => ({
       actionId,
@@ -528,7 +532,7 @@ export class ComposedRewind implements Rewind {
     if (!workspaceRoot)
       return unprotected("No workspace was available for recovery.");
     return this.#members.recovery
-      .prepare(actionId, workspaceRoot, changes)
+      .prepare(actionId, workspaceRoot, changes, conversationId)
       .catch(() =>
         unprotected("Recovery storage was unavailable before this action."),
       );
@@ -544,5 +548,9 @@ export class ComposedRewind implements Rewind {
 
   discardBackup(actionId: string): Promise<void> {
     return this.#members.recovery.discard(actionId);
+  }
+
+  forgetConversation(conversationId: string): Promise<void> {
+    return this.#members.recovery.forgetConversation(conversationId);
   }
 }

@@ -48,23 +48,27 @@ export function ShellNotice({
   return (
     <div role="status" className={styles["shell-notice"]}>
       <span>Shell commands are unavailable. {shell.reason}</span>
-      <span className={styles["shell-notice__actions"]}>
-        <button
-          type="button"
-          className="button button--small"
-          onClick={() => void onOpenExternalUrl(shell.installUrl)}
-        >
-          Get Git for Windows
-        </button>
-        <button
-          type="button"
-          className="button button--small button--quiet"
-          disabled={checking}
-          onClick={() => void recheck()}
-        >
-          {checking ? "Checking…" : "Check again"}
-        </button>
-      </span>
+      {/* Only an install changes the answer, so without one there is nothing
+          to do here. */}
+      {shell.installUrl ? (
+        <span className={styles["shell-notice__actions"]}>
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => void onOpenExternalUrl(shell.installUrl as string)}
+          >
+            Get Git for Windows
+          </button>
+          <button
+            type="button"
+            className="button button--small button--quiet"
+            disabled={checking}
+            onClick={() => void recheck()}
+          >
+            {checking ? "Checking…" : "Check again"}
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -33,6 +33,11 @@ download, and only a complete, verified install is ever used (ADR 0016).
   SHA-256, size, source, and the program's path inside its archive. Every
   entry is an https download for Windows x64 from the source it names: the
   project's GitHub releases, or for Blender its own download site.
+- `DownloadedToolchains` implements `Toolchains`, given `fetchDownload`, which
+  downloads an archive, and `windowsTarUnpack`, which unpacks it with Windows'
+  own bsdtar and refuses an entry that would leave the folder.
+- The types these take and return: `ToolchainDownload`, `ToolchainState`,
+  `ToolchainSpec`, `Download`, `Ready`, `Unpack`.
 
 ## Invariants
 
@@ -42,7 +47,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
   a full disk, fails the install, which can then be tried again.
 - Nothing partial is ever used. An install is assembled in a staging folder
   and moved into place whole; a stopped or failed one leaves neither a staging
-  folder nor a program.
+  folder nor a program. What an install cut short by Zhiyin closing left is
+  cleared before the next install begins.
 - An archive may not reach outside its own folder: entries that climb out, and
   links of any kind, are refused. Archives are unpacked with the `tar.exe`
   that ships with Windows, called by its full path.

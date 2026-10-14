@@ -1060,7 +1060,7 @@
   border-radius: 4px;
   background: var(--zy-panel);
   color: var(--zy-accent);
-  font: 0.88em/1.5 var(--zy-font-data);
+  font: max(12px, 0.88em) / 1.5 var(--zy-font-data);
 }
 
 .message-prose pre {
@@ -1209,7 +1209,9 @@
 .message-link__target {
   color: var(--zy-faint);
   font-family: var(--zy-font-data);
-  font-size: 0.82em;
+  /* Smaller than the link it follows, but never under the floor: in a table
+     the link's own text is already small. */
+  font-size: max(12px, 0.82em);
   overflow-wrap: anywhere;
 }
 

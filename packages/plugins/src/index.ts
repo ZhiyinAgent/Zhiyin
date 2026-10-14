@@ -1,8 +1,6 @@
 /**
  * Installable capability packages: their identity, their declared skills,
  * specialists and connectors, and the state a person keeps beside them.
- *
- * Boundaries and invariants: docs/architecture/features/plugins/README.md
  */
 
 export * from "./plugins.js";

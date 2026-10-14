@@ -1,8 +1,6 @@
 /**
  * Saves conversations and the workspace, so they can be resumed after a
  * restart.
- *
- * Boundaries and invariants: docs/architecture/features/session/README.md
  */
 
 export * from "./session.js";

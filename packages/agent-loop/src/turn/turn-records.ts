@@ -600,7 +600,7 @@ export class TurnRecords {
     const actions = drawn
       ? task.actions.filter((item) => item.id !== actionId)
       : task.actions.map((item) => (item.id === actionId ? action : item));
-    const produced = result?.ok ? (result.produced ?? []) : [];
+    const produced = result?.produced ?? [];
     const artifacts = produced.length
       ? this.#deps.artifacts.record(task.artifacts, produced, this.#deps.now())
       : task.artifacts;

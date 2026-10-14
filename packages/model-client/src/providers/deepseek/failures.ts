@@ -18,6 +18,29 @@ function said(failure: FailureReport): string | undefined {
   return typeof message === "string" && message.trim() ? message : undefined;
 }
 
+/**
+ * The failures DeepSeek names as the reason an answer stopped, besides the
+ * content filter every Chat Completions provider may name (API reference,
+ * create chat completion, checked 2026-10-14).
+ */
+export function failedFinish(reason: string): ModelClientError | undefined {
+  switch (reason) {
+    case "insufficient_system_resource":
+      return new ModelClientError(
+        "modelUnavailable",
+        "DeepSeek ran out of capacity partway through the answer.",
+        { retryable: true },
+      );
+    case "aborted":
+      return new ModelClientError(
+        "networkFailure",
+        "DeepSeek interrupted the answer partway through.",
+      );
+    default:
+      return undefined;
+  }
+}
+
 export function classifyFailure(failure: FailureReport): ModelClientError {
   const sentence = said(failure);
   const wait = retryAfterMs(failure.headers);

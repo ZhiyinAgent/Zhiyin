@@ -100,14 +100,19 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 
 - Vitest runs everything. Package tests run in Node; only the renderer pays for
   a DOM.
-- There are five projects. `pnpm test` runs `packages`, `desktop`,
+- There are six projects. `pnpm test` runs `packages`, `desktop`,
   `repository` (checks over the repository as a whole, such as the lint rules)
   and `system-boundary`. `installed` starts the built app in Electron through
   Playwright, with its own data folder, so it runs after the build as its own
   gate step. Whatever is only true of a real launch is tested there: the
   preload bridge, a second copy of the app, a folder moved while the app was
   closed, history that will not open, a page drawn in the drawing process. It
-  runs in every gate, not only before a release.
+  runs in every gate, not only before a release. `live` holds the tests that
+  call a provider's real API (files named `live*.test.ts` or `*.live.test.ts`)
+  and runs only through `pnpm test:live`, so no other run spends credit.
+- A test that needs a tool, a browser or a key the machine lacks skips itself.
+  After `pnpm test` and `pnpm test:installed`, the run names every file with
+  tests that did not run, and how many.
 - `system-boundary` tests drive real browsers, Windows processes and file
   replacement. They run one file at a time, after the parallel projects, so
   shared machine resources do not skew them. Each scope has its own test
@@ -193,8 +198,12 @@ theme check, knip, `pnpm audit`, Prettier, the typecheck, the test suite, the
 build and the installed-app suite, which is not run when the build failed:
 there would be no app to start. `-Full` adds packaging; a check that the
 packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE` and
-`--inspect` (ADR 0001); a check that the packaged app holds every spelling
-dictionary unchanged; and the installed documents test run against the packed
+`--inspect` (ADR 0001), load the app only from its archive and check the
+archive against the hash in the executable; the packaged executable itself,
+started on a saved conversation and reached over Chromium's debugging port
+(`ZHIYIN_PACKAGED_APP` names it), which must show that conversation; a check
+that the packaged app holds every spelling dictionary unchanged; and the
+installed documents test run against the packed
 `app.asar` (named by `ZHIYIN_APP_ARCHIVE`), so a packaging change that stops
 document drawing fails it. Packaging is slow, so it sits behind the flag and
 runs before a release.
@@ -245,8 +254,9 @@ The theme check (`scripts/check-theme.mjs`, a gate step) holds the renderer's
 stylesheets to the theme. Every colour comes from the theme blocks: the dark
 `:root` block and the light one under `prefers-color-scheme: light`. Both
 blocks define the same tokens, and every token a rule uses is defined. No text
-is set under 12 px, and every text colour reaches 4.5:1 contrast on every
-ground of its theme. A literal colour goes unnoticed until the theme changes,
+is set under 12 px: a size in px or rem is measured, and one relative to its
+parent is written as `max(12px, …)` so it holds the floor itself. Every text
+colour reaches 4.5:1 contrast on every ground of its theme. A literal colour goes unnoticed until the theme changes,
 and an undefined token paints nothing; a DOM test catches neither. The demo
 stage, the frame drawn around the app for review, is excluded.
 

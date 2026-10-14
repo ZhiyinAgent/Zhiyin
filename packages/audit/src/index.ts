@@ -15,8 +15,6 @@
  *
  * It is not a second transcript. Nothing here is shown to the person during
  * their work, and nothing here is sent to a model.
- *
- * Boundaries and invariants: docs/architecture/features/audit/README.md
  */
 
 export * from "./audit.js";

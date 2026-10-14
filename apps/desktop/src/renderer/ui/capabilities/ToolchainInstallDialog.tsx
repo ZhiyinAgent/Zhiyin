@@ -1,12 +1,6 @@
 import type { PluginComponentState } from "@zhiyin/contract";
-import { Dialog, Icon } from "../shared/index.js";
+import { Dialog, fileSize, Icon } from "../shared/index.js";
 import styles from "./capabilities.module.css";
-
-function formatBytes(bytes: number): string {
-  return bytes >= 1_000_000
-    ? `${Math.round(bytes / 1_000_000)} MB`
-    : `${Math.max(1, Math.round(bytes / 1000))} KB`;
-}
 
 /** What setting up a component downloads, asked before anything is fetched. */
 export function ToolchainInstallDialog({
@@ -48,7 +42,7 @@ export function ToolchainInstallDialog({
           <div className={styles["install-manifest"]}>
             <div className={styles["install-manifest__head"]}>
               <span>What gets downloaded</span>
-              <span>{formatBytes(total)}</span>
+              <span>{fileSize(total)}</span>
             </div>
             <ul>
               {downloads.map((item) => (
@@ -60,7 +54,7 @@ export function ToolchainInstallDialog({
                     <small>{item.source}</small>
                   </span>
                   <span className={styles["install-manifest__size"]}>
-                    {formatBytes(item.bytes)}
+                    {fileSize(item.bytes)}
                   </span>
                 </li>
               ))}

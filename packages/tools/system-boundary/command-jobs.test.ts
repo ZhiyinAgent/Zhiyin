@@ -232,9 +232,8 @@ describe.runIf(contained)("a command that outlasts its call", () => {
     const theirs = join(root, "theirs.pid");
     await run(workspace, helper(mine), "conversation-1");
     await run(workspace, helper(theirs), "conversation-2");
-    const [minePid, theirPid] = await Promise.all(
-      [mine, theirs].map(async (file) => Number(await readFile(file, "utf8"))),
-    );
+    const minePid = Number(await readFile(mine, "utf8"));
+    const theirPid = Number(await readFile(theirs, "utf8"));
 
     await workspace.stopCommands("conversation-1");
 

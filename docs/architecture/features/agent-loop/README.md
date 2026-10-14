@@ -69,9 +69,9 @@ permission or execution.
 - `resolveApproval(taskId, requestId, decision, reason?)` and
   `resolveUserInput(taskId, requestId, response)` answer the exact pending
   request. `revokeConversationPermission` removes a conversation grant.
-- `running`, `anyRunning` and `accepts` say whether a turn runs and whether a
-  write to a conversation is still accepted. `running` is also true while a
-  specialist that outlived its turn is finishing, so Stop stays reachable.
+- `running` and `anyRunning` say whether a turn runs. `running` is also true
+  while a specialist that outlived its turn is finishing, so Stop stays
+  reachable.
 - `settleAfterRestart` and `settleEndedTurn` settle a conversation whose turn
   did not finish, at startup or once its turn has ended. `wakeSaved` delivers
   handoffs that were saved but not yet delivered.
@@ -87,8 +87,9 @@ and the `TurnHost`. The host is the app around the turn: it finds and stores
 conversations, each store checked against the writing turn, reports and lowers
 the model's window, says whether the chosen model can answer without
 reasoning, supplies the default budget and standing instructions,
-records usage and emits events. It also hears which files an action wrote and
-shows or closes the document beside the conversation for the main agent
+records usage and reports issues; its store announces each change. It also
+hears which files an action wrote, including those written before it failed,
+and shows or closes the document beside the conversation for the main agent
 (ADR 0018); the model is told what the person now sees and, after a successful
 read, the exact link to cite it with. None of this can fail the turn.
 
@@ -97,11 +98,17 @@ offered when the turn has specialists, with its `id` limited to exactly those;
 `activate_plugin`, offered while an enabled plugin is inactive; and, inside a
 specialist, `finish_specialist`. An activation's answer is the plugin's
 contents as they stand once its connectors have been reached for the first
-time, so one that refused says what it needs in that same answer. In a turn,
+time, so one that refused says what it needs in that same answer. One whose
+tools cannot then be gathered is undone, and its answer says why. In a turn,
 every other tool is offered with a `purpose` argument, listed among what a call
 has to give. The loop takes it off before the tool sees its input and shows it
 as the action's description and the approval's reason. A call that leaves it
 out still runs, and is named in the background.
+
+- `TurnOwnership`, the lifecycle tree of root turns and the work they delegate,
+  and `WorkLedger`, what one stretch of work has spent, renewed when the person
+  chooses Continue; a specialist keeps a ledger of its own.
+- The types these take and return: `WorkLimits`.
 
 ## Invariants
 
@@ -126,6 +133,8 @@ out still runs, and is named in the background.
 - Stopping a turn stops every specialist it started, including one still
   running after the turn finished. A turn that finishes on its own leaves its
   specialists running.
+- A specialist whose end cannot be saved still lets go of its conversation,
+  which no longer counts it as running.
 - A new turn cannot start while the conversation's files are being restored.
 
 ### Approvals bound to the exact action
@@ -140,7 +149,8 @@ out still runs, and is named in the background.
   for the first.
 - A prompt stays on screen until it is answered or the turn is stopped. Work
   going on beside it, the turn's or a specialist's, does not replace it, and a
-  turn that ends while a specialist's prompt waits leaves that prompt showing.
+  turn that ends or fails while a specialist's prompt waits leaves that prompt
+  showing.
 - After approval the action is inspected again. If it no longer matches what
   the person approved, such as a create that became an overwrite, it does not
   run. The model is told why and can propose it again for a fresh approval.
@@ -176,7 +186,8 @@ out still runs, and is named in the background.
   is handed to `recordDefect` and its cause is not shown in the conversation.
   A specialist that stops on such an error says the same of itself and hands
   it over the same way; a stop it accounts for, as a spent budget or a missing
-  report is, keeps its own words.
+  report is, keeps its own words. A tool that throws while it runs is handed
+  over the same way; the model is told only that the action failed.
 - Every request records its usage against its conversation, with its purpose:
   the turn, a condensing, a specialist, or background naming and repair.
 - A turn's or a specialist's request that ends before the provider counts it
@@ -311,8 +322,8 @@ out still runs, and is named in the background.
   answer or a call has begun, or when nothing waits, sending now changes
   nothing and says so, and the message is read at the next step.
 - A waiting message the person takes back becomes a draft and the model never
-  reads it. One the model was already sent stays a message of the
-  conversation.
+  reads it, even when it is taken back while an earlier one is being handed
+  over. One the model was already sent stays a message of the conversation.
 - When the connection drops after tools have completed and the client's retries
   are spent, the turn resumes once from the recorded results. Completed tools
   are not run again.
@@ -352,7 +363,9 @@ out still runs, and is named in the background.
   conversation with an automatic turn.
 - A handoff carries the specialist's report and its tool outcomes in order. The
   report is taken only when sent on its own, after the specialist has seen its
-  other calls' results.
+  other calls' results. Zhiyin's notice says only which specialist ended and
+  how; the report and outcomes follow inside it as untrusted `tool-output`,
+  since another model wrote them after reading what it was given.
 - A read specialist is offered only tools declared as reading, by Zhiyin's own
   code or by an activated plugin for its connector. A specialist's reads show
   nothing beside the conversation, and each of its actions carries its run id.
@@ -363,8 +376,8 @@ out still runs, and is named in the background.
   turn, a running specialist and reasoning still streaming are marked
   interrupted, and a running action cancelled, so no prompt is left waiting on
   a continuation that no longer exists. A handoff saved but not yet delivered
-  wakes its conversation with a turn, and jobs running when Zhiyin closed are
-  reported to the model as stopped.
+  wakes its conversation with a turn once, when that conversation is read, and
+  jobs running when Zhiyin closed are reported to the model as stopped.
 
 ## Testing notes
 

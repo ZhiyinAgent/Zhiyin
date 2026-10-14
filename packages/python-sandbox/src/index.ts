@@ -3,8 +3,6 @@
  * connector. It is `uv`-managed and kept apart from a person's own projects:
  * every `uv` command runs in the sandbox folder, so nothing in the workspace
  * decides what the sandbox contains.
- *
- * Boundaries and invariants: docs/architecture/features/python-sandbox/README.md
  */
 
 export * from "./python-sandbox.js";

@@ -13,7 +13,8 @@ import type {
 import type { ModelChoice, ModelChoiceValue } from "./choice.js";
 import type { KeptApiKey } from "./model-client.js";
 import type { ProviderCredentials } from "./credentials.js";
-import { ModelClientError } from "./failures.js";
+import { ModelClientError, withoutKey } from "./failures.js";
+import { catalogFetch } from "./keyed-fetch.js";
 import {
   refuseUnavailable,
   type CatalogFetch,
@@ -51,13 +52,15 @@ export type ProviderAccountOptions = {
   readonly region?: string;
 };
 
-const defaultCatalogFetch: CatalogFetch = (url, init) =>
-  fetch(url, {
-    headers: init.headers,
-    ...(init.method ? { method: init.method } : {}),
-    ...(init.body === undefined ? {} : { body: init.body }),
-    signal: AbortSignal.timeout(15_000),
-  });
+/**
+ * Why a model's reasoning settings are not known, when looking them up
+ * failed. Not "restart the app": a lookup that failed is forgotten, so the
+ * next question asked about this model, or the same request sent again, tries
+ * again. Telling somebody to restart sends them to do something that changes
+ * nothing.
+ */
+export const reasoningNotLoaded =
+  "Reasoning settings could not be loaded. They are read again the next time they are needed.";
 
 export class ProviderAccount {
   readonly #modelInfo: ProviderAccountOptions["modelInfo"];
@@ -175,17 +178,7 @@ export class ProviderAccount {
     const description = await this.#describe();
     return description.ok
       ? this.#provider.reasoning(description.value)
-      : {
-          status: "unavailable" as const,
-          /*
-           * Not "restart the app": `#describe` forgets a lookup that failed, so
-           * the next question asked about this model tries again. Telling
-           * somebody to restart sends them to do something that changes
-           * nothing.
-           */
-          reason:
-            "Reasoning settings could not be loaded. They are read again the next time they are needed.",
-        };
+      : { status: "unavailable" as const, reason: reasoningNotLoaded };
   }
 
   /**
@@ -269,7 +262,7 @@ export class ProviderAccount {
    * about the key: that check could not be made.
    */
   async #checkApiKey(apiKey: string): Promise<KeptApiKey> {
-    const fetcher = this.#catalogFetch ?? defaultCatalogFetch;
+    const fetcher = this.#catalogFetch ?? catalogFetch;
     const unchecked: KeptApiKey = {
       status: "unverified",
       reason: `The key was saved but could not be checked with ${this.#provider.name}. If it turns out to be wrong, requests will say so.`,
@@ -282,7 +275,7 @@ export class ProviderAccount {
     }
     if (checked.accepted) return { status: "accepted" };
     if (checked.error.retryable) return unchecked;
-    throw checked.error;
+    throw withoutKey(checked.error, apiKey);
   }
 
   async clearApiKey(): Promise<void> {

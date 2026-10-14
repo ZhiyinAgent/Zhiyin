@@ -15,6 +15,7 @@ import {
   sendAnthropicMessages,
   type AnthropicMessagesDialect,
 } from "../../wires/anthropic-messages/send.js";
+import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { anthropicModels, thinkingOff } from "./models.js";
 
@@ -105,13 +106,7 @@ async function checkKey(
 /** The models the account can use now, by Anthropic's own listing. */
 const listedByApi: ListedByApi = async (options) => {
   const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch =
-    options.fetcher ??
-    ((url, init) =>
-      fetch(url, {
-        headers: init.headers,
-        signal: AbortSignal.timeout(15_000),
-      }));
+  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
   // A thousand is the most one page holds; Anthropic lists far fewer.
   const response = await fetcher(`${host}/v1/models?limit=1000`, {
     headers: apiKey ? signed(apiKey) : {},

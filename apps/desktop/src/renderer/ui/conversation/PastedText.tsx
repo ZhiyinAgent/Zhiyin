@@ -1,12 +1,6 @@
 import type { PastedTextAttachment } from "@zhiyin/contract";
-import { Icon } from "../shared/index.js";
+import { fileSize, Icon } from "../shared/index.js";
 import styles from "./conversation.module.css";
-
-function readableSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} bytes`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 /**
  * A long paste, shown as the file it was kept as rather than as its text. It
@@ -32,7 +26,7 @@ export function PastedText({
         <Icon name="file" />
         <span className={styles["pasted-text__name"]}>{attachment.id}</span>
         <span className={styles["pasted-text__size"]}>
-          {readableSize(attachment.bytes)} ·{" "}
+          {fileSize(attachment.bytes)} ·{" "}
           {attachment.lines.toLocaleString("en-US")} lines
         </span>
       </button>

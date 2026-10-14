@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -67,6 +67,36 @@ describe("multi_edit", () => {
       "Owner: Rowan\nStatus: final",
     );
     await expect(readFile(join(root, "plan.md"), "utf8")).resolves.toBe(
+      "Owner: Rowan",
+    );
+  });
+
+  it("still declares the files it changed when a later one cannot be written", async () => {
+    const root = await workspace({
+      "notes.md": "Owner: Dana",
+      "plan.md": "Owner: Dana",
+    });
+    // Windows refuses to replace a read-only file.
+    await chmod(join(root, "plan.md"), 0o444);
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("multi_edit", {
+      edits: [
+        {
+          path: "notes.md",
+          replacements: [{ find: "Dana", replace: "Rowan" }],
+        },
+        { path: "plan.md", replacements: [{ find: "Dana", replace: "Rowan" }] },
+      ],
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      reason:
+        "plan.md could not be written. These files were already changed: notes.md. These were not: plan.md.",
+      produced: [{ path: "notes.md", change: "updated", bytes: 12 }],
+    });
+    await expect(readFile(join(root, "notes.md"), "utf8")).resolves.toBe(
       "Owner: Rowan",
     );
   });

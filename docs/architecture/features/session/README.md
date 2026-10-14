@@ -61,8 +61,6 @@ The history:
 - `inspectDamage()`, `preserveDamaged()`, `recoverReadable()` and
   `startAfresh(kept)` examine, copy aside, recover or clear a history whose
   settings will not open.
-- `list()` answers each conversation's id and title. `undo()` always refuses;
-  undoing a turn's files belongs to the rewind group.
 
 Kept beside a conversation:
 
@@ -81,6 +79,13 @@ Kept beside a conversation:
 
 Failures are `SessionStoreError`s with a `code` (`corrupted`, `unavailable`,
 `in-use`, `newer` or `outdated`), and `writtenBy` for the last two.
+
+- `defaultKeptLimits`, the limits of each kind of kept item, as the table below
+  gives them.
+- The types these take and return: `FileRead`, `KeptItem`, `KeptKind`,
+  `KeptLimits`, `KeptSource`, `LocatedItem`, `OpenedConversation`, `RecycleBin`,
+  `RecycleResult`, `SavedIndex`, `UpdateResult`, `Formats`, `Migration`,
+  `HistoryFiles`, `SavedWorkspace`, `DamageReport`.
 
 ## On disk
 
@@ -190,11 +195,10 @@ instead, so nothing a conversation is called can name a path.
 
 - **One process owns a data folder at a time.** The write queue orders one
   process's saves and cannot see another's, so a second instance is refused
-  rather than coordinated, and every write checks ownership first. On Windows
-  the lock is a file held open without sharing, which the operating system
-  lets go of when the process ends however it ended, so no process id is
-  trusted. Elsewhere a lock whose process is gone is taken over. Reading needs
-  no ownership, so a refused instance can still show what is saved.
+  rather than coordinated, and every write checks ownership first. The lock is
+  a file held open without sharing, which Windows lets go of when the process
+  ends however it ended, so no process id is trusted. Reading needs no
+  ownership, so a refused instance can still show what is saved.
 
 ### Kept beside a conversation
 
@@ -224,7 +228,8 @@ instead, so nothing a conversation is called can name a path.
   kept for another conversation is never taken.
 - Deleting a conversation removes everything it kept, and nothing of another
   conversation's. When each file was last read survives a restart, so a file
-  changed while the app was closed is noticed.
+  changed while the app was closed is noticed, and reads that finish together
+  are all remembered.
 
 ## Testing notes
 

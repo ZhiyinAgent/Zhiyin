@@ -36,7 +36,6 @@ export type CatalogFetch = (
 export type CatalogOptions = {
   readonly apiKey?: () => Promise<string | undefined>;
   readonly fetcher?: CatalogFetch;
-  readonly timeoutMs?: number;
   /** The platform asked, where the provider runs two. */
   readonly region?: string;
 };

@@ -1,6 +1,10 @@
 import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { ALLOWED_EXTERNAL_URLS, type ConnectorSetup } from "@zhiyin/contract";
+import {
+  ALLOWED_EXTERNAL_URLS,
+  travelsSecurely,
+  type ConnectorSetup,
+} from "@zhiyin/contract";
 import {
   AGENT_PLUGINS_SCHEMA,
   InvalidPluginError,
@@ -434,6 +438,10 @@ async function serversFrom(
       )
         throw new InvalidPluginError(
           `MCP server “${id}” must use an http(s) URL without credentials.`,
+        );
+      if (!travelsSecurely(parsed))
+        throw new InvalidPluginError(
+          `MCP server “${id}” must use https unless it runs on this computer.`,
         );
       return {
         id: `${pluginName}/${id}`,

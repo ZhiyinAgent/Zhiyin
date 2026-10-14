@@ -85,13 +85,31 @@ A package uses the portable Agent Plugins layout:
   change things.
 - An application connector names one of the connections the app provides
   (the browser, Git, the document compiler, the Python environment).
+- `validatePluginPackage` refuses a package whose parts do not form one valid
+  whole, with `InvalidPluginError`; `PluginStoreError` is a store operation
+  refused, with its reason as a code.
+- `AGENT_PLUGINS_SCHEMA` and `MCP_PLUGINS_SCHEMA`, the schemas a package's
+  manifest and connectors are written to.
+- `writePluginDirectory` writes a plugin a person authored as a package folder,
+  named by `slugifyPluginName`; `portableName` is the form every package and
+  component name takes.
+- `pluginOf`, the plugin that declares a component, from the component's id;
+  `validRate`, a request rate a connector may declare.
+- `SHIPPED`, `AUTHORED` and `LOCAL_IMPORT`, where a plugin came from.
+- The types these take and return: `InstalledPlugin`, `AuthoredPluginDraft`,
+  `AuthoredMcpServerDraft`, `AuthoredPluginContents`, `AuthoredSkillDraft`,
+  `AuthoredSpecialistDraft`, `PluginSource`, `PluginProvenance`, `PluginSkill`,
+  `PluginSpecialist`, `PluginMcpServer`, `PluginAppConnector`, `PluginManifest`,
+  `PluginPackage`, `PluginEditing`, `ComponentOverrideState`, `ComponentView`,
+  `DamagedPlugin`, `ComponentContent`.
 
 ## Invariants
 
 - **A package is accepted whole or refused whole.** An invalid manifest, a
   non-portable name, a path outside the package, a symbolic link, a duplicate
-  component id, a connector transport other than Streamable HTTP, a lifecycle
-  hook or a plugin UI app refuses the package before anything of it is used.
+  component id, a connector transport other than Streamable HTTP, a connector
+  address that is plain `http` anywhere but this computer, a lifecycle hook or
+  a plugin UI app refuses the package before anything of it is used.
 - **A component belongs to the package that declares it.** Its id is
   namespaced by the package, and a skill, a specialist and a connector cannot
   share an id, because a person's choices are kept by id.

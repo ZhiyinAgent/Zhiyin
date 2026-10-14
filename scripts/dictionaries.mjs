@@ -112,7 +112,10 @@ if (
     manifest,
     folder: join(repository, "apps/desktop/dictionaries"),
     download: async (url) => {
-      const response = await fetch(url);
+      // A stalled server fails the build within a minute instead of holding it.
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(60_000),
+      });
       if (!response.ok) throw new Error(`${url} answered ${response.status}.`);
       return Buffer.from(await response.arrayBuffer());
     },

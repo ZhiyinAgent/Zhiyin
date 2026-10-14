@@ -7,7 +7,7 @@ import { InMemoryMcpCredentials, ManagedMcpServers } from "@zhiyin/mcp";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
 import { FileRecovery } from "@zhiyin/recovery";
 import { WorkspaceTools } from "@zhiyin/tools";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -249,6 +249,55 @@ describe("conversation rewind composition", () => {
     expect(result.files).toEqual([{ path: "note.txt", status: "restored" }]);
     expect(await readFile(join(root, "note.txt"), "utf8")).toBe("before");
     expect(agent.snapshot().tasks[0]!.phase).toEqual({ kind: "draft" });
+  });
+
+  it("deletes the copies kept for a conversation's changes with the conversation", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-delete-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-delete-recovery-"));
+    await writeFile(join(root, "note.txt"), "before", "utf8");
+    const workspace = new WorkspaceTools(root, { shell: undefined });
+    const deps = stubDependencies(() => {});
+    let request = 0;
+    const agent = loopFrom({
+      ...deps,
+      permissions: {
+        decide: async () => ({ outcome: "allow", reason: "Test policy." }),
+      },
+      tools: workspace,
+      workspace,
+      recovery: new FileRecovery(storage),
+      rewind: new ConversationRewind(() => "rewind-files"),
+      model: {
+        ...deps.model,
+        send: async function* () {
+          request += 1;
+          if (request === 1) {
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "write-1",
+              name: "write_file",
+              argumentsDelta: JSON.stringify({
+                path: "note.txt",
+                content: "agent result",
+              }),
+            };
+          } else {
+            yield { kind: "textDelta", text: "Done" };
+          }
+          yield { kind: "done" };
+        },
+      },
+    });
+    await agent.selectWorkspace(root);
+    const taskId = await agent.createTask();
+    await agent.start(taskId, "Change the note");
+    expect(await readdir(join(storage, "recovery"))).toHaveLength(1);
+
+    await agent.deleteTask(taskId);
+
+    expect(await readdir(join(storage, "recovery"))).toEqual([]);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("agent result");
   });
 
   it("undoes one turn's files and keeps the conversation, leaving a file changed since as it is", async () => {

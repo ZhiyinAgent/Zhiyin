@@ -1,4 +1,6 @@
+import { rm } from "node:fs/promises";
 import { WorkspacePreview } from "./workspace-preview.js";
+import { WorkspaceUploads } from "./workspace-uploads.js";
 import type { ProcessContainment } from "@zhiyin/process-ownership";
 
 export type BrowserFrame = {
@@ -72,6 +74,8 @@ export type BrowserContainment = ProcessContainment;
 export interface InteractiveBrowser {
   refresh(): Promise<void>;
   readonly preview?: WorkspacePreview | undefined;
+  /** The open folder's files a page's file chooser may be given. */
+  readonly uploads?: WorkspaceUploads | undefined;
   availability(): Promise<BrowserAvailability>;
   state(): BrowserSessionState;
   /** Idempotent: opening an open session navigates it instead of starting a second one. */
@@ -116,10 +120,22 @@ export interface ConversationBrowsers {
 
 export class BrowserSessions implements ConversationBrowsers {
   readonly #create: (conversationId: string) => InteractiveBrowser;
+  readonly #outputDirectory: ((conversationId: string) => string) | undefined;
   readonly #sessions = new Map<string, InteractiveBrowser>();
 
-  constructor(create: (conversationId: string) => InteractiveBrowser) {
+  constructor(
+    create: (conversationId: string) => InteractiveBrowser,
+    options: {
+      /**
+       * The folder a conversation's browser writes into: its downloads, the
+       * copies of what it uploaded, its page records. It goes with the
+       * conversation.
+       */
+      readonly outputDirectory?: (conversationId: string) => string;
+    } = {},
+  ) {
     this.#create = create;
+    this.#outputDirectory = options.outputDirectory;
   }
 
   browser(conversationId: string): InteractiveBrowser {
@@ -138,6 +154,10 @@ export class BrowserSessions implements ConversationBrowsers {
     const browser = this.#sessions.get(conversationId);
     this.#sessions.delete(conversationId);
     await browser?.close();
+    const output = this.#outputDirectory?.(conversationId);
+    // A file that will not go yet does not keep the conversation.
+    if (output)
+      await rm(output, { recursive: true, force: true }).catch(() => {});
   }
 
   async closeAll(): Promise<void> {
@@ -164,6 +184,7 @@ export type BrowserSessionOptions = {
 
 export class BrowserSession implements InteractiveBrowser {
   readonly preview: WorkspacePreview | undefined;
+  readonly uploads: WorkspaceUploads | undefined;
   readonly #launcher: BrowserLauncher;
   readonly #viewport: BrowserViewport;
   readonly #frameListeners = new Set<(frame: BrowserFrame) => void>();
@@ -178,6 +199,9 @@ export class BrowserSession implements InteractiveBrowser {
   constructor(options: BrowserSessionOptions) {
     this.preview = options.workspaceRoot
       ? new WorkspacePreview(options.workspaceRoot)
+      : undefined;
+    this.uploads = options.workspaceRoot
+      ? new WorkspaceUploads(options.workspaceRoot)
       : undefined;
     this.#launcher = options.launcher;
     this.#viewport = options.viewport ?? { width: 1280, height: 800 };

@@ -11,7 +11,7 @@ import type {
   TaskGuidance,
   TaskPlanItem,
 } from "@zhiyin/contract";
-import type { WorkStep } from "./WorkTrace.js";
+import type { WorkStep } from "@zhiyin/contract";
 
 /**
  * Something the timeline places by when it happened, without knowing what it
@@ -33,7 +33,7 @@ type TimelinePhase =
   | { readonly kind: "draft" | "approval" | "input" | "loading" }
   | {
       readonly kind: "working" | "browser";
-      readonly steps: WorkStep[];
+      readonly steps: readonly WorkStep[];
       readonly note?: string;
       readonly retry?: { readonly readyAt: string; readonly count?: string };
     }

@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -193,10 +194,64 @@ describe.each(paths)("a %s run", (_, containment) => {
     }
   });
 
+  it("never passes on a model key Zhiyin was given, inherited or handed over", async () => {
+    process.env["ZHIYIN_OPENAI_API_KEY"] = "sk-given-to-zhiyin";
+    process.env["ZHIYIN_PARENT_ONLY"] = "parent";
+    try {
+      const names = ["ZHIYIN_OPENAI_API_KEY", "ZHIYIN_PARENT_ONLY"];
+      const inherited = await node(containment, "environment.mjs", names)();
+      const handed = await node(containment, "environment.mjs", names, {
+        environment: { ...process.env },
+      })();
+
+      for (const run of [inherited, handed])
+        expect(JSON.parse(run.stdout)).toEqual({
+          ZHIYIN_OPENAI_API_KEY: null,
+          ZHIYIN_PARENT_ONLY: "parent",
+        });
+    } finally {
+      delete process.env["ZHIYIN_OPENAI_API_KEY"];
+      delete process.env["ZHIYIN_PARENT_ONLY"];
+    }
+  });
+
   it("reads valid UTF-8 as UTF-8", async () => {
     const run = await node(containment, "bytes.mjs", ["0xC3", "0xA9"])();
 
     expect(run.stdout).toBe("é");
+  });
+});
+
+describe.runIf(process.platform === "win32")("stopping a run", () => {
+  it("ends it with Windows' own taskkill, never one placed earlier on the search path", async () => {
+    const decoys = await mkdtemp(join(tmpdir(), "zhiyin-decoy-"));
+    // A program that runs and ends at once, named as the real one.
+    await copyFile(
+      join(
+        process.env["SystemRoot"] ?? "C:\\Windows",
+        "System32",
+        "whoami.exe",
+      ),
+      join(decoys, "taskkill.exe"),
+    );
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-stop-"));
+    const stop = new AbortController();
+    const path = process.env["PATH"];
+    process.env["PATH"] = `${decoys};${path ?? ""}`;
+    try {
+      const run = node(undefined, "child.mjs", [directory], {
+        signal: stop.signal,
+      })(directory);
+      await eventually(() => existsSync(join(directory, "child.pid")));
+      const pid = Number(await readFile(join(directory, "child.pid"), "utf8"));
+
+      stop.abort();
+
+      await eventually(() => !alive(pid));
+      expect((await run).ending).toBe("stopped");
+    } finally {
+      process.env["PATH"] = path;
+    }
   });
 });
 

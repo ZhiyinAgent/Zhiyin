@@ -9,9 +9,9 @@ import {
   emptyConversationLists,
   type WorkspaceTask,
 } from "@zhiyin/contract";
+import type { LogEntry } from "@zhiyin/core";
 import { FileSessions } from "@zhiyin/session";
 import { buildCore } from "./composition.js";
-import type { LogEntry } from "./diagnostic-log.js";
 
 /** Two models of one family: one can be shown pictures, the other cannot. */
 const catalogue = {
@@ -396,6 +396,63 @@ describe("the application's composition", () => {
       expect(answered[1]).toContain(
         "This model cannot be shown pictures, so chart.png cannot be looked at here.",
       );
+    },
+  );
+
+  it.each([
+    ["an installed app ignores it", true, "https://openrouter.ai/"],
+    ["a development run sends there", false, "https://elsewhere.test/"],
+  ])(
+    "takes the model address from the environment only outside an installed app: %s",
+    { timeout: 60_000 },
+    async (_case, packaged, host) => {
+      process.env["ZHIYIN_MODEL_ENDPOINT"] =
+        "https://elsewhere.test/api/v1/chat/completions";
+      const requested: string[] = [];
+      const answering = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        (input: string | URL | Request, init?: RequestInit) => {
+          requested.push(input instanceof Request ? input.url : String(input));
+          return answering(input, init);
+        },
+      );
+      const sent: { readonly kind?: string }[] = [];
+      const core = buildCore({
+        dataDirectory,
+        builtInPluginsDirectory: fileURLToPath(
+          new URL("../../../../packages/plugins/built-in", import.meta.url),
+        ),
+        workspaceDirectory,
+        version: "test",
+        packaged,
+        send: (_channel, payload) => void sent.push(payload as object),
+        chooseFolder: async () => undefined,
+        chooseSaveLocation: async () => undefined,
+        openExternal: async () => {},
+        openPath: async () => {},
+        showInFolder: async () => {},
+        startDrawing: async () => {
+          throw new Error("Nothing is drawn in this test.");
+        },
+      });
+      core.start();
+      const completions = () =>
+        requested.filter((url) => url.endsWith("/chat/completions"));
+      try {
+        await core.receive(CHANNEL.frontendReady, []);
+        await eventually(() =>
+          sent.some((event) => event.kind === "providerSettingsChanged"),
+        );
+        await core.receive(CHANNEL.selectModel, ["z-ai/glm-5.3-flash", []]);
+        const taskId = (await core.receive(CHANNEL.createTask, [])) as string;
+        await core.receive(CHANNEL.sendMessage, [taskId, "Hello"]);
+        await eventually(() => completions().length > 0);
+      } finally {
+        await core.shutdown();
+      }
+
+      expect(completions().every((url) => url.startsWith(host))).toBe(true);
     },
   );
 });

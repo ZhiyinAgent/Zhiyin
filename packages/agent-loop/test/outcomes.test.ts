@@ -99,6 +99,36 @@ describe("AgentLoop action outcomes", () => {
       "completed",
     ]);
   });
+
+  it("keeps the error of a tool that throws while it runs, and tells the model only that it failed", async () => {
+    const thrown = new TypeError("Cannot read properties of undefined");
+    const kept: unknown[] = [];
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      tools: {
+        ...toolReturning({ ok: true, value: "" }),
+        execute: async () => {
+          throw thrown;
+        },
+      },
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Approved" }),
+      },
+      model: { ...deps.model, send: callsOnce("bash") },
+      recordDefect: (defect) => kept.push(defect),
+    });
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Check whether Python is available");
+
+    expect(kept).toEqual([{ taskId, error: thrown }]);
+    const action = loop.snapshot().tasks[0]?.actions?.[0];
+    expect(action?.status).toBe("failed");
+    expect(action?.reason).toBe(
+      "The requested action failed while it was running.",
+    );
+  });
 });
 
 /**

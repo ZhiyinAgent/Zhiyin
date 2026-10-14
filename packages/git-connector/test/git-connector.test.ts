@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -235,6 +235,65 @@ withGit("gitAutomation against a real repository", () => {
 
     expect(await gitOutput(root, ["log", "--format=%s"])).toBe("Add note");
     expect(await gitOutput(elsewhere, ["rev-list", "--all"])).toBe("");
+  });
+
+  /**
+   * A repository's own settings can name programs for git to run: a file
+   * monitor, an outside diff tool, a converter for diffs, a filter. A folder
+   * that arrives with its `.git` in it, from an archive or a shared drive,
+   * brings them along. Reading the repository runs none of them.
+   */
+  it("runs no program the repository's settings name when it is only read", async () => {
+    const ran = join(root, "ran");
+    const marking = (name: string) =>
+      `touch '${join(ran, name).replaceAll("\\", "/")}';`;
+    await mkdir(ran);
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    await writeFile(join(root, "other.txt"), "staged\n", "utf8");
+    await run("git_stage", { paths: ["other.txt"] });
+    await writeFile(
+      join(root, ".git", "info", "attributes"),
+      "*.txt diff=planted filter=planted\n",
+      "utf8",
+    );
+    for (const [key, value] of [
+      ["core.fsmonitor", `${marking("fsmonitor")} true`],
+      ["diff.external", `${marking("external")} true`],
+      ["diff.planted.textconv", `${marking("textconv")} cat`],
+      ["filter.planted.clean", `${marking("clean")} cat`],
+      ["filter.planted.smudge", `${marking("smudge")} cat`],
+      ["filter.planted.process", `${marking("process")} true`],
+      ["log.showSignature", "true"],
+      ["gpg.program", `${marking("gpg")} true`],
+    ])
+      await gitOutput(root, ["config", key as string, value as string]);
+    await writeFile(join(root, "note.txt"), "hello again\n", "utf8");
+
+    const failed: string[] = [];
+    for (const [name, args] of [
+      ["git_status", {}],
+      ["git_diff", {}],
+      ["git_diff", { staged: true }],
+      ["git_log", { limit: 5 }],
+      ["git_show", { ref: "HEAD" }],
+      ["git_branch", {}],
+      ["git_stash", { action: "list" }],
+    ] as const) {
+      const result = await run(name, args);
+      if (result.isError) failed.push(`${name}: ${result.text}`);
+    }
+    await automation.inspect("git_commit", { message: "Add other" });
+
+    expect(failed).toEqual([]);
+    expect(await readdir(ran)).toEqual([]);
+
+    // The same read, run as git runs it by default, does start them.
+    await gitOutput(root, ["diff"]).catch(() => "");
+    expect(await readdir(ran)).toEqual(
+      expect.arrayContaining(["fsmonitor", "process"]),
+    );
   });
 });
 

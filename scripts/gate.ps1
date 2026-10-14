@@ -75,6 +75,12 @@ Invoke-Step "installed" {
 if ($Full) {
     Invoke-Step "package" { pnpm package }
     Invoke-Step "packaged" { node scripts/check-packaged.mjs }
+    # The executable itself, fuses and all, opened on a saved conversation.
+    Invoke-Step "packaged launch" {
+        $env:ZHIYIN_PACKAGED_APP = (Resolve-Path "apps/desktop/release/win-unpacked/Zhiyin.exe").Path
+        try { pnpm vitest run --project installed apps/desktop/installed/packaged-app.test.ts }
+        finally { Remove-Item Env:ZHIYIN_PACKAGED_APP }
+    }
     # Every language is checked with nothing downloaded only if the installer
     # carries every dictionary, unchanged (ADR 0023).
     Invoke-Step "packaged dictionaries" { node scripts/dictionaries.mjs --check apps/desktop/release/win-unpacked/resources/dictionaries }

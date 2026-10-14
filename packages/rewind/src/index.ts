@@ -8,8 +8,6 @@
  * applied or replaced, says when files are being put back, and takes the
  * backups around each file change. Each member keeps its own rules and storage
  * (ADR 0002).
- *
- * Boundaries and invariants: docs/architecture/features/rewind/README.md
  */
 
 export * from "./rewind.js";

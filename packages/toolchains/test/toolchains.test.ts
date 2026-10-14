@@ -267,6 +267,24 @@ describe("installing a pinned program", () => {
     );
   });
 
+  it("clears what an install cut short by Zhiyin closing left, the next time it installs", async () => {
+    const directory = await temporaryRoot();
+    const abandoned = join(directory, "toolchains", ".staging", "a1b2c3d4");
+    mkdirSync(abandoned, { recursive: true });
+    await writeFile(join(abandoned, "download.zip"), "half a download");
+    const toolchains = new DownloadedToolchains({
+      directory,
+      specs: [specFor(program)],
+      download: serving(program),
+    });
+
+    await toolchains.install("typst");
+
+    expect(await readdir(join(directory, "toolchains", ".staging"))).toEqual(
+      [],
+    );
+  });
+
   it("replaces an older installed version with the pinned one", async () => {
     const directory = await temporaryRoot();
     const older = specFor(program, { version: "1.0.0" });

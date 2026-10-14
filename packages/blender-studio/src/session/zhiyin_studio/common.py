@@ -169,10 +169,6 @@ def point_text(values):
     return "(" + ", ".join(f"{v:.4g}" for v in values) + " m)"
 
 
-def angles_text(euler):
-    return "(" + ", ".join(f"{math.degrees(a):.4g}°" for a in euler) + ")"
-
-
 def scene():
     return bpy.context.scene
 

@@ -189,6 +189,12 @@ export type WorkspaceToolsOptions = {
    */
   readonly containment?: CommandContainment | undefined;
   /**
+   * Why the application cannot contain commands here, when it cannot. The
+   * shell tool is then never offered, even with a shell present, and a
+   * re-check does not change that.
+   */
+  readonly uncontained?: string | undefined;
+  /**
    * What each conversation kept that a tool can reach: a command's whole
    * output, pasted text, and when each file was last read. Supplied by the
    * application; without it, those are not offered.
@@ -241,6 +247,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   #root: string;
   #available: boolean;
   #shell: string | undefined;
+  readonly #commandsWithheld: string | undefined;
   readonly #containment: CommandContainment | undefined;
   readonly #acceptsImages: (() => boolean) | undefined;
   readonly #items: ConversationItems | undefined;
@@ -252,7 +259,15 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
     this.#available = workspaceRoot !== undefined;
     const root = resolve(workspaceRoot ?? ".");
     this.#root = root;
-    this.#shell = "shell" in options ? options.shell : resolveShell();
+    this.#commandsWithheld =
+      options.uncontained === undefined
+        ? undefined
+        : `Zhiyin cannot contain what a command starts on this computer, so it runs none. ${options.uncontained}`;
+    this.#shell = this.#commandsWithheld
+      ? undefined
+      : "shell" in options
+        ? options.shell
+        : resolveShell();
     this.#containment = options.containment;
     this.#acceptsImages = options.acceptsImages;
     this.#items = options.items;
@@ -522,6 +537,8 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
 
   /** Whether the shell tool can run here, and why not when it can't. */
   shellAvailability(): ShellAvailability {
+    if (this.#commandsWithheld)
+      return { available: false, reason: this.#commandsWithheld };
     return this.#shell ? { available: true } : shellUnavailable;
   }
 
@@ -529,7 +546,7 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   recheckShell(
     environment: NodeJS.ProcessEnv = process.env,
   ): ShellAvailability {
-    this.#shell = resolveShell(environment);
+    if (!this.#commandsWithheld) this.#shell = resolveShell(environment);
     return this.shellAvailability();
   }
 

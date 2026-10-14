@@ -6,7 +6,7 @@
  */
 
 import type { ModelChoiceValue } from "../../choice.js";
-import type { ModelClientError, ProviderError } from "../../failures.js";
+import { ModelClientError, type ProviderError } from "../../failures.js";
 import type { ModelEvent, ModelRequest } from "../../model-client.js";
 import type { SendInput } from "../../provider.js";
 import {
@@ -35,6 +35,25 @@ export type ChatCompletionsDialect = StreamingDialect & {
    */
   readonly failedFinish?: (reason: string) => ModelClientError | undefined;
 };
+
+/** The finish reasons by which the model itself ends its answer. */
+const answerEnds: ReadonlySet<string> = new Set(["stop", "tool_calls"]);
+
+/**
+ * Chat Completions' own name for an answer a content filter stopped, which
+ * any provider speaking it may send.
+ */
+function standardFailedFinish(
+  provider: string,
+  reason: string,
+): ModelClientError | undefined {
+  return reason === "content_filter"
+    ? new ModelClientError(
+        "refused",
+        `${provider}'s content filter stopped the answer.`,
+      )
+    : undefined;
+}
 
 type ProviderChunk = {
   readonly id?: unknown;
@@ -190,7 +209,8 @@ export async function* sendChatCompletions(
   const failed =
     finishReason === undefined
       ? undefined
-      : dialect.failedFinish?.(finishReason);
+      : (dialect.failedFinish?.(finishReason) ??
+        standardFailedFinish(dialect.name, finishReason));
   if (failed) throw failed;
   if (!sawDone && finishReason === undefined && !sawUsage)
     throw endedEarly(dialect);
@@ -200,8 +220,12 @@ export async function* sendChatCompletions(
       : sawDone
         ? ("sentinel" as const)
         : ("usage" as const);
+  // Only a reason that says the model ended its answer makes it complete: a
+  // reason a provider adds of its own, documented or not, may have cut it.
   const complete =
-    termination !== "usage" && finishReason !== "length" && sawUsableOutput;
+    termination !== "usage" &&
+    (finishReason === undefined || answerEnds.has(finishReason)) &&
+    sawUsableOutput;
   yield {
     kind: "done",
     ...(finishReason === undefined ? {} : { finishReason }),

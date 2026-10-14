@@ -38,6 +38,7 @@ import {
   type SavedConnections,
 } from "./saved-connections.js";
 import { BuiltInDescriptions } from "./built-in-descriptions.js";
+import { testConnection } from "./connection-test.js";
 import { validateDefinition } from "./endpoint.js";
 
 /**
@@ -150,7 +151,6 @@ type RoutedTool = {
   readonly connectionKey: string;
 };
 
-/** Long enough to read an input by; short enough not to be a second copy of it. */
 export class ManagedMcpServers implements McpServers {
   #mutations: Promise<void> = Promise.resolve();
   #enqueue(operation: () => Promise<void>): Promise<void> {
@@ -480,55 +480,14 @@ export class ManagedMcpServers implements McpServers {
     );
   }
 
-  /**
-   * A dry run against a draft definition: connects, lists tools, and closes
-   * immediately. Never touches `#connected`, `#failures`, or persisted state,
-   * so it cannot disturb a server already connected under the same id.
-   */
-  async test(
+  /** A dry run of a draft definition; see `testConnection`. */
+  test(
     definition: McpServerDefinition,
     token?: string,
   ): Promise<McpConnectionTestOutcome> {
-    let connection: McpConnection | undefined;
-    try {
-      connection = await this.#connect(definition, () =>
-        Promise.resolve(token),
-      );
-      const tools = await connection.listTools();
-      return {
-        ok: true,
-        tools: tools.map(({ name, description }) => ({
-          name,
-          enabled: true,
-          ...(description ? { description } : {}),
-        })),
-      };
-    } catch (error) {
-      // A service refusing anyone without a credential still answered: the
-      // address works, and says what it asks for.
-      if (error instanceof McpUnauthorizedError && token === undefined)
-        return (await this.#signIns.addressOffers(definition.url))
-          ? {
-              ok: false,
-              reason:
-                "This service has its own sign-in. Save the connector, then sign in to it.",
-              needs: "sign-in",
-            }
-          : {
-              ok: false,
-              reason: "This service needs an access token.",
-              needs: "token",
-            };
-      return {
-        ok: false,
-        reason:
-          error instanceof McpUnauthorizedError
-            ? UNAUTHORIZED
-            : "Could not connect to this MCP server.",
-      };
-    } finally {
-      await connection?.close().catch(() => undefined);
-    }
+    return testConnection(definition, token, this.#connect, (url) =>
+      this.#signIns.addressOffers(url),
+    );
   }
 
   async availableTools(

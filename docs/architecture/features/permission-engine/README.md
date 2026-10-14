@@ -27,8 +27,10 @@ that call (ADR 0006).
   - what the implementation declared about it: `access` (`read` or `change`)
     and `scope` (`workspace` or `outside`). Either may be missing.
 - `Decision = { outcome: 'allow' | 'ask' | 'deny', reason: string }`.
-- `GuardedPermissionEngine` is the policy the app runs. `AskPermissionEngine`
-  asks for every action.
+- `GuardedPermissionEngine` is the policy the app runs. It never answers
+  `deny`; the outcome exists so the agent loop can be given a policy that
+  refuses, and it handles one.
+- The types these take and return: `Action`, `PermissionEngine`.
 
 ## The policy
 

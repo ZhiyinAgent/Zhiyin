@@ -154,7 +154,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           title="Edit a workspace file"
           claim="Remove Babel and fix how the boxed notes are defined."
           target="rapport-enseigner-maternelle.tex"
-          command={'edit_file({"path":"rapport-enseigner-maternelle.tex"})'}
           changes={[
             {
               path: "rapport-enseigner-maternelle.tex",
@@ -172,7 +171,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           title="Edit a workspace file"
           claim="Darken the grey and explain the gold colour."
           target="page-maternelle.html"
-          command={'edit_file({"path":"page-maternelle.html"})'}
           changes={[
             {
               path: "page-maternelle.html",
@@ -202,7 +200,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           destination="Tavily"
           claim="Find the total raised at ZEvent 2026."
           target="tavily_search"
-          command={'tavily_search({"query":"ZEvent 2026 montant récolté"})'}
           invocation={{
             name: "tavily_search",
             via: "Tavily",
@@ -216,7 +213,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           title="Delete 2 items: 1 to the Recycle Bin, 1 permanently"
           target="2 items"
           detail="To the Recycle Bin, where they can be restored: drafts/old-plan.md (4.1 KB). Deleted permanently; this cannot be restored from the Recycle Bin: exports/archive.zip (18.2 GB). Windows would not move exports/archive.zip to the Recycle Bin: it is too large for it, or on a drive without one."
-          command='delete_file({"paths":["drafts/old-plan.md","exports/archive.zip"]})'
           changes={[
             { path: "drafts/old-plan.md", change: "recycled" },
             { path: "exports/archive.zip", change: "deleted" },
@@ -227,7 +223,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           title="Publish the release notes"
           target="docs.zhiyin.app"
           description="This sends the reviewed draft to the public documentation site."
-          command="pnpm docs:publish --production"
           onDecision={() => undefined}
         />
         <ApprovalPrompt
@@ -235,9 +230,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           effect="Run a command"
           claim="Runs only the invoice tests, to check the date fix."
           target="pnpm test -- --run invoice"
-          command={
-            'bash({"command":"pnpm test -- --run invoice","timeoutMs":120000})'
-          }
           onDecision={() => undefined}
         />
         <div className="lab-dock">
@@ -261,7 +253,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
                 },
               ],
             }}
-            command={'bash({"command":"cat > /tmp/parse_tables.py << EOF …"})'}
             onDecision={() => undefined}
           />
         </div>
@@ -271,7 +262,6 @@ export const actionsEntries: ComponentCatalogEntry[] = [
           detail="This replaces the current contents of docs/brief.md (4.2 KB)."
           target="docs/brief.md"
           description="The rewritten brief replaces the draft you already have."
-          command={'write_file({"path":"docs/brief.md","content":"# Brief…"})'}
           changes={[
             {
               path: "docs/brief.md",

@@ -157,6 +157,24 @@ export class PluginActivation {
       options.taskId,
       activatedPlugins,
     );
+    if (!refreshed.ok) {
+      // Kept active, it would fail every later gathering in the conversation.
+      await this.#records.replaceTask({
+        ...this.#records.task(options.taskId),
+        activatedPlugins: options.activatedPlugins,
+      });
+      const failed = {
+        ok: false as const,
+        reason: `The plugin could not be activated: ${refreshed.reason}`,
+      };
+      await this.#records.finishToolAction(
+        options.taskId,
+        options.call,
+        actionId,
+        { inspection, presentation, status: "failed", result: failed },
+      );
+      return { result: failed, ...unchanged };
+    }
     // Read again: gathering the tools reached the plugin's connectors for
     // the first time, and one that refused now says what it needs.
     const reached =
@@ -184,15 +202,11 @@ export class PluginActivation {
     return {
       result,
       activatedPlugins,
-      tools: refreshed.ok ? refreshed.value.tools : options.tools,
-      skills: refreshed.ok ? refreshed.value.skills : options.skills,
-      specialists: refreshed.ok
-        ? refreshed.value.specialists
-        : options.specialists,
-      pluginDirectory: refreshed.ok
-        ? refreshed.value.pluginDirectory
-        : options.pluginDirectory,
-      ownerOf: refreshed.ok ? refreshed.value.ownerOf : options.ownerOf,
+      tools: refreshed.value.tools,
+      skills: refreshed.value.skills,
+      specialists: refreshed.value.specialists,
+      pluginDirectory: refreshed.value.pluginDirectory,
+      ownerOf: refreshed.value.ownerOf,
     };
   }
 }

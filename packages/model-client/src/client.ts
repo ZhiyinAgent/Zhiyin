@@ -12,7 +12,8 @@ import type {
 } from "@zhiyin/contract";
 import { randomUUID } from "node:crypto";
 import { estimateCost } from "./estimated-cost.js";
-import { ModelClientError } from "./failures.js";
+import { ModelClientError, withoutKey } from "./failures.js";
+import { keyedFetch } from "./keyed-fetch.js";
 import type {
   KeptApiKey,
   ModelClient,
@@ -27,6 +28,7 @@ import type {
 import { platformOf, refuseUnavailable, type Provider } from "./provider.js";
 import {
   ProviderAccount,
+  reasoningNotLoaded,
   type ProviderAccountOptions,
 } from "./provider-account.js";
 import { withRetries, type RetryOptions } from "./retry.js";
@@ -65,7 +67,7 @@ export type ProviderModelClientOptions = ProviderAccountOptions & {
 const defaultStallTimeoutMs = 300_000;
 
 function defaultFetch(url: string, init: Parameters<ModelFetch>[1]) {
-  return fetch(url, init) as Promise<ModelFetchResponse>;
+  return keyedFetch(url, init) as Promise<ModelFetchResponse>;
 }
 
 /**
@@ -141,6 +143,12 @@ export class ProviderModelClient implements ModelClient {
         throw new ModelClientError(
           "unsupportedReasoning",
           "Reasoning settings could not be verified for this model. Try again in a moment.",
+          // A lookup that failed is tried again with the request.
+          {
+            retryable:
+              capabilities?.status === "unavailable" &&
+              capabilities.reason === reasoningNotLoaded,
+          },
         );
       if (!request.reasoning.enabled && capabilities.required)
         throw new ModelClientError(
@@ -165,29 +173,36 @@ export class ProviderModelClient implements ModelClient {
       );
     }
     const price = this.#provider.price?.(chosen.model, this.#region);
-    for await (const event of this.#provider.send({
-      endpoint: this.#endpoint,
-      apiKey,
-      chosen,
-      request: {
-        ...request,
-        messages: ownReplaysOnly(request.messages, this.#provider.id),
-      },
-      fetcher: startingWithin(
-        this.#fetcher,
-        this.#startTimeoutMs,
-        this.#provider.name,
-      ),
-      stallTimeoutMs: this.#stallTimeoutMs,
-    })) {
-      // A cost the provider did not report is estimated from its price list.
-      const estimated =
-        price && event.kind === "usage" && event.usage.costUsd === undefined
-          ? estimateCost(price, event.usage, this.#now())
-          : undefined;
-      yield estimated && event.kind === "usage"
-        ? { ...event, usage: { ...event.usage, estimatedCost: estimated } }
-        : event;
+    try {
+      for await (const event of this.#provider.send({
+        endpoint: this.#endpoint,
+        apiKey,
+        chosen,
+        request: {
+          ...request,
+          messages: ownReplaysOnly(request.messages, this.#provider.id),
+        },
+        fetcher: startingWithin(
+          this.#fetcher,
+          this.#startTimeoutMs,
+          this.#provider.name,
+        ),
+        stallTimeoutMs: this.#stallTimeoutMs,
+      })) {
+        // A cost the provider did not report is estimated from its price list.
+        const estimated =
+          price && event.kind === "usage" && event.usage.costUsd === undefined
+            ? estimateCost(price, event.usage, this.#now())
+            : undefined;
+        yield estimated && event.kind === "usage"
+          ? { ...event, usage: { ...event.usage, estimatedCost: estimated } }
+          : event;
+      }
+    } catch (error) {
+      // A lab's own sentence is passed on, and some quote the key back.
+      throw error instanceof ModelClientError
+        ? withoutKey(error, apiKey)
+        : error;
     }
   }
 

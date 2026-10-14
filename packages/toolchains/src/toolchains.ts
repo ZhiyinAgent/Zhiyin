@@ -130,6 +130,11 @@ export class DownloadedToolchains implements Toolchains {
   readonly #ready: Readonly<Record<string, Ready>>;
   readonly #installing = new Map<string, Promise<void>>();
   readonly #failures = new Map<string, string>();
+  /**
+   * What installs cut short by Zhiyin closing left, cleared once before this
+   * run's first install begins, so no install of this run is under way.
+   */
+  #leftovers: Promise<void> | undefined;
 
   constructor(options: {
     readonly directory: string;
@@ -202,6 +207,10 @@ export class DownloadedToolchains implements Toolchains {
 
   async #install(spec: ToolchainSpec, signal?: AbortSignal): Promise<void> {
     if (await this.executable(spec.id)) return;
+    await (this.#leftovers ??= rm(join(this.#root, ".staging"), {
+      recursive: true,
+      force: true,
+    }).catch(() => {}));
     // Short, so the longest path in a large archive stays within Windows'
     // 260-character limit where long paths are not enabled.
     const staging = join(this.#root, ".staging", randomUUID().slice(0, 8));

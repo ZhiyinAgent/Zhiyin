@@ -30,12 +30,6 @@ import {
   type LocatedItem,
 } from "./kept-items.js";
 
-export interface SessionSummary {
-  readonly id: string;
-  /** Always producible, even for a session trimmed for the model's context. */
-  readonly label: string;
-}
-
 /**
  * What the history holds: the conversations and the choices a person made.
  * Connection, plugin, usage, and browser state are only true while the app
@@ -132,9 +126,6 @@ export interface Sessions {
   /** When a file was last read in a conversation, as it was then. */
   lastRead(conversationId: string, path: string): Promise<FileRead | undefined>;
   noteRead(conversationId: string, path: string, read: FileRead): Promise<void>;
-  list(): Promise<readonly SessionSummary[]>;
-  /** Idempotent: undoing twice does nothing the second time. */
-  undo(turnId: string): Promise<void>;
   /** What is left of a history whose settings will not open. Changes nothing. */
   inspectDamage(): Promise<DamageReport>;
   /** Copies what is damaged somewhere safe and answers where. Changes nothing else. */
@@ -444,22 +435,5 @@ export class FileSessions implements Sessions {
         await this.#kept.forget(id).catch(() => undefined);
       }
     });
-  }
-
-  async list(): Promise<readonly SessionSummary[]> {
-    const index = await this.loadIndex();
-    return (
-      index?.conversations.map((item) => ({
-        id: item.id,
-        label: item.title,
-      })) ?? []
-    );
-  }
-
-  async undo(): Promise<void> {
-    throw new SessionStoreError(
-      "unavailable",
-      "File undo is not available yet.",
-    );
   }
 }

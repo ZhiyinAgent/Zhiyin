@@ -1,5 +1,5 @@
-import type { WorkStep } from "../conversation/index.js";
 import type {
+  ApprovalRequest as CoreApprovalRequest,
   BrowserPanelState,
   ConversationSummary,
   DocumentPanelState,
@@ -9,10 +9,7 @@ import type {
   RunningCommand,
   McpServerState as CoreMcpServerState,
   PluginState as CorePluginState,
-  FileChange as CoreFileChange,
-  TaskArtifact as CoreTaskArtifact,
   TaskAction as CoreTaskAction,
-  TaskPlanItem as CoreTaskPlanItem,
   TaskView as CoreTaskView,
   TaskInteraction as CoreTaskInteraction,
   SpecialistRun as CoreSpecialistRun,
@@ -34,103 +31,42 @@ const closedDocument: DocumentPanelState = { status: "closed", documents: [] };
 type WorkspaceSurface =
   "thread" | "library" | "usage" | "settings" | "instructions" | "preferences";
 
-export type ApprovalRequest = {
-  effect?: string;
-  detail?: string;
-  claim?: string;
-  destination?: string;
-  id: string;
-  action: string;
-  target: string;
-  reason: string;
-  command: string;
-  /** What is being called and with what, laid out rather than rendered. */
-  invocation?: import("@zhiyin/contract").ToolInvocation;
-  /** Before and after for every file the action would change, when known. */
-  changes?: readonly CoreFileChange[];
-  recovery?: import("@zhiyin/contract").ApprovalRequest["recovery"];
-  conversationRule?: import("@zhiyin/contract").ApprovalRequest["conversationRule"];
-};
-
-type TaskOutcome = {
-  title: string;
-  summary: string;
-};
-
+export type ApprovalRequest = CoreApprovalRequest;
 export type TaskAction = CoreTaskAction;
-type TaskArtifact = CoreTaskArtifact;
-type TaskPlanItem = CoreTaskPlanItem;
 export type TaskView = CoreTaskView;
 export type TaskInteraction = CoreTaskInteraction;
 export type SpecialistRun = CoreSpecialistRun;
 
-type TaskPhase =
-  | { kind: "draft" }
-  | { kind: "loading" }
-  | {
-      kind: "working";
-      steps: WorkStep[];
-      note?: string;
-      retry?: { readyAt: string; count?: string };
-    }
-  | { kind: "approval"; steps: WorkStep[]; prompt: ApprovalRequest }
-  | {
-      kind: "input";
-      steps: WorkStep[];
-      prompt: import("@zhiyin/contract").PendingUserInputRequest;
-    }
-  | { kind: "browser"; steps: WorkStep[]; note?: string }
-  | {
-      kind: "completed";
-      outcome: TaskOutcome;
-      /** Specialist runs still going in the background when this turn ended. */
-      backgroundSpecialistIds?: readonly string[];
-    }
-  | {
-      kind: "failed";
-      reason: string;
-      remedies?: readonly import("@zhiyin/contract").TurnRemedy[];
-    }
-  | { kind: "interrupted"; reason?: string };
-
-type TaskMessage = {
-  reasoning?: import("@zhiyin/contract").ReasoningTrace;
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-  attachments?: readonly import("@zhiyin/contract").MessageAttachment[];
-  interactionId?: string;
-  sequence: number;
-};
-
-export type WorkspaceTask = {
-  reasoning?: import("@zhiyin/contract").ReasoningSelection;
-  /** Absent follows the app's default. */
-  contextBudget?: CoreWorkspaceTask["contextBudget"];
-  /** The size of the last request the loop sent. */
-  contextUsage?: CoreWorkspaceTask["contextUsage"];
-  condensings: CoreWorkspaceTask["condensings"];
-  /** The standing instructions its last turn sent, by source. */
-  standingInstructions: CoreWorkspaceTask["standingInstructions"];
+/**
+ * A conversation as the window holds it: the parts of the core's it shows.
+ * The record of model requests and what the model was sent stay in the core.
+ */
+export type WorkspaceTask = Pick<
+  CoreWorkspaceTask,
+  | "reasoning"
+  | "contextBudget"
+  | "contextUsage"
+  | "condensings"
+  | "standingInstructions"
+  | "id"
+  | "title"
+  | "workspace"
+  | "updatedAt"
+  | "updatedLabel"
+  | "messages"
+  | "guidance"
+  | "actions"
+  | "conversationPermissions"
+  | "plan"
+  | "artifacts"
+  | "specialistRuns"
+  | "views"
+  | "interactions"
+  | "undos"
+  | "phase"
+> & {
   /** The last message the model now knows only from a summary. */
-  condensedThrough?: string;
-  id: string;
-  title: string;
-  /** The folder this conversation was last worked in. */
-  workspace?: CoreWorkspaceSnapshot["workspace"];
-  updatedAt: string;
-  updatedLabel: string;
-  messages: TaskMessage[];
-  guidance: CoreWorkspaceTask["guidance"];
-  actions: readonly TaskAction[];
-  conversationPermissions: CoreWorkspaceTask["conversationPermissions"];
-  plan: readonly TaskPlanItem[];
-  artifacts: readonly TaskArtifact[];
-  specialistRuns: readonly SpecialistRun[];
-  views: readonly TaskView[];
-  interactions: readonly TaskInteraction[];
-  undos: CoreWorkspaceTask["undos"];
-  phase: TaskPhase;
+  readonly condensedThrough?: string;
 };
 
 export type UsageState = CoreUsageState;

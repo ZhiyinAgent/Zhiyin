@@ -5,7 +5,7 @@ import type {
   ToolInvocationResult,
 } from "@zhiyin/contract";
 import type { GitContainment, GitInvocation } from "./run-git.js";
-import { runGit } from "./run-git.js";
+import { readGit, runGit } from "./run-git.js";
 
 export type GitToolSpec = {
   readonly name: string;
@@ -52,20 +52,22 @@ function errorResult(text: string): GitToolResult {
   };
 }
 
+/**
+ * A call that changes the repository runs as git would run it for the person,
+ * with the repository's hooks and filters; one that only reads runs none of
+ * the programs its settings name (`readGit`).
+ */
 async function invoke(
   git: string,
   root: string,
   args: readonly string[],
   signal: AbortSignal | undefined,
   containment: GitContainment | undefined,
+  reading = false,
 ): Promise<GitToolResult> {
-  const { exitCode, stdout, stderr, ending } = await runGit(
-    git,
-    root,
-    args,
-    signal,
-    containment,
-  );
+  const { exitCode, stdout, stderr, ending } = await (
+    reading ? readGit : runGit
+  )(git, root, args, signal, containment);
   // Ended by Zhiyin, not by git: said as such, with whatever git printed.
   if (ending)
     return errorResult(
@@ -124,6 +126,7 @@ const statusTool: GitToolDefinition = {
       ["status", "--porcelain=v1", "-b"],
       signal,
       containment,
+      true,
     );
   },
 };
@@ -166,9 +169,15 @@ const diffTool: GitToolDefinition = {
     return invoke(
       git,
       root,
-      ["diff", ...(staged ? ["--staged"] : [])],
+      [
+        "diff",
+        "--no-ext-diff",
+        "--no-textconv",
+        ...(staged ? ["--staged"] : []),
+      ],
       signal,
       containment,
+      true,
     );
   },
 };
@@ -218,6 +227,7 @@ const logTool: GitToolDefinition = {
       ["log", `-n${limit}`, "--pretty=format:%h %ad %an: %s", "--date=short"],
       signal,
       containment,
+      true,
     );
   },
 };
@@ -267,7 +277,14 @@ const showTool: GitToolDefinition = {
     // `ref` is already refused when it could be read as a flag
     // (`isSafeArgument`), so this needs no `--` — which would instead tell
     // git to treat `ref` as a pathspec rather than a revision.
-    return invoke(git, root, ["show", ref], signal, containment);
+    return invoke(
+      git,
+      root,
+      ["show", "--no-ext-diff", "--no-textconv", ref],
+      signal,
+      containment,
+      true,
+    );
   },
 };
 
@@ -292,7 +309,7 @@ const branchTool: GitToolDefinition = {
     };
   },
   async execute(git, root, _args, signal, containment) {
-    return invoke(git, root, ["branch", "--list"], signal, containment);
+    return invoke(git, root, ["branch", "--list"], signal, containment, true);
   },
 };
 
@@ -374,10 +391,10 @@ const commitTool: GitToolDefinition = {
     const message = commitMessage(args);
     if (!message)
       return argumentsInspection("Give a non-empty commit message.");
-    const staged = await runGit(
+    const staged = await readGit(
       git,
       root,
-      ["diff", "--staged", "--stat"],
+      ["diff", "--no-ext-diff", "--no-textconv", "--staged", "--stat"],
       undefined,
       containment,
     );
@@ -477,7 +494,7 @@ const stashTool: GitToolDefinition = {
         : action === "pop"
           ? ["stash", "pop"]
           : ["stash", "list"];
-    return invoke(git, root, argv, signal, containment);
+    return invoke(git, root, argv, signal, containment, action === "list");
   },
 };
 

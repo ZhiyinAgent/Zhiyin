@@ -7,8 +7,6 @@
  * tool name, which plugin a conversation may use, and which member a change
  * belongs to. Each member keeps its own storage, validation and execution. A
  * group owns no I/O of its own (ADR 0002).
- *
- * Boundaries and invariants: docs/architecture/features/capabilities/README.md
  */
 
 export * from "./capabilities.js";

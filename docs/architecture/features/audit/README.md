@@ -27,13 +27,16 @@ was attempted and corrected.
   the tool, the kind (`quiet-retry`, `repair-applied` or `repair-rejected`),
   the tool's refusal reason, and for a repair the arguments before and after.
   A rejected repair also says why it was rejected.
-- `read(limit?)` returns entries oldest first, or only the most recent
-  `limit`.
+- `read()` returns the entries oldest first.
 
 The log is `corrections.log` in Zhiyin's data folder, one JSON line per entry.
 It is not shown in the window and never sent to a model. Entries hold bounded
 text from the workspace with common credential formats removed; other
 sensitive text cannot be recognised reliably (ADR 0019).
+
+- `FileAuditLog` keeps the log as one line of JSON per entry, appended and never
+  rewritten, and keeps the newest `maximumAuditEntries` (5,000).
+- The types these take and return: `RepairRejection`, `AuditEntry`, `AuditLog`.
 
 ## Invariants
 

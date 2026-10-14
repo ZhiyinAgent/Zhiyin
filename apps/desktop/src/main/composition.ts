@@ -34,8 +34,13 @@ import { FileAuditLog } from "@zhiyin/audit";
 import { CHANNEL, type AppEvent, type Appearance } from "@zhiyin/contract";
 import {
   Core,
+  DiagnosticLog,
   Workspace,
+  recordCrashes,
+  reloadAfterCrash,
+  testSwitches,
   type CoreDependencies,
+  type LogEntry,
   type Notifier,
 } from "@zhiyin/core";
 import {
@@ -65,7 +70,6 @@ import { ComposedRewind, FileRewindJournal } from "@zhiyin/rewind";
 import {
   CanvasPictureFitting,
   WorkspaceTools,
-  resolveShell,
   checkRecyclable,
 } from "@zhiyin/tools";
 import {
@@ -92,7 +96,6 @@ import {
 } from "@zhiyin/document-viewer";
 import { createHash, randomUUID } from "node:crypto";
 import { PendingViewChecks } from "@zhiyin/views";
-import type { LogEntry } from "./diagnostic-log.js";
 
 /** What the composition needs from the Electron side. */
 export type Surroundings = {
@@ -103,6 +106,8 @@ export type Surroundings = {
   readonly blenderSessionScript?: string;
   readonly workspaceDirectory: string | undefined;
   readonly version: string;
+  /** An installed app, which takes no model address from the environment. */
+  readonly packaged?: boolean;
   /** Sends to the app's window while it is open. */
   readonly send: (channel: string, payload: unknown) => void;
   readonly chooseFolder: CoreDependencies["chooseFolder"];
@@ -148,6 +153,24 @@ export function savedAppearance(
 /** What the right-click menu offers at a point: the spelling feature decides. */
 export const textMenuAt = textMenu;
 
+/**
+ * The diagnostic log, started before anything else so that whatever fails from
+ * then on leaves a line behind, with what the main process throws and nobody
+ * catches recorded rather than fatal. What it keeps is the core's.
+ */
+export function startDiagnosticLog(folder: string): DiagnosticLog {
+  const log = new DiagnosticLog(folder);
+  log.prune();
+  recordCrashes(process, log);
+  return log;
+}
+
+/** What happens when the window's page crashes: the core decides. */
+export const watchForCrashes = reloadAfterCrash;
+
+/** The switches only an uninstalled build reads, for testing it: the core decides. */
+export const testSwitchesOf = testSwitches;
+
 export type { SpellcheckEngine, TextMenuItem } from "@zhiyin/spelling";
 
 export function buildCore({
@@ -156,6 +179,7 @@ export function buildCore({
   blenderSessionScript,
   workspaceDirectory,
   version,
+  packaged = false,
   send,
   chooseFolder,
   chooseSaveLocation,
@@ -190,9 +214,11 @@ export function buildCore({
    *
    * For a test run or the benchmark, ZHIYIN_MODEL fixes the model, on the
    * provider and region ZHIYIN_PROVIDER and ZHIYIN_REGION name (OpenRouter
-   * when unnamed), and ZHIYIN_MODEL_ENDPOINT sends every request elsewhere.
+   * when unnamed). Outside an installed app, ZHIYIN_MODEL_ENDPOINT sends
+   * every request elsewhere; an installed app would send its keys there.
    */
   const fixedModel = process.env["ZHIYIN_MODEL"];
+  const endpoint = packaged ? undefined : process.env["ZHIYIN_MODEL_ENDPOINT"];
   const model = new ModelProviders({
     environment: (variable) => process.env[variable],
     ...(fixedModel
@@ -208,9 +234,7 @@ export function buildCore({
           },
         }
       : { choice: new FileModelChoice(dataDirectory) }),
-    ...(process.env["ZHIYIN_MODEL_ENDPOINT"]
-      ? { endpoint: process.env["ZHIYIN_MODEL_ENDPOINT"] }
-      : {}),
+    ...(endpoint ? { endpoint } : {}),
     ...(credentialEntry ? { credentialEntry } : {}),
   });
   const containment = { open: openProcessContainer };
@@ -219,12 +243,19 @@ export function buildCore({
     containment,
     pixelDensity ? { pixelDensity } : {},
   );
+  const browserOutput = (conversationId: string) =>
+    join(
+      dataDirectory,
+      "browser-output",
+      createHash("sha256").update(conversationId).digest("hex"),
+    );
   const browsers = new BrowserSessions(
     () =>
       new BrowserSession({
         launcher: browserLauncher,
         workspaceRoot: () => workspace.workspaceRoot(),
       }),
+    { outputDirectory: browserOutput },
   );
   // One reading process for every PDF read in the core: the model's, and the
   // words compared when a person reviews a changed PDF.
@@ -234,7 +265,9 @@ export function buildCore({
     // A PDF the model reads is read in a contained process, as one the person
     // sees is drawn in one (ADR 0018).
     pdfPages,
-    shell: containmentState.available ? resolveShell() : undefined,
+    ...(containmentState.available
+      ? {}
+      : { uncontained: containmentState.reason }),
     ...(recycle
       ? { recycleBin: { recyclable: checkRecyclable, recycle } }
       : {}),
@@ -306,11 +339,7 @@ export function buildCore({
               browserAutomation(browsers.browser(conversationId), {
                 acceptsImages: async () =>
                   (await model.settings()).acceptsImages === true,
-                outputDirectory: join(
-                  dataDirectory,
-                  "browser-output",
-                  createHash("sha256").update(conversationId).digest("hex"),
-                ),
+                outputDirectory: browserOutput(conversationId),
               }),
             () =>
               describeBrowserAutomation(browserLauncher, {

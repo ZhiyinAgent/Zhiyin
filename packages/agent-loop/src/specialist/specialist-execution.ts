@@ -185,13 +185,22 @@ export type DelegationAck =
     }
   | { readonly ok: false; readonly reason: string };
 
-/** What a settled run is reported back to the model as, once delivered. */
+/**
+ * What Zhiyin says of a settled run: which specialist, and how it ended. The
+ * report is not part of it: another model wrote that, after reading what it
+ * was given, so it follows as output, data rather than instructions.
+ */
 function handoffHeader(result: SpecialistExecutionResult): string {
   const { name, id } = result.specialist;
+  const reportFollows =
+    "Its report follows as its own output: another model wrote it.";
   return result.ok
-    ? `Specialist "${name}" (${id}) finished in the background. Run: ${result.runId}. Handoff: ${JSON.stringify(result.handoff)}`
-    : `Specialist "${name}" (${id}) stopped before finishing. Run: ${result.runId}. Reason: ${result.reason}`;
+    ? `Specialist "${name}" (${id}) finished in the background. Run: ${result.runId}. ${reportFollows}`
+    : `Specialist "${name}" (${id}) stopped before finishing. Run: ${result.runId}. Reason: ${result.reason} ${reportFollows}`;
 }
+
+/** The tool a handoff's report is fenced as the output of. */
+export const handoffReportTool = "delegate_specialist";
 
 function handoffTimeline(actions: readonly TaskAction[]) {
   return actions.map((action) => ({
@@ -205,22 +214,29 @@ function handoffTimeline(actions: readonly TaskAction[]) {
   }));
 }
 
+function handoffReport(result: SpecialistExecutionResult): string {
+  return result.ok ? `Handoff: ${JSON.stringify(result.handoff)}\n` : "";
+}
+
+/** The whole report and timeline, as kept for read_file when too long. */
 export function completeHandoffMessage(
   result: SpecialistExecutionResult,
   actions: readonly TaskAction[],
 ): string {
   const timeline = handoffTimeline(actions);
-  return `${handoffHeader(result)}\nTool timeline (${timeline.length} calls, in order; recorded details are in the conversation):\n${timeline.map((line) => JSON.stringify(line)).join("\n")}`;
+  return `${handoffReport(result)}Tool timeline (${timeline.length} calls, in order; recorded details are in the conversation):\n${timeline.map((line) => JSON.stringify(line)).join("\n")}`;
 }
 
+/** The handoff notice: Zhiyin's words, and the report fenced after them. */
 export function handoffMessage(
   result: SpecialistExecutionResult,
   actions: readonly TaskAction[],
   savedOutput?: string,
-): string {
-  const full = completeHandoffMessage(result, actions);
-  if (full.length <= 12_000) return full;
+): { readonly notice: string; readonly report: string } {
   const header = handoffHeader(result);
+  const full = completeHandoffMessage(result, actions);
+  if (full.length <= 12_000) return { notice: header, report: full };
+  const report = handoffReport(result);
   const timeline = handoffTimeline(actions);
   const shown = timeline.slice(0, 10).map((line) => ({
     ...line,
@@ -229,10 +245,13 @@ export function handoffMessage(
     summary: line.summary.slice(0, 120),
   }));
   const omitted = timeline.length - shown.length;
-  const excerpt = `${header.slice(0, 7_000)}${header.length > 7_000 ? "… [report continues in the saved output]" : ""}\nTool timeline: ${timeline.length} calls; first ${shown.length}:\n${shown.map((line) => JSON.stringify(line)).join("\n")}\n${omitted} calls omitted from this notice.`;
-  return savedOutput
-    ? `${excerpt}\nRead the complete report and timeline with read_file({"path":"${savedOutput}"}); its numbered pages show the rest.`
-    : `${excerpt}\nThe complete report and timeline remain in the specialist card, but the model could not retain a readable copy. Treat this handoff as incomplete.`;
+  const excerpt = `${report.slice(0, 7_000)}${report.length > 7_000 ? "… [report continues in the saved output]\n" : ""}Tool timeline: ${timeline.length} calls; first ${shown.length}:\n${shown.map((line) => JSON.stringify(line)).join("\n")}\n${omitted} calls omitted from this notice.`;
+  return {
+    notice: savedOutput
+      ? `${header}\nOnly an excerpt follows. Read the complete report and timeline with read_file({"path":"${savedOutput}"}); its numbered pages show the rest.`
+      : `${header}\nOnly an excerpt follows. The complete report and timeline remain in the specialist card, but the model could not retain a readable copy. Treat this handoff as incomplete.`,
+    report: excerpt,
+  };
 }
 
 export class SpecialistExecution {
@@ -292,16 +311,6 @@ export class SpecialistExecution {
         .actions.filter((action) => action.specialistRunId === runId)
         .sort((a, b) => a.sequence - b.sequence)
         .map((action) => action.id);
-    await this.#storeRun(options.taskId, {
-      id: runId,
-      ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
-      specialist: options.specialist,
-      task: options.request.task,
-      depth: options.depth,
-      status: "running",
-      startedAt: this.#deps.now().toISOString(),
-      actionIds: [],
-    });
 
     const messages: ModelMessage[] = [
       ...options.fixedMessages,
@@ -340,6 +349,17 @@ export class SpecialistExecution {
     let spent = false;
 
     try {
+      // A start that cannot be saved ends the run as a failure would.
+      await this.#storeRun(options.taskId, {
+        id: runId,
+        ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
+        specialist: options.specialist,
+        task: options.request.task,
+        depth: options.depth,
+        status: "running",
+        startedAt: this.#deps.now().toISOString(),
+        actionIds: [],
+      });
       for (;;) {
         // The same round a turn runs, gathered without being shown.
         const { calls, text } = await this.#round.run(
@@ -534,13 +554,17 @@ export class SpecialistExecution {
           : error instanceof Error
             ? error.message
             : "The specialist failed before returning a handoff.";
-      const actionIds = ownActionIds();
-      await this.#finishRun(options.taskId, runId, {
-        status: controller.signal.aborted || spent ? "interrupted" : "failed",
-        reason,
-        actionIds,
-      });
-      this.#ownership.finish(childTurnId, controller);
+      // Let go even when the end cannot be saved, or the conversation would
+      // count a specialist as running for good.
+      try {
+        await this.#finishRun(options.taskId, runId, {
+          status: controller.signal.aborted || spent ? "interrupted" : "failed",
+          reason,
+          actionIds: ownActionIds(),
+        });
+      } finally {
+        this.#ownership.finish(childTurnId, controller);
+      }
       return {
         ok: false,
         runId,

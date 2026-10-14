@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import { FileSessions, historyFiles, type Sessions } from "@zhiyin/session";
-import { loopFrom, stubDependencies } from "./support.js";
+import { loopFrom, stubDependencies, until } from "./support.js";
 
 const roots: string[] = [];
 
@@ -334,6 +334,70 @@ describe("opening conversations", () => {
         keptAt: expect.stringContaining("damaged-history"),
       },
     ]);
+  });
+
+  it("hands a specialist's saved report to its conversation when that conversation is first opened", async () => {
+    const root = await temporaryRoot();
+    const waiting: WorkspaceTask = {
+      ...conversation(1),
+      specialistRuns: [
+        {
+          id: "saved-review",
+          specialist: {
+            id: "engineering/reviewer",
+            name: "Reviewer",
+            description: "Reviews work.",
+            instructions: "Review evidence.",
+            provenance: { source: "plugin", pluginId: "engineering" },
+          },
+          task: "Review the change",
+          depth: 1,
+          sequence: 1,
+          status: "completed",
+          startedAt: "2026-09-01T09:00:00.000Z",
+          finishedAt: "2026-09-01T09:01:00.000Z",
+          actionIds: [],
+          handoff: {
+            summary: "All clear.",
+            findings: [],
+            recommendations: [],
+            limitations: [],
+          },
+          handoffDelivered: false,
+        },
+      ],
+    };
+    await new FileSessions(root).saveWorkspace({
+      tasks: [conversation(0), waiting],
+      selectedTaskId: "task-0",
+      recentWorkspaces: [],
+    });
+    const deps = stubDependencies(() => {});
+    const asked: string[] = [];
+    const app = loopFrom({
+      ...deps,
+      sessions: new FileSessions(root),
+      revealDelayMs: 0,
+      model: {
+        ...deps.model,
+        send: async function* (request) {
+          asked.push(JSON.stringify(request.messages));
+          yield { kind: "textDelta" as const, text: "I read the review." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    await app.initialize();
+    await app.connectionsReady();
+
+    await app.selectTask("task-1");
+
+    await until(() => asked.length === 1 && !app.turns.anyRunning());
+    expect(asked[0]).toContain("All clear.");
+    expect(
+      app.snapshot().tasks.find((task) => task.id === "task-1")
+        ?.specialistRuns[0]?.handoffDelivered,
+    ).toBe(true);
   });
 
   it("says when the last moment before the app closed was not saved", async () => {

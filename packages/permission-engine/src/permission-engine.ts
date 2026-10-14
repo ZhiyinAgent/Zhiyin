@@ -95,13 +95,3 @@ export class GuardedPermissionEngine implements PermissionEngine {
     };
   }
 }
-
-/** The strictest policy: every valid tool call asks a person. */
-export class AskPermissionEngine implements PermissionEngine {
-  async decide(): Promise<Decision> {
-    return {
-      outcome: "ask",
-      reason: "The current policy requires an explicit decision.",
-    };
-  }
-}

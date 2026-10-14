@@ -393,6 +393,17 @@ free GLM-4.7-Flash is often overloaded (429, code 1305). Z.ai and BigModel
 accept each other's keys; Kimi, MiniMax and Qwen refuse them. Xiaomi's one
 host takes keys from both platforms' accounts.
 
+**Finish reasons.** _Documentation read and live check, 2026-10-14._ Beyond
+`stop`, `length` and `tool_calls`, DeepSeek documents `content_filter`,
+`insufficient_system_resource` and `aborted`; OpenRouter normalizes to those
+three plus `content_filter` and `error`, keeping the upstream's own as
+`native_finish_reason`; Xiaomi adds `repetition_truncation`. Kimi's,
+MiniMax's and Qwen's references list no other. Live, one plain answer and one
+tool call per lab: every Chat Completions lab sent `stop`, then `tool_calls`;
+Anthropic and MiniMax `end_turn`, then `tool_use`; OpenAI's Responses
+`completed` both times. Every request in that check was sent refusing
+redirects, and none was redirected.
+
 **Subscription plans.** _Read 2026-10-09, international terms._ Zhiyin is
 built for pay-as-you-go keys (ADR 0024). Z.ai's GLM Coding Plan allows only
 the tools Z.ai lists, and other applications only by written agreement.

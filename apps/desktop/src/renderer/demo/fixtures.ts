@@ -237,7 +237,9 @@ export function createDemoWorkspaceState(
     });
   }
 
-  const task: WorkspaceTask = structuredClone(releaseTask);
+  // A copy each scenario then changes in place.
+  const task: { -readonly [Key in keyof WorkspaceTask]: WorkspaceTask[Key] } =
+    structuredClone(releaseTask);
   task.updatedAt = new Date().toISOString();
   if (scenario === "thinking") {
     task.messages = task.messages.slice(0, 1);
@@ -403,12 +405,15 @@ export function createDemoWorkspaceState(
         sequence: 3,
       },
     ];
-    task.messages.push({
-      id: "release-assistant",
-      role: "assistant",
-      text: "The release draft is ready. Publishing is the remaining external action, so I need your decision before sending it to the documentation site.",
-      sequence: 4,
-    });
+    task.messages = [
+      ...task.messages,
+      {
+        id: "release-assistant",
+        role: "assistant",
+        text: "The release draft is ready. Publishing is the remaining external action, so I need your decision before sending it to the documentation site.",
+        sequence: 4,
+      },
+    ];
     task.plan = task.plan.map((item, index) => ({
       ...item,
       status: index < 2 ? "done" : "in_progress",
@@ -446,10 +451,12 @@ export function createDemoWorkspaceState(
     scenario === "document"
   ) {
     task.plan = task.plan.map((item) => ({ ...item, status: "done" }));
-    task.messages.push({
-      id: "release-assistant",
-      role: "assistant",
-      text: `## Release notes ready
+    task.messages = [
+      ...task.messages,
+      {
+        id: "release-assistant",
+        role: "assistant",
+        text: `## Release notes ready
 
 I checked the draft against the current branch and architecture decisions.
 
@@ -466,14 +473,15 @@ I checked the draft against the current branch and architecture decisions.
 | Public links | Verified |
 
 The final artifact is attached below.${
-        scenario === "document"
-          ? `
+          scenario === "document"
+            ? `
 
 The revenue figures are on [page 2](${reportPlace.path}#page=2) of the report, and the trend is in [the chart](${chartPlace.path}). A citation past the end, [page 9](${reportPlace.path}#page=9), is refused.`
-          : ""
-      }`,
-      sequence: 4,
-    });
+            : ""
+        }`,
+        sequence: 4,
+      },
+    ];
     task.phase = {
       kind: "completed",
       outcome: {

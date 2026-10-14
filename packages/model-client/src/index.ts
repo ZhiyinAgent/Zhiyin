@@ -1,8 +1,6 @@
 /**
  * Talks to the language model. The provider's wire format does not escape this
  * package — nothing else names a provider-specific field.
- *
- * Boundaries and invariants: docs/architecture/features/model-client/README.md
  */
 
 export * from "./model-client.js";

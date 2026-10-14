@@ -1,7 +1,5 @@
 /**
  * Lifecycle and transport for external MCP servers.
- *
- * Boundaries and invariants: docs/architecture/features/mcp/README.md
  */
 
 export * from "./mcp.js";

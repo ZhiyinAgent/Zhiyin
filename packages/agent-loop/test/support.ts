@@ -304,10 +304,6 @@ export class TestHost implements TurnHost {
     this.issues.push(notice);
     this.#emit({ kind: "workspaceSnapshot", data: this.snapshot() });
   }
-
-  emit(event: AppEvent): void {
-    this.#emit(event);
-  }
 }
 
 /**
@@ -574,8 +570,6 @@ export function stubDependencies(
         return { task, lost: false };
       },
       saveWorkspace: async () => {},
-      list: async () => [],
-      undo: async () => {},
       savePicture: async () => "picture-1",
       readPicture: async () => ({
         status: "missing" as const,
@@ -689,6 +683,7 @@ export function stubDependencies(
         reason: "No versions in this test.",
       }),
       cleanup: async () => {},
+      forgetConversation: async () => {},
     },
     guidanceModel: {
       send: async function* () {

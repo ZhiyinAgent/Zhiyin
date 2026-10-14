@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TaskAction, ToolCallInspection } from "@zhiyin/contract";
+import type {
+  TaskAction,
+  ToolCallInspection,
+  WorkspaceTask,
+} from "@zhiyin/contract";
 import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
 import type { WorkLimits } from "../src/index.js";
 import {
@@ -7,6 +11,7 @@ import {
   handoffMessage,
 } from "../src/specialist/specialist-execution.js";
 import {
+  loopAndHost,
   loopFrom,
   pluginOffering,
   pluginsOffering,
@@ -225,14 +230,18 @@ describe("specialist child execution", () => {
       specialistRunId: "review-1",
     }));
     const full = completeHandoffMessage(result, actions);
-    const notice = handoffMessage(result, actions, "output://saved-trace");
+    const { notice, report } = handoffMessage(
+      result,
+      actions,
+      "output://saved-trace",
+    );
 
     expect(full).toContain('"actionId":"action-129"');
     expect(full).toContain('"outcome":"denied"');
     expect(full).toContain('"outcome":"failed"');
-    expect(notice).toContain("120 calls omitted");
+    expect(report).toContain("120 calls omitted");
     expect(notice).toContain('read_file({"path":"output://saved-trace"})');
-    expect(notice).not.toContain('"actionId":"action-129"');
+    expect(report).not.toContain('"actionId":"action-129"');
   });
   it("attributes interleaved parent and specialist actions to their actual owner", async () => {
     const execute = vi.fn(async () => ({
@@ -796,10 +805,12 @@ describe("specialist child execution", () => {
       readonly taskId: string;
       readonly error: unknown;
     }) => void;
+    /** Saving a conversation in this state fails, as on a full disk. */
+    readonly refusesSaving?: (task: WorkspaceTask) => boolean;
   }) {
     const base = stubDependencies(() => {});
     let specialistRound = 0;
-    return loopFrom({
+    const { host } = loopAndHost({
       ...base,
       ...(options.recordDefect ? { recordDefect: options.recordDefect } : {}),
       ...(options.workLimits ? { workLimits: options.workLimits } : {}),
@@ -880,6 +891,15 @@ describe("specialist child execution", () => {
       },
       newSpecialistRunId: () => "specialist-1",
     });
+    const refuses = options.refusesSaving;
+    if (refuses) {
+      const store = host.store.bind(host);
+      host.store = async (task, saving) => {
+        if (refuses(task)) throw new Error("The disk is full.");
+        await store(task, saving);
+      };
+    }
+    return host.app;
   }
 
   const readsAFile = (round: number): ModelEvent => ({
@@ -911,6 +931,25 @@ describe("specialist child execution", () => {
     );
     return loop.snapshot().tasks[0]?.specialistRuns?.[0];
   }
+
+  it("lets go of a specialist whose end cannot be saved, so nothing is left running", async () => {
+    const loop = delegatingLoop({
+      specialist: () => [finishes("Read it.")],
+      refusesSaving: (task) =>
+        task.specialistRuns.some((run) => run.status !== "running"),
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Review this change");
+    await until(
+      () =>
+        loop.snapshot().tasks[0]?.phase.kind === "completed" &&
+        loop.snapshot().tasks[0]?.specialistRuns.length === 1,
+    );
+
+    await until(() => !loop.anyRunning());
+    expect(loop.running(taskId)).toBe(false);
+  });
 
   it("answers a specialist that finishes in the same breath as another call, and takes its report once it finishes alone", async () => {
     let secondRequest = "";

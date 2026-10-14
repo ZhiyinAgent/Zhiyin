@@ -88,3 +88,50 @@ export async function runGit(
     };
   return result;
 }
+
+/**
+ * A git call that only reads, run so it starts no program the repository's
+ * own settings name. A folder can arrive with its `.git`, from an archive or
+ * a shared drive, and those settings can name a file monitor, a signature
+ * checker and filters, each a program git would otherwise start. Diff tools
+ * and converters are left out by the calls that show changes.
+ */
+export async function readGit(
+  git: string,
+  cwd: string,
+  args: readonly string[],
+  signal?: AbortSignal,
+  containment?: GitContainment,
+): Promise<GitInvocation> {
+  // Reading settings starts nothing.
+  const filters = await runGit(
+    git,
+    cwd,
+    ["config", "--get-regexp", "^filter\\..+\\.(clean|smudge|process)$"],
+    signal,
+    containment,
+  );
+  const drivers = new Set(
+    filters.stdout
+      .split(/\r?\n/)
+      .map((line) => /^filter\.(.+)\.(?:clean|smudge|process) /.exec(line)?.[1])
+      .filter((name): name is string => name !== undefined),
+  );
+  const settings = [
+    "core.fsmonitor=false",
+    "log.showSignature=false",
+    ...[...drivers].flatMap((driver) => [
+      `filter.${driver}.clean=`,
+      `filter.${driver}.smudge=`,
+      `filter.${driver}.process=`,
+      `filter.${driver}.required=false`,
+    ]),
+  ];
+  return runGit(
+    git,
+    cwd,
+    [...settings.flatMap((setting) => ["-c", setting]), ...args],
+    signal,
+    containment,
+  );
+}

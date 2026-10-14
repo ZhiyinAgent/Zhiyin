@@ -99,6 +99,48 @@ describe("the theme check", () => {
     ]);
   });
 
+  it("refuses a size relative to its parent unless it holds the 12 px floor", () => {
+    const sheet = {
+      path: "ui/app/app.module.css",
+      text: [
+        ".a { font-size: max(12px, 0.82em); }",
+        ".b { font: max(12px, 0.88em)/1.5 serif; }",
+        ".c { font-size: 0.82em; }",
+        ".d { font: 0.88em/1.5 serif; }",
+        ".e { font-size: 90%; }",
+        ".f { font-size: smaller; }",
+        ".g { font-size: max(11px, 0.82em); }",
+      ].join("\n"),
+    };
+
+    expect(themeProblems([foundations(dark, light), sheet])).toEqual(
+      [3, 4, 5, 6]
+        .map((line) =>
+          expect.stringContaining(
+            `ui/app/app.module.css:${line}: text sized against its parent`,
+          ),
+        )
+        .concat([
+          expect.stringContaining(
+            "ui/app/app.module.css:7: text smaller than 12 px",
+          ),
+        ]),
+    );
+  });
+
+  it("reads a size in rem against the 16 px root", () => {
+    const sheet = {
+      path: "ui/app/app.module.css",
+      text: ".a { font-size: 0.85rem; }\n.b { font: 400 0.7rem / normal serif; }",
+    };
+
+    expect(themeProblems([foundations(dark, light), sheet])).toEqual([
+      expect.stringContaining(
+        "ui/app/app.module.css:2: text smaller than 12 px",
+      ),
+    ]);
+  });
+
   it("refuses a text colour that reads below 4.5:1 on a ground of its theme", () => {
     const grounds = dark.replace(
       "color-scheme: dark;",

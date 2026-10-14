@@ -827,6 +827,56 @@ describe("ProviderCredentials", () => {
     });
   });
 
+  /** The events of an answer that began, then stopped for `reason`. */
+  async function stoppedFor(reason: string) {
+    const events: unknown[] = [];
+    const client = new OpenRouterModelClient({
+      retry: noWaiting,
+      apiKey: async () => apiKey,
+      model: "m",
+      fetcher: async () =>
+        streamResponse([
+          'data: {"id":"gen-1","model":"m","choices":[{"delta":{"content":"Part"},"finish_reason":null}]}\n\n',
+          `data: {"id":"gen-1","model":"m","choices":[{"delta":{},"finish_reason":"${reason}"}]}\n\n`,
+          "data: [DONE]\n\n",
+        ]),
+    });
+    try {
+      for await (const event of client.send({
+        messages: [{ role: "user", content: "Hi" }],
+      }))
+        events.push(event);
+    } catch (error) {
+      return { events, error };
+    }
+    return { events, error: undefined };
+  }
+
+  it("says a content filter stopped the answer, and does not send it again", async () => {
+    const { events, error } = await stoppedFor("content_filter");
+
+    expect(error).toMatchObject({ code: "refused", retryable: false });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ kind: "done" }),
+    );
+  });
+
+  it("sends the request again when the model failed partway through", async () => {
+    const { error } = await stoppedFor("error");
+
+    expect(error).toMatchObject({ code: "unexplainedError", retryable: true });
+  });
+
+  it("does not call an answer complete when it stopped for a reason nobody documents", async () => {
+    const { events } = await stoppedFor("repetition_truncation");
+
+    expect(events.at(-1)).toMatchObject({
+      kind: "done",
+      finishReason: "repetition_truncation",
+      response: { complete: false },
+    });
+  });
+
   it("does not mistake terminal accounting for a completed response", async () => {
     const fetcher: ModelFetch = async () =>
       streamResponse([

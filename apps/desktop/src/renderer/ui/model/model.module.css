@@ -538,10 +538,6 @@
   text-wrap: pretty;
 }
 
-.model-check--fixed input {
-  cursor: default;
-}
-
 .model-select {
   min-height: 36px;
   padding: 0 32px 0 11px;

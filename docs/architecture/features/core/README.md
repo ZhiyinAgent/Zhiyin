@@ -88,6 +88,20 @@ answers every other command:
 - **Model settings:** `settings` holds the provider key's status, the models
   on offer and who serves them, and the model chosen. They sit beside the
   conversations because none of them touches one. The key is write-only.
+- `DiagnosticLog(folder)`, the app's local log of what went wrong, kept for 14
+  days, and `recordCrashes`, which records into it what the main process throws
+  or rejects and leaves unhandled, and keeps the app running.
+- `reloadAfterCrash(window, responses, log)` loads the window's page again after
+  it crashes, and after more than three crashes in a minute asks whether to open
+  it again or quit.
+- `testSwitches(environment, packaged)`, the switches the installed tests set,
+  honoured only when the app is not packaged.
+- `ModelSettings`, the model the app talks to as the person has set it up: the
+  providers and their keys, the models on offer and who serves them, and the
+  model chosen.
+- The types these take and return: `LogEntry`, `CrashResponses`, `TestSwitches`,
+  `Notice`, `Notifier`, `WorkspaceDependencies`, `WorkspaceTurns`,
+  `CoreWorkspace`, `CoreCommands`, `CoreDependencies`.
 
 ## Invariants
 
@@ -140,9 +154,11 @@ answers every other command:
   hold back the person's history.
 - **A launch reads the list, not the conversations.** The open conversation is
   read at launch; any other when something first needs it, settled then as it
-  would have been at launch. A damaged one is reported and stays closed while
-  every other opens; selecting it shows its report in its place. One whose
-  last save was cut off by a crash opens without it, and the person is told.
+  would have been at launch. A specialist's report saved but not yet delivered
+  wakes its conversation when that conversation is read, once the connections
+  have arrived. A damaged one is reported and stays closed while every other
+  opens; selecting it shows its report in its place. One whose last save was
+  cut off by a crash opens without it, and the person is told.
 - **Quitting always finishes.** Turns, then browsers, Blender and connections, are
   given until one deadline five seconds after quitting starts. Whatever has not
   closed is named and left. The data folder is given up either way, once the
@@ -277,8 +293,15 @@ answers every other command:
   exception nobody handled is recorded and the process keeps running. An
   error of Zhiyin's own that ended a turn is recorded with its stack and its
   conversation's id. A conversation that would not open is recorded with its
-  id and the part of it that did not read. A page that crashes is loaded again, unless it crashed
-  more than three times in a minute.
+  id and the part of it that did not read. The log and what it keeps are the
+  core's; the main process only starts it.
+- A page that crashes is loaded again. One that crashed more than three times
+  in a minute is not; the person is asked instead whether to open it again or
+  quit, and is never left with an empty window.
+- Behaviours that exist only to test the built app (a dictionary server,
+  connections that never close, a refusing credential store) are read from
+  the environment of an uninstalled build only. The installed app honours
+  none of them.
 
 ## Testing notes
 

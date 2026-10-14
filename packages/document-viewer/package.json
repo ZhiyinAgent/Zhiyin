@@ -15,7 +15,9 @@
   "dependencies": {
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/pdf-engine": "workspace:*",
-    "@zhiyin/process-ownership": "workspace:*",
     "@zhiyin/workspace-containment": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/process-ownership": "workspace:*"
   }
 }

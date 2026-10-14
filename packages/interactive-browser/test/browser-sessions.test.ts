@@ -1,7 +1,29 @@
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { BrowserSessions, type InteractiveBrowser } from "../src/index.js";
 
 describe("conversation browser sessions", () => {
+  it("takes a conversation's browser folder, its downloads among it, away with the conversation", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    const folderOf = (conversationId: string) => join(parent, conversationId);
+    for (const conversationId of ["first", "second"]) {
+      await mkdir(folderOf(conversationId));
+      await writeFile(join(folderOf(conversationId), "report.pdf"), "pdf");
+    }
+    const sessions = new BrowserSessions(() => fakeBrowser(), {
+      outputDirectory: folderOf,
+    });
+    sessions.browser("first");
+    sessions.browser("second");
+
+    await sessions.close("second");
+    await sessions.forget("first");
+
+    expect(await readdir(parent)).toEqual(["second"]);
+  });
+
   it("keeps a different browser session for each conversation and closes only its owner", async () => {
     const created = new Map<string, ReturnType<typeof fakeBrowser>>();
     const sessions = new BrowserSessions((conversationId) => {

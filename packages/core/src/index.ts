@@ -7,12 +7,17 @@
  * may not decide for itself is decided here too — which folder may be reopened
  * without a dialog, and when startup is tried again — so the Electron main
  * process only carries messages (ADR 0002).
- *
- * Boundaries and invariants: docs/architecture/features/core/README.md
  */
 
 export * from "./core.js";
 
+export {
+  DiagnosticLog,
+  recordCrashes,
+  type LogEntry,
+} from "./diagnostic-log.js";
+export { reloadAfterCrash, type CrashResponses } from "./window-recovery.js";
+export { testSwitches, type TestSwitches } from "./test-switches.js";
 export type { ModelSettings } from "./model-settings.js";
 export type { Notice, Notifier } from "./attention.js";
 export {

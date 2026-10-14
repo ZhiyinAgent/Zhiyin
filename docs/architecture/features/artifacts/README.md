@@ -32,6 +32,8 @@ session and often the file itself. Review is read-only.
   the file there, answering saved, cancelled or failed.
 - `exportView(viewTitle, svg, chooseDestination)` saves a rendered view as an
   SVG file where the person chooses.
+- `WorkspaceArtifacts` implements `Artifacts` over the open folder.
+- The types these take and return: `DestinationChooser`.
 
 ## Invariants
 
@@ -50,9 +52,14 @@ session and often the file itself. Review is read-only.
 - An export that did not happen is never reported as saved. Cancelling the
   destination choice is distinct from failing to copy.
 - Export copies outward only. This feature never writes into the workspace.
-- An SVG with scripts, embedded objects or frames, event handlers, or links to
-  anything outside itself is refused. A view's file name comes from its title,
-  and a title with no letters or digits still gives one (`view.svg`).
+- A saved SVG holds only what a still picture is made of: a list of allowed
+  elements, those the app's charts and Mermaid's diagrams draw, and anything
+  else, a script, an animation, HTML or a picture from a file among them, is
+  refused. Every link and `url(...)` points inside the drawing, a stylesheet
+  imports nothing, event handlers, comments and declarations are refused, and
+  character references are read as a browser reads them before the check. A
+  view's file name comes from its title, and a title with no letters or
+  digits still gives one (`view.svg`).
 
 ## Testing notes
 

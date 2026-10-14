@@ -1,7 +1,8 @@
-import type { McpServerDefinition } from "@zhiyin/contract";
+import { travelsSecurely, type McpServerDefinition } from "@zhiyin/contract";
 
 /**
- * Where a declared connection may be dialled: an HTTP or HTTPS endpoint that
+ * Where a declared connection may be dialled: an HTTPS endpoint, or HTTP on
+ * this computer only, so a token never crosses the network unencrypted. It
  * carries no credentials of its own, since an endpoint is displayed and kept
  * as the connection's identity.
  */
@@ -18,6 +19,10 @@ export function validateDefinition(server: McpServerDefinition) {
   if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
     throw new Error("MCP endpoints must use HTTP or HTTPS.");
   }
+  if (!travelsSecurely(endpoint))
+    throw new Error(
+      "MCP endpoints must use HTTPS unless the server runs on this computer.",
+    );
   if (
     endpoint.username ||
     endpoint.password ||

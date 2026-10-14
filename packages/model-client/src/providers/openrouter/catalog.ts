@@ -25,19 +25,12 @@ import type {
   ModelProviderList,
   ModelProviderOption,
 } from "@zhiyin/contract";
+import { catalogFetch } from "../../keyed-fetch.js";
 import type { CatalogFetch, CatalogOptions } from "../../provider.js";
 
 const catalogUrl = "https://openrouter.ai/api/v1/models";
 const endpointsUrl = (model: string) =>
   `https://openrouter.ai/api/v1/models/${model}/endpoints`;
-
-const defaultTimeoutMs = 15_000;
-
-const defaultFetch: CatalogFetch = (url, init) =>
-  fetch(url, {
-    headers: init.headers,
-    signal: AbortSignal.timeout(defaultTimeoutMs),
-  });
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null
@@ -175,7 +168,7 @@ type Read =
 
 async function read(url: string, options: CatalogOptions): Promise<Read> {
   const key = await options.apiKey?.().catch(() => undefined);
-  const fetcher = options.fetcher ?? defaultFetch;
+  const fetcher = options.fetcher ?? catalogFetch;
   let response: Awaited<ReturnType<CatalogFetch>>;
   try {
     response = await fetcher(url, {

@@ -1,9 +1,6 @@
 /**
  * PDFs and pictures shown beside the conversation, drawn as pages in a
  * contained process and sent to the window as pictures.
- *
- * Boundaries and invariants:
- * docs/architecture/features/document-viewer/README.md
  */
 
 export { serveDrawing } from "./drawing-service.js";

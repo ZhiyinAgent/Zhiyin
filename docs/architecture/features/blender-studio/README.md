@@ -79,6 +79,11 @@ for its launch; nothing listens on a port.
   - `blender_api` answers what the installed Blender's API accepts, read from
     the running Blender.
   - `blender_run_script` runs any Blender Python in the session.
+- `studioTools`, the 3D studio's tools as the model is offered them.
+- The types these take and return: `ConversationScenesOptions`, `SceneCommand`,
+  `SceneOutcome`, `SceneSessionOptions`, `SceneAutomation`,
+  `SceneAutomationOptions`, `LaunchSession`, `OpenFolder`,
+  `SessionLaunchOptions`, `SessionProcess`, `StudioTool`.
 
 ## Invariants
 

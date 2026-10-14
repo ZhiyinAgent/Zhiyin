@@ -59,7 +59,9 @@ says about itself is shown as its claim.
   reconnect the connector so the change takes effect;
   `setToolEnabled(id, toolName, enabled)` switches one tool;
   `test(definition, token?)` connects, lists the tools and closes, saving
-  nothing.
+  nothing. A test follows the endpoint rules a saved connection does, so a
+  token is never sent where a saved one could not go, and a token is kept
+  only for a connection something declares.
 - Calls: `availableTools(scope?, withheld?, onConnecting?)`,
   `inspect(name, args, scope?, withheld?)` and
   `execute(name, args, { signal, expectedIdentity, scope, excludedServerIds })`.
@@ -67,6 +69,16 @@ says about itself is shown as its claim.
   `execute`) the connections the caller does not allow, and `onConnecting`
   hears each connection the call waits for.
 - `builtInIds()`, `shutdownScope(conversationId)` and `shutdownAll()`.
+- `routedName`, a connector tool's routed name, one that fits every supported
+  model API.
+- `McpRateRefusedError`, a server that answered 429 before acting, so sending
+  again repeats nothing, and `McpUnauthorizedError`, a server that rejected the
+  credential: the remedy is a new token, not a retry.
+- `InMemoryMcpCredentials`, tokens kept for the life of the process, for tests
+  and headless use.
+- The types these take and return: `SignInOptions`, `McpConnectionFactory`,
+  `DeclaredMcpServer`, `DeclaredMcpServers`, `McpExecuteOptions`,
+  `McpConnectionTool`, `McpConnection`, `McpCredentialStore`.
 
 ## Invariants
 
@@ -94,10 +106,13 @@ says about itself is shown as its claim.
   switched off is unknown, so no declared connector is reached: each is
   closed and shown failed with the reason, and nothing is forgotten or
   written. Built-in connections need nothing saved and carry on.
-- Only HTTP and HTTPS endpoints are dialled. An endpoint that carries its own
-  credentials, in its user name, password or a token-like query parameter, is
-  refused, because an endpoint is displayed and kept as the connection's
-  identity.
+- Only HTTPS endpoints are dialled, and plain HTTP ones on this computer
+  (`localhost`, `127.0.0.1`, `[::1]`), so a credential never crosses the
+  network unencrypted. An endpoint that carries its own credentials, in its
+  user name, password or a token-like query parameter, is refused, because an
+  endpoint is displayed and kept as the connection's identity.
+- A tool description longer than 4,000 characters is cut there, so no server
+  can fill the model's window with its own words.
 
 ### Built-in connections
 

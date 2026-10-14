@@ -13,6 +13,7 @@ import {
   readFile,
   realpath,
   rename,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -307,18 +308,26 @@ async function resolveWritablePath(
   return staysInside(realRoot, target) ? target : undefined;
 }
 
-/** Replaces the file only once the new contents are completely on disk. */
+/**
+ * Replaces the file only once the new contents are completely on disk. A write
+ * that fails takes its temporary copy away with it.
+ */
 export async function writeFileAtomically(
   target: string,
   text: string,
   signal?: AbortSignal,
 ): Promise<void> {
   const temporary = resolve(dirname(target), `.zhiyin-${randomUUID()}.tmp`);
-  await writeFile(temporary, text, {
-    encoding: "utf8",
-    ...(signal ? { signal } : {}),
-  });
-  await rename(temporary, target);
+  try {
+    await writeFile(temporary, text, {
+      encoding: "utf8",
+      ...(signal ? { signal } : {}),
+    });
+    await rename(temporary, target);
+  } catch (error) {
+    await rm(temporary, { force: true });
+    throw error;
+  }
 }
 
 export async function runWriteTextFile(

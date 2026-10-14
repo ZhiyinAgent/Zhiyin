@@ -1,5 +1,4 @@
 import type {
-  AppEvent,
   CommandFileChanges,
   ReasoningSelection,
   WorkspaceTask,
@@ -127,11 +126,6 @@ export class AgentLoop {
       ),
     });
     await this.#records.announceWritten(taskId, writtenFiles([], changes));
-  }
-
-  /** Passes an event on through the host, the one stream the window hears. */
-  emit(event: AppEvent): void {
-    this.#deps.host.emit(event);
   }
 
   /**
@@ -434,12 +428,16 @@ export class AgentLoop {
     return settledAfterRestart(task);
   }
 
-  /** Rebuilds pending handoffs from saved runs after the workspace loads. */
+  /**
+   * Rebuilds pending handoffs from saved runs as their conversations are read.
+   * A handoff already waiting is not queued twice.
+   */
   wakeSaved(tasks: readonly WorkspaceTask[]): void {
     for (const task of tasks) {
       for (const run of task.specialistRuns) {
         if (run.handoffDelivered !== false || run.status === "running")
           continue;
+        if (this.#pendingHandoffs.holds(task.id, run.id)) continue;
         if (
           task.modelHistory.some(
             (entry) =>
@@ -521,28 +519,15 @@ export class AgentLoop {
   }
 
   /** Whether a turn is running in this conversation, including a specialist
-   * still finishing in the background after its own turn ended. */
+   * still finishing in the background after its own turn ended. Asked of
+   * what runs, not of the record, whose end may not have been saved. */
   running(taskId: string): boolean {
-    if (this.#activeTurns.running(taskId)) return true;
-    const task = this.#deps.host.find(taskId);
-    return (task?.specialistRuns ?? []).some((run) => run.status === "running");
+    return this.#activeTurns.runningUnder(taskId);
   }
 
   /** Whether any turn is running, not counting the one named. */
   anyRunning(exceptTaskId?: string): boolean {
     return this.#activeTurns.anyRunning(exceptTaskId);
-  }
-
-  /**
-   * Whether a write to this conversation is still accepted. A turn that was
-   * stopped owns nothing, so nothing but the record of its stopping is written
-   * for its conversation.
-   */
-  accepts(task: WorkspaceTask): boolean {
-    return !(
-      this.#activeTurns.controller(task.id)?.signal.aborted &&
-      task.phase.kind !== "interrupted"
-    );
   }
 
   /** Captures the exact turn that authored a durable write. */

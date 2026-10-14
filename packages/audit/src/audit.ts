@@ -34,7 +34,7 @@ export type AuditEntry = {
 export interface AuditLog {
   record(entry: AuditEntry): Promise<void>;
   /** Most recent last, so the file reads in the order things happened. */
-  read(limit?: number): Promise<readonly AuditEntry[]>;
+  read(): Promise<readonly AuditEntry[]>;
 }
 
 export const maximumAuditEntries = 5_000;
@@ -103,7 +103,7 @@ export class FileAuditLog implements AuditLog {
     await rename(temporary, this.#file);
   }
 
-  async read(limit?: number): Promise<readonly AuditEntry[]> {
+  async read(): Promise<readonly AuditEntry[]> {
     let source: string;
     try {
       source = await readFile(this.#file, "utf8");
@@ -121,6 +121,6 @@ export class FileAuditLog implements AuditLog {
         continue;
       }
     }
-    return limit === undefined ? entries : entries.slice(-limit);
+    return entries;
   }
 }

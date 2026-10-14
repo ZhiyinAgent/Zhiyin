@@ -2,8 +2,6 @@
  * The built-in actions the agent can take. Each tool takes typed arguments,
  * performs one action, and returns a typed result. It decides nothing about
  * whether it is allowed to run and renders nothing itself.
- *
- * Boundaries and invariants: docs/architecture/features/tools/README.md
  */
 
 export * from "./tools.js";

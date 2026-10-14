@@ -1,7 +1,8 @@
 # 0019. Data stays on this computer: keys in Credential Manager, the rest bounded in one folder and described plainly
 
 Status: partly superseded by 0025, under which only an automated run supplies a
-key, under Zhiyin's own names. The rest holds.
+key, under Zhiyin's own names, and by 0030, under which deleting a conversation
+also deletes the file copies taken for it. The rest holds.
 
 ## Decision
 

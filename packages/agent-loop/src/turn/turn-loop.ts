@@ -228,11 +228,17 @@ export class TurnLoop {
       const remedies = turnFailureRemedies(error, ledger.completedToolRounds());
       await this.#records.replaceTask({
         ...task,
-        phase: {
-          kind: "failed",
-          reason: turnFailureReason(error, ledger.completedToolRounds()),
-          ...(remedies.length ? { remedies } : {}),
-        },
+        // A specialist still waiting on the person keeps its question on
+        // screen, as when the turn finishes.
+        phase:
+          showsPrompt(task.phase) &&
+          this.#waits.awaitsAnswer(taskId, task.phase.prompt.id)
+            ? task.phase
+            : {
+                kind: "failed",
+                reason: turnFailureReason(error, ledger.completedToolRounds()),
+                ...(remedies.length ? { remedies } : {}),
+              },
       });
     } finally {
       if (this.#ownership.finish(taskId, controller)) {

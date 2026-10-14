@@ -22,7 +22,7 @@
 export const noticeKinds = [
   /** A condensed conversation, in place of the messages it condenses. */
   "summary",
-  /** A specialist's result, arriving after it settled. */
+  /** A specialist's result, arriving after it settled, its report fenced. */
   "handoff",
   /** The person chose Pause: report now. */
   "pause",
@@ -71,10 +71,19 @@ function attribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-export function harnessNotice(kind: NoticeKind, text: string): string {
+/**
+ * A notice in Zhiyin's voice. What it carries that Zhiyin did not write, such
+ * as a specialist's report, follows fenced as output inside it.
+ */
+export function harnessNotice(
+  kind: NoticeKind,
+  text: string,
+  output?: { readonly tool: string; readonly content: string },
+): string {
   if (!(noticeKinds as readonly string[]).includes(kind))
     throw new Error(`No part of Zhiyin sends a "${kind}" notice.`);
-  return `<zhiyin-notice kind="${kind}">${inert(text)}</zhiyin-notice>`;
+  const fenced = output ? toolOutput(output.tool, output.content) : "";
+  return `<zhiyin-notice kind="${kind}">${inert(text)}${fenced}</zhiyin-notice>`;
 }
 
 /** What a tool returned, as data to weigh and never as instructions. */

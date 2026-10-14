@@ -132,6 +132,25 @@ describe("portable plugin directories", () => {
     });
   });
 
+  it("refuses a connector reached over plain http, unless it runs on this computer", async () => {
+    const parent = await temporaryRoot("plain-http");
+    const remote = await writePackage(parent, {
+      name: "remote-plain",
+      mcp: { url: "http://search.example/mcp" },
+    });
+    const local = await writePackage(parent, {
+      name: "local-plain",
+      mcp: { url: "http://localhost:3100/mcp" },
+    });
+
+    await expect(loadPluginDirectory(remote, personal)).rejects.toThrow(
+      "MCP server “search” must use https unless it runs on this computer.",
+    );
+    expect((await loadPluginDirectory(local, personal)).mcpServers).toEqual([
+      expect.objectContaining({ url: "http://localhost:3100/mcp" }),
+    ]);
+  });
+
   it("reads the request rate a connector declares, and refuses one that is not a positive number", async () => {
     const parent = await temporaryRoot("request-rate");
     const paced = await writePackage(parent, {
