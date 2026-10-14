@@ -11,7 +11,7 @@ import { notices } from "./plan-fixture.js";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
 /** Reasoning the loop counts as about this many tokens. */
-const thought = (tokens: number) => "x".repeat(tokens * 3);
+const thought = (tokens: number) => "x".repeat(tokens * 4.5);
 
 /** Reasons for as long as anyone listens. */
 async function* reasonsWithoutEnd(
@@ -25,6 +25,9 @@ async function* reasonsWithoutEnd(
 
 function setUp(
   answer: (request: ModelRequest, number: number) => AsyncIterable<ModelEvent>,
+  limit: { readonly longestThoughtTokens?: number } = {
+    longestThoughtTokens: 100,
+  },
 ) {
   const requests: ModelRequest[] = [];
   const seen: AppEvent[] = [];
@@ -32,7 +35,7 @@ function setUp(
   const loop = loopFrom({
     ...deps,
     revealDelayMs: 0,
-    longestThoughtTokens: 100,
+    ...limit,
     model: {
       ...deps.model,
       send: (request) => {
@@ -137,6 +140,22 @@ describe("a model that reasons at length", () => {
     expect(loop.snapshot().tasks[0]?.messages.at(-1)?.text).toBe(
       "Here is the plan. And the detail.",
     );
+  });
+
+  it("is not stopped before a wordy model has reasoned 50,000 of its own tokens", async () => {
+    // DeepSeek V4.1 Flash wrote 4.48 bytes of reasoning a token: 160 KB is
+    // about 36,000 of its tokens, a hard step it then acts on.
+    const { loop, requests } = setUp(async function* () {
+      for (let sent = 0; sent < 160_000; sent += 4_000)
+        yield { kind: "reasoningDelta", text: "x".repeat(4_000) };
+      yield { kind: "textDelta", text: "Decided." };
+      yield { kind: "done", finishReason: "stop" };
+    }, {});
+
+    await loop.start(await loop.createTask(), "Design a stand");
+
+    expect(requests).toHaveLength(1);
+    expect(loop.snapshot().tasks[0]?.messages.at(-1)?.text).toBe("Decided.");
   });
 
   it("is held to the same limit whatever reasoning effort the person chose", async () => {

@@ -301,8 +301,10 @@ out still runs, and is named in the background.
   arrives. The wait before a repeated request is counted down instead, and
   silence is counted from when the repeat is sent.
 - While the model reasons and has said and called nothing yet, the
-  conversation says it is thinking. A request that reasons past about 50,000
-  tokens that way, at any reasoning effort, is stopped and asked once, in a
+  conversation says it is thinking. A request that reasons past 50,000
+  tokens that way, at any reasoning effort, counted at the most bytes a token
+  has been measured to take so that no model is stopped short of that, is
+  stopped and asked once, in a
   `thinking` notice, to act on what it knows: call a tool, answer, or ask one
   question. What it reasoned leaves no empty answer behind, and a message the
   person added meanwhile goes with the new request. Stopped twice in a row,

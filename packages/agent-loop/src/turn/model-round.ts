@@ -59,14 +59,21 @@ const thinkingNote = "Thinking";
 
 /**
  * How much one request may reason before it has answered or called anything,
- * in tokens as the loop estimates them: three bytes each, which is within two
- * in a hundred of what Xiaomi MiMo counted for its own reasoning. Several
- * times what a hard step takes a model that then acts, and well short of a
- * request that reasons for half an hour and answers nothing. The same at every
- * reasoning effort: it is already above the reasoning a provider allows one
- * request at its highest.
+ * in tokens. Several times what a hard step takes a model that then acts, and
+ * well short of a request that reasons for half an hour and answers nothing.
+ * The same at every reasoning effort: it is already above the reasoning a
+ * provider allows one request at its highest.
  */
 const longestThoughtTokens = 50_000;
+
+/**
+ * The reasoning is counted as it arrives, in bytes, at the most bytes a token
+ * has been measured to take, so no model measured is stopped before it has
+ * reasoned the limit in its own tokens: DeepSeek V4.1 Flash wrote 4.48 bytes a
+ * reasoning token in a 3D run (602,574 bytes for 134,429 tokens), Xiaomi MiMo
+ * about 3.
+ */
+const reasoningBytesPerToken = 4.5;
 
 /**
  * How long after a request the next one is taken to read it from the
@@ -361,7 +368,7 @@ export class ModelRound {
           thinking = true;
           await this.#note(taskId, thinkingNote);
         }
-        if (attempt.reasoningBytes / 3 > longestThought) {
+        if (attempt.reasoningBytes / reasoningBytesPerToken > longestThought) {
           thought.abort();
           throw new ThoughtTooLong();
         }
