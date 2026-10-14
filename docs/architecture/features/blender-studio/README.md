@@ -161,8 +161,9 @@ for its launch; nothing listens on a port.
   replacing an existing file ask again, and offer only that exact call.
 - **A script says what it can reach.** It is asked for every time, and its
   approval says, beside the code, that it can change any file in the
-  workspace and none outside it, and that going back restores only the scene
-  file. A repair never rewrites
+  workspace and none outside it, that it can read any file the person's
+  account can read and use the network, and that going back restores only the
+  scene file. A repair never rewrites
   its code. It runs in the workspace folder, so a workspace path opens as it
   is.
 - **Only the preview Zhiyin asked for is read.** A preview file Blender names

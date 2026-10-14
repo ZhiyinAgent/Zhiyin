@@ -35,12 +35,17 @@ describe("a shell command that deletes", () => {
     ["echo $(rm notes.md)", "rm"],
     ["echo `rm notes.md`", "rm"],
     ["bash -c 'rm notes.md'", "rm"],
+    ["bash -lc 'rm notes.md'", "rm"],
+    ['sh -ec "rm -rf build"', "rm"],
+    ["bash -o pipefail -c 'rm notes.md'", "rm"],
     ["cmd /c del notes.md", "del"],
     ['cmd.exe /c "rd /s /q build"', "rd"],
     ['powershell -Command "Remove-Item build -Recurse"', "Remove-Item"],
     ["git clean -fdx", "git clean"],
     ["git rm notes.md", "git rm"],
     [`python -c "import shutil; shutil.rmtree('build')"`, "shutil.rmtree"],
+    [`python3 -Bc "import os; os.remove('notes.md')"`, "os.remove"],
+    [`py -c"import os; os.remove('notes.md')"`, "os.remove"],
     [`node -e "require('fs').rmSync('build', { recursive: true })"`, "rmSync"],
   ])("refuses %s and points to delete_file", async (command, named) => {
     expect(await inspect(command)).toEqual({
@@ -58,6 +63,8 @@ describe("a shell command that deletes", () => {
     "mv draft.md final.md",
     "git rm --cached notes.md",
     "npm run build",
+    "bash -l build.sh",
+    "python -B tidy.py",
   ])("lets %s through to the person's approval", async (command) => {
     expect(await inspect(command)).toMatchObject({
       ok: true,

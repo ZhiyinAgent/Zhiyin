@@ -69,8 +69,8 @@ call with `tool_choice` never sent.
   balance endpoint where the lab has one, otherwise the cheapest request that
   proves the key, named in the provider's profile. One environment variable
   per provider supplies a key for development.
-- **The stored choice names its provider.** It becomes provider, region (or
-  model and upstreams, saved as one document. A choice
+- **The stored choice names its provider.** It becomes provider, region (where
+  the lab has two), model and upstreams, saved as one document. A choice
   without a provider is an OpenRouter choice, so the existing file reads
   unchanged. ADR 0022 does not cover the model choice, and this needs no
   migration.

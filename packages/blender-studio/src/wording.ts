@@ -440,6 +440,11 @@ export function scriptRows(code: string): Row[] {
         "any file in the workspace, and none outside it; going back restores only the scene file",
       readable: true,
     },
+    {
+      name: "Can also reach",
+      value: "any file your account can read, and the network",
+      readable: true,
+    },
   ];
 }
 

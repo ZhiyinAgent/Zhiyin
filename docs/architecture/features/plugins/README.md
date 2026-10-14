@@ -42,6 +42,8 @@ expected and intended (ADR 0012).
   switched on, how it is edited, and its skills, specialists, connectors and
   application connectors, each with its own switch and edit state. A
   component id is always `<plugin>/<component>`.
+- `damaged()` answers the installed packages `list()` leaves out because they
+  could not be opened, each with its version and why.
 - `builtInNames()` answers the catalog's plugin names in catalog order; the
   onboarding question is asked from it.
 - `setEnabled(name, enabled)` and `setComponentEnabled(id, enabled)` record a
@@ -106,6 +108,10 @@ A package uses the portable Agent Plugins layout:
   rolling back switches to it whole.
 - **Changes are serialized,** so concurrent requests never lose a package or a
   choice.
+- **A damaged package fails alone.** An installed package that cannot be
+  opened, or does not match its installation record, is set apart with the
+  reason: every other package is still listed, it can be removed, and the
+  choices kept for it wait in case it opens again.
 - **Choices survive a restart**, and a damaged settings file is refused rather
   than read as empty.
 - **A choice about something that is gone is forgotten.** Removing a package

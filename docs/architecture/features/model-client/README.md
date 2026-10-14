@@ -34,7 +34,8 @@ trust boundary.
 
 ## Public interface
 
-`ModelClient`, implemented by `OpenRouterModelClient`:
+`ModelClient`, implemented by `ModelProviders`, which the app talks to and
+which is described below, and by `OpenRouterModelClient` for OpenRouter alone:
 
 - `send(request)` returns an `AsyncIterable<ModelEvent>`. A request carries
   messages (system, user, assistant with its tool calls, tool results) and may
@@ -69,7 +70,9 @@ trust boundary.
   with a reason instead of an empty list when the catalogue cannot be read.
 - `selectModel(model, providers)` saves both as one change. An empty list
   means unrestricted routing.
-- `setApiKey(value)` checks a key and stores it. `clearApiKey()` removes it.
+- `setApiKey(value)` checks a key and stores it, and answers whether it was
+  checked (`accepted`) or kept unchecked (`unverified`, with the reason). A
+  key that is refused or cannot be stored throws. `clearApiKey()` removes it.
 
 `ModelProviders` is the `ModelClient` the app talks to: each request and
 each of the commands above follows the person's choice. It is also the
@@ -296,7 +299,7 @@ sends every request to another host.
   the platform whose currency the account's balance names. A key it refuses
   is never stored and never replaces a working one. When the provider cannot be
   reached, or answers in a way that says nothing about the key, the key is
-  kept and the error says it could not be checked, so someone offline is not
+  kept and the answer says it could not be checked, so someone offline is not
   told their key is wrong.
 - **The key never appears in errors, events or settings.** A key supplied by
   the environment shows as the active source, without its value.

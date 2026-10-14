@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import styles from "./shared.module.css";
 import { InsideLayer, useDismiss } from "./useDismiss.js";
+import { useModalFocus } from "./useModalFocus.js";
 import { WindowLayer } from "./WindowLayer.js";
 
 export function Dialog({
@@ -20,41 +21,15 @@ export function Dialog({
   const dialog = useRef<HTMLDivElement>(null);
   const layer = useDismiss(true, [dialog], onClose, { closeOnBlur: false });
 
+  useModalFocus(dialog);
   useEffect(() => {
-    const returnTo =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : undefined;
-    dialog.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !dialog.current) return;
-      const focusable = [
-        ...dialog.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), [href], input:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])',
-        ),
-      ];
-      const first = focusable[0];
-      const last = focusable.at(-1);
-      if (!first || !last) {
-        event.preventDefault();
-      } else if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      returnTo?.focus();
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   return (

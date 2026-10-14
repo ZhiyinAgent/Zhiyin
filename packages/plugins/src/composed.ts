@@ -9,6 +9,7 @@ import {
   portableName,
   type ComponentContent,
   type ComponentView,
+  type DamagedPlugin,
   type PluginPackage,
   type PluginView,
   type Plugins,
@@ -21,7 +22,7 @@ import {
   type FilePluginSettings,
   type PluginSettingsState,
 } from "./settings.js";
-import type { FilePluginStore } from "./store.js";
+import type { DamagedInstall, FilePluginStore } from "./store.js";
 
 export function slugifyPluginName(displayName: string): string {
   const slug = displayName
@@ -176,6 +177,19 @@ export class ComposedPlugins implements Plugins {
     return entries.map((entry) => view(entry, settings));
   }
 
+  async damaged(): Promise<readonly DamagedPlugin[]> {
+    const { damaged } = await this.#store.list();
+    return damaged.map((item) => ({
+      name: item.name,
+      version: item.activeVersion,
+      editing:
+        item.provenance.sourceId === AUTHORED.sourceId
+          ? "authored"
+          : "override",
+      reason: item.reason,
+    }));
+  }
+
   async builtInNames(): Promise<readonly string[]> {
     return (await this.#builtInPackages()).map(
       (plugin) => plugin.manifest.name,
@@ -269,7 +283,10 @@ export class ComposedPlugins implements Plugins {
 
   remove(name: string): Promise<void> {
     return this.#serial(async () => {
-      await this.#installed(name, "removed");
+      // A damaged package is in no list, and removing it is the way out.
+      const { damaged } = await this.#store.list();
+      if (!damaged.some((item) => item.name === name))
+        await this.#installed(name, "removed");
       await this.#store.remove(name);
       await this.#settings.forgetPlugin(name);
     });
@@ -329,11 +346,18 @@ export class ComposedPlugins implements Plugins {
   }
 
   async #entries(): Promise<readonly Entry[]> {
-    const [builtIns, installed] = await Promise.all([
+    return (await this.#inventory()).entries;
+  }
+
+  async #inventory(): Promise<{
+    readonly entries: readonly Entry[];
+    readonly damaged: readonly DamagedInstall[];
+  }> {
+    const [builtIns, { installed, damaged }] = await Promise.all([
       this.#builtInPackages(),
       this.#store.list(),
     ]);
-    return [
+    const entries = [
       ...builtIns.map((plugin) => ({ plugin })),
       ...installed.map((item) => ({
         plugin: item.package,
@@ -342,6 +366,7 @@ export class ComposedPlugins implements Plugins {
           : {}),
       })),
     ];
+    return { entries, damaged };
   }
 
   async #requireEntry(name: string): Promise<Entry> {
@@ -397,12 +422,20 @@ export class ComposedPlugins implements Plugins {
     throw new PluginStoreError("notFound", `Component “${id}” does not exist.`);
   }
 
-  /** Forgets choices about anything no longer installed or declared. */
+  /**
+   * Forgets choices about anything no longer installed or declared. A damaged
+   * package is still installed: its choices wait for it to open again.
+   */
   async #reconcile(): Promise<void> {
-    const entries = await this.#entries();
+    const { entries, damaged } = await this.#inventory();
+    const unreadable = damaged.map((item) => item.name);
     await this.#settings.retain(
-      new Set(entries.map((entry) => entry.plugin.manifest.name)),
+      new Set([
+        ...entries.map((entry) => entry.plugin.manifest.name),
+        ...unreadable,
+      ]),
       new Set(entries.flatMap((entry) => componentIds(entry.plugin))),
+      new Set(unreadable),
     );
     this.#reconciled = true;
   }

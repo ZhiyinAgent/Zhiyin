@@ -11,8 +11,8 @@
 
 import { describe, expect, it } from "vitest";
 import type { ModelEvent } from "@zhiyin/model-client";
-import type { ToolInvocationResult } from "@zhiyin/contract";
-import { stubDependencies, until, loopFrom } from "./support.js";
+import { VisibleError, type ToolInvocationResult } from "@zhiyin/contract";
+import { loopAndHost, loopFrom, stubDependencies, until } from "./support.js";
 
 /** A promise a test opens and closes by hand. */
 function gate() {
@@ -61,6 +61,67 @@ describe("AgentLoop turn ownership", () => {
       .join(" ");
     expect(texts).toContain("Answer from the second turn.");
     expect(texts).not.toContain("Answer from the stopped turn.");
+  });
+
+  it("gives the conversation back when its turn fails before it starts", async () => {
+    const { host } = loopAndHost(stubDependencies(() => {}));
+    const loop = host.app;
+    const taskId = await loop.createTask();
+    const enter = host.enterFolderOf.bind(host);
+    host.enterFolderOf = async () => {
+      throw new VisibleError("The folder could not be opened.");
+    };
+
+    await expect(loop.start(taskId, "First question")).rejects.toThrow(
+      "The folder could not be opened.",
+    );
+    host.enterFolderOf = enter;
+
+    expect(loop.running(taskId)).toBe(false);
+    await loop.start(taskId, "Second question");
+    expect(
+      loop
+        .snapshot()
+        .tasks[0]!.messages.filter((message) => message.role === "user")
+        .map((message) => message.text),
+    ).toEqual(["Second question"]);
+  });
+
+  it("ends a stopped conversation's commands even when the stop cannot be saved", async () => {
+    const held = gate();
+    const stopped: string[] = [];
+    const deps = stubDependencies(() => {});
+    const { host } = loopAndHost({
+      ...deps,
+      tools: {
+        ...deps.tools,
+        stopCommands: async (conversationId: string) => {
+          stopped.push(conversationId);
+        },
+      },
+      model: {
+        ...deps.model,
+        send: async function* (): AsyncGenerator<ModelEvent> {
+          await held.opened;
+          yield { kind: "done" };
+        },
+      },
+    });
+    const loop = host.app;
+    const taskId = await loop.createTask();
+    const running = loop.start(taskId, "Keep busy");
+    await until(() => loop.snapshot().tasks[0]?.phase.kind === "working");
+    const store = host.store.bind(host);
+    host.store = async () => {
+      throw new Error("The disk is full.");
+    };
+
+    await expect(loop.cancel(taskId)).rejects.toThrow("The disk is full.");
+
+    expect(stopped).toEqual([taskId]);
+    host.store = store;
+    held.release();
+    await running.catch(() => {});
   });
 
   it("survives a late answer arriving for a conversation that was deleted", async () => {

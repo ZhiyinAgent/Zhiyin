@@ -9,7 +9,7 @@ import type { BrowserAutomation } from "@zhiyin/interactive-browser";
 import type { GitAutomation } from "@zhiyin/git-connector";
 import type { SceneAutomation } from "@zhiyin/blender-studio";
 import type { McpServers } from "@zhiyin/mcp";
-import type { PluginView, Plugins } from "@zhiyin/plugins";
+import type { DamagedPlugin, PluginView, Plugins } from "@zhiyin/plugins";
 import {
   ComposedCapabilities,
   browserConnection,
@@ -131,6 +131,7 @@ function research(): PluginView {
 function pluginsHolding(
   initial: readonly PluginView[],
   asked: unknown[][],
+  damaged: readonly DamagedPlugin[] = [],
 ): Plugins {
   let views = [...initial];
   const refuse = async (): Promise<never> => {
@@ -138,6 +139,7 @@ function pluginsHolding(
   };
   return {
     list: async () => views,
+    damaged: async () => damaged,
     builtInNames: async () =>
       views
         .filter((view) => view.provenance.source === "built-in")
@@ -995,15 +997,12 @@ describe("a call handed back", () => {
     ).toEqual({ ok: true, value: "ask_user done" });
   });
 
-  it("closes one conversation's browser and connections without closing the others", async () => {
+  it("leaves a stopped conversation's browser and connections open", async () => {
     const { capabilities, asked } = membersRecording();
 
-    await capabilities.closeConversation("conversation-1");
+    await capabilities.stopConversation("conversation-1");
 
-    expect(asked).toEqual([
-      ["browsers.close", "conversation-1"],
-      ["mcp.shutdownScope", "conversation-1"],
-    ]);
+    expect(asked).toEqual([]);
   });
 
   it("lets go of a deleted conversation's browser and connections", async () => {
@@ -1017,7 +1016,7 @@ describe("a call handed back", () => {
     ]);
   });
 
-  it("stops a conversation's running commands when it is closed or forgotten, and every one at shutdown", async () => {
+  it("stops a conversation's running commands when it is stopped or forgotten, and every one at shutdown", async () => {
     const stopped: string[] = [];
     const { capabilities } = membersRecording({
       overrides: {
@@ -1035,7 +1034,7 @@ describe("a call handed back", () => {
       },
     });
 
-    await capabilities.closeConversation("conversation-1");
+    await capabilities.stopConversation("conversation-1");
     await capabilities.forgetConversation("conversation-2");
     await capabilities.shutdown();
 
@@ -1166,7 +1165,7 @@ describe("a call handed back", () => {
     ).toBeUndefined();
   });
 
-  it("closes a conversation's Blender with its browser, lets it go when the conversation is deleted, and closes every one at shutdown", async () => {
+  it("keeps a stopped conversation's Blender open, lets it go when the conversation is deleted, and closes every one at shutdown", async () => {
     const asked: unknown[][] = [];
     const note =
       (name: string) =>
@@ -1183,12 +1182,11 @@ describe("a call handed back", () => {
       },
     });
 
-    await capabilities.closeConversation("conversation-1");
+    await capabilities.stopConversation("conversation-1");
     await capabilities.forgetConversation("conversation-2");
     await capabilities.shutdown();
 
     expect(asked).toEqual([
-      ["scenes.close", "conversation-1"],
       ["scenes.forget", "conversation-2"],
       ["scenes.closeAll"],
     ]);
@@ -1262,6 +1260,40 @@ describe("what a person has set up", () => {
       ],
     });
     expect(researchState).toMatchObject({ status: "ready" });
+  });
+
+  it("shows an installed plugin that could not be opened as needing attention, with why", async () => {
+    const asked: unknown[][] = [];
+    const { capabilities } = membersRecording({
+      overrides: {
+        plugins: pluginsHolding([engineering(), research()], asked, [
+          {
+            name: "notes",
+            version: "1.0.0",
+            editing: "override",
+            reason:
+              "Installed plugin “notes” is damaged and cannot be opened safely.",
+          },
+        ]),
+      },
+    });
+
+    const states = await capabilities.pluginStates();
+
+    expect(states.map((state) => [state.id, state.status])).toEqual([
+      ["software-engineering", "ready"],
+      ["deep-research", "ready"],
+      ["notes", "failed"],
+    ]);
+    expect(states[2]).toMatchObject({
+      name: "notes",
+      version: "1.0.0",
+      source: "personal",
+      editing: "override",
+      components: [],
+      description:
+        "Installed plugin “notes” is damaged and cannot be opened safely. Remove it, then install it again.",
+    });
   });
 
   it("looks at what a person has set up without reaching any connector", async () => {

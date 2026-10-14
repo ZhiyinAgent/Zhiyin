@@ -131,8 +131,8 @@ function deletionBy(words: readonly string[]): string | undefined {
     return undefined;
   }
   if (shells.has(name)) {
-    const code = args[args.indexOf("-c") + 1];
-    return args.includes("-c") && code ? deletionIn(code) : undefined;
+    const code = shellCode(args);
+    return code ? deletionIn(code) : undefined;
   }
   if (name === "eval") return deletionIn(args.join(" "));
   if (name === "cmd") {
@@ -145,15 +145,53 @@ function deletionBy(words: readonly string[]): string | undefined {
     return powershellDeletion.exec(code.trim())?.[1];
   }
   if (pythons.has(name)) {
-    const code = args[args.indexOf("-c") + 1];
-    return args.includes("-c") && code
-      ? pythonDeletion.exec(code)?.[1]
-      : undefined;
+    const code = pythonCode(args);
+    return code ? pythonDeletion.exec(code)?.[1] : undefined;
   }
   if (name === "node") {
     const at = args.findIndex((arg) => ["-e", "--eval", "-p"].includes(arg));
     const code = at >= 0 ? args[at + 1] : undefined;
     return code ? nodeDeletion.exec(code)?.[1] : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The command text a shell runs with `-c`, which may be combined with other
+ * single-letter options (`bash -lc '…'`). It is the first word after the
+ * options; `-o` and `-O` take a name of their own.
+ */
+function shellCode(args: readonly string[]): string | undefined {
+  let reads = false;
+  for (let at = 0; at < args.length; at += 1) {
+    const arg = args[at]!;
+    if (/^[-+][oO]$/.test(arg)) at += 1;
+    else if (/^-[A-Za-z]+$/.test(arg)) reads ||= arg.includes("c");
+    else if (!/^[-+]/.test(arg)) return reads ? arg : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The code Python runs with `-c`, which may follow other single-letter options
+ * in the same word (`-Bc`) and may be joined to it (`-c"…"`). Options after a
+ * script or module name belong to that script.
+ */
+function pythonCode(args: readonly string[]): string | undefined {
+  for (let at = 0; at < args.length; at += 1) {
+    const arg = args[at]!;
+    if (!/^-[A-Za-z]/.test(arg)) return undefined;
+    for (let letter = 1; letter < arg.length; letter += 1) {
+      const option = arg[letter]!;
+      const rest = arg.slice(letter + 1);
+      if (option === "c") return rest || args[at + 1];
+      if (option === "m") return undefined;
+      // These take a value, joined or as the next word.
+      if ("WXQ".includes(option)) {
+        if (!rest) at += 1;
+        break;
+      }
+    }
   }
   return undefined;
 }

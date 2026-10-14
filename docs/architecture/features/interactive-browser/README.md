@@ -27,8 +27,8 @@ some sites refuse headless browsers.
   through the ordinary permission and approval path.
 - **Does not own:** process containment (process ownership, supplied by the
   application), whether a tool call is allowed (permission engine), when a
-  conversation's browser closes (the capabilities group, on a stopped turn, a
-  deleted conversation or shutdown), whether the browser is what shows beside
+  conversation's browser closes (the capabilities group, on a deleted
+  conversation or shutdown), whether the browser is what shows beside
   the conversation (core), or the panel's markup and input handling
   (renderer).
 - **Talks to other features only through:** the interfaces below. The

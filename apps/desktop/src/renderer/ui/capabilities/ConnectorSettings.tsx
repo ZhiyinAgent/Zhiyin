@@ -154,6 +154,8 @@ export function ConnectorSettings({
           token.trim() || undefined,
         ),
       );
+    } catch {
+      setError("The connection could not be tested.");
     } finally {
       setPending(null);
     }

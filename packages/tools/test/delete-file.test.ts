@@ -167,6 +167,35 @@ describe("delete_file", () => {
     );
   });
 
+  it("follows the last inspection when Windows answers on a second look", async () => {
+    const root = await workspace();
+    const { bin, recycled } = recycleBin(root);
+    const answers = bin.recyclable;
+    bin.recyclable = async () => new Map();
+    const tools = new WorkspaceTools(root, { recycleBin: bin });
+
+    const unanswered = await tools.inspect("delete_file", {
+      paths: ["huge.iso"],
+    });
+    bin.recyclable = answers;
+    const answered = await tools.inspect("delete_file", {
+      paths: ["huge.iso"],
+    });
+    await tools.execute("delete_file", { paths: ["huge.iso"] });
+
+    expect(unanswered).toMatchObject({
+      ok: true,
+      changes: [{ path: "huge.iso", change: "deleted" }],
+    });
+    expect(answered).toMatchObject({
+      ok: true,
+      action: "Move huge.iso to the Recycle Bin",
+      changes: [{ path: "huge.iso", change: "recycled" }],
+    });
+    expect(recycled).toEqual(["huge.iso"]);
+    expect(await exists(join(root, "huge.iso"))).toBe(true);
+  });
+
   it("deletes nothing permanently when the Recycle Bin refuses after approval", async () => {
     const root = await workspace();
     const { bin } = recycleBin(root);

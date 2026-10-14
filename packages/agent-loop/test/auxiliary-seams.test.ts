@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
-import { stubDependencies, loopFrom, wordsOf } from "./support.js";
+import { stubDependencies, loopFrom, until, wordsOf } from "./support.js";
 
 function recorder(
   requests: ModelRequest[],
@@ -94,6 +94,35 @@ describe("auxiliary model seams", () => {
     await loop.start(taskId, "Who are you and what can you do?");
 
     expect(promptsOf(guidance)).toContain("Name this conversation");
+    expect(loop.snapshot().tasks[0]?.title).toBe("Explain the assistant");
+  });
+
+  it("asks for the first answer without waiting for the conversation's name", async () => {
+    const main: ModelRequest[] = [];
+    let answerName = () => {};
+    const nameAsked = new Promise<void>((resolve) => (answerName = resolve));
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      model: { ...deps.model, ...recorder(main) },
+      guidanceModel: {
+        send: async function* () {
+          await nameAsked;
+          yield {
+            kind: "textDelta",
+            text: '{"title":"Explain the assistant"}',
+          };
+          yield { kind: "done" };
+        },
+      },
+    });
+    const taskId = await loop.createTask();
+
+    const running = loop.start(taskId, "Who are you and what can you do?");
+    await until(() => main.length > 0);
+    answerName();
+    await running;
+
     expect(loop.snapshot().tasks[0]?.title).toBe("Explain the assistant");
   });
 

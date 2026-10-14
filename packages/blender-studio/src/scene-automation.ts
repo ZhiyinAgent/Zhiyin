@@ -390,7 +390,7 @@ async function prepare(
       rows = scriptRows(code);
       sent = { ...args, folder: root };
       detail =
-        "A script can change any file in the workspace, and none outside it. Only the scene file is kept for going back.";
+        "A script can change any file in the workspace, and none outside it. It can read any file your account can read and use the network. Only the scene file is kept for going back.";
     }
   }
   return {

@@ -331,9 +331,13 @@ export class DeleteFiles {
   async inspect(args: unknown): Promise<ToolCallInspection> {
     const plan = await this.#plan(args, true);
     if ("ok" in plan) return plan;
-    for (const item of plan.planned)
-      if (item.forced && this.#bin)
-        this.#shownPermanent.add(`${item.absolute}|${item.fingerprint}`);
+    // The latest inspection is what the person approves: a target it shows
+    // going to the Recycle Bin is no longer one shown as permanent.
+    for (const item of plan.planned) {
+      const key = `${item.absolute}|${item.fingerprint}`;
+      if (item.forced && this.#bin) this.#shownPermanent.add(key);
+      else this.#shownPermanent.delete(key);
+    }
     const changes: FileChange[] = plan.planned.map((item) => ({
       path: item.path,
       change: item.mode === "recycle" ? "recycled" : "deleted",

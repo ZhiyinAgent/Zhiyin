@@ -4,7 +4,7 @@ import type {
   ToolCallInspection,
   ToolInvocationResult,
 } from "@zhiyin/contract";
-import type { GitContainment } from "./run-git.js";
+import type { GitContainment, GitInvocation } from "./run-git.js";
 import { runGit } from "./run-git.js";
 
 export type GitToolSpec = {
@@ -59,16 +59,29 @@ async function invoke(
   signal: AbortSignal | undefined,
   containment: GitContainment | undefined,
 ): Promise<GitToolResult> {
-  const { exitCode, stdout, stderr } = await runGit(
+  const { exitCode, stdout, stderr, ending } = await runGit(
     git,
     root,
     args,
     signal,
     containment,
   );
+  // Ended by Zhiyin, not by git: said as such, with whatever git printed.
+  if (ending)
+    return errorResult(
+      [endings[ending], shortened(stderr || stdout)].filter(Boolean).join("\n"),
+    );
   if (exitCode !== 0) return errorResult(shortened(stderr || stdout));
   return textResult(shortened(stdout));
 }
+
+const endings: Readonly<Record<NonNullable<GitInvocation["ending"]>, string>> =
+  {
+    timeout: "The git command took longer than 30 seconds and was stopped.",
+    stopped: "The git command was stopped before it finished.",
+    outputLimit:
+      "The git command printed more than a command may, and was stopped.",
+  };
 
 /**
  * A ref, path, or similar user-influenced argument never starts with `-`:
@@ -373,9 +386,11 @@ const commitTool: GitToolDefinition = {
       ok: true,
       action: "Commit the staged changes",
       target: basename(root),
-      detail: summary
-        ? `Commits exactly what is staged:\n${shortened(summary, 2_000)}`
-        : "Nothing is staged. This commit would be empty and git will refuse it.",
+      detail: staged.ending
+        ? "What is staged could not be read in time. The commit takes whatever is staged when it runs."
+        : summary
+          ? `Commits exactly what is staged:\n${shortened(summary, 2_000)}`
+          : "Nothing is staged. This commit would be empty and git will refuse it.",
       command: `git commit -m "${message}"`,
       access: "change",
     };

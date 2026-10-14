@@ -18,6 +18,7 @@ import styles from "./artifacts.module.css";
  * conversation while it is open and must not be a place to get stuck.
  */
 export function ArtifactDrawer({
+  conversationId,
   artifacts,
   open,
   onClose,
@@ -25,6 +26,8 @@ export function ArtifactDrawer({
   onExport,
   onShowBeside,
 }: {
+  /** Whose files these are: another conversation's start with none open. */
+  conversationId: string;
   artifacts: readonly TaskArtifact[];
   open: boolean;
   onClose: () => void;
@@ -71,6 +74,7 @@ export function ArtifactDrawer({
       <div className={styles["files-drawer__body"]}>
         {artifacts.length ? (
           <ArtifactPanel
+            key={conversationId}
             artifacts={artifacts}
             onPreview={onPreview}
             onExport={onExport}

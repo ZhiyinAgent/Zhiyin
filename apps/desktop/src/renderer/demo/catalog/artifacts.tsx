@@ -74,6 +74,7 @@ export const artifactsEntries: ComponentCatalogEntry[] = [
     render: () => (
       <div className="lab-drawer-stage">
         <ArtifactDrawer
+          conversationId="demo"
           open
           onClose={() => undefined}
           artifacts={[

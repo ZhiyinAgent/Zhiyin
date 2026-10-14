@@ -56,6 +56,9 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
   is not an ordinary file, a file over the size limit, and a copy that
   expired, was evicted or is missing are reported as unprotected. One missing
   copy does not stop the other files from being restored.
+- A copy is put back only while it is what was kept: its digest is checked
+  before it replaces or remakes a file, and a damaged copy leaves the file as
+  it is and is reported as damaged.
 - A copy is used only for the workspace it was taken in.
 - A file's versions are given only while they are the recorded ones: the copy
   from before the first action, and the file on disk only while it is still

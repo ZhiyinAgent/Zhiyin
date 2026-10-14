@@ -260,6 +260,39 @@ describe("compiling a document", () => {
     ).toMatchObject({ content: [{ text: "The compiled document is a PDF." }] });
   });
 
+  /**
+   * Tectonic is given a folder and names the PDF after the source, so another
+   * name would leave the approved file unwritten and overwrite one nobody
+   * approved.
+   */
+  it("refuses a LaTeX output named differently from its source, before anything runs", async () => {
+    const root = await workspace();
+    const { compiler, calls } = compilerWriting(root);
+    const reason =
+      "LaTeX writes the PDF under its source's name: give the output as paper.pdf, in any folder of the workspace.";
+
+    expect(
+      await compiler.inspect("compile_document", {
+        path: "paper.tex",
+        output: "out/summary.pdf",
+      }),
+    ).toMatchObject({ ok: false, reason });
+    expect(
+      await compiler.callTool("compile_document", {
+        path: "paper.tex",
+        output: "out/summary.pdf",
+      }),
+    ).toMatchObject({ isError: true, content: [{ text: reason }] });
+    expect(calls).toEqual([]);
+    // Its own name, in another folder, is what Tectonic can write.
+    expect(
+      await compiler.inspect("compile_document", {
+        path: "paper.tex",
+        output: "out/Paper.pdf",
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
   it("offers no tool at all until an engine is installed", async () => {
     const root = await workspace();
     const { compiler } = compilerWriting(root, { programs: {} });

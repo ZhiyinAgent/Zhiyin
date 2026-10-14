@@ -10,6 +10,8 @@ files:
   # The window sets its own icon, so the mark has to be readable at runtime and
   # not only by the installer.
   - build/icon.ico
+  # Source maps serve only debugging, and nothing reads them at runtime.
+  - "!**/*.map"
 # A program cannot be started from inside the packed archive, so the bundled
 # ripgrep is unpacked beside it.
 asarUnpack:

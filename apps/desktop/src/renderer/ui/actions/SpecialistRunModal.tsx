@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { CoreApi, SpecialistRun, TaskAction } from "@zhiyin/contract";
 import { ActionHistory } from "./ActionHistory.js";
-import { Icon, WindowLayer } from "../shared/index.js";
+import { Icon, WindowLayer, useModalFocus } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 export const statusPresentation: Record<
@@ -46,9 +46,8 @@ export function SpecialistRunModal({
   const hasReport = Boolean(handoff || stopped);
   const [tab, setTab] = useState<Tab>(hasReport ? "report" : "calls");
 
+  useModalFocus(dialog);
   useEffect(() => {
-    const returnTo = document.activeElement;
-    dialog.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       // A call's own inspector opened from here is above this dialog, and is
@@ -59,10 +58,7 @@ export function SpecialistRunModal({
       onClose();
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (returnTo instanceof HTMLElement) returnTo.focus();
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   const tabs: readonly [Tab, string, number | undefined][] = [

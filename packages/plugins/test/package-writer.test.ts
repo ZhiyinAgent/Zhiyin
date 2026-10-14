@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -117,5 +117,29 @@ describe("writePluginDirectory", () => {
         dataDestination: "example.com",
       },
     ]);
+  });
+
+  it("refuses a skill whose name is not portable, writing nothing outside its folder", async () => {
+    const parent = await temporaryRoot();
+    const root = join(parent, "plugin");
+
+    await expect(
+      writePluginDirectory(root, {
+        name: "my-plugin",
+        displayName: "My Plugin",
+        version: "0.0.1",
+        description: "A plugin I made.",
+        skills: [
+          {
+            id: "..\\..\\escaped",
+            description: "Not a skill.",
+            instructions: "Nothing.",
+          },
+        ],
+        specialists: [],
+        mcpServers: [],
+      }),
+    ).rejects.toThrow("must use a portable name");
+    await expect(stat(join(parent, "escaped"))).rejects.toThrow();
   });
 });

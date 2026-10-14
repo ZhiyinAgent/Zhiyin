@@ -699,18 +699,28 @@ export class HistoryStore {
         { cause: error },
       );
     }
-    for (const id of this.#onDisk) {
+    for (const id of [...this.#onDisk]) {
       if (listed.has(id)) continue;
-      this.#onDisk.delete(id);
       this.#conversations.delete(id);
       this.#staleMeta.delete(id);
       const folder = this.#folderOf(id);
-      await rename(folder, `${folder}${deleting}`)
-        .then(() =>
-          rm(`${folder}${deleting}`, { recursive: true, force: true }),
-        )
-        .catch(() => undefined);
+      // A folder Windows will not let go of, such as one holding a file
+      // another program has open, stays on disk: the next save tries again.
+      const moved = await rename(folder, `${folder}${deleting}`).then(
+        () => true,
+        (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT",
+      );
+      if (!moved) continue;
+      this.#onDisk.delete(id);
+      await rm(`${folder}${deleting}`, { recursive: true, force: true }).catch(
+        () => undefined,
+      );
     }
+  }
+
+  /** Whether a conversation's folder is still on disk. */
+  holds(id: string): boolean {
+    return this.#onDisk.has(id);
   }
 
   /**

@@ -38,8 +38,9 @@ below it:
   the workspace but the contract.
 - **Above the group layer, a member is reached through its group.** An
   exception is listed in the lint configuration with the reason the group does
-  not answer for it. There is one: the core reaches the interactive browser for
-  the panel a person watches and drives.
+  not answer for it. There are two, both panels a person watches and drives:
+  the core reaches the interactive browser for the browser panel, and the
+  Blender studio for the 3D view.
 - **Nothing goes around the rules.** Lint refuses a workspace package reached
   by a dynamic import, an inline type import or a runtime `require`, a relative
   path into a sibling package, and a path into another package's internals.

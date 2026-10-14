@@ -179,7 +179,15 @@ export function timelinePieces(
   function takeStep(step: OtherStep) {
     if (step === "updateApiKey") landing.openSettings("apiKey");
     else if (step === "addCredits" && landing.provider)
-      void commands.openExternalUrl(landing.provider.pages.billing);
+      void commands
+        .openExternalUrl(landing.provider.pages.billing)
+        .catch((cause: unknown) =>
+          landing.say(
+            cause instanceof Error
+              ? cause.message
+              : "The billing page could not be opened.",
+          ),
+        );
     else if (step === "continue")
       void commands
         .sendMessage(task.id, "Continue.", task.reasoning)
@@ -217,7 +225,16 @@ export function timelinePieces(
     );
   }
   return {
-    openAttachment: (id) => void commands.openAttachment(task.id, id),
+    openAttachment: (id) =>
+      void commands
+        .openAttachment(task.id, id)
+        .catch((cause: unknown) =>
+          landing.say(
+            cause instanceof Error
+              ? cause.message
+              : "The attachment could not be opened.",
+          ),
+        ),
     ...(readPicture ? { readPicture } : {}),
     answerNow: () => commands.answerNow(task.id),
     waitingMessage: {

@@ -23,6 +23,20 @@ export type InstalledPlugin = {
   readonly rollbackVersion?: string;
 };
 
+/** An installed package whose files could not be opened, and why. */
+export type DamagedInstall = {
+  readonly name: string;
+  readonly activeVersion: string;
+  readonly provenance: PluginProvenance;
+  readonly reason: string;
+};
+
+/** What is installed: the packages that open, and those that do not. */
+export type InstalledPlugins = {
+  readonly installed: readonly InstalledPlugin[];
+  readonly damaged: readonly DamagedInstall[];
+};
+
 type InstalledRecord = {
   readonly name: string;
   readonly activeVersion: string;
@@ -131,7 +145,11 @@ export class FilePluginStore {
     this.#journalFile = join(root, "journal.json");
   }
 
-  list(): Promise<readonly InstalledPlugin[]> {
+  /**
+   * One damaged package is set apart with its reason rather than failing the
+   * whole list, so every other package stays usable and it can be removed.
+   */
+  list(): Promise<InstalledPlugins> {
     return this.#enqueue(() => this.#list());
   }
 
@@ -194,10 +212,18 @@ export class FilePluginStore {
     this.#recovered = true;
   }
 
-  async #list(): Promise<readonly InstalledPlugin[]> {
+  async #list(): Promise<InstalledPlugins> {
     await this.#ensureRecovered();
     const state = await this.#readState();
     const installed: InstalledPlugin[] = [];
+    const damaged: DamagedInstall[] = [];
+    const setAside = (record: InstalledRecord, reason: string) =>
+      damaged.push({
+        name: record.name,
+        activeVersion: record.activeVersion,
+        provenance: record.provenance,
+        reason,
+      });
     for (const record of state.plugins) {
       let plugin: PluginPackage;
       try {
@@ -206,17 +232,22 @@ export class FilePluginStore {
           record.provenance,
         );
       } catch {
-        throw unavailable(
+        setAside(
+          record,
           `Installed plugin “${record.name}” is damaged and cannot be opened safely.`,
         );
+        continue;
       }
       if (
         plugin.manifest.name !== record.name ||
         plugin.manifest.version !== record.activeVersion
-      )
-        throw unavailable(
+      ) {
+        setAside(
+          record,
           `Installed plugin “${record.name}” does not match its installation record.`,
         );
+        continue;
+      }
       installed.push({
         package: plugin,
         activeVersion: record.activeVersion,
@@ -225,7 +256,7 @@ export class FilePluginStore {
           : {}),
       });
     }
-    return installed;
+    return { installed, damaged };
   }
 
   async #install(

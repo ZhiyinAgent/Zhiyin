@@ -71,6 +71,14 @@ describe("a request whose answer does not start", () => {
     expect(fetcher.requests).toBe(5);
   });
 
+  it("says the provider did not start answering, not that it could not be reached", async () => {
+    await expect(
+      drain(
+        client(anthropic, unanswered(), { startTimeoutMs: 30 }).send(hello),
+      ),
+    ).rejects.toThrow("Anthropic did not start answering. Try again.");
+  });
+
   it("is given up when the response opens and its stream never sends a byte", async () => {
     let requests = 0;
     const fetcher: ModelFetch = async () => {

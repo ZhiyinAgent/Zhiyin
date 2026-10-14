@@ -172,7 +172,11 @@ export class DrawingHost {
 
   async #process(): Promise<Running | undefined> {
     if (this.#closed) return undefined;
-    this.#running ??= this.#launch();
+    // A start that failed is tried again by the next request, not kept.
+    this.#running ??= this.#launch().catch((error: unknown) => {
+      this.#running = undefined;
+      throw error;
+    });
     const running = await this.#running;
     if (!running) this.#running = undefined;
     return running;

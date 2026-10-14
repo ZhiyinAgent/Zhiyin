@@ -1,4 +1,5 @@
 import type {
+  ApiKeySaveOutcome,
   EstimatedCost,
   ModelCatalog,
   ModelProviderList,
@@ -156,6 +157,9 @@ export type UncountedUsage = {
   readonly reasoningTokens?: number;
 };
 
+/** A key that was kept: checked with the provider, or kept unchecked. */
+export type KeptApiKey = Exclude<ApiKeySaveOutcome, { status: "refused" }>;
+
 export interface ModelClient {
   send(request: ModelRequest): AsyncIterable<ModelEvent>;
   /**
@@ -165,7 +169,11 @@ export interface ModelClient {
    */
   uncounted?(usage: UncountedUsage): Promise<ModelUsage | undefined>;
   settings(): Promise<ProviderSettings>;
-  setApiKey(apiKey: string): Promise<void>;
+  /**
+   * Keeps a key the provider did not refuse, and says whether it was checked.
+   * A refused key, or one that could not be stored, throws and is not kept.
+   */
+  setApiKey(apiKey: string): Promise<KeptApiKey>;
   clearApiKey(): Promise<void>;
   /** The models this account may use. */
   models(): Promise<ModelCatalog>;

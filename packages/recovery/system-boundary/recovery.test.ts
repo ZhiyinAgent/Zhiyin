@@ -434,6 +434,48 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     expect(await readFile(join(root, "two.txt"), "utf8")).toBe("before two");
   });
 
+  it("leaves a file as it is when the copy kept of it is damaged, and says so", async () => {
+    const { root, recovery } = await fixture();
+    await writeFile(join(root, "edited.txt"), "before the edit");
+    await writeFile(join(root, "deleted.txt"), "before the delete");
+    const changes = [
+      { path: "edited.txt", change: "updated" as const },
+      { path: "deleted.txt", change: "deleted" as const },
+    ];
+    await recovery.prepare("action-1", root, changes);
+    await writeFile(join(root, "edited.txt"), "after the edit");
+    await rm(join(root, "deleted.txt"));
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Edit files",
+        target: "2 files",
+        status: "completed",
+        changes,
+      },
+    ]);
+    for (const target of review.targets)
+      await writeFile(target.backup!, "befo");
+
+    const result = await recovery.restore(review);
+
+    expect(result.files).toEqual(
+      ["edited.txt", "deleted.txt"].map((path) => ({
+        path,
+        status: "unprotected",
+        reason:
+          "The copy kept before the change is damaged, so the current file was left as it is.",
+      })),
+    );
+    expect(await readFile(join(root, "edited.txt"), "utf8")).toBe(
+      "after the edit",
+    );
+    await expect(readFile(join(root, "deleted.txt"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
   it("refuses restoration while another process holds an incompatible file handle", async () => {
     const { root, recovery } = await fixture();
     const path = join(root, "note.txt");

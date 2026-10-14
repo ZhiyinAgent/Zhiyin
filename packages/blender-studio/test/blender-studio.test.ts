@@ -541,6 +541,14 @@ describe("the tools", () => {
         /any file in the workspace, and none outside it/,
       ),
     });
+    expect(inspected.ok && inspected.invocation?.arguments[2]).toEqual({
+      name: "Can also reach",
+      value: "any file your account can read, and the network",
+      readable: true,
+    });
+    expect(inspected.ok ? inspected.detail : "").toMatch(
+      /can read any file your account can read and use the network/,
+    );
   });
 
   it("binds an approval to the scene it changes and to whether its file is new", async () => {

@@ -1396,6 +1396,93 @@ describe("WorkspaceShell", () => {
     ).toBeNull();
   });
 
+  it("puts the default budget back, and says so, when it cannot be saved", async () => {
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          contextBudget: "medium",
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          setDefaultContextBudget: () =>
+            Promise.reject(new Error("settings unwritable")),
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Context:/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^Low/ }));
+
+    expect(
+      await screen.findByText(
+        "The budget could not be saved, so it stays as it was.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByRole("radio", { name: /^Medium/ })).toBeChecked();
+  });
+
+  it("shows another conversation's files without the last one's preview", async () => {
+    const conversation = (id: string, title: string): WorkspaceTask => ({
+      id,
+      title,
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [{ sequence: 0, id: `m-${id}`, role: "user", text: title }],
+      artifacts: [
+        {
+          path: "report.md",
+          name: "report.md",
+          change: "created",
+          bytes: 19,
+          updatedAt: "2026-09-05T10:00:00.000Z",
+        },
+      ],
+      phase: {
+        kind: "completed",
+        outcome: { title: "Done", summary: "The report is ready." },
+      },
+    });
+    const showing = (selectedTaskId: string) => (
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId,
+          tasks: [
+            conversation("task-1", "Write the brief"),
+            conversation("task-2", "Write the memo"),
+          ],
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          previewArtifact: async (taskId) => ({
+            status: "ready",
+            path: "report.md",
+            text: `The report of ${taskId}.`,
+            truncated: false,
+          }),
+        }}
+      />
+    );
+    const { rerender } = render(showing("task-1"));
+    fireEvent.click(screen.getByRole("button", { name: /^Files/ }));
+    fireEvent.click(screen.getByRole("button", { name: /report\.md/ }));
+    expect(await screen.findByText("The report of task-1.")).toBeVisible();
+
+    rerender(showing("task-2"));
+
+    expect(screen.queryByText("The report of task-1.")).toBeNull();
+    expect(screen.getByRole("button", { name: /report\.md/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
   /**
    * A snapshot carries which conversation is open. Unless the core is told one
    * was left for a new one, the next snapshot to arrive (after choosing a
@@ -3480,6 +3567,121 @@ describe("a failed turn", () => {
     expect(openExternalUrl).toHaveBeenCalledWith(
       "https://platform.deepseek.com/",
     );
+  });
+
+  describe("says why a page or a pasted text did not open", () => {
+    const deepSeek: WorkspaceState["provider"] = {
+      provider: {
+        id: "deepseek",
+        name: "DeepSeek",
+        pages: {
+          keys: "https://platform.deepseek.com/api_keys",
+          billing: "https://platform.deepseek.com/",
+        },
+      },
+      endpoint: "https://api.deepseek.com/chat/completions",
+      credential: { status: "configured", source: "credentialStore" },
+    };
+    const refusing = {
+      ...stubCommands,
+      openExternalUrl: () =>
+        Promise.reject(new Error("The page could not be opened.")),
+      openAttachment: () =>
+        Promise.reject(new Error("The pasted text is no longer kept.")),
+    };
+
+    it("from a turn's remedy", async () => {
+      render(
+        <Live
+          initial={{
+            ...failed(["addCredits", "tryAgain"]),
+            provider: deepSeek,
+          }}
+          commands={refusing}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Add DeepSeek credits" }),
+      );
+
+      expect(
+        await screen.findByText("The page could not be opened."),
+      ).toBeVisible();
+    });
+
+    it("from Settings", async () => {
+      render(
+        <Live
+          initial={{
+            ...createWorkspaceState({
+              connection: "ready",
+              runtime: { tasks: "available", capabilities: "available" },
+            }),
+            surface: "settings",
+            provider: deepSeek,
+          }}
+          commands={refusing}
+        />,
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: "Billing" }));
+
+      expect(
+        await screen.findByText("The page could not be opened."),
+      ).toBeVisible();
+    });
+
+    it("from the conversation", async () => {
+      const paste = {
+        kind: "pastedText" as const,
+        id: "pasted-2026-09-24-101500.txt",
+        bytes: 48_000,
+        lines: 1_200,
+      };
+      render(
+        <Live
+          initial={createWorkspaceState({
+            connection: "ready",
+            runtime: { tasks: "available", capabilities: "available" },
+            selectedTaskId: "task-1",
+            tasks: [
+              {
+                id: "task-1",
+                title: "Read a log",
+                updatedLabel: "Now",
+                updatedAt: "2026-10-05T09:00:00.000Z",
+                ...emptyConversationLists,
+                messages: [
+                  {
+                    sequence: 0,
+                    id: "u",
+                    role: "user",
+                    text: "",
+                    attachments: [paste],
+                  },
+                ],
+                phase: {
+                  kind: "completed",
+                  outcome: { title: "Done", summary: "Read." },
+                },
+              },
+            ],
+          })}
+          commands={refusing}
+        />,
+      );
+
+      fireEvent.click(
+        within(
+          screen.getByRole("log", { name: "Task conversation" }),
+        ).getByRole("button", { name: /Open pasted text/ }),
+      );
+
+      expect(
+        await screen.findByText("The pasted text is no longer kept."),
+      ).toBeVisible();
+    });
   });
 
   it("edits the message where it is", async () => {

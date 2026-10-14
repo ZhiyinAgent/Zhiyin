@@ -210,9 +210,9 @@ describe("a Z.ai key", () => {
       }),
     );
 
-    await expect(client.setApiKey("zai-busy")).rejects.toMatchObject({
-      code: "networkFailure",
-      message: expect.stringContaining("could not be checked with Z.ai"),
+    await expect(client.setApiKey("zai-busy")).resolves.toEqual({
+      status: "unverified",
+      reason: expect.stringContaining("could not be checked with Z.ai"),
     });
     expect(stored()).toBe("zai-busy");
   });

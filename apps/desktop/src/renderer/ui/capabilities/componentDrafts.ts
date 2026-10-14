@@ -44,6 +44,17 @@ export function slugify(value: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/**
+ * A name as it is being typed: the same id, keeping the hyphen at its end so
+ * the next word can follow. Saving takes it through `slugify`.
+ */
+export function slugAsTyped(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-/, "");
+}
+
 /** The part of a component id after its plugin's name. */
 export function localIdOf(pluginId: string, fullId: string): string {
   const prefix = `${pluginId}/`;

@@ -18,6 +18,7 @@ import { ProviderModelClient } from "./client.js";
 import { ProviderCredentials, type CredentialEntry } from "./credentials.js";
 import { ModelClientError } from "./failures.js";
 import type {
+  KeptApiKey,
   ModelClient,
   ModelEvent,
   ModelFetch,
@@ -255,7 +256,7 @@ export class ModelProviders implements ModelClient, ProviderDirectory {
     };
   }
 
-  async setApiKey(apiKey: string): Promise<void> {
+  async setApiKey(apiKey: string): Promise<KeptApiKey> {
     return this.#client(await this.#chosen()).setApiKey(apiKey);
   }
 

@@ -101,8 +101,9 @@ describe("a Qwen key", () => {
   it("is kept, with the trouble named, when the check could not say anything about the key", async () => {
     const { client, stored } = accountWith(answering(500));
 
-    await expect(client.setApiKey("sk-ws-maybe")).rejects.toMatchObject({
-      code: "networkFailure",
+    await expect(client.setApiKey("sk-ws-maybe")).resolves.toEqual({
+      status: "unverified",
+      reason: expect.stringContaining("could not be checked"),
     });
     expect(stored()).toBe("sk-ws-maybe");
   });

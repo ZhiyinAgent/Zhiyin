@@ -4,8 +4,8 @@
 
 The renderer is Zhiyin's window: a React app that shows the state the core
 holds and sends what the person asks for back to it. It draws conversations,
-the agent's actions and the decisions it waits on, the browser and documents
-beside a conversation, diagrams and charts, and the app's pages. It decides
+the agent's actions and the decisions it waits on, the browser, documents and
+3D scenes beside a conversation, diagrams and charts, and the app's pages. It decides
 nothing about the work itself: the core runs turns, asks for permission, keeps
 history and counts cost, and the window renders what the core says
 ([ADR 0003](../../decisions/0003-the-window-is-a-sandboxed-view-of-core-state.md)).
@@ -52,8 +52,8 @@ The workspace is laid out as:
   commands still running, the Conversation/Workspace switch, and Files.
 - **The conversation**, with the plan above it (ADR 0013) and the composer
   below. Pending approvals and most questions sit above the composer.
-- **The space beside the conversation**, holding the agent's browser or a
-  document, behind a divider the person can drag.
+- **The space beside the conversation**, holding the agent's browser, a
+  document or a 3D scene, behind a divider the person can drag.
 - **Pages** that take the conversation's place, one at a time.
 
 The window has no application menu. Ctrl+N starts a new task and Ctrl+, opens
@@ -66,7 +66,7 @@ control, context ring and plan; `rewind` editing and resending a message;
 history, change review, the files a turn changed and specialist runs; `views`
 diagrams and charts; `commands` commands running as jobs; `artifacts` the files
 a task produced. `workspace` is the split beside the conversation, holding
-`browser` or `document`. `capabilities`, `model`, `usage`, `instructions` and
+`browser`, `document` or `scene`. `capabilities`, `model`, `usage`, `instructions` and
 `settings` are the pages; `onboarding` and `recovery` come before the
 workspace. `shared` holds neutral components every module may use; they are
 described in the [component library](../../component-library.md).
@@ -105,7 +105,7 @@ described in the [component library](../../component-library.md).
   form that could not be sent stays filled in.
 - **The keyboard reaches everything.** The focus ring shows for keyboard focus.
   Escape closes what is open and returns focus to what opened it; a dialog keeps
-  focus inside itself. A control drawn as an icon alone is named on hover and
+  focus inside itself, Tab and Shift+Tab going round its own controls. A control drawn as an icon alone is named on hover and
   keyboard focus, and one that cannot be used yet says what it is waiting for.
   What floats closes on a press outside it, top layer first; menus also close
   when the window loses focus, dialogs stay open.
@@ -196,6 +196,10 @@ described in the [component library](../../component-library.md).
   as a binary scene's, the inputs are shown with the files. Inputs a built-in
   tool wrote in words read as text, not code. A long approval scrolls inside
   itself, so its buttons stay in view at the smallest window.
+- What an approval, a change under review or a call's inputs show from the
+  model or a connector writes out a character that draws nothing or changes the
+  direction of the text as its code, such as `[U+202E]`, so it reads as what
+  will run. Emoji keep their look.
 - Deny offers optional guidance for the agent once it is chosen. "Allow for this
   conversation" appears only when the core proposes a rule for the rest of the
   conversation, and says what that rule covers. Choosing it asks once more,
@@ -225,8 +229,8 @@ described in the [component library](../../component-library.md).
 
 ### Beside the conversation
 
-- One surface shows at a time; with a browser and a document both open, a switch
-  chooses between them and closes neither. The divider keeps the width the
+- One surface shows at a time; with more than one open, a switch chooses
+  between them and closes none. The divider keeps the width the
   person chose for each layout, and a portrait document gets a narrower space.
 - The browser panel shows the page as a picture the core captured and sends
   clicks and keys to the core in the page's coordinates; the app's own
@@ -235,6 +239,13 @@ described in the [component library](../../component-library.md).
   or picture a task produced opens there from Files. Nothing in the space can be
   dragged out of the window. While the space is put away, the conversation says
   what is in it and opens it from there.
+- The 3D view shows the picture Blender drew of the scene, named after its
+  file. Dragging or the arrow keys turn the overview, the wheel or plus and
+  minus zoom it, and Home goes back to its first angle; a switch moves between the overview and
+  the scene's camera. A zoom scales the picture on screen at once until Blender
+  draws the closer one, and the last good picture stays until the next can be
+  drawn whole. It says when Blender is starting or working, when the scene is
+  empty or has no camera, and when Blender stopped, that the scene comes back.
 - A page fitted to the document panel's width holds still. The space the pages
   scroll in keeps a scrollbar's room whether or not one shows, so a picture
   that almost fits the panel's height cannot bring a scrollbar that narrows it

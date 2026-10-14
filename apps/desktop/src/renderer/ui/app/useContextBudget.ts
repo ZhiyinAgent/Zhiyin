@@ -7,7 +7,7 @@ import type { WorkspaceState, WorkspaceTask } from "./workspaceState.js";
  * else the app's default, else Medium. Chosen for an open conversation, it is
  * that conversation's alone. Chosen before the first message, it becomes the
  * default for new conversations, shown at once rather than when the core
- * confirms it. A conversation is given the budget it starts on before its
+ * confirms it, and put back if it cannot be saved. A conversation is given the budget it starts on before its
  * first message is sent, so a later default leaves it where it began.
  */
 export function useContextBudget(
@@ -35,12 +35,18 @@ export function useContextBudget(
         ? { instructions: selectedTask.standingInstructions }
         : {}),
       onEditInstructions,
-      onChoose: (choice: ContextBudgetChoice) => {
-        if (selectedTask)
-          void commands.setContextBudget(selectedTask.id, choice);
-        else {
-          setChosen(choice);
-          void commands.setDefaultContextBudget(choice);
+      onChoose: async (choice: ContextBudgetChoice) => {
+        if (selectedTask) {
+          await commands.setContextBudget(selectedTask.id, choice);
+          return;
+        }
+        const before = chosen;
+        setChosen(choice);
+        try {
+          await commands.setDefaultContextBudget(choice);
+        } catch (error) {
+          setChosen(before);
+          throw error;
         }
       },
       ...(selectedTask

@@ -32,8 +32,8 @@ the conversation, such as asking you questions, giving you a quiz, keeping its
 plan, drawing charts and diagrams, and handing work to a specialist, whose own
 actions follow these same rules. Everything else asks: creating, changing or
 deleting files, reading outside the folder, every shell command, and every
-call to a connector, including the browser, Git, Python and the document
-compiler.
+call to a connector, including the browser, Git, Python, the 3D studio and the
+document compiler.
 
 The rule reads what an action's implementation declares, and only Zhiyin's
 built-in tools are trusted to declare a read. A tool's name earns nothing,
@@ -44,9 +44,10 @@ An approval covers the exact request you saw. Before an approved action runs,
 Zhiyin inspects it again, and if its target changed while it waited, it does
 not run.
 
-For edits inside one folder below the one you chose, or for one connector
-tool, you can allow the action for the rest of the conversation, and take
-that back from the conversation's menu. Deletions, shell commands and Python
+For edits inside one folder below the one you chose, for one connector tool,
+or for work on the open 3D scene that writes only new files, you can allow the
+action for the rest of the conversation, and take that back from the
+conversation's menu. Deletions, shell commands, Python scripts and Blender
 scripts ask every time.
 
 ### The folder you choose
@@ -54,8 +55,9 @@ scripts ask every time.
 File tools have nothing to work on until you choose a folder. Creating,
 editing and deleting files is refused outside it; reading or listing outside
 it asks first. Each path is checked when the request is inspected and again,
-with links resolved, when it runs, so a link or a replaced file cannot carry
-an operation outside the folder.
+with links resolved, when it runs. That check holds for the moment it is
+made: a file replaced by a link after it, while the operation runs, is not
+checked again.
 
 Before a file changes, Zhiyin keeps a copy, so going back in a conversation or
 undoing a turn can restore it. Copies are bounded: 10 MiB per file and
@@ -89,15 +91,27 @@ Python scripts run in an environment Zhiyin manages, kept apart from your own
 projects. That separation keeps packages apart; it is not a security
 boundary, and a script has the same access as a shell command.
 
+### 3D scenes
+
+Each conversation's 3D work runs in its own Blender, which Zhiyin installs
+and starts without a window, on its own settings: it ignores your Blender
+preferences, add-ons and startup file, and never runs a script saved in a
+scene file. Blender runs at Windows' low integrity level, so Windows refuses
+it, and every program it starts, any write outside the folder you chose and
+its own folder in Zhiyin's data. It still reads whatever your account can read,
+and it can use the network. A whole drive, or a folder that holds your user
+folder, is never opened to it. A Blender script asks every time, and its
+approval says what it can reach; going back restores only the scene file.
+
 ### Processes Zhiyin starts
 
-Shell commands, the browser, Git, Python, the document compilers and file
-search start suspended, are placed in a Windows Job Object that ends
+Shell commands, the browser, Git, Python, Blender, the document compilers and
+file search start suspended, are placed in a Windows Job Object that ends
 everything in it when it closes, and only then resume. The process that draws
 PDF pages joins a Job Object with a memory limit before it is given a
-document. Stopping a conversation ends its commands and closes its browser;
-quitting, or Zhiyin ending abruptly, ends every process tree it started. If
-Job Objects are unavailable, the shell is not offered.
+document. Stopping a turn ends its commands and leaves its browser and 3D
+scene open; quitting, or Zhiyin ending abruptly, ends every process tree it
+started. If Job Objects are unavailable, the shell is not offered.
 
 Job Objects govern how long processes live, not what they can reach. They do
 not limit file, registry, network or credential access, and they do not cover
@@ -147,7 +161,8 @@ to its model, through OpenRouter or the lab's own API as the person chose,
 and to its connectors.
 
 Exported conversations have credentials in recognised formats removed, such as
-`Authorization` headers, bearer tokens and common key prefixes. Recognition
+`Authorization` and key headers, bearer tokens, fields and variables named for
+a key, keys in a web address, and common key prefixes. Recognition
 cannot prove that none remain, and each export says so.
 
 ### The app window

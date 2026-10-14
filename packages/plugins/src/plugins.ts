@@ -133,6 +133,14 @@ export type PluginView = {
   readonly appConnectors: readonly (PluginAppConnector & ComponentView)[];
 };
 
+/** An installed package that could not be opened: it can only be removed. */
+export type DamagedPlugin = {
+  readonly name: string;
+  readonly version: string;
+  readonly editing: PluginEditing;
+  readonly reason: string;
+};
+
 export type ComponentContent = {
   /** Kept for specialists; a skill's name is its portable id. */
   readonly name?: string;
@@ -143,6 +151,8 @@ export type ComponentContent = {
 export interface Plugins {
   /** Built-in packages first, then installed ones, in a stable order. */
   list(): Promise<readonly PluginView[]>;
+  /** Installed packages left out of `list` because they could not be opened. */
+  damaged(): Promise<readonly DamagedPlugin[]>;
   /** The built-in package names, in catalog order. */
   builtInNames(): Promise<readonly string[]>;
   setEnabled(name: string, enabled: boolean): Promise<void>;

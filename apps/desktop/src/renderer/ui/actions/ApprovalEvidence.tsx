@@ -1,7 +1,7 @@
 import type { FileChange, ToolInvocation } from "@zhiyin/contract";
 import { diffLines } from "@zhiyin/contract";
 import { ToolCallView } from "./ToolCallView.js";
-import { Icon } from "../shared/index.js";
+import { Icon, visibleText } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 /** The tools that run what they are given as a command. */
@@ -74,7 +74,7 @@ export function ApprovalEvidence({
         </ul>
       ) : shellCommand !== undefined ? (
         <code className={styles.approval__command} aria-label="What will run">
-          {shellCommand}
+          {visibleText(shellCommand)}
         </code>
       ) : invocation?.via ? (
         <>
@@ -84,7 +84,7 @@ export function ApprovalEvidence({
               className={styles.approval__command}
               aria-label="What will be sent"
             >
-              {invocation.arguments[0]!.value}
+              {visibleText(invocation.arguments[0]!.value)}
             </code>
           ) : (
             invocation.arguments.length > 1 && (
@@ -102,7 +102,7 @@ export function ApprovalEvidence({
         )
       ) : (
         <code className={styles.approval__command} aria-label="What will run">
-          {target}
+          {visibleText(target)}
         </code>
       )}
     </>
@@ -118,9 +118,10 @@ function FileRow({
   disabled: boolean;
   onReview: () => void;
 }) {
-  const slash = change.path.lastIndexOf("/");
-  const name = change.path.slice(slash + 1);
-  const folder = slash > 0 ? change.path.slice(0, slash) : undefined;
+  const path = visibleText(change.path);
+  const slash = path.lastIndexOf("/");
+  const name = path.slice(slash + 1);
+  const folder = slash > 0 ? path.slice(0, slash) : undefined;
   const counts =
     change.after === undefined
       ? undefined
@@ -142,7 +143,7 @@ function FileRow({
           <span>{changeLabels[change.change]}</span>
           {folder && <span>in {folder}</span>}
           {change.createdFolder && (
-            <span>Also creates folder {change.createdFolder}</span>
+            <span>Also creates folder {visibleText(change.createdFolder)}</span>
           )}
           {change.omitted && <span>{change.omitted}</span>}
         </span>

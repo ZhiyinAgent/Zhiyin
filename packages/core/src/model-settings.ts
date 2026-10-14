@@ -144,20 +144,17 @@ export class ModelSettings {
     apiKey: string,
     target?: ProviderTarget,
   ): Promise<ApiKeySaveOutcome> {
-    const account = this.#account(target);
-    let outcome: ApiKeySaveOutcome = { status: "accepted" };
+    let outcome: ApiKeySaveOutcome;
     try {
-      await account.setApiKey(apiKey);
+      outcome = await this.#account(target).setApiKey(apiKey);
     } catch (error) {
-      const reason =
-        error instanceof Error && error.message
-          ? error.message
-          : "The key could not be saved.";
-      const stored = (await account.settings()).credential.status;
-      outcome =
-        stored === "configured"
-          ? { status: "unverified", reason }
-          : { status: "refused", reason };
+      outcome = {
+        status: "refused",
+        reason:
+          error instanceof Error && error.message
+            ? error.message
+            : "The key could not be saved.",
+      };
     }
     await this.refresh();
     return outcome;

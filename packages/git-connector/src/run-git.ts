@@ -6,7 +6,10 @@ import {
 
 export type GitContainment = ProcessContainment;
 export type GitContainer = ReturnType<ProcessContainment["open"]>;
-export type GitInvocation = Pick<ProcessRun, "exitCode" | "stdout" | "stderr">;
+export type GitInvocation = Pick<
+  ProcessRun,
+  "exitCode" | "stdout" | "stderr" | "ending"
+>;
 
 const timeoutMs = 30_000;
 

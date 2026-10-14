@@ -5,7 +5,14 @@
  * their summaries and ordered by when each conversation last changed.
  */
 
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  open,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -185,6 +192,49 @@ describe("the history on disk", () => {
     expect(
       (await readdir(join(historyFolder(root), "conversations"))).sort(),
     ).toEqual(["c-a", "c-b"]);
+  });
+
+  /**
+   * Windows will not move a folder while another program has a file in it
+   * open. Until the folder goes, the conversation is still on disk, and what it
+   * kept beside itself stays with it, so a launch before then finds it whole.
+   */
+  it("keeps what a deleted conversation kept until its folder can be removed", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    const sessions = new FileSessions(root);
+    await sessions.loadIndex();
+    const output = await sessions.keep("output", "c", { text: "its output" });
+    if (output.status !== "kept") throw new Error(output.reason);
+    const without = {
+      ...history,
+      tasks: history.tasks.filter((item) => item.id !== "c"),
+    } as never;
+
+    const held = await open(
+      join(conversationFolder(root, "c"), "meta.json"),
+      "r",
+    );
+    try {
+      await sessions.saveWorkspace(without);
+      await sessions.forgetConversation("c");
+
+      expect((await sessions.locate("output", "c", output.id)).status).toBe(
+        "ready",
+      );
+      expect((await listed(root))?.map(([id]) => id)).toContain("c");
+    } finally {
+      await held.close();
+    }
+
+    await sessions.saveWorkspace(without);
+
+    expect(
+      (await readdir(join(historyFolder(root), "conversations"))).sort(),
+    ).toEqual(["c-a", "c-b"]);
+    expect((await sessions.locate("output", "c", output.id)).status).toBe(
+      "missing",
+    );
   });
 
   it("keeps the conversations when the settings were never written", async () => {

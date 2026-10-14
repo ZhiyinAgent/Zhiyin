@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 import { estimateCost } from "./estimated-cost.js";
 import { ModelClientError } from "./failures.js";
 import type {
+  KeptApiKey,
   ModelClient,
   ModelEvent,
   ModelFetch,
@@ -215,7 +216,7 @@ export class ProviderModelClient implements ModelClient {
     return this.#account.settings();
   }
 
-  setApiKey(apiKey: string): Promise<void> {
+  setApiKey(apiKey: string): Promise<KeptApiKey> {
     return this.#account.setApiKey(apiKey);
   }
 

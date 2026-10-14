@@ -163,8 +163,9 @@ function pluginName(value: unknown): boolean {
 function authoredSkillDraft(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
+  // A skill's name becomes the name of its folder in the package.
   return (
-    text(item.id, 128) &&
+    pluginName(item.id) &&
     text(item.description, 4000) &&
     text(item.instructions, 64_000)
   );

@@ -8,7 +8,7 @@ import type { McpConnectionTestOutcome } from "@zhiyin/contract";
 import { Icon } from "../shared/index.js";
 import type { AccessMode } from "./ConnectorAccess.js";
 import {
-  slugify,
+  slugAsTyped,
   type ConnectorDraft,
   type SkillDraft,
   type SpecialistDraft,
@@ -44,7 +44,7 @@ export function SkillFields({
           value={form.id}
           disabled={!isNew}
           onChange={(event) =>
-            onChange({ ...form, id: slugify(event.target.value) })
+            onChange({ ...form, id: slugAsTyped(event.target.value) })
           }
         />
         {invalid.name && <small role="alert">Enter a name.</small>}

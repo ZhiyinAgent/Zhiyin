@@ -14,7 +14,7 @@ export async function recordUsage(
     .record(usage)
     .then(() => telemetry.state(now))
     .catch(() => ({
-      status: "unavailable",
+      status: "failed",
       reason: "Usage history could not be saved.",
     }));
   emit({ kind: "usageChanged", data: state });

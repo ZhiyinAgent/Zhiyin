@@ -163,7 +163,13 @@ export type SpecialistExecutionResult =
       readonly runId: string;
       readonly specialist: SpecialistDefinition;
       readonly reason: string;
+      /** Ended by a stop: told to the next turn, and wakes nothing itself. */
+      readonly stopped?: true;
     };
+
+/** Why a run ended when its turn was stopped. */
+export const stoppedBeforeCompleting =
+  "The specialist stopped before it completed.";
 
 /**
  * The delegate_specialist tool call's own, immediate result. A run's actual
@@ -522,7 +528,7 @@ export class SpecialistExecution {
       const own = !controller.signal.aborted && isOwnDefect(error);
       if (own) this.#deps.recordDefect?.({ taskId: options.taskId, error });
       const reason = controller.signal.aborted
-        ? "The specialist stopped before it completed."
+        ? stoppedBeforeCompleting
         : own
           ? "Zhiyin stopped on an error of its own while this specialist was working."
           : error instanceof Error
@@ -535,7 +541,13 @@ export class SpecialistExecution {
         actionIds,
       });
       this.#ownership.finish(childTurnId, controller);
-      return { ok: false, runId, specialist: options.specialist, reason };
+      return {
+        ok: false,
+        runId,
+        specialist: options.specialist,
+        reason,
+        ...(controller.signal.aborted ? { stopped: true as const } : {}),
+      };
     }
   }
 

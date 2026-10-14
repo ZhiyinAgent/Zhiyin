@@ -1,4 +1,11 @@
-import { appendFile, mkdir, readFile, readdir, rm } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  open,
+  readFile,
+  readdir,
+  rm,
+} from "node:fs/promises";
 import { join } from "node:path";
 import type { ProviderUsage, UsageState } from "@zhiyin/contract";
 import {
@@ -23,11 +30,32 @@ const missing = (error: unknown) =>
   "code" in error &&
   error.code === "ENOENT";
 
+/** Whether the file's last line has no end, as when a write was cut off. */
+async function endsInsideLine(file: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await open(file, "r");
+  } catch (error) {
+    if (missing(error)) return false;
+    throw error;
+  }
+  try {
+    const { size } = await handle.stat();
+    if (!size) return false;
+    const last = Buffer.alloc(1);
+    await handle.read(last, 0, 1, size - 1);
+    return last[0] !== 0x0a;
+  } finally {
+    await handle.close();
+  }
+}
+
 /**
  * Usage kept as one file a month, one request a line. A request is appended,
  * never rewritten into the rest, so recording costs the same on the first day
  * as after a year; a line that cannot be read is skipped and the rest still
- * counts. Months past the kept span are removed as new ones are recorded.
+ * counts, and one a crash cut off is ended before the next is written. Months
+ * past the kept span are removed as new ones are recorded.
  */
 export class FileUsageTelemetry implements UsageTelemetry {
   readonly #directory: string;
@@ -50,11 +78,10 @@ export class FileUsageTelemetry implements UsageTelemetry {
       : monthOf(at);
     try {
       await mkdir(this.#directory, { recursive: true });
-      await appendFile(
-        join(this.#directory, `${month}.jsonl`),
-        `${JSON.stringify(usage)}\n`,
-        "utf8",
-      );
+      const file = join(this.#directory, `${month}.jsonl`);
+      // A line a crash cut off is ended first, so this one starts its own.
+      const after = (await endsInsideLine(file)) ? "\n" : "";
+      await appendFile(file, `${after}${JSON.stringify(usage)}\n`, "utf8");
     } catch {
       throw new UsageStoreError("Usage history could not be saved.");
     }

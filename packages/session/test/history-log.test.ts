@@ -142,6 +142,32 @@ describe("a history log", () => {
     expect((await HistoryLog.open(file)).state).toEqual(states.at(-1));
   });
 
+  /**
+   * A save reported as failed is sent again, so one already in the log would
+   * be applied twice when the log is read back.
+   */
+  it("counts a save once it is in the log, even when a fresh file cannot be started", async () => {
+    const file = await temporaryFile();
+    const states = Array.from({ length: 24 }, (_, index) => ({
+      text: `${index} `.padEnd(20_000, "x"),
+    }));
+    await HistoryLog.create(file, states[0]);
+    const { log } = await HistoryLog.open(file, {
+      ...historyFiles,
+      create: async () => {
+        throw new Error("Disk full");
+      },
+    });
+
+    for (let index = 1; index < states.length; index += 1)
+      await log.write(
+        changesBetween(states[index - 1], states[index]),
+        states[index],
+      );
+
+    expect((await HistoryLog.open(file)).state).toEqual(states.at(-1));
+  });
+
   it("keeps the previous file when starting a fresh one did not finish", async () => {
     const file = await temporaryFile();
     await saved(file, [{ text: "" }, { text: "Kept" }]);

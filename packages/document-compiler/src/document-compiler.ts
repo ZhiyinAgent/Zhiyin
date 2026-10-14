@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { relative, resolve, sep } from "node:path";
+import { basename, extname, relative, resolve, sep } from "node:path";
 import type {
   ActionDetail,
   ProducedFile,
@@ -133,6 +133,15 @@ function requestFrom(
     return { reason: "Documents are compiled inside the workspace folder." };
   if (!target.toLowerCase().endsWith(".pdf"))
     return { reason: "The compiled document is a PDF." };
+  // Tectonic is given a folder and names the PDF after the source.
+  const named = `${basename(source, extname(source))}.pdf`;
+  if (
+    engine === "tectonic" &&
+    basename(target).toLowerCase() !== named.toLowerCase()
+  )
+    return {
+      reason: `LaTeX writes the PDF under its source's name: give the output as ${named}, in any folder of the workspace.`,
+    };
   return {
     engine,
     source,

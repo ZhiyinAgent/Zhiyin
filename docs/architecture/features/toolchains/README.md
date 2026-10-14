@@ -38,7 +38,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
 
 - A download is used only if its size and SHA-256 match the pinned ones. A
   download that grows past its size is stopped; a mismatch is discarded and
-  reported, and nothing is installed.
+  reported, and nothing is installed. A download that cannot be written, as on
+  a full disk, fails the install, which can then be tried again.
 - Nothing partial is ever used. An install is assembled in a staging folder
   and moved into place whole; a stopped or failed one leaves neither a staging
   folder nor a program.

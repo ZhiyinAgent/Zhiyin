@@ -74,9 +74,6 @@ importers:
       koffi:
         specifier: 3.2.1
         version: 3.2.1
-      mermaid:
-        specifier: 11.17.2
-        version: 11.17.2
       pdfjs-dist:
         specifier: 6.3.289
         version: 6.3.289
@@ -192,6 +189,9 @@ importers:
       jsdom:
         specifier: 30.0.1
         version: 30.0.1(@noble/hashes@2.4.0)
+      mermaid:
+        specifier: 11.17.2
+        version: 11.17.2
       react:
         specifier: 19.2.8
         version: 19.2.8

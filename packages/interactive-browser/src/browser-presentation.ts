@@ -168,7 +168,8 @@ export async function inspectBrowser(
   if (
     name === "browser_navigate" &&
     typeof args.url === "string" &&
-    args.url.startsWith("file:")
+    // A browser reads a scheme in any case, after any leading space.
+    /^\s*file:/i.test(args.url)
   )
     return {
       ok: false,

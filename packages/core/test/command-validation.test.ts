@@ -461,6 +461,13 @@ describe("privileged commands", () => {
         { ...contents, skills: [{ id: "fetch-forecast" }] },
       ]),
     ).toThrow();
+    // A skill's name becomes a folder: one that could climb out is refused.
+    expect(() =>
+      validateCommand(CHANNEL.savePluginContents, [
+        "weather-pro",
+        { ...contents, skills: [{ ...contents.skills[0], id: "..\\escaped" }] },
+      ]),
+    ).toThrow();
     expect(() =>
       validateCommand(CHANNEL.setComponentEnabled, [
         "weather-pro/route-planner",

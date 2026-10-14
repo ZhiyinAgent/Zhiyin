@@ -49,7 +49,8 @@ there is no second implementation of git's storage format to audit.
 - A ref or path that starts with `-` is refused, both when the call is
   inspected and when it runs, so it is never read as an option.
 - Results are git's own output, shortened past 4,000 characters. A failure
-  returns what git printed.
+  returns what git printed. A command Zhiyin ended, at its time limit, its
+  output limit or a stop, says so first, rather than reading as git's error.
 - The `git_commit` approval shows the message and `git diff --staged --stat`,
   run when the call is inspected, or says that nothing is staged.
 - All conversations share one connection, since no git operation keeps state

@@ -49,7 +49,7 @@ describe("usage that cannot be saved", () => {
     expect(events).toContainEqual({
       kind: "usageChanged",
       data: {
-        status: "unavailable",
+        status: "failed",
         reason: "Usage history could not be saved.",
       },
     });

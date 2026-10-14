@@ -59,7 +59,9 @@ type RequestWindow = {
 
 /**
  * What a provider said about a key offered to it. A refusal carries the
- * failure to report; a check that could not be made throws instead.
+ * failure to report; a check that could not be made throws instead. A refusal
+ * that sending again could get past, such as a busy provider, is taken as a
+ * check that could not be made.
  */
 export type KeyCheck =
   | { readonly accepted: true }

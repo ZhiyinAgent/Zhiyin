@@ -91,6 +91,27 @@ describe.runIf(process.platform === "win32")("the drawing host", () => {
     host.close();
   });
 
+  it("tries a process that could not be started again on the next request", async () => {
+    let attempts = 0;
+    const host = new DrawingHost({
+      start: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("The process could not start.");
+        return serviceProcess();
+      },
+      containment,
+    });
+    const bytes = new Uint8Array(pdf());
+
+    await expect(host.open("r1", "pdf", bytes)).rejects.toThrow(
+      "The process could not start.",
+    );
+    await expect(host.open("r1", "pdf", bytes)).resolves.toMatchObject({
+      ok: true,
+    });
+    host.close();
+  });
+
   it("ends its process when closed", async () => {
     const processes = starting(() => fixtureProcess("never-answers.mjs"));
     const host = new DrawingHost({ start: processes.start, containment });

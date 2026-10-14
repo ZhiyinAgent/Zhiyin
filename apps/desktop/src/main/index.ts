@@ -34,6 +34,12 @@ import { reloadAfterCrash } from "./window-recovery.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+// Where the development server serves the window. An installed app never
+// reads it: its window comes only from its own files.
+const developmentServer = app.isPackaged
+  ? undefined
+  : process.env["ELECTRON_RENDERER_URL"];
+
 // The data folder is named after the app, and the name otherwise depends on
 // how it was started: the package's name in development, Electron's own when
 // the built file is run directly. Said before anything reads the folder; a
@@ -131,7 +137,7 @@ function createWindow(): BrowserWindow {
   // Developer tools opened where there is a developer. With no menu to hang a
   // role on, the key is read here; in a built app there is no way in at all,
   // which is the point.
-  if (process.env["ELECTRON_RENDERER_URL"])
+  if (developmentServer)
     window.webContents.on("before-input-event", (_event, input) => {
       if (input.type === "keyDown" && input.key === "F12")
         window.webContents.toggleDevTools();
@@ -142,8 +148,8 @@ function createWindow(): BrowserWindow {
 
   const load = (restarted: boolean) => {
     const query = restarted ? { restarted: "1" } : undefined;
-    if (process.env["ELECTRON_RENDERER_URL"]) {
-      const url = new URL(process.env["ELECTRON_RENDERER_URL"]);
+    if (developmentServer) {
+      const url = new URL(developmentServer);
       if (query) url.search = new URLSearchParams(query).toString();
       void window.loadURL(url.toString());
     } else {
@@ -200,9 +206,7 @@ void app.whenReady().then(async () => {
       : join(here, "../../../../packages/blender-studio/src/session/start.py"),
     workspaceDirectory:
       process.env["ZHIYIN_WORKSPACE"] ??
-      (process.env["ELECTRON_RENDERER_URL"]
-        ? join(app.getAppPath(), "../..")
-        : undefined),
+      (developmentServer ? join(app.getAppPath(), "../..") : undefined),
     version: app.getVersion(),
     send: (channel, payload) => {
       if (!window.isDestroyed()) window.webContents.send(channel, payload);

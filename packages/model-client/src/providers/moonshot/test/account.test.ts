@@ -128,8 +128,9 @@ describe("a Moonshot key", () => {
       }),
     );
 
-    await expect(client.setApiKey("sk-good")).rejects.toMatchObject({
-      message: expect.stringContaining("could not be checked"),
+    await expect(client.setApiKey("sk-good")).resolves.toEqual({
+      status: "unverified",
+      reason: expect.stringContaining("could not be checked"),
     });
     expect(stored()).toBe("sk-good");
   });

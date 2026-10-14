@@ -59,7 +59,9 @@ crash interrupted, and takes the backup around each file change. It is a group
   entry. If the saved conversation matches neither its state before the
   operation nor the intended result, that conversation stays blocked: no
   turn, rewind or undo starts in it. The host is asked to open the
-  conversation first, since after a restart it may not be loaded.
+  conversation first, since after a restart it may not be loaded. One entry
+  that cannot be finished blocks only its own conversation: the others still
+  finish.
 - An undo puts back only the turn's files, and never one changed since: such a
   file is left as it is and reported as a conflict. An undo goes through the
   same journal as a rewind.

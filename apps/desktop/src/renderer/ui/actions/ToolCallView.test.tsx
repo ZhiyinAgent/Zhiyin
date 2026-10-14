@@ -24,6 +24,24 @@ describe("ToolCallView", () => {
     expect(screen.getByText("max_results")).toBeVisible();
   });
 
+  it("writes out characters that draw nothing or reverse the text, in names, text and structures alike", () => {
+    render(
+      <ToolCallView
+        invocation={{
+          name: "send\u200Bmail",
+          arguments: [
+            { name: "to", value: "ana@example.com\u202E" },
+            { name: "options", value: '{"subject":"Q3\\u2067 notes"}' },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("send[U+200B]mail")).toBeVisible();
+    expect(screen.getByText("ana@example.com[U+202E]")).toBeVisible();
+    expect(screen.getByText('"Q3[U+2067] notes"')).toBeVisible();
+  });
+
   it("shows every row when several share a name, as the rows the 3D tools name after objects do", () => {
     // React says when rows cannot be told apart: what it then shows is unsupported.
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

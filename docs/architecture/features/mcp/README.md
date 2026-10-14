@@ -83,13 +83,17 @@ says about itself is shown as its claim.
   seconds, on a check, or when switched off and on. A refused credential and
   an invalid endpoint are never retried on their own.
 - A connection lost during a call is dialled again on the next look; the lost
-  call is never repeated, since it may have taken effect.
+  call is never repeated, and its answer says it may have taken effect.
 - A server that announces a changed tool list has its tools replaced, and with
   them their approval identity. Switching a connector off closes it and
   withdraws its tools at once.
 - A connector nothing declares any more is forgotten with its credential and
   tool choices, so reinstalling its package starts clean. When the
   declarations cannot be read, nothing changes.
+- When the saved connection settings cannot be read, which tools a person
+  switched off is unknown, so no declared connector is reached: each is
+  closed and shown failed with the reason, and nothing is forgotten or
+  written. Built-in connections need nothing saved and carry on.
 - Only HTTP and HTTPS endpoints are dialled. An endpoint that carries its own
   credentials, in its user name, password or a token-like query parameter, is
   refused, because an endpoint is displayed and kept as the connection's

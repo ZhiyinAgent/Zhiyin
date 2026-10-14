@@ -75,8 +75,9 @@ Kept beside a conversation:
 - `claimDrafts(conversationId, ids)` moves pastes and pictures added before a
   message was sent into its conversation, answering each one's size and a
   paste's line count.
-- `forgetConversation(conversationId)` removes everything a conversation
-  kept; `lastRead` and `noteRead` record when each file was last read.
+- `forgetConversation(conversationId)` removes everything a deleted
+  conversation kept, once its folder is gone; `lastRead` and `noteRead` record
+  when each file was last read.
 
 Failures are `SessionStoreError`s with a `code` (`corrupted`, `unavailable`,
 `in-use`, `newer` or `outdated`), and `writtenBy` for the last two.
@@ -119,13 +120,18 @@ instead, so nothing a conversation is called can name a path.
   line is refused.
 - **There is always one complete file to read.** A log grown past four times
   the size of its state, and the settings at every change, are written whole
-  under another name and renamed into place.
+  under another name and renamed into place. A log that cannot be started
+  afresh stays as it is, and the save already in it counts, so it is never
+  written twice.
 - **The list is the folders, not a file.** A launch reads each conversation's
   summary, never its log, and starting, renaming or deleting a conversation
   touches only its own folder. A summary missing, broken or older than its
   conversation is not trusted; the conversation is read instead. A deleted
   conversation's folder is renamed before it is removed, so a deletion cut
-  short by a crash is finished at the next launch.
+  short by a crash is finished at the next launch. A folder Windows will not
+  let go of, as when another program has a file in it open, is tried again at
+  each save, and what the conversation kept beside itself stays until the
+  folder goes: a conversation that is back at the next launch is back whole.
 - **Only what lasts is saved:** the conversations, the open one, the person's
   choices and the folders worked in. Connection, plugin, usage and browser
   state are read again at every launch, so a passing state never decides

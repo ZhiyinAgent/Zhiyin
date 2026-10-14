@@ -166,6 +166,9 @@ function providersSetUp() {
       setApiKey: async (apiKey: string) => {
         if (apiKey === "refused") throw new Error("The lab rejected the key.");
         keys.set(name(at), apiKey);
+        return apiKey === "unchecked"
+          ? { status: "unverified", reason: "The lab could not be reached." }
+          : { status: "accepted" };
       },
       clearApiKey: async () => void keys.delete(name(at)),
       models: async () => ({
@@ -222,6 +225,31 @@ describe("setting up a provider other than the chosen one", () => {
       reason: "The lab rejected the key.",
     });
     expect(keys.size).toBe(0);
+  });
+
+  it("reports a refused key as refused when an earlier key is still kept", async () => {
+    const { settings, keys } = providersSetUp();
+    await settings.saveApiKey("lab-key", mainland);
+
+    const outcome = await settings.saveApiKey("refused", mainland);
+
+    expect(outcome).toEqual({
+      status: "refused",
+      reason: "The lab rejected the key.",
+    });
+    expect(keys.get("lab:mainland")).toBe("lab-key");
+  });
+
+  it("reports a key kept without a check as unverified, not refused", async () => {
+    const { settings, keys } = providersSetUp();
+
+    const outcome = await settings.saveApiKey("unchecked", mainland);
+
+    expect(outcome).toEqual({
+      status: "unverified",
+      reason: "The lab could not be reached.",
+    });
+    expect(keys.get("lab:mainland")).toBe("unchecked");
   });
 
   it("removes a key from that provider and region alone", async () => {

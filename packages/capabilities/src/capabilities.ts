@@ -32,6 +32,7 @@ import {
   activeSpecialists,
   authoredContentsOf,
   componentContentOf,
+  damagedPluginState,
   declaredConnections,
   inspectPluginTool,
   pluginContentsDetails,
@@ -151,11 +152,11 @@ export interface Capabilities {
       ) => Promise<ToolInvocationResult>)
     | undefined;
   /**
-   * Closes this conversation's browser and its connections, and leaves every
-   * other conversation's open. The conversation itself remains, so its next
-   * turn starts a fresh browser.
+   * Ends what a stopped turn left running in this conversation: its commands
+   * and jobs. Its browser, 3D scene and connections stay open with what they
+   * show, so the next turn carries on from them.
    */
-  closeConversation(conversationId: string): Promise<void>;
+  stopConversation(conversationId: string): Promise<void>;
   /**
    * Lets go of everything a conversation held, for one that is gone. Nothing is
    * kept for it, because nothing will ask for it again.
@@ -535,14 +536,8 @@ export class ComposedCapabilities implements Capabilities {
       : undefined;
   }
 
-  async closeConversation(conversationId: string): Promise<void> {
-    const { browsers, mcp, tools, scenes } = this.#members;
-    await Promise.all([
-      browsers.close(conversationId),
-      scenes?.close(conversationId),
-      mcp.shutdownScope(conversationId),
-      tools.stopCommands?.(conversationId),
-    ]);
+  async stopConversation(conversationId: string): Promise<void> {
+    await this.#members.tools.stopCommands?.(conversationId);
   }
 
   async forgetConversation(conversationId: string): Promise<void> {
@@ -589,14 +584,21 @@ export class ComposedCapabilities implements Capabilities {
   async pluginStates(
     knownConnections?: readonly McpServerState[],
   ): Promise<readonly PluginState[]> {
-    const views = await this.#members.plugins.list();
+    const { plugins } = this.#members;
+    const [views, damaged] = await Promise.all([
+      plugins.list(),
+      plugins.damaged(),
+    ]);
     const connections = knownConnections ?? (await this.#members.mcp.states());
     const facts = new Map<string, AppConnectionFact>();
     for (const state of connections.filter((item) => item.builtIn)) {
       const toolchain = await this.#toolchainOf(state.id);
       facts.set(state.id, { state, ...(toolchain ? { toolchain } : {}) });
     }
-    return pluginStatesFrom(views, connections, facts);
+    return [
+      ...pluginStatesFrom(views, connections, facts),
+      ...damaged.map(damagedPluginState),
+    ];
   }
 
   setPluginEnabled(id: string, enabled: boolean): Promise<void> {

@@ -162,8 +162,10 @@ installs, and, in the app, where process containment is available.
 - A command that deletes is refused, correctably, before approval and again
   before it runs, pointing the model to `delete_file`. The command is split
   into the simple commands bash would run, including substituted and nested
-  ones. This recognises deletions; a program that deletes on its own still
-  goes through the shell approval.
+  ones, and code handed to a shell or Python with `-c`, alone or among other
+  options. This recognises deletions; it does not prove there are none. A
+  program that deletes on its own, or a command whose program name is only
+  put together as it runs, still goes through the shell approval.
 - Output is bounded inline to about 5,000 tokens of standard output and 1,500
   of standard error, each as its start and end; when either does not fit, the
   whole stream is kept with the conversation under an `output://` address.

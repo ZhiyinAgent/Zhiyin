@@ -51,6 +51,8 @@ export async function* streamedEvents(
   } catch (error) {
     // Cancelled by the caller, which is not a connection that failed.
     if (request.signal?.aborted) throw request.signal.reason;
+    // Already said for what it is, such as an answer that never started.
+    if (error instanceof ModelClientError) throw error;
     throw new ModelClientError(
       "networkFailure",
       `Could not reach ${dialect.name}. Check the connection and try again.`,

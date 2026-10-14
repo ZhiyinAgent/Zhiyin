@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { TaskArtifact } from "@zhiyin/contract";
 import { ArtifactPanel } from "./ArtifactPanel.js";
@@ -115,6 +121,31 @@ describe("ArtifactPanel", () => {
         "Only the beginning is shown here. Save a copy to read all of it.",
       ),
     ).toBeVisible();
+  });
+
+  it("shows the file opened last when an earlier one answers after it", async () => {
+    const answers = new Map<string, (text: string) => void>();
+    render(
+      <ArtifactPanel
+        artifacts={[brief, notes]}
+        onPreview={(path) =>
+          new Promise((resolve) =>
+            answers.set(path, (text) =>
+              resolve({ status: "ready", path, text, truncated: false }),
+            ),
+          )
+        }
+        onExport={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /brief\.md/ }));
+    fireEvent.click(screen.getByRole("button", { name: /notes\.md/ }));
+
+    await act(async () => answers.get("notes.md")?.("The notes."));
+    await act(async () => answers.get("reports/brief.md")?.("The brief."));
+
+    expect(screen.getByText("The notes.")).toBeVisible();
+    expect(screen.queryByText("The brief.")).toBeNull();
   });
 
   it("explains a produced file that is no longer in the workspace", async () => {

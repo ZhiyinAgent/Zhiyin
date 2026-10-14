@@ -103,4 +103,22 @@ describe("browser permission requests", () => {
       { name: "Address", value: "https://example.org/docs" },
     ]);
   });
+
+  it("refuses to open a file address however it is written", async () => {
+    for (const url of [
+      "file:///C:/Users/notes.html",
+      "FILE:///C:/Users/notes.html",
+      " File:///C:/Users/notes.html",
+    ])
+      expect(
+        await inspectBrowser(
+          onPage("https://example.com/pricing"),
+          "browser_navigate",
+          { url },
+        ),
+      ).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining("File URLs are not supported"),
+      });
+  });
 });

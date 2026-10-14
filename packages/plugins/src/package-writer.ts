@@ -5,7 +5,11 @@ import type {
   AuthoredSkillDraft,
   AuthoredSpecialistDraft,
 } from "@zhiyin/contract";
-import { AGENT_PLUGINS_SCHEMA } from "./plugins.js";
+import {
+  AGENT_PLUGINS_SCHEMA,
+  InvalidPluginError,
+  portableName,
+} from "./plugins.js";
 import { MCP_PLUGINS_SCHEMA } from "./package-loader.js";
 
 /**
@@ -34,6 +38,11 @@ async function writeSkill(
   root: string,
   skill: AuthoredSkillDraft,
 ): Promise<void> {
+  // The name becomes a folder, so it is checked before it is used as one.
+  if (!portableName.test(skill.id))
+    throw new InvalidPluginError(
+      `Skill “${skill.id}” must use a portable name.`,
+    );
   const directory = join(root, "skills", skill.id);
   await mkdir(directory, { recursive: true });
   const frontmatter = [

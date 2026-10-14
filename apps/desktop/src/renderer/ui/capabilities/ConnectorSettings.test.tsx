@@ -94,6 +94,30 @@ describe("setting up a connector", () => {
     await within(dialog).findByText(/needs a personal access token/);
   });
 
+  it("says so when a connection test cannot be run", async () => {
+    render(
+      <ConnectorSettings
+        component={github}
+        server={server()}
+        onTest={() => Promise.reject(new Error("bridge closed"))}
+        onCheck={async () => server()}
+        onSaveToken={async () => undefined}
+        onClearToken={async () => undefined}
+        onSignIn={async () => ({ status: "signed-in" })}
+        onCancelSignIn={async () => undefined}
+        onSetToolEnabled={async () => undefined}
+        onOpenExternalUrl={async () => undefined}
+        onClose={() => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText("The connection could not be tested."),
+    ).toBeVisible();
+  });
+
   it("with no key, says which key it needs before it can be used", async () => {
     const { dialog } = open(server());
 

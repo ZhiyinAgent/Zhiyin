@@ -554,6 +554,68 @@ describe("specialist child execution", () => {
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
   });
 
+  it("starts nothing when a stopped turn's specialist settles", async () => {
+    const base = stubDependencies(() => {});
+    let requestNumber = 0;
+    let childStarted = false;
+    const loop = loopFrom({
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Reviews work.",
+              instructions: "Review the evidence.",
+            },
+          ],
+        }),
+      ]),
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          requestNumber += 1;
+          if (requestNumber === 1) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Wait for evidence.",
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          childStarted = true;
+          await new Promise<void>((resolve) =>
+            request.signal?.addEventListener("abort", () => resolve(), {
+              once: true,
+            }),
+          );
+        },
+      },
+      newSpecialistRunId: () => "specialist-cancelled",
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    const running = loop.start(taskId, "Review this change");
+    await until(() => childStarted);
+    await loop.cancel(taskId);
+    await running;
+    const requestsAtStop = requestNumber;
+    // Nothing is awaited that could start a turn: a wake would have begun by now.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(requestNumber).toBe(requestsAtStop);
+    expect(loop.running(taskId)).toBe(false);
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
+  });
+
   it("never offers a running specialist its own delegate tool", async () => {
     const base = stubDependencies(() => {});
     const loop = loopFrom({

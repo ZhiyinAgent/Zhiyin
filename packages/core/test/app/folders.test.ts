@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { stubDependencies, loopFrom } from "./support.js";
+import { stubDependencies, loopFrom, until } from "./support.js";
 
 /**
  * Starting a new conversation and then choosing a folder for it. The folder
@@ -292,5 +292,93 @@ describe("AgentLoop per-conversation folders", () => {
         .issues?.map((issue) => issue.message)
         .join(" "),
     ).toMatch(/could not be opened/i);
+  });
+
+  it("refuses a message in a conversation whose folder cannot be opened, rather than work in another", async () => {
+    const root = { name: "reports" };
+    const deps = stubDependencies(() => {});
+    let broken = false;
+    const loop = loopFrom({
+      ...deps,
+      workspace: {
+        ...deps.workspace,
+        describeWorkspace: async () => ({
+          rootName: root.name,
+          entries: [],
+          truncated: false,
+        }),
+        selectWorkspace: async (path: string) => {
+          if (broken && path === "C:/work/reports")
+            throw new Error("The folder is gone.");
+        },
+      },
+      newTaskId: () => `task-${Math.random()}`,
+    });
+    await loop.initialize();
+    const reports = await loop.createTask();
+    await loop.selectWorkspace("C:/work/reports");
+    root.name = "notes";
+    await loop.createTask();
+    await loop.selectWorkspace("C:/work/notes");
+    broken = true;
+    await loop.selectTask(reports);
+
+    await expect(loop.start(reports, "Summarize the reports")).rejects.toThrow(
+      "The folder for this conversation could not be opened. Choose its new location, then send again.",
+    );
+
+    expect(loop.turns.running(reports)).toBe(false);
+    expect(
+      loop.snapshot().tasks.find((task) => task.id === reports)?.messages,
+    ).toEqual([]);
+  });
+
+  it("refuses a message in one conversation while another works in a different folder", async () => {
+    const root = { name: "reports" };
+    const deps = stubDependencies(() => {});
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const loop = loopFrom({
+      ...deps,
+      workspace: {
+        ...deps.workspace,
+        describeWorkspace: async () => ({
+          rootName: root.name,
+          entries: [],
+          truncated: false,
+        }),
+        selectWorkspace: async () => {},
+      },
+      model: {
+        ...deps.model,
+        send: async function* () {
+          await held;
+          yield { kind: "done" as const };
+        },
+      },
+      newTaskId: () => `task-${Math.random()}`,
+    });
+    await loop.initialize();
+    const reports = await loop.createTask();
+    await loop.selectWorkspace("C:/work/reports");
+    root.name = "notes";
+    const notes = await loop.createTask();
+    await loop.selectWorkspace("C:/work/notes");
+    root.name = "reports";
+    await loop.selectTask(reports);
+    const working = loop.start(reports, "Summarize the reports");
+    await until(() => loop.turns.running(reports));
+    await loop.selectTask(notes);
+
+    await expect(loop.start(notes, "Tidy the notes")).rejects.toThrow(
+      "Another conversation is working in “reports”. Send this once it finishes, or stop it first.",
+    );
+
+    expect(loop.snapshot().workspace?.path).toBe("C:/work/reports");
+    expect(
+      loop.snapshot().tasks.find((task) => task.id === notes)?.messages,
+    ).toEqual([]);
+    release();
+    await working;
   });
 });

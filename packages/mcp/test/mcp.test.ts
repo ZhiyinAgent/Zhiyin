@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, type ServerResponse } from "node:http";
@@ -1220,7 +1220,8 @@ describe("ManagedMcpServers", () => {
 
     await expect(servers.execute("mcp__docs__lookup", {})).resolves.toEqual({
       ok: false,
-      reason: "The MCP server could not complete this action.",
+      reason:
+        "The connection to the MCP server was lost during the call, so the action may already have taken effect. Check before calling it again.",
     });
     expect(close).toHaveBeenCalledOnce();
     expect(calls).toBe(1);
@@ -1603,6 +1604,58 @@ describe("ManagedMcpServers", () => {
         status: "connected",
         toolCount: 1,
       }),
+    ]);
+  });
+
+  it("keeps built-in connections working, and leaves declared ones waiting, when the saved settings are damaged", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const remoteClose = vi.fn(async () => {});
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: remoteClose,
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "navigate" }],
+            callTool: async () => ({ content: [] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    const saved = join(directory, "mcp-connections.json");
+    await writeFile(saved, "{ not json", "utf8");
+
+    const tools = (await servers.availableTools()).map((tool) => tool.name);
+    const states = await servers.states();
+
+    expect(tools).toEqual(["mcp__browser__navigate"]);
+    expect(states.find((state) => state.id === "docs")).toMatchObject({
+      status: "failed",
+      reason: "Saved connection settings are damaged.",
+    });
+    expect(remoteClose).toHaveBeenCalled();
+    expect(await readFile(saved, "utf8")).toBe("{ not json");
+
+    await writeFile(saved, JSON.stringify({ version: 1, connections: {} }));
+    expect((await servers.availableTools()).map((tool) => tool.name)).toEqual([
+      "mcp__browser__navigate",
+      "mcp__docs__lookup",
     ]);
   });
 

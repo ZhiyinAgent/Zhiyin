@@ -6,7 +6,7 @@ import { ToolCallView } from "./ToolCallView.js";
 import { JsonBlock } from "./JsonBlock.js";
 import { ResultImage } from "./ResultImage.js";
 import styles from "./actions.module.css";
-import { WindowLayer } from "../shared/index.js";
+import { WindowLayer, useModalFocus } from "../shared/index.js";
 
 /**
  * What an action did, opened from the record of it having happened.
@@ -49,19 +49,15 @@ export function ActionInspector({
   const shown =
     action.changes?.filter((change) => !named.includes(change)) ?? [];
 
+  useModalFocus(dialog);
   useEffect(() => {
-    const returnTo = document.activeElement;
-    dialog.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.stopPropagation();
       onClose();
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (returnTo instanceof HTMLElement) returnTo.focus();
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   return (

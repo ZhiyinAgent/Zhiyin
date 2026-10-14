@@ -38,6 +38,7 @@ import {
   type SavedConnections,
 } from "./saved-connections.js";
 import { BuiltInDescriptions } from "./built-in-descriptions.js";
+import { validateDefinition } from "./endpoint.js";
 
 /**
  * `token` is asked for the current credential rather than handed one, so a
@@ -149,31 +150,6 @@ type RoutedTool = {
   readonly connectionKey: string;
 };
 
-function validateDefinition(server: McpServerDefinition) {
-  if (!server.id.trim() || !server.name.trim()) {
-    throw new Error("An MCP server needs a name.");
-  }
-  let endpoint: URL;
-  try {
-    endpoint = new URL(server.url);
-  } catch {
-    throw new Error("Enter a valid MCP endpoint.");
-  }
-  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
-    throw new Error("MCP endpoints must use HTTP or HTTPS.");
-  }
-  if (
-    endpoint.username ||
-    endpoint.password ||
-    [...endpoint.searchParams.keys()].some((key) =>
-      /token|secret|password|api.?key/i.test(key),
-    )
-  )
-    throw new Error(
-      "Use an endpoint without embedded credentials. Save the access token separately.",
-    );
-}
-
 /** Long enough to read an input by; short enough not to be a second copy of it. */
 export class ManagedMcpServers implements McpServers {
   #mutations: Promise<void> = Promise.resolve();
@@ -204,6 +180,8 @@ export class ManagedMcpServers implements McpServers {
   readonly #connecting = new Map<string, Promise<void>>();
   readonly #epochs = new Map<string, number>();
   readonly #failures = new Map<string, Failure>();
+  /** Connections held back because the saved settings could not be read. */
+  readonly #waitingForSaved = new Set<string>();
   /** When each configured connection last answered or failed to. */
   readonly #checkedAt = new Map<string, number>();
   /** What each conversation-scoped built-in offers, once it has said. */
@@ -771,11 +749,13 @@ export class ManagedMcpServers implements McpServers {
               retryAt: this.#now(),
             },
       );
+      // A call lost on the way may have reached the server: the model is
+      // told so, not that nothing happened, so it does not simply repeat it.
       return {
         ok: false,
         reason: refused
           ? refusal
-          : "The MCP server could not complete this action.",
+          : "The connection to the MCP server was lost during the call, so the action may already have taken effect. Check before calling it again.",
       };
     }
   }
@@ -1063,7 +1043,20 @@ export class ManagedMcpServers implements McpServers {
     } catch (error) {
       throw new Error("Connections could not be read.", { cause: error });
     }
-    const state = await this.#saved.read();
+    let state: SavedConnections;
+    try {
+      state = await this.#saved.read();
+    } catch (error) {
+      return this.#waitForSaved(
+        declared,
+        error instanceof Error
+          ? error.message
+          : "Connection settings could not be read.",
+      );
+    }
+    // Readable again: what waited for the settings is dialled afresh.
+    for (const id of this.#waitingForSaved) this.#failures.delete(id);
+    this.#waitingForSaved.clear();
     const next: SavedConnections = { ...state };
     const byId = new Map(declared.map((server) => [server.id, server]));
     for (const id of Object.keys(state)) {
@@ -1131,6 +1124,36 @@ export class ManagedMcpServers implements McpServers {
     this.#readOnly = new Map(
       declared.map((server) => [server.id, new Set(server.readOnlyTools)]),
     );
+    return definitions;
+  }
+
+  /**
+   * With the saved settings unreadable, which tools a person switched off is
+   * not known, so no declared connection is reached: each is closed and shown
+   * failed with the reason, and nothing is forgotten or written. Built-in
+   * connections need nothing saved and carry on. Each look reads again.
+   */
+  async #waitForSaved(
+    declared: readonly DeclaredMcpServer[],
+    reason: string,
+  ): Promise<McpServerDefinition[]> {
+    const definitions: McpServerDefinition[] = [];
+    for (const server of declared) {
+      if (this.#isBuiltIn(server.id))
+        throw new Error(`Connection “${server.id}” is built in to Zhiyin.`);
+      await this.#disconnect(server.id);
+      if (server.enabled) {
+        this.#failures.set(server.id, { status: "failed", reason });
+        this.#waitingForSaved.add(server.id);
+      }
+      definitions.push({
+        id: server.id,
+        name: server.name,
+        url: server.url,
+        enabled: server.enabled,
+      });
+    }
+    this.#definitions = definitions;
     return definitions;
   }
 }

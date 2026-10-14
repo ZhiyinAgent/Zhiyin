@@ -13,5 +13,7 @@ export { Notice } from "./Notice.js";
 export { StandalonePage } from "./StandalonePage.js";
 export { SurfacePanel } from "./SurfacePanel.js";
 export { useDismiss } from "./useDismiss.js";
+export { useModalFocus } from "./useModalFocus.js";
+export { visibleText } from "./visibleText.js";
 export { WindowLayer } from "./WindowLayer.js";
 export { countWords, wordCount } from "./words.js";

@@ -1,6 +1,7 @@
 # 0017. The agent's browser is Zhiyin's own: headless, isolated, one per conversation
 
-Status: accepted
+Status: partly superseded by 0029, under which stopping a turn leaves its
+browser open.
 
 ## Decision
 

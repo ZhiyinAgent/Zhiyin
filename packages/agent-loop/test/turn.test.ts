@@ -393,7 +393,7 @@ describe("AgentLoop", () => {
           endpoint: "https://openrouter.ai/api/v1/chat/completions",
           credential: { status: "missing", source: "none" },
         }),
-        setApiKey: async () => {},
+        setApiKey: async () => ({ status: "accepted" }),
         clearApiKey: async () => {},
       },
     });
@@ -1282,11 +1282,10 @@ describe("AgentLoop", () => {
     await running;
 
     expect(toolObservedAbort).toBe(true);
-    // Stopping this conversation closes this conversation's connections. It is
-    // not a reason to disconnect the servers every other conversation shares,
-    // which is what ADR 0005 means by not closing shared resources for
-    // unrelated work.
-    expect(scopesClosed).toEqual([taskId]);
+    // Stopping ends the work, not what the conversation holds open: its own
+    // connections stay for its next turn, and the servers every other
+    // conversation shares are not touched either (ADR 0005).
+    expect(scopesClosed).toEqual([]);
     expect(sharedConnectionsClosed).toBe(false);
     expect(loop.snapshot().tasks[0]?.actions).toEqual([
       expect.objectContaining({

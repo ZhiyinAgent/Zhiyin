@@ -1,4 +1,5 @@
 import type { ToolInvocation } from "@zhiyin/contract";
+import { visibleText } from "../shared/index.js";
 import { JsonBlock, looksStructured } from "./JsonBlock.js";
 import styles from "./actions.module.css";
 
@@ -43,13 +44,13 @@ export function ToolCallView({
           {label && <span className={styles["tool-call__label"]}>{label}</span>}
           {!hideName && (
             <div className={styles["tool-call__identity"]}>
-              <code>{invocation.name}</code>
+              <code>{visibleText(invocation.name)}</code>
               {invocation.via && (
                 <span
                   className={styles["tool-call__via"]}
-                  title={invocation.via}
+                  title={visibleText(invocation.via)}
                 >
-                  {invocation.via}
+                  {visibleText(invocation.via)}
                 </span>
               )}
             </div>
@@ -75,7 +76,7 @@ export function ToolCallView({
                   ? { className: styles["tool-call__words"] }
                   : {})}
               >
-                <dt>{argument.name}</dt>
+                <dt>{visibleText(argument.name)}</dt>
                 <dd>
                   {argument.described && (
                     <p
@@ -87,7 +88,7 @@ export function ToolCallView({
                   )}
                   {/* Written for a person already: read as text, not data. */}
                   {argument.readable ? (
-                    <p>{argument.value}</p>
+                    <p>{visibleText(argument.value)}</p>
                   ) : (
                     <ArgumentValue
                       text={argument.value}
@@ -117,19 +118,23 @@ export function ToolCallView({
 function ArgumentValue({ text, omitted }: { text: string; omitted?: number }) {
   if (omitted === undefined) {
     return looksStructured(text) ? (
-      <JsonBlock text={text} className={styles["tool-call__value"]} />
+      <JsonBlock
+        text={text}
+        className={styles["tool-call__value"]}
+        shown={visibleText}
+      />
     ) : (
-      <pre className={styles["tool-call__value"]}>{text}</pre>
+      <pre className={styles["tool-call__value"]}>{visibleText(text)}</pre>
     );
   }
   const middle = Math.floor(text.length / 2);
   return (
     <pre className={styles["tool-call__value"]}>
-      {text.slice(0, middle)}
+      {visibleText(text.slice(0, middle))}
       <span className={styles["tool-call__omitted"]}>
         {` … ${omitted.toLocaleString()} characters hidden … `}
       </span>
-      {text.slice(middle)}
+      {visibleText(text.slice(middle))}
     </pre>
   );
 }

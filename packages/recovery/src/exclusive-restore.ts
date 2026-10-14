@@ -15,6 +15,7 @@
 
 import koffi from "koffi";
 import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 
@@ -32,7 +33,31 @@ export type ExclusiveRestore = {
   readonly expected: string;
   readonly action: "restore" | "remove";
   readonly backup?: string;
+  /** The digest the kept copy had when it was made. */
+  readonly retained?: string;
 };
+
+/** A kept copy that no longer matches what was kept, and is never put back. */
+export class DamagedCopyError extends Error {
+  constructor() {
+    super("The kept copy no longer matches what was kept.");
+    this.name = "DamagedCopyError";
+  }
+}
+
+/** Copies the kept bytes beside the file, and refuses a copy that changed. */
+async function copyIntact(
+  backup: string,
+  temporary: string,
+  retained: string | undefined,
+): Promise<void> {
+  await copyFile(backup, temporary);
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(temporary))
+    hash.update(chunk as Buffer);
+  if (retained !== undefined && hash.digest("hex") !== retained)
+    throw new DamagedCopyError();
+}
 
 type Files = {
   readonly openShared: (path: string) => unknown;
@@ -123,7 +148,7 @@ export async function restoreExclusively(
       if (!target.backup)
         throw new Error("The retained bytes are unavailable.");
       temporary = `${target.absolute}.${randomUUID().replaceAll("-", "")}.restore`;
-      await copyFile(target.backup, temporary);
+      await copyIntact(target.backup, temporary, target.retained);
     }
     const handle = api.openShared(target.absolute);
     if (!handle)
@@ -153,6 +178,8 @@ export async function restoreExclusively(
 export async function recreateExclusively(target: {
   readonly absolute: string;
   readonly backup: string;
+  /** The digest the kept copy had when it was made. */
+  readonly retained?: string;
 }): Promise<void> {
   if (process.platform !== "win32")
     throw new Error("Exclusive recovery is unavailable on this platform.");
@@ -161,7 +188,7 @@ export async function recreateExclusively(target: {
   let temporary: string | undefined =
     `${target.absolute}.${randomUUID().replaceAll("-", "")}.restore`;
   try {
-    await copyFile(target.backup, temporary);
+    await copyIntact(target.backup, temporary, target.retained);
     if (!api.moveIntoPlace(temporary, target.absolute))
       throw new Error("Something took the deleted file's place.");
     temporary = undefined;

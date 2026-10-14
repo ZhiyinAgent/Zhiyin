@@ -89,10 +89,15 @@ export function UsagePanel({
         <LoadingSkeleton label="Loading usage" />
       )}
 
-      {availability.status === "unavailable" && (
+      {(availability.status === "unavailable" ||
+        availability.status === "failed") && (
         <div className={styles["usage-unavailable"]}>
           <Icon name="usage" />
-          <strong>No usage data yet</strong>
+          <strong>
+            {availability.status === "failed"
+              ? "Usage could not be shown"
+              : "No usage data yet"}
+          </strong>
           <p>{availability.reason}</p>
         </div>
       )}

@@ -11,12 +11,14 @@ import type {
   ReasoningCapabilities,
 } from "@zhiyin/contract";
 import type { ModelChoice, ModelChoiceValue } from "./choice.js";
+import type { KeptApiKey } from "./model-client.js";
 import type { ProviderCredentials } from "./credentials.js";
 import { ModelClientError } from "./failures.js";
 import {
   refuseUnavailable,
   type CatalogFetch,
   type CatalogOptions,
+  type KeyCheck,
   type Provider,
 } from "./provider.js";
 
@@ -249,7 +251,7 @@ export class ProviderAccount {
    * typed the wrong key and must not be told they have, so the key is kept and
    * the trouble is named for what it is.
    */
-  async setApiKey(apiKey: string): Promise<void> {
+  async setApiKey(apiKey: string): Promise<KeptApiKey> {
     if (!this.#credentials) {
       throw new ModelClientError(
         "credentialUnavailable",
@@ -257,28 +259,30 @@ export class ProviderAccount {
       );
     }
     const checked = await this.#checkApiKey(apiKey);
-    if (!checked.accepted) throw checked.error;
     await this.#credentials.set(apiKey);
-    if (checked.error) throw checked.error;
+    return checked;
   }
 
-  async #checkApiKey(apiKey: string): Promise<{
-    readonly accepted: boolean;
-    readonly error?: ModelClientError;
-  }> {
+  /**
+   * Throws the provider's refusal of the key. A provider that was busy or
+   * failed on its own side, which sending again could get past, said nothing
+   * about the key: that check could not be made.
+   */
+  async #checkApiKey(apiKey: string): Promise<KeptApiKey> {
     const fetcher = this.#catalogFetch ?? defaultCatalogFetch;
+    const unchecked: KeptApiKey = {
+      status: "unverified",
+      reason: `The key was saved but could not be checked with ${this.#provider.name}. If it turns out to be wrong, requests will say so.`,
+    };
+    let checked: KeyCheck;
     try {
-      return await this.#provider.checkKey(apiKey, fetcher, this.#region);
-    } catch (error) {
-      return {
-        accepted: true,
-        error: new ModelClientError(
-          "networkFailure",
-          `The key was saved but could not be checked with ${this.#provider.name}. If it turns out to be wrong, requests will say so.`,
-          { cause: error },
-        ),
-      };
+      checked = await this.#provider.checkKey(apiKey, fetcher, this.#region);
+    } catch {
+      return unchecked;
     }
+    if (checked.accepted) return { status: "accepted" };
+    if (checked.error.retryable) return unchecked;
+    throw checked.error;
   }
 
   async clearApiKey(): Promise<void> {

@@ -8,7 +8,7 @@ import type {
 import { ApprovalChoice, type ApprovalDecision } from "./ApprovalChoice.js";
 import { ApprovalEvidence } from "./ApprovalEvidence.js";
 import { DiffModal } from "./DiffModal.js";
-import { Icon } from "../shared/index.js";
+import { Icon, visibleText } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 type ApprovalPromptProps = {
@@ -105,7 +105,7 @@ export function ApprovalPrompt({
           <span className={styles.approval__kind} aria-hidden="true">
             <Icon name={kind} />
           </span>
-          <h3>{title}</h3>
+          <h3>{visibleText(title)}</h3>
         </header>
         <div className={styles.approval__summary}>
           {effect && effect !== title && (
@@ -120,17 +120,19 @@ export function ApprovalPrompt({
               )) && <p className={styles.approval__detail}>{detail}</p>}
           {claim && (
             <ApprovalClaim
-              claim={claim}
+              claim={visibleText(claim)}
               tipAt={claimTipAt}
               onTip={setClaimTipAt}
             />
           )}
           {description && description !== claim && (
-            <p className={styles.approval__reason}>{description}</p>
+            <p className={styles.approval__reason}>
+              {visibleText(description)}
+            </p>
           )}
           {destination && (
             <p className={styles.approval__destination}>
-              Sends this to <strong>{destination}</strong>:
+              Sends this to <strong>{visibleText(destination)}</strong>:
             </p>
           )}
           <ApprovalEvidence

@@ -116,6 +116,107 @@ describe("ApprovalPrompt", () => {
     expect(screen.queryByText("command")).toBeNull();
   });
 
+  it("writes out characters that draw nothing or reverse the text, so a command reads as what runs", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="echo done"
+        command="bash"
+        invocation={{
+          name: "bash",
+          arguments: [
+            {
+              name: "command",
+              value: "echo done\u202E\u2066 && del report\u200B.docx",
+            },
+          ],
+        }}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("What will run")).toHaveTextContent(
+      "echo done[U+202E][U+2066] && del report[U+200B].docx",
+    );
+  });
+
+  it("writes out hidden characters in what a connector is sent, and leaves emoji as they are", () => {
+    render(
+      <ApprovalPrompt
+        title="Post a message"
+        destination="Chat"
+        target="post"
+        command="post"
+        invocation={{
+          name: "post",
+          via: "Chat",
+          arguments: [
+            {
+              name: "text",
+              value: "Shipped 👨\u200D💻 ❤\uFE0F\u{E0049}\u{E0047}",
+            },
+          ],
+        }}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("What will be sent")).toHaveTextContent(
+      "Shipped 👨\u200D💻 ❤\uFE0F[U+E0049][U+E0047]",
+    );
+  });
+
+  it("writes out a direction change in the name of a file that will change", () => {
+    render(
+      <ApprovalPrompt
+        title="Write a file"
+        target="invoice"
+        command="write_file"
+        changes={[
+          {
+            path: "bills/invoice\u202Efdp.exe",
+            change: "created",
+            after: "x",
+          },
+        ]}
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "Review this change to invoice[U+202E]fdp.exe",
+      }),
+    ).toHaveTextContent("invoice[U+202E]fdp.exe");
+  });
+
+  it("writes out a direction change inside a line under review", () => {
+    render(
+      <ApprovalPrompt
+        title="Edit a file"
+        target="src/access.ts"
+        command="edit_file"
+        changes={[
+          {
+            path: "src/access.ts",
+            change: "updated",
+            before: "const admin = false;\n",
+            after: "const admin = false; /*\u202E } \u2066if (true) {*/\n",
+          },
+        ]}
+        onDecision={() => undefined}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Review this change to access.ts" }),
+    );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "/*[U+202E] } [U+2066]if (true) {*/",
+    );
+  });
+
   it("shows what a connector request sends, and keeps the tool's own name under Technical details", () => {
     render(
       <ApprovalPrompt

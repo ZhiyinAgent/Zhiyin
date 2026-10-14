@@ -43,8 +43,8 @@ depends on (ADR 0002) live in `eslint.config.js` and run in the gate.
   implementations; that is what an integration test is for.
 - Above the group layer, a group's members are reached through the group. A
   direct import is refused unless the configuration lists it with the reason
-  the group does not answer for it. The one listed is the browser panel a
-  person drives themselves.
+  the group does not answer for it. The two listed are the browser panel and
+  the 3D view, which a person drives themselves.
 - No package deep-imports another's internals: a package's entry point is its
   public interface. Its `index.ts` only re-exports, so the entry point is the
   list of what the package offers.
@@ -167,7 +167,7 @@ through.
 
 The gate fails on any published advisory, at any severity, in any dependency:
 `pnpm audit`, not `pnpm audit --prod`. Electron's runtime and the renderer's
-bundled libraries (React, the Markdown renderer) are `devDependencies` of the
+bundled libraries (React, the Markdown renderer, Mermaid) are `devDependencies` of the
 desktop app yet ship in the installer, so a production-only audit would miss
 them. CI also runs the gate weekly, so an advisory published while nobody
 commits still turns it red.
@@ -221,7 +221,14 @@ own decision record before it is added.
 dependencies (the credential binding of ADR 0019, koffi, Playwright) stay
 outside the JavaScript bundle and load from the packaged app's
 `node_modules`. electron-builder unpacks their native binaries from the
-archive, and the bundled ripgrep is unpacked so it can be started.
+archive, and the bundled ripgrep is unpacked so it can be started. A library
+only the window uses, such as Mermaid, is a `devDependency`: Vite bundles it
+into the window's script, and the packager copies only `dependencies` into the
+app. Source maps are left out of the package.
+
+The build writes `THIRD_PARTY_NOTICES.txt` beside each bundled part of the app,
+with the name, version and licence text of every npm package whose code that
+part carries, since a bundle drops the folders those licences came in.
 
 Building the desktop app first fetches the spelling dictionaries listed in
 `packages/spelling/dictionaries.json` into `apps/desktop/dictionaries`, which

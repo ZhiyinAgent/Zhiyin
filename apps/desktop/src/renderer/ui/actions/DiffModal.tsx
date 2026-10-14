@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { DocumentComparison, FileChange } from "@zhiyin/contract";
 import { ChangeReview } from "./ChangeReview.js";
 import { DocumentChangeReview } from "./DocumentChangeReview.js";
-import { Icon, WindowLayer } from "../shared/index.js";
+import { Icon, WindowLayer, useModalFocus } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 /**
@@ -43,9 +43,8 @@ export function DiffModal({
   const titleId = useId();
   const current = changes.find((change) => change.path === openPath);
 
+  useModalFocus(dialog);
   useEffect(() => {
-    const returnTo = document.activeElement;
-    dialog.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
@@ -53,10 +52,7 @@ export function DiffModal({
       }
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      if (returnTo instanceof HTMLElement) returnTo.focus();
-    };
+    return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
   return (

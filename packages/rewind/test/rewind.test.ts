@@ -264,6 +264,62 @@ describe("applying a rewind", () => {
     await expect(stored.pending()).resolves.toEqual([]);
   });
 
+  it("finishes every other conversation's rewind after restart when one cannot be finished", async () => {
+    const stuck = conversation("conversation-1", "C:/work");
+    const other = conversation("conversation-2", "C:/work");
+    const rewound = { ...other, messages: [] };
+    const review = {
+      id: "review",
+      workspaceRoot: "C:/work",
+      files: [],
+      targets: [],
+    } as RecoveryReview;
+    const completed: string[] = [];
+    const journal: RewindJournal = {
+      pending: async () => [
+        {
+          version: 1,
+          id: "rewind-1",
+          conversationId: stuck.id,
+          // Saved from a conversation that has changed since.
+          source: JSON.stringify({ ...stuck, title: "Before" }),
+          task: { ...stuck, messages: [] },
+          review,
+        },
+        {
+          version: 1,
+          id: "rewind-2",
+          conversationId: other.id,
+          source: JSON.stringify(other),
+          task: rewound,
+          review,
+        },
+      ],
+      begin: async () => {},
+      filesRestored: async () => {},
+      complete: async (id) => void completed.push(id),
+    };
+    const saved: WorkspaceTask[] = [];
+    const rewind = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording().recovery,
+      journal,
+    });
+
+    await expect(
+      rewind.resume({
+        task: (id) => (id === stuck.id ? stuck : other),
+        save: async (task) => void saved.push(task),
+      }),
+    ).rejects.toThrow("no longer matches");
+
+    expect(saved).toEqual([rewound]);
+    expect(completed).toEqual(["rewind-2"]);
+    // The one left unfinished is held, so it cannot be used half rewound.
+    expect(rewind.restoring(stuck.id)).toBe(true);
+    expect(rewind.restoring(other.id)).toBe(false);
+  });
+
   it("restores files only when asked to, and saves the rewound conversation", async () => {
     const { recovery, asked } = recoveryRecording();
     const rewind = new ComposedRewind({ conversation: planner(), recovery });

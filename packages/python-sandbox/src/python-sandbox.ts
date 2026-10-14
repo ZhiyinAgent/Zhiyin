@@ -122,8 +122,9 @@ const tools: readonly SandboxTool[] = [
   },
 ];
 
+/** Starts with a letter or digit, so it can never be read as an option. */
 const packageName =
-  /^[A-Za-z0-9._-]+(\[[A-Za-z0-9,._-]+\])?([<>=!~]=?[^\s]+)?$/;
+  /^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9,._-]+\])?([<>=!~]=?[^\s]+)?$/;
 
 function textResult(text: string, isError = false) {
   return {
@@ -167,7 +168,10 @@ export function pythonSandbox(
   const packages = options.packages ?? defaultPackages;
   const venv = join(options.directory, ".venv");
   const interpreter = join(venv, "Scripts", "python.exe");
+  /** Written once the default packages are installed; until then it is not built. */
+  const built = join(venv, "zhiyin-packages-installed");
   const scripts = join(options.directory, "scripts");
+  const isBuilt = async () => Boolean(await stat(built).catch(() => undefined));
 
   const invoke = (
     executable: string,
@@ -197,20 +201,24 @@ export function pythonSandbox(
   ): Promise<
     { readonly ok: true } | { readonly ok: false; readonly reason: string }
   > {
-    if (await stat(interpreter).catch(() => undefined)) return { ok: true };
-    await mkdir(options.directory, { recursive: true });
-    const created = await invoke(
-      uv,
-      ["venv", "--python", pythonVersion, venv],
-      options.directory,
-      prepareTimeoutMs,
-      signal,
-    );
-    if (created.exitCode !== 0)
-      return {
-        ok: false,
-        reason: `The Python environment could not be created.\n${reported(created)}`,
-      };
+    if (await isBuilt()) return { ok: true };
+    // An environment whose packages failed to install is finished, not made
+    // again.
+    if (!(await stat(interpreter).catch(() => undefined))) {
+      await mkdir(options.directory, { recursive: true });
+      const created = await invoke(
+        uv,
+        ["venv", "--python", pythonVersion, venv],
+        options.directory,
+        prepareTimeoutMs,
+        signal,
+      );
+      if (created.exitCode !== 0)
+        return {
+          ok: false,
+          reason: `The Python environment could not be created.\n${reported(created)}`,
+        };
+    }
     const installed = await invoke(
       uv,
       ["pip", "install", "--python", interpreter, ...packages],
@@ -223,6 +231,7 @@ export function pythonSandbox(
         ok: false,
         reason: `The Python environment's packages could not be installed.\n${reported(installed)}`,
       };
+    await writeFile(built, "", "utf8");
     return { ok: true };
   }
 
@@ -244,8 +253,7 @@ export function pythonSandbox(
       if (!root)
         return { ok: false, reason: "Choose a folder before running Python." };
       if (!(await options.uv())) return { ok: false, reason: notInstalled };
-      const prepared = Boolean(await stat(interpreter).catch(() => undefined));
-      const preparing = prepared
+      const preparing = (await isBuilt())
         ? {}
         : {
             destination:
@@ -264,6 +272,8 @@ export function pythonSandbox(
             typeof code === "string"
               ? shortened(code, 4_000)
               : `python ${String(path)}`,
+          detail:
+            "A script runs with your own access: it can read and change your files and use the network.",
           ...preparing,
         };
       }
@@ -293,7 +303,7 @@ export function pythonSandbox(
           ok: true,
           action: "Rebuild the Python environment",
           target: "Zhiyin's Python environment",
-          command: "uv venv --clean",
+          command: `uv venv --python ${pythonVersion}\nuv pip install ${packages.join(" ")}`,
           detail: "Packages added to it are removed.",
           destination: "Packages are downloaded from pypi.org.",
         };

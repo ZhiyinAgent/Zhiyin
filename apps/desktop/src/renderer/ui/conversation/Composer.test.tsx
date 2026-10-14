@@ -304,6 +304,27 @@ describe("Composer", () => {
       screen.getByRole("button", { name: /Open pasted text/ }),
     ).toBeVisible();
   });
+
+  it("says why a message was refused, and keeps it", async () => {
+    render(
+      <Composer
+        onSubmit={async () => {
+          throw new Error(
+            "Another conversation is working in “reports”. Send this once it finishes, or stop it first.",
+          );
+        }}
+      />,
+    );
+    const field = screen.getByRole("textbox", { name: "Message Zhiyin" });
+    fireEvent.change(field, { target: { value: "Tidy the notes" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Your message could not be sent: Another conversation is working in “reports”. Send this once it finishes, or stop it first. It is still here.",
+    );
+    expect(field).toHaveValue("Tidy the notes");
+  });
 });
 
 const paste: MessageAttachment = {

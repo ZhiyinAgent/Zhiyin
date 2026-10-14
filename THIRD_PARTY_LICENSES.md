@@ -5,6 +5,11 @@ Apache-2.0 distribution. This file records attributions that must accompany the
 source and packaged developer previews. Package metadata and the lockfile remain
 the inventory of exact dependency versions.
 
+The build writes `THIRD_PARTY_NOTICES.txt` beside each part of the app that
+bundles npm packages, the main process and the window, with every bundled
+package's name, version and licence text. Packages the app loads at run time
+ship in their own folders with their licence files.
+
 ## khroma 2.1.0
 
 Khroma is included transitively by Mermaid 11.17.2.

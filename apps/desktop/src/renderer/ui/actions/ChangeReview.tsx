@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { FileChange } from "@zhiyin/contract";
 import { diffLines, type DiffLine, type DiffSummary } from "@zhiyin/contract";
+import { visibleText } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 /**
@@ -24,8 +25,8 @@ export function ChangeReview({
       <div className={styles["change-review__unavailable"]} role="status">
         <p>
           {change.change === "recycled"
-            ? `${change.path} goes to the Recycle Bin, where it can be restored.`
-            : `${change.path} is deleted permanently. It cannot be restored from the Recycle Bin.`}
+            ? `${visibleText(change.path)} goes to the Recycle Bin, where it can be restored.`
+            : `${visibleText(change.path)} is deleted permanently. It cannot be restored from the Recycle Bin.`}
         </p>
       </div>
     );
@@ -155,13 +156,13 @@ export function DiffTable({
                 ? line.parts.map((part, partIndex) =>
                     part.changed ? (
                       <mark className={styles.diff__changed} key={partIndex}>
-                        {part.text}
+                        {visibleText(part.text)}
                       </mark>
                     ) : (
-                      part.text
+                      visibleText(part.text)
                     ),
                   )
-                : line.text || " "}
+                : visibleText(line.text) || " "}
             </code>
           </td>
         </tr>,

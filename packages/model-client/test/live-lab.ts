@@ -179,9 +179,9 @@ export function checkLive(
       it(
         "accepts its key, and refuses a wrong one before keeping it",
         async () => {
-          await expect(reach(undefined).setApiKey(key ?? "")).resolves.toBe(
-            undefined,
-          );
+          await expect(reach(undefined).setApiKey(key ?? "")).resolves.toEqual({
+            status: "accepted",
+          });
           await expect(
             reach(undefined).setApiKey("zhiyin-live-check-not-a-key"),
           ).rejects.toMatchObject({ code: "unauthorized" });
@@ -202,7 +202,8 @@ export function checkLive(
           : "refuses a key from the lab's other platform",
         async () => {
           const offered = reach(undefined).setApiKey(otherKey ?? "");
-          if (sharedKeys) await expect(offered).resolves.toBe(undefined);
+          if (sharedKeys)
+            await expect(offered).resolves.toEqual({ status: "accepted" });
           else
             await expect(offered).rejects.toMatchObject({
               code: "unauthorized",

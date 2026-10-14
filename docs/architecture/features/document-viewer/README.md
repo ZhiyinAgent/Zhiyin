@@ -70,7 +70,8 @@ shows live pages.
   memory limit of 1 GB ends alone; one that crashes is replaced. Whatever
   ended it, the waiting requests fail, and the next request goes to a new
   process that is given the document again. A process that cannot be
-  contained is ended and draws nothing.
+  contained is ended and draws nothing. One that could not be started fails
+  its request, and the next request starts one again.
 - **Only pictures and page text leave the drawing process.** A document goes
   in as bytes; a page comes back as PNG or JPEG bytes with its size, or as its
   text items, and nothing else. The process reads no file and opens no

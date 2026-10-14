@@ -333,7 +333,11 @@ export function WorkspaceShell({
 
       <WorkspaceSurfaces
         state={state}
-        commands={commands}
+        commands={{
+          ...commands,
+          // Pages open from many places on them; a failure is said here.
+          openExternalUrl: (url) => act(() => commands.openExternalUrl(url)),
+        }}
         onOpenSurface={openSurface}
         openKeyDialog={keyFirst}
         {...(savedUpdate.ask ? { onUpdateConversations: savedUpdate.ask } : {})}
@@ -458,6 +462,7 @@ export function WorkspaceShell({
                 </div>
                 {selectedTask && (
                   <ArtifactDrawer
+                    conversationId={selectedTask.id}
                     artifacts={selectedTask.artifacts}
                     open={filesOpen}
                     onClose={() => setFilesOpen(false)}

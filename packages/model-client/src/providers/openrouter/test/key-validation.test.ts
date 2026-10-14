@@ -122,8 +122,9 @@ describe("saving a provider key", () => {
       model: "z-ai/glm-5.3-flash",
     });
 
-    await expect(client.setApiKey("sk-or-v1-unknown")).rejects.toMatchObject({
-      code: "networkFailure",
+    await expect(client.setApiKey("sk-or-v1-unknown")).resolves.toEqual({
+      status: "unverified",
+      reason: expect.stringContaining("could not be checked"),
     });
     expect(store.saved()).toBe("sk-or-v1-unknown");
   });

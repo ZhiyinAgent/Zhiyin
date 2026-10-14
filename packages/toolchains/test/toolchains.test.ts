@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -163,6 +164,34 @@ describe("installing a pinned program", () => {
       /larger than expected/,
     );
     expect(await toolchains.executable("typst")).toBeUndefined();
+  });
+
+  it("fails, and can be tried again, when the download cannot be written", async () => {
+    const directory = await temporaryRoot();
+    const spec = specFor(program);
+    let refuse = true;
+    const download: Download = async (url, signal) => {
+      // A folder where the download is written stands in for a disk that
+      // refuses the write.
+      if (refuse) {
+        const staging = join(directory, "toolchains", ".staging");
+        for (const name of readdirSync(staging))
+          mkdirSync(join(staging, name, "download.zip"));
+      }
+      return serving(program)(url, signal);
+    };
+    const toolchains = new DownloadedToolchains({
+      directory,
+      specs: [spec],
+      download,
+    });
+
+    await expect(toolchains.install("typst")).rejects.toThrow();
+    expect((await toolchains.state("typst")).status).toBe("failed");
+
+    refuse = false;
+    await toolchains.install("typst");
+    expect(await toolchains.state("typst")).toEqual({ status: "ready" });
   });
 
   it("refuses an archive that does not contain the program", async () => {

@@ -176,10 +176,16 @@ export function Composer({
           await onSubmit?.(value, capabilities ? reasoning : undefined, sent);
         else if (capabilities) await onSubmit?.(value, reasoning);
         else await onSubmit?.(value);
-      } catch {
+      } catch (error) {
         setMessage(typed);
         replace(kept);
-        setError("Your message could not be sent. It is still here.");
+        const reason = error instanceof Error ? error.message.trim() : "";
+        const sentence = /[.!?]$/.test(reason) ? reason : `${reason}.`;
+        setError(
+          reason
+            ? `Your message could not be sent: ${sentence} It is still here.`
+            : "Your message could not be sent. It is still here.",
+        );
       }
     } finally {
       submitting.current = false;

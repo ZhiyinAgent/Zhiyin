@@ -45,6 +45,25 @@ const usage: UsageState = {
 };
 
 describe("UsagePanel", () => {
+  it("says usage could not be shown when its history failed, not that there is none yet", () => {
+    render(
+      <UsagePanel
+        availability={{
+          status: "failed",
+          reason: "Usage history could not be saved.",
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const panel = screen.getByRole("region", { name: "Usage overview" });
+    expect(within(panel).getByText("Usage could not be shown")).toBeVisible();
+    expect(
+      within(panel).getByText("Usage history could not be saved."),
+    ).toBeVisible();
+    expect(within(panel).queryByText("No usage data yet")).toBeNull();
+  });
+
   it("uses visual summaries and updates when the range changes", () => {
     render(<UsagePanel availability={usage} onClose={() => undefined} />);
 

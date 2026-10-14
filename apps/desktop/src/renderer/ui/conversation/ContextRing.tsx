@@ -79,7 +79,8 @@ export function ContextRing({
     readonly refusedTokens?: number;
   };
   budget: ContextBudgetChoice;
-  onChoose: (budget: ContextBudgetChoice) => void;
+  /** A refusal leaves the budget as it was, and the panel says so. */
+  onChoose: (budget: ContextBudgetChoice) => void | Promise<void>;
   /** Condenses the conversation; absent before there is one. */
   onCondense?: () => Promise<void>;
   /** The standing instructions the last turn sent, by source. */
@@ -97,7 +98,8 @@ export function ContextRing({
   const [open, setOpen] = useState(false);
   const [breakdown, setBreakdown] = useState(false);
   const [condensing, setCondensing] = useState(false);
-  const [condenseFailure, setCondenseFailure] = useState<string>();
+  /** Why a choice or a compacting asked here did not happen. */
+  const [failure, setFailure] = useState<string>();
 
   const reading = contextReading(usage, model, budget);
   const busy = compacting || condensing;
@@ -138,15 +140,23 @@ export function ContextRing({
     // action fails.
     setOpen(false);
     setCondensing(true);
-    setCondenseFailure(undefined);
+    setFailure(undefined);
     run()
       .catch((error: unknown) => {
-        setCondenseFailure(
-          error instanceof Error ? error.message : String(error),
+        setFailure(
+          `Could not compact: ${error instanceof Error ? error.message : String(error)}`,
         );
         setOpen(true);
       })
       .finally(() => setCondensing(false));
+  }
+
+  function choose(next: ContextBudgetChoice) {
+    setFailure(undefined);
+    void Promise.resolve(onChoose(next)).catch(() => {
+      setFailure("The budget could not be saved, so it stays as it was.");
+      setOpen(true);
+    });
   }
 
   return (
@@ -186,8 +196,8 @@ export function ContextRing({
             reading={reading}
             usage={usage}
             busy={busy}
-            failure={condenseFailure}
-            onChoose={onChoose}
+            failure={failure}
+            onChoose={choose}
             onBreakdown={() => {
               setOpen(false);
               setBreakdown(true);
@@ -274,7 +284,7 @@ function BudgetPanel({
   usage: ContextUsage | undefined;
   /** The conversation is being summarised now. */
   busy: boolean;
-  /** Why the compacting asked here did not happen. */
+  /** Why a choice or a compacting asked here did not happen. */
   failure: string | undefined;
   onChoose: (budget: ContextBudgetChoice) => void;
   onBreakdown: () => void;
@@ -366,7 +376,7 @@ function BudgetPanel({
       )}
       {failure && (
         <p className={styles["context-ring__warning"]} role="alert">
-          Could not compact: {failure}
+          {failure}
         </p>
       )}
     </div>

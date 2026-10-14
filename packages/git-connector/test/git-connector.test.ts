@@ -188,6 +188,22 @@ withGit("gitAutomation against a real repository", () => {
     );
   });
 
+  it("says a git command was stopped, not that git reported an error", async () => {
+    const stopped = new AbortController();
+    stopped.abort();
+
+    const result = (await automation.callTool(
+      "git_status",
+      {},
+      stopped.signal,
+    )) as { isError?: boolean; content: readonly { text: string }[] };
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toBe(
+      "The git command was stopped before it finished.",
+    );
+  });
+
   it("shows unstaged changes with git_diff", async () => {
     await writeFile(join(root, "note.txt"), "hello\n", "utf8");
     await run("git_stage", { paths: ["note.txt"] });

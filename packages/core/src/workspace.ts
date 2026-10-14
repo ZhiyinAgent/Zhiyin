@@ -951,6 +951,20 @@ export class Workspace {
     if (!started) return;
     if (await this.#openTaskWorkspace(started, taskId))
       this.emit({ kind: "workspaceSnapshot", data: this.snapshot() });
+    // The tools work in one folder at a time. A turn that would find another
+    // conversation's folder there is refused, never run in it.
+    const wanted = started.workspace;
+    const current = this.#workspaceSelection;
+    if (
+      wanted &&
+      wanted.path !== current?.path &&
+      this.#deps.workspace.selectWorkspace
+    )
+      throw new VisibleError(
+        this.turns.anyRunning(taskId) && current
+          ? `Another conversation is working in “${current.name}”. Send this once it finishes, or stop it first.`
+          : "The folder for this conversation could not be opened. Choose its new location, then send again.",
+      );
     if (!started.workspace && this.#workspaceSelection) {
       const folder = this.#workspaceSelection;
       this.#tasks = this.#tasks.map((task) =>

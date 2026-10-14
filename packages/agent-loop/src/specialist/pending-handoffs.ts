@@ -15,9 +15,14 @@ export class PendingHandoffs {
     this.#byTask.set(taskId, queued);
   }
 
-  /** Whether a handoff is queued for the task. */
+  /**
+   * Whether a handoff is queued that should wake the task. One a stop ended
+   * waits for the next turn the person starts: nothing resumes a stopped turn.
+   */
   waiting(taskId: string): boolean {
-    return this.#byTask.has(taskId);
+    return (this.#byTask.get(taskId) ?? []).some(
+      (result) => result.ok || !result.stopped,
+    );
   }
 
   /** Everything queued for this task, removed in the same call. */

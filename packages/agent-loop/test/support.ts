@@ -627,7 +627,7 @@ export function stubDependencies(
         endpoint: "https://openrouter.ai/api/v1/chat/completions",
         credential: { status: "missing", source: "none" },
       }),
-      setApiKey: async () => {},
+      setApiKey: async () => ({ status: "accepted" }),
       clearApiKey: async () => {},
       models: async () => ({ status: "ready", models: [] }),
       modelProviders: async (model) => ({
@@ -791,6 +791,7 @@ export function pluginsOffering(views: readonly PluginView[]): Plugins {
   };
   return {
     list: async () => views,
+    damaged: async () => [],
     builtInNames: async () => views.map((view) => view.manifest.name),
     setEnabled: refuse,
     setComponentEnabled: refuse,

@@ -7,7 +7,10 @@ import type {
 import { picturesPerMessage, VisibleError } from "@zhiyin/contract";
 import { AuxiliaryWork } from "./specialist/auxiliary-work.js";
 import { ToolCalls } from "./tools/tool-calls.js";
-import { SpecialistExecution } from "./specialist/specialist-execution.js";
+import {
+  SpecialistExecution,
+  stoppedBeforeCompleting,
+} from "./specialist/specialist-execution.js";
 import type { SpecialistExecutionResult } from "./specialist/specialist-execution.js";
 import { PluginActivation } from "./tools/plugin-activation.js";
 import { PendingHandoffs } from "./specialist/pending-handoffs.js";
@@ -21,6 +24,7 @@ import { condenseBetweenTurns } from "./plan/request-plan.js";
 import { beginUserTurn } from "./turn/start-turn.js";
 import { modelText } from "./context/attachments.js";
 import { settledAfterRestart, settledWhenTurnEnded } from "./turn/settling.js";
+import { isOwnDefect } from "./turn/turn-recovery.js";
 import { defaultWorkLimits, WorkLedger } from "./turn/work-limits.js";
 import { writtenFiles } from "./turn/written-files.js";
 import type { AgentLoopDependencies } from "./dependencies.js";
@@ -266,33 +270,47 @@ export class AgentLoop {
       throw error;
     }
 
-    // A turn runs where its conversation lives, whatever the window last
-    // displayed. A no-op when they already agree.
-    await this.#deps.host.enterFolderOf(taskId);
-    const existing = this.#records.task(taskId);
-    const started = beginUserTurn(existing, message, {
-      messageId: this.#deps.newMessageId(),
-      sequence: this.#records.nextTimelineSequence(existing),
-      attachments: claimed,
-      ...(reasoning ? { reasoning } : {}),
-    });
-    await this.#records.replaceTask({
-      ...started.task,
-      guidance: existing.guidance.filter((item) => item.status === "pending"),
-    });
+    let started: ReturnType<typeof beginUserTurn>;
+    try {
+      // A turn runs where its conversation lives, whatever the window last
+      // displayed. A no-op when they already agree.
+      await this.#deps.host.enterFolderOf(taskId);
+      const existing = this.#records.task(taskId);
+      started = beginUserTurn(existing, message, {
+        messageId: this.#deps.newMessageId(),
+        sequence: this.#records.nextTimelineSequence(existing),
+        attachments: claimed,
+        ...(reasoning ? { reasoning } : {}),
+      });
+      await this.#records.replaceTask({
+        ...started.task,
+        guidance: existing.guidance.filter((item) => item.status === "pending"),
+      });
+    } catch (error) {
+      // A turn that never started gives its conversation back, or every later
+      // message would wait for it.
+      this.#activeTurns.finish(taskId, controller);
+      throw error;
+    }
 
     return async () => {
-      await this.#turnLoop.run(taskId, controller, ledger, {
-        beforeGather: async () => {
-          if (started.shouldGenerateInitialTitle)
-            await this.#auxiliary.nameConversation(
+      // The name is asked for beside the turn, so the first answer does not
+      // wait for it, and a name that cannot be written leaves the turn alone.
+      const naming = started.shouldGenerateInitialTitle
+        ? this.#auxiliary
+            .nameConversation(
               taskId,
               modelText({ text: message, attachments: claimed }),
               controller.signal,
-            );
-        },
-      });
+            )
+            .catch((error: unknown) => {
+              if (isOwnDefect(error))
+                this.#deps.recordDefect?.({ taskId, error });
+            })
+        : undefined;
+      await this.#turnLoop.run(taskId, controller, ledger);
       this.#wakeIfQueued(taskId);
+      await naming;
     };
   }
 
@@ -356,7 +374,12 @@ export class AgentLoop {
       this.#deps.workLimits ?? defaultWorkLimits,
       this.#deps.now(),
     );
-    await this.#deps.host.enterFolderOf(taskId);
+    try {
+      await this.#deps.host.enterFolderOf(taskId);
+    } catch (error) {
+      this.#activeTurns.finish(taskId, controller);
+      throw error;
+    }
     await this.#turnLoop.run(taskId, controller, ledger, {
       initialDelegatedChildren:
         this.#records.task(taskId).specialistRuns.length,
@@ -391,9 +414,15 @@ export class AgentLoop {
     if (this.#activeTurns.running(taskId)) return;
     if (this.#wakeScheduled.has(taskId)) return;
     this.#wakeScheduled.add(taskId);
-    void this.#resume(taskId).finally(() => {
-      this.#wakeScheduled.delete(taskId);
-    });
+    // What is queued stays queued for the next turn when this one cannot
+    // start; a failure that is Zhiyin's own is kept for whoever looks into it.
+    void this.#resume(taskId)
+      .catch((error: unknown) => {
+        if (isOwnDefect(error)) this.#deps.recordDefect?.({ taskId, error });
+      })
+      .finally(() => {
+        this.#wakeScheduled.delete(taskId);
+      });
   }
 
   /**
@@ -434,6 +463,10 @@ export class AgentLoop {
                 specialist: run.specialist,
                 reason:
                   run.reason ?? "The specialist stopped before finishing.",
+                // One the person stopped stays stopped after a restart too.
+                ...(run.reason === stoppedBeforeCompleting
+                  ? { stopped: true as const }
+                  : {}),
               },
         );
       }
@@ -477,9 +510,14 @@ export class AgentLoop {
 
   async cancel(taskId: string): Promise<void> {
     this.#activeTurns.cancel(taskId);
-    await this.#records.interrupt(taskId);
-    await this.#records.releaseGuidance(taskId);
-    await this.#deps.capabilities.closeConversation(taskId);
+    try {
+      await this.#records.interrupt(taskId);
+      await this.#records.releaseGuidance(taskId);
+    } finally {
+      // Ended even when the stop could not be saved: a command left running
+      // would go on working for a turn that is over.
+      await this.#deps.capabilities.stopConversation(taskId);
+    }
   }
 
   /** Whether a turn is running in this conversation, including a specialist

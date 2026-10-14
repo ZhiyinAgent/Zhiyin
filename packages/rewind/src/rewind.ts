@@ -258,7 +258,12 @@ export class ComposedRewind implements Rewind {
     );
   }
 
+  /**
+   * Finishes each rewind a restart cut short. One that cannot be finished is
+   * held, the others still finish, and the first failure is thrown after.
+   */
   async resume(host: RewindHost): Promise<void> {
+    const failures: unknown[] = [];
     for (const operation of await this.#journal.pending()) {
       this.#restoring.add(operation.conversationId);
       let completed = false;
@@ -282,12 +287,15 @@ export class ComposedRewind implements Rewind {
         await host.save(operation.task);
         await this.#journal.complete(operation.id);
         completed = true;
+      } catch (error) {
+        failures.push(error);
       } finally {
         this.#restoring.delete(operation.conversationId);
         if (completed) this.#blocked.delete(operation.conversationId);
         else this.#blocked.add(operation.conversationId);
       }
     }
+    if (failures.length) throw failures[0];
   }
 
   async preview(

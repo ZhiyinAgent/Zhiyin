@@ -42,7 +42,8 @@ and every call needs the person's approval.
 - The environment is built once, on first use, in its own folder in the app's
   data. Every `uv` command runs with that folder as its working directory, so
   a `pyproject.toml` in the workspace never decides what the environment
-  contains.
+  contains. It counts as built only once its default packages are installed:
+  when that step failed, the next call installs them again.
 - A script runs with the workspace as its working directory, through the
   environment's interpreter, so it works on the person's files with the
   environment's packages.
@@ -50,11 +51,12 @@ and every call needs the person's approval.
   workspace, and removed after the run.
 - Only a `.py` file is run, and a call that gives neither code nor a file is
   refused.
-- A package is named by name, optional extras and version only. Anything else
-  is refused before `uv` runs, so a call cannot change the package index or
-  pass options.
+- A package is named by name, optional extras and version only, starting with
+  a letter or a digit. Anything else is refused before `uv` runs, so a call
+  cannot change the package index or pass options.
 - Installing changes only the environment. Resetting deletes it and builds it
-  again, and its approval says that added packages will be removed.
+  again; its approval shows the commands that rebuild it and says that added
+  packages will be removed.
 - A failure reports what the run or the build printed, with the exit code. The
   whole output is passed on, so a traceback at the end survives; how much of
   it the model sees is decided where every tool's answer is sized.
@@ -64,7 +66,8 @@ and every call needs the person's approval.
   as soon as `uv` is installed.
 - The approval says what a call will do and where anything is downloaded
   from: Python and the default packages when the environment is first built,
-  and added packages from pypi.org.
+  and added packages from pypi.org. Running a script says that it runs with
+  the person's own access to files and the network.
 
 ## Testing notes
 

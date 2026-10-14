@@ -130,20 +130,26 @@ export class FilePluginSettings {
 
   /**
    * Forgets every choice about a plugin or component that no longer exists.
-   * Writes nothing when there is nothing to forget.
+   * The components of a plugin named in `unread`, which is installed but could
+   * not be opened to list them, keep theirs. Writes nothing when there is
+   * nothing to forget.
    */
-  retain(plugins: ReadonlySet<string>, components: ReadonlySet<string>) {
+  retain(
+    plugins: ReadonlySet<string>,
+    components: ReadonlySet<string>,
+    unread: ReadonlySet<string> = new Set(),
+  ) {
+    const kept = (id: string) =>
+      components.has(id) || unread.has(id.split("/", 1)[0]!);
     return this.#change((saved) => {
       const next: SavedSettings = {
         version: 1,
         disabledPlugins: saved.disabledPlugins.filter((name) =>
           plugins.has(name),
         ),
-        disabledComponents: saved.disabledComponents.filter((id) =>
-          components.has(id),
-        ),
+        disabledComponents: saved.disabledComponents.filter(kept),
         overrides: Object.fromEntries(
-          Object.entries(saved.overrides).filter(([id]) => components.has(id)),
+          Object.entries(saved.overrides).filter(([id]) => kept(id)),
         ),
       };
       return next.disabledPlugins.length === saved.disabledPlugins.length &&

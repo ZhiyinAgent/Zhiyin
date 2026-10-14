@@ -6,11 +6,7 @@
  * happens before this begins (a fresh message from the person, or nothing).
  */
 
-import type {
-  ProducedImage,
-  ToolOwner,
-  WorkspaceDescription,
-} from "@zhiyin/contract";
+import type { ProducedImage, ToolOwner } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "../tools/quiet-failures.js";
@@ -182,9 +178,6 @@ export class TurnLoop {
     controller: AbortController,
     ledger: WorkLedger,
     options?: {
-      readonly beforeGather?: (
-        workspace: WorkspaceDescription,
-      ) => Promise<void>;
       /** Specialist count carried across a background wake. */
       readonly initialDelegatedChildren?: number;
     },
@@ -260,8 +253,6 @@ export class TurnLoop {
     options: Parameters<TurnLoop["run"]>[3],
   ): Promise<Turn> {
     const workspace = await describedWorkspace(this.#deps.workspace);
-    controller.signal.throwIfAborted();
-    if (options?.beforeGather) await options.beforeGather(workspace);
     controller.signal.throwIfAborted();
     this.#deps.host.watchBrowser(taskId);
     const activatedPlugins = this.#records.task(taskId).activatedPlugins;

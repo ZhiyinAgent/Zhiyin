@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -125,7 +125,7 @@ async function setup(builtIns: readonly PackageSpec[] = [engineering]) {
       store: new FilePluginStore(join(data, "plugins")),
       settings: new FilePluginSettings(data),
     });
-  return { plugins: open(), reopen: open, catalog };
+  return { plugins: open(), reopen: open, catalog, data };
 }
 
 const find = (plugins: readonly PluginView[], name: string) =>
@@ -162,6 +162,80 @@ describe("a plugin directory composed of built-ins and installed packages", () =
       skills: [{ id: "notes/summarize" }],
       mcpServers: [{ id: "notes/search" }],
     });
+  });
+
+  it("lists the others when one installed package is damaged, says which, and removes it", async () => {
+    const { plugins, reopen, data } = await setup();
+    await plugins.install(
+      await writePackage(await temporaryRoot("notes"), {
+        name: "notes",
+        skills: { summarize: "Summarize." },
+      }),
+    );
+    await plugins.install(
+      await writePackage(await temporaryRoot("tasks"), { name: "tasks" }),
+    );
+    const manifest = join(
+      data,
+      "plugins",
+      "packages",
+      "notes",
+      "1.0.0",
+      "plugin.json",
+    );
+    await writeFile(manifest, "{ not json", "utf8");
+
+    const restarted = reopen();
+    const listed = await restarted.list();
+
+    expect(listed.map((plugin) => plugin.manifest.name)).toEqual([
+      "software-engineering",
+      "tasks",
+    ]);
+    expect(await restarted.damaged()).toEqual([
+      {
+        name: "notes",
+        version: "1.0.0",
+        editing: "override",
+        reason:
+          "Installed plugin “notes” is damaged and cannot be opened safely.",
+      },
+    ]);
+
+    await restarted.remove("notes");
+
+    expect(await restarted.damaged()).toEqual([]);
+    expect(
+      (await reopen().list()).map((plugin) => plugin.manifest.name),
+    ).toEqual(["software-engineering", "tasks"]);
+  });
+
+  it("keeps the choices made for a damaged package, for when it opens again", async () => {
+    const { plugins, reopen, data } = await setup();
+    const source = await writePackage(await temporaryRoot("notes"), {
+      name: "notes",
+      skills: { summarize: "Summarize." },
+    });
+    await plugins.install(source);
+    await plugins.setEnabled("notes", false);
+    await plugins.setComponentEnabled("notes/summarize", false);
+    const manifest = join(
+      data,
+      "plugins",
+      "packages",
+      "notes",
+      "1.0.0",
+      "plugin.json",
+    );
+    const intact = await readFile(manifest, "utf8");
+
+    await writeFile(manifest, "{ not json", "utf8");
+    await reopen().list();
+    await writeFile(manifest, intact, "utf8");
+
+    const repaired = find(await reopen().list(), "notes");
+    expect(repaired?.enabled).toBe(false);
+    expect(repaired?.skills[0]?.enabled).toBe(false);
   });
 
   it("refuses to install a package whose identity collides with a built-in", async () => {

@@ -19,7 +19,7 @@ import type {
   ToolchainState,
   ToolSpec,
 } from "@zhiyin/contract";
-import type { PluginView } from "@zhiyin/plugins";
+import type { DamagedPlugin, PluginView } from "@zhiyin/plugins";
 import type { DeclaredMcpServer } from "@zhiyin/mcp";
 
 /** One plugin's components by name and purpose, for inspection before activation. */
@@ -383,6 +383,28 @@ function appConnectorStatus(
     return "setup-required";
   // A missing prerequisite (a browser, git) is fixed outside the app.
   return facts.state.status === "connected" ? "ready" : "setup-required";
+}
+
+/**
+ * An installed plugin that could not be opened. It offers nothing, and its
+ * description says the way out, since removing it is all it allows.
+ */
+export function damagedPluginState(plugin: DamagedPlugin): PluginState {
+  return {
+    id: plugin.name,
+    name: plugin.name,
+    version: plugin.version,
+    description: `${plugin.reason} Remove it, then install it again.`,
+    category: "Other",
+    publisher: "Unknown publisher",
+    source: "personal",
+    enabled: true,
+    editing: plugin.editing,
+    status: "failed",
+    rollbackAvailable: false,
+    defaultPrompts: [],
+    components: [],
+  };
 }
 
 /**

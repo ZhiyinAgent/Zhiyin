@@ -35,8 +35,9 @@ because request accounting has its own retention and failure behavior.
 - Each request is one JSON line in its month's file in the app's data folder,
   so a month's record can be read without the app.
 - Recording appends; nothing written is rewritten. A line that cannot be read
-  is skipped and the rest still counts. Months more than thirteen before the
-  one being recorded are removed.
+  is skipped and the rest still counts. A line a crash cut off is ended before
+  the next request is recorded, so it costs only itself. Months more than
+  thirteen before the one being recorded are removed.
 - A request id recorded twice counts once, as last recorded.
 - Each conversation's cost is the sum of its requests, costliest first.
   Requests made outside any conversation are counted apart.
@@ -47,8 +48,9 @@ because request accounting has its own retention and failure behavior.
   into another, and order conversations by dollars, then by each other
   currency. A request with either is priced; one with neither still counts,
   and the summary says how many were priced.
-- A failure to save usage never fails the request it describes. The usage view
-  says the history could not be saved.
+- A failure to save usage never fails the request it describes. The usage
+  state is then `failed`, apart from `unavailable`, and the usage view says the
+  history could not be saved rather than that there is none yet.
 
 ## Testing notes
 

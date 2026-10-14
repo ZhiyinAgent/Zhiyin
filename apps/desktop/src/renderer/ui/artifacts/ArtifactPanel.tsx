@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   namesADocument,
   type ArtifactExport,
@@ -45,26 +45,32 @@ export function ArtifactPanel({
   const [openPath, setOpenPath] = useState<string>();
   const [preview, setPreview] = useState<PreviewState>();
   const [exports, setExports] = useState<Record<string, ExportState>>({});
+  // The file asked for last: an earlier one answering later is not shown.
+  const asked = useRef<string>(undefined);
 
   if (!artifacts.length) return null;
 
   async function open(path: string) {
     if (openPath === path) {
+      asked.current = undefined;
       setOpenPath(undefined);
       setPreview(undefined);
       return;
     }
+    asked.current = path;
     setOpenPath(path);
     setPreview({ status: "loading" });
+    let answer: ArtifactPreview;
     try {
-      setPreview(await onPreview(path));
+      answer = await onPreview(path);
     } catch {
-      setPreview({
+      answer = {
         status: "unreadable",
         path,
         reason: "This file could not be opened. Try again.",
-      });
+      };
     }
+    if (asked.current === path) setPreview(answer);
   }
 
   async function save(path: string) {

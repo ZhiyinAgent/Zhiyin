@@ -123,6 +123,27 @@ describe("FileUsageTelemetry", () => {
     });
   });
 
+  it("loses only the line a crash cut off, not the request recorded after it", async () => {
+    const root = await temporaryRoot();
+    const usage = new FileUsageTelemetry(root);
+    await usage.record(request("before", "2026-09-04T08:00:00.000Z"));
+    // Cut off mid-write: no end to the line.
+    await appendFile(
+      join(root, "usage", "2026-09.jsonl"),
+      '{"requestId":"torn","mod',
+    );
+    await usage.record(request("after", "2026-09-05T08:00:00.000Z"));
+
+    const state = await new FileUsageTelemetry(root).state(
+      new Date("2026-09-05T12:00:00.000Z"),
+    );
+
+    expect(state).toMatchObject({
+      status: "ready",
+      ranges: { "7": { requests: 2 } },
+    });
+  });
+
   it("counts a request recorded twice once, as it was last recorded", async () => {
     const usage = new FileUsageTelemetry(await temporaryRoot());
     await usage.record({

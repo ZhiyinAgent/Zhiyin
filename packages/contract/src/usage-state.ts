@@ -46,9 +46,14 @@ export type UsageRange = Estimated & {
 /** What a model request was made for. */
 export type UsagePurpose = "turn" | "condensing" | "specialist" | "background";
 
+/**
+ * `unavailable` is usage not recorded yet; `failed` is a usage history that
+ * could not be read or saved.
+ */
 export type UsageState =
   | { readonly status: "loading" }
   | { readonly status: "unavailable"; readonly reason: string }
+  | { readonly status: "failed"; readonly reason: string }
   | {
       readonly status: "ready";
       readonly costSource: "provider-reported";

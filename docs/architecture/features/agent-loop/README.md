@@ -20,8 +20,9 @@ one before it, so the provider serves that start from its cache, and anything
 new goes at the end. The start changes only on purpose, and each such change is
 an expected cache miss (ADR 0012).
 
-The loop also names a new conversation from its first message, and in the
-background names an action whose call did not say what it is for. The working
+The loop also names a new conversation from its first message, alongside the
+turn so the first answer does not wait for the name, and in the background
+names an action whose call did not say what it is for. The working
 model keeps its own plan with `update_plan` (ADR 0013). None of this can affect
 permission or execution.
 
@@ -106,14 +107,19 @@ out still runs, and is named in the background.
 
 ### Stopping and ownership (ADR 0005)
 
-- Stop reaches the active model request and the running tool, closes what the
-  conversation holds (its browser, connections and running commands), records
-  a running action as stopped, and publishes no later completion. Other
-  conversations keep working.
+- Stop reaches the active model request and the running tool, ends the
+  conversation's running commands and jobs, records a running action as
+  stopped, and publishes no later completion. What the conversation shows, its
+  browser and its 3D scene, stays open with its connections (ADR 0029). The
+  commands end even when the stop cannot be saved. Other conversations keep
+  working.
 - Stopping gives the conversation back at once. Every write is checked against
   its exact owning turn before it is committed, so a stopped turn's late
   answer cannot overwrite the turn that replaced it or reach a deleted
-  conversation. Nothing resumes a stopped turn.
+  conversation. Nothing resumes a stopped turn: a specialist it stopped is
+  reported to the next turn the person starts, after a restart too.
+- A turn that fails before it starts, such as one whose folder cannot be
+  entered, gives its conversation back, so the next message starts a turn.
 - An approved action not yet dispatched does not run once the turn is stopped.
   A connector action already dispatched is recorded as one that may already
   have taken effect.

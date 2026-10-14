@@ -63,6 +63,8 @@ activating it.
 - `pluginStates(connections?)` joins every package to the live state of what
   it contains: each connector's connection status and setup (which key, made
   where), each application connector's program, and each component's switch.
+  An installed package that could not be opened is listed last as failed,
+  with no components and a description that says why and how to remove it.
 - Plugin changes go to the plugins member: `setPluginEnabled`,
   `setComponentEnabled`, `overrideComponent`, `resetComponent`,
   `installPlugin`, `updatePlugin`, `rollbackPlugin`, `removePlugin`,
@@ -79,9 +81,10 @@ activating it.
   (`runningCommands`, `commandOutput`, `stopCommandForPerson`,
   `onCommandEnded`, `onCommandsChanged`, `onJobChanges`) pass through to the
   tools member, for the core and the agent loop (ADR 0007).
-- `closeConversation`, `forgetConversation` and `shutdown` are the one place a
+- `stopConversation`, `forgetConversation` and `shutdown` are the one place a
   conversation's browser, Blender, connections and running commands are let
-  go of.
+  go of. A stop ends only the running commands and jobs; the rest stays open
+  for the next turn (ADR 0029).
 - `declaredConnectionsOf(plugins)` turns package declarations into what the
   MCP feature connects, with each connector's request rate and read-only
   tools. The composition root wires it, because the MCP feature is

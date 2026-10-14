@@ -301,8 +301,11 @@ export class HistoryLog {
       stateLine(state, this.#header),
       "utf8",
     );
+    // The save is in the file and counts. A fresh file that cannot be started
+    // leaves the log as it is, to be started again at a later save; reporting
+    // it as a failed save would have the same edits written twice.
     if (this.#bytes > Math.max(4 * this.#stateBytes, smallestRestart))
-      await this.#restart(state);
+      await this.#restart(state).catch(() => undefined);
   }
 
   /** A fresh file holding only this state, in place of the old one. */

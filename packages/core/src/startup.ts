@@ -193,7 +193,7 @@ export async function loadStartup(
       return [];
     }),
     deps.usage.state(deps.now()).catch(() => ({
-      status: "unavailable" as const,
+      status: "failed" as const,
       reason: "Usage history could not be opened.",
     })),
   ]);

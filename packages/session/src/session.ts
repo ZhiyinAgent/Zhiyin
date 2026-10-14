@@ -177,6 +177,8 @@ export class FileSessions implements Sessions {
   readonly #recycleBin: RecycleBin | undefined;
   /** Every read and write of the history, in the order they were asked for. */
   #queue: Promise<void> = Promise.resolve();
+  /** Deleted conversations whose folder is still on disk. */
+  readonly #forgetLater = new Set<string>();
 
   constructor(
     directory: string,
@@ -334,8 +336,17 @@ export class FileSessions implements Sessions {
     return this.#kept.claimDrafts(conversationId, ids);
   }
 
+  /**
+   * What a deleted conversation kept stays while its folder does, so one that
+   * comes back at the next launch comes back whole; it goes after the save
+   * that removes the folder.
+   */
   forgetConversation(conversationId: string): Promise<void> {
-    return this.#kept.forget(conversationId);
+    return this.#queued(async () => {
+      if (this.#history.holds(conversationId))
+        this.#forgetLater.add(conversationId);
+      else await this.#kept.forget(conversationId);
+    });
   }
 
   lastRead(
@@ -427,6 +438,11 @@ export class FileSessions implements Sessions {
     return this.#queued(async () => {
       await this.#ownership.require();
       await this.#history.save(workspace, options.commit ?? (() => true));
+      for (const id of [...this.#forgetLater]) {
+        if (this.#history.holds(id)) continue;
+        this.#forgetLater.delete(id);
+        await this.#kept.forget(id).catch(() => undefined);
+      }
     });
   }
 

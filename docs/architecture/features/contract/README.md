@@ -87,6 +87,12 @@ single feature can own it.
 - The window's copy takes a change only on top of the one before it. Past a
   missing one it asks once for that conversation whole and sets its changes
   aside until it arrives; the rest of a workspace change still applies.
+- Credential removal knows a field or a variable holding a credential by how
+  its name ends, however it is written (`OPENAI_API_KEY`, `openaiApiKey`,
+  `db-password`), and also takes key headers, keys in a URL's query and keys
+  with a known prefix. It leaves a lower-case name ending in "token" alone, so
+  a model's special tokens stay readable, and code that reads a key, such as
+  `API_KEY = os.getenv(…)`, as it is. Removing again changes nothing.
 - A text's size is counted in UTF-8 bytes as an encoder would count it, in any
   script, and its tokens as a third of that, rounded up.
 - A budget's target is one formula. On a window `W` of 300k tokens or more,

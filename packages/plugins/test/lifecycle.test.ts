@@ -284,7 +284,9 @@ describe("durable plugin installation", () => {
 
     const restarted = new FilePluginStore(root);
     expect(
-      (await restarted.list()).map((item) => item.package.manifest.name),
+      (await restarted.list()).installed.map(
+        (item) => item.package.manifest.name,
+      ),
     ).toEqual(Array.from({ length: 8 }, (_, index) => `plugin-${index}`));
   });
 
@@ -300,7 +302,7 @@ describe("durable plugin installation", () => {
     await rm(join(root, "state.json.tmp"), { recursive: true });
 
     const restarted = new FilePluginStore(root);
-    expect(await restarted.list()).toEqual([]);
+    expect((await restarted.list()).installed).toEqual([]);
     await expect(
       readFile(
         join(root, "packages", "research-helper", "1.0.0", "plugin.json"),
@@ -321,7 +323,7 @@ describe("durable plugin installation", () => {
 
     await store.update("research-helper", second);
 
-    expect(await store.list()).toMatchObject([
+    expect((await store.list()).installed).toMatchObject([
       {
         activeVersion: "2.0.0",
         rollbackVersion: "1.0.0",
@@ -331,7 +333,7 @@ describe("durable plugin installation", () => {
       },
     ]);
     await store.rollback("research-helper");
-    expect(await new FilePluginStore(root).list()).toMatchObject([
+    expect((await new FilePluginStore(root).list()).installed).toMatchObject([
       {
         activeVersion: "1.0.0",
         rollbackVersion: "2.0.0",
@@ -356,7 +358,7 @@ describe("durable plugin installation", () => {
     );
     await rm(join(root, "state.json.tmp"), { recursive: true });
 
-    const recovered = await new FilePluginStore(root).list();
+    const recovered = (await new FilePluginStore(root).list()).installed;
     expect(recovered).toMatchObject([{ activeVersion: "1.0.0" }]);
     expect(recovered[0]).not.toHaveProperty("rollbackVersion");
   });
@@ -369,7 +371,7 @@ describe("durable plugin installation", () => {
 
     await store.remove("research-helper");
 
-    expect(await new FilePluginStore(root).list()).toEqual([]);
+    expect((await new FilePluginStore(root).list()).installed).toEqual([]);
     await expect(store.remove("software-engineering")).rejects.toMatchObject({
       code: "notFound",
     });

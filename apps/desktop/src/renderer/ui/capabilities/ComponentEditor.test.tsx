@@ -58,6 +58,29 @@ describe("ComponentEditor", () => {
     );
   });
 
+  it("takes a name of several words typed one key at a time", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{ kind: "skill", id: "", description: "d", instructions: "i" }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+    const name = screen.getByLabelText<HTMLInputElement>("Name");
+
+    for (const key of "Fetch forecast ")
+      fireEvent.change(name, { target: { value: name.value + key } });
+
+    expect(name.value).toBe("fetch-forecast-");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "fetch-forecast" }),
+      ),
+    );
+  });
+
   it("confirms before removing an existing component", async () => {
     const onRemove = vi.fn().mockResolvedValue(undefined);
     render(
@@ -116,6 +139,69 @@ describe("ComponentEditor", () => {
       }),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("says a connector was saved when only its token could not be kept, and offers no second save", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+        onSaveToken={() => Promise.reject(new Error("store failed"))}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Paste an access token/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Access token"), {
+      target: { value: "t0k3n" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(
+        "Weather API is saved, but its token could not be kept. Open it again to enter the token.",
+      ),
+    ).toBeVisible();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Done" })).toBeVisible();
+  });
+
+  it("says so when a connection test cannot be run", async () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={() => Promise.reject(new Error("bridge closed"))}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText("The connection could not be tested."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Test connection" }),
+    ).toBeEnabled();
   });
 
   it("shows a failed test's reason, and still lets the connector be saved", async () => {

@@ -265,6 +265,33 @@ describe("the sandbox's own packages", () => {
     );
   });
 
+  it("refuses an option written as a package name", async () => {
+    const { sandbox, calls } = await sandboxWith();
+
+    const options = [
+      "--index-url=http://evil.test/simple",
+      "--extra-index-url=http://evil.test/simple",
+      "-r",
+      "-rrequirements.txt",
+      ".hidden",
+    ];
+    for (const option of options) {
+      expect(
+        await sandbox.inspect("install_python_package", { packages: [option] }),
+      ).toMatchObject({ ok: false });
+      expect(
+        await sandbox.callTool("install_python_package", {
+          packages: [option],
+        }),
+      ).toMatchObject({ isError: true });
+    }
+    expect(
+      calls.some((call) =>
+        options.some((option) => call.arguments.includes(option)),
+      ),
+    ).toBe(false);
+  });
+
   it("rebuilds the sandbox from nothing when it is reset", async () => {
     const { sandbox, calls, directory } = await sandboxWith();
     await sandbox.callTool("run_python", { code: "print(1)" });
@@ -283,6 +310,28 @@ describe("the sandbox's own packages", () => {
     expect(calls.filter((call) => call.arguments[0] === "venv")).toHaveLength(
       2,
     );
+  });
+
+  it("installs the default packages again when they failed to install the first time", async () => {
+    const network: { failing?: string } = { failing: "pandas" };
+    const { sandbox, calls, interpreter } = await sandboxWith(network);
+    expect(
+      await sandbox.callTool("run_python", { code: "print(1)" }),
+    ).toMatchObject({
+      isError: true,
+      content: [{ text: expect.stringContaining("could not be installed") }],
+    });
+
+    delete network.failing;
+    calls.length = 0;
+    await sandbox.callTool("run_python", { code: "print(1)" });
+
+    // The environment is there; only its packages are installed again.
+    expect(calls.map((call) => call.arguments.slice(0, 2))).toEqual([
+      ["pip", "install"],
+      [expect.stringContaining("scripts")],
+    ]);
+    expect(calls[1]?.executable).toBe(interpreter);
   });
 
   it("says what went wrong when the environment cannot be built", async () => {
@@ -340,6 +389,27 @@ describe("what the sandbox offers", () => {
         ok: true,
         action: "Rebuild the Python environment",
         detail: "Packages added to it are removed.",
+      },
+    );
+  });
+
+  it("says a script reaches what the person's own account reaches", async () => {
+    const { sandbox } = await sandboxWith();
+
+    expect(
+      await sandbox.inspect("run_python", { code: "print(1)" }),
+    ).toMatchObject({
+      detail:
+        "A script runs with your own access: it can read and change your files and use the network.",
+    });
+  });
+
+  it("shows the commands a rebuild runs", async () => {
+    const { sandbox } = await sandboxWith();
+
+    expect(await sandbox.inspect("reset_python_environment", {})).toMatchObject(
+      {
+        command: `uv venv --python 3.13\nuv pip install ${defaultPackages.join(" ")}`,
       },
     );
   });

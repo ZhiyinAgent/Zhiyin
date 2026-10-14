@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
 import type { ToolchainState } from "@zhiyin/contract";
 import { staysInside } from "@zhiyin/workspace-containment";
 
@@ -255,22 +256,23 @@ export class DownloadedToolchains implements Toolchains {
   ): Promise<void> {
     const hash = createHash("sha256");
     let received = 0;
-    const file = createWriteStream(destination);
-    try {
-      for await (const chunk of await this.#download(spec.url, signal)) {
-        signal.throwIfAborted();
-        received += chunk.byteLength;
-        if (received > spec.bytes)
-          throw new Error(
-            `The download of ${spec.name} is larger than expected.`,
-          );
-        hash.update(chunk);
-        if (!file.write(chunk))
-          await new Promise<void>((drained) => file.once("drain", drained));
-      }
-    } finally {
-      await new Promise<void>((closed) => file.end(closed));
-    }
+    // A write that fails, such as on a full disk, fails the download.
+    await pipeline(
+      await this.#download(spec.url, signal),
+      async function* (chunks: AsyncIterable<Uint8Array>) {
+        for await (const chunk of chunks) {
+          signal.throwIfAborted();
+          received += chunk.byteLength;
+          if (received > spec.bytes)
+            throw new Error(
+              `The download of ${spec.name} is larger than expected.`,
+            );
+          hash.update(chunk);
+          yield chunk;
+        }
+      },
+      createWriteStream(destination),
+    );
     signal.throwIfAborted();
     if (received !== spec.bytes || hash.digest("hex") !== spec.sha256)
       throw new Error(

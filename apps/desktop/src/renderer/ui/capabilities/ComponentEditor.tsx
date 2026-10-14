@@ -183,6 +183,7 @@ export function ComponentEditor({
   const savedId = useRef<string | undefined>(isNew ? undefined : draft.id);
   const closeWhenSignedIn = useRef(false);
   const [savedForSignIn, setSavedForSignIn] = useState(false);
+  const [tokenLost, setTokenLost] = useState(false);
   const signIn = useConnectorSignIn(
     onSignIn ? () => onSignIn(savedId.current ?? draft.id) : undefined,
     () => {
@@ -265,6 +266,8 @@ export function ComponentEditor({
         mode === "token" ? token.trim() || undefined : undefined,
       );
       setTestResult(result);
+    } catch {
+      setError("The connection could not be tested.");
     } finally {
       setTesting(false);
     }
@@ -280,12 +283,14 @@ export function ComponentEditor({
     }
     setPending("save");
     setError(null);
+    const saved: ComponentDraft =
+      form.kind === "skill"
+        ? { ...form, id: isNew ? slugify(form.id) : form.id }
+        : { ...form, id: form.id || slugify(form.name) };
+    let step: "save" | "token" = "save";
     try {
-      const saved: ComponentDraft =
-        form.kind === "skill"
-          ? { ...form, id: form.id || slugify(form.id) }
-          : { ...form, id: form.id || slugify(form.name) };
       await onSave(saved);
+      step = "token";
       if (
         saved.kind === "connection" &&
         mode === "token" &&
@@ -303,7 +308,17 @@ export function ComponentEditor({
       }
       onClose();
     } catch {
-      setError(`Could not save this ${kindLabel[form.kind]}.`);
+      if (step === "save")
+        setError(`Could not save this ${kindLabel[form.kind]}.`);
+      else {
+        // Saved already, so the dialog offers no second save, which would
+        // add it twice.
+        savedId.current = saved.id;
+        setTokenLost(true);
+        setError(
+          `${name} is saved, but its token could not be kept. Open it again to enter the token.`,
+        );
+      }
     } finally {
       setPending(null);
     }
@@ -346,7 +361,7 @@ export function ComponentEditor({
       footer={
         <EditorActions
           stage={
-            savedForSignIn
+            savedForSignIn || tokenLost
               ? "saved"
               : confirmingRemoval
                 ? "confirming-removal"
@@ -413,7 +428,7 @@ export function ComponentEditor({
             />
           </>
         )}
-        {form.kind === "connection" && !savedForSignIn && (
+        {form.kind === "connection" && !savedForSignIn && !tokenLost && (
           <>
             <ConnectorAddressFields
               form={form}

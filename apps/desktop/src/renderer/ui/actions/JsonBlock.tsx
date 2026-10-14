@@ -113,11 +113,14 @@ function tokenizeJson(text: string): React.ReactNode[] {
 export function JsonBlock({
   text,
   className,
+  shown = (formatted) => formatted,
 }: {
   text: string;
   className?: string | undefined;
+  /** How the laid-out text is drawn, once escapes in it are decoded. */
+  shown?: (formatted: string) => string;
 }) {
-  const formatted = formatJson(text);
+  const formatted = shown(formatJson(text));
   const structured = looksStructured(formatted);
   return (
     <div className={className ?? styles["json-block"]}>

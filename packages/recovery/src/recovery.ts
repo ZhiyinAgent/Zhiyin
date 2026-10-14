@@ -19,6 +19,7 @@ import type {
 } from "@zhiyin/contract";
 import { staysInside } from "@zhiyin/workspace-containment";
 import {
+  DamagedCopyError,
   recreateExclusively,
   restoreExclusively,
 } from "./exclusive-restore.js";
@@ -504,12 +505,14 @@ export class FileRecovery implements Recovery {
           path: file.path,
           status: target.action === "remove" ? "removed" : "restored",
         });
-      } catch {
+      } catch (error) {
         results.push({
           path: file.path,
           status: "unprotected",
           reason:
-            "The retained bytes could not be applied; the current file was left in place.",
+            error instanceof DamagedCopyError
+              ? "The copy kept before the change is damaged, so the current file was left as it is."
+              : "The retained bytes could not be applied; the current file was left in place.",
         });
       }
     }
@@ -664,13 +667,16 @@ export class FileRecovery implements Recovery {
       return recreateExclusively({
         absolute: target.absolute,
         backup: target.backup,
+        retained: target.restored,
       });
     }
     await restoreExclusively({
       absolute: target.absolute,
       expected: target.expected,
       action: target.action,
-      ...(target.backup ? { backup: target.backup } : {}),
+      ...(target.backup
+        ? { backup: target.backup, retained: target.restored }
+        : {}),
     });
   }
 
