@@ -18,6 +18,7 @@ export {
 } from "./diagnostic-log.js";
 export { reloadAfterCrash, type CrashResponses } from "./window-recovery.js";
 export { testSwitches, type TestSwitches } from "./test-switches.js";
+export { debuggingRefusal } from "./debugging-switches.js";
 export type { ModelSettings } from "./model-settings.js";
 export type { Notice, Notifier } from "./attention.js";
 export {

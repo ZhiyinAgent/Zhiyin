@@ -96,6 +96,8 @@ answers every other command:
   it again or quit.
 - `testSwitches(environment, packaged)`, the switches the installed tests set,
   honoured only when the app is not packaged.
+- `debuggingRefusal(hasSwitch, packaged)`, why the installed app must not start
+  with the switches it was given, or nothing when it may.
 - `ModelSettings`, the model the app talks to as the person has set it up: the
   providers and their keys, the models on offer and who serves them, and the
   model chosen.
@@ -302,6 +304,11 @@ answers every other command:
   connections that never close, a refusing credential store) are read from
   the environment of an uninstalled build only. The installed app honours
   none of them.
+- The installed app does not start when given Chromium's debugging switches,
+  `--remote-debugging-port` or `--remote-debugging-pipe`, which would let
+  another program drive its window, approvals included. It records which
+  switch in its log and ends before the debugging server opens. A build run
+  from source keeps both.
 
 ## Testing notes
 

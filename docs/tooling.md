@@ -200,8 +200,9 @@ there would be no app to start. `-Full` adds packaging; a check that the
 packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE` and
 `--inspect` (ADR 0001), load the app only from its archive and check the
 archive against the hash in the executable; the packaged executable itself,
-started on a saved conversation and reached over Chromium's debugging port
-(`ZHIYIN_PACKAGED_APP` names it), which must show that conversation; a check
+started on a saved conversation and read from outside through UI Automation
+(`ZHIYIN_PACKAGED_APP` names it), which must show that conversation and must
+refuse to start with Chromium's debugging switches; a check
 that the packaged app holds every spelling dictionary unchanged; and the
 installed documents test run against the packed
 `app.asar` (named by `ZHIYIN_APP_ARCHIVE`), so a packaging change that stops

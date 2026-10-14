@@ -24,6 +24,7 @@ import { dirname, join, resolve } from "node:path";
 import { COMMAND_CHANNELS } from "@zhiyin/contract";
 import {
   buildCore,
+  debuggingRefusalOf,
   savedAppearance,
   startDiagnosticLog,
   testSwitchesOf,
@@ -52,6 +53,18 @@ app.setName("Zhiyin");
 
 // Local only, beside the saved history, and started before anything else.
 const log = startDiagnosticLog(join(app.getPath("userData"), "logs"));
+
+// Ended here, in the first tick and before Chromium opens its debugging
+// server, when the switches it was started with would let a program drive the
+// window. Before the app is ready, exiting ends the process at once.
+const refusal = debuggingRefusalOf(
+  (name) => app.commandLine.hasSwitch(name),
+  app.isPackaged,
+);
+if (refusal) {
+  log.record({ level: "error", source: "startup", message: refusal });
+  app.exit(1);
+}
 
 /**
  * No application menu at all. Every page is reached from the window itself, so

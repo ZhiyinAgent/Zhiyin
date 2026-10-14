@@ -36,6 +36,7 @@ import {
   Core,
   DiagnosticLog,
   Workspace,
+  debuggingRefusal,
   recordCrashes,
   reloadAfterCrash,
   testSwitches,
@@ -170,6 +171,9 @@ export const watchForCrashes = reloadAfterCrash;
 
 /** The switches only an uninstalled build reads, for testing it: the core decides. */
 export const testSwitchesOf = testSwitches;
+
+/** Whether the switches the app was started with let it start: the core decides. */
+export const debuggingRefusalOf = debuggingRefusal;
 
 export type { SpellcheckEngine, TextMenuItem } from "@zhiyin/spelling";
 
