@@ -925,7 +925,8 @@
     */
     top: calc(20px + (var(--zy-title-bar-height) - 38px) / 2);
     left: 16px;
-    z-index: var(--zy-layer-overlay);
+    /* Over the drawer it opens, which comes after it, and under a dialog. */
+    z-index: calc(var(--zy-layer-navigation) + 1);
     width: 38px;
     height: 38px;
     border: 1px solid var(--zy-line);

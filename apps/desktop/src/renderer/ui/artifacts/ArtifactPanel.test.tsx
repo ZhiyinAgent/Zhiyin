@@ -90,7 +90,7 @@ describe("ArtifactPanel", () => {
       />,
     );
 
-    expect(screen.getByText("Created by this task · 2 KB")).toBeVisible();
+    expect(screen.getByText("Created by this task · 1.5 KB")).toBeVisible();
     expect(
       screen.getByText("Replaced an existing file · 240 bytes"),
     ).toBeVisible();

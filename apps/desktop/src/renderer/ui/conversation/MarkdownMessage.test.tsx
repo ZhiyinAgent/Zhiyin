@@ -65,6 +65,14 @@ describe("a citation in an answer (ADR 0018)", () => {
     expect(screen.queryByRole("link")).toBeNull();
   });
 
+  it("keeps the dash before a web address on the address's line", () => {
+    rendered(vi.fn());
+
+    expect(
+      screen.getByText(/https:\/\/example\.com\/council/).textContent,
+    ).toContain("— https://example.com/council");
+  });
+
   it("is plain text where nothing can open it", () => {
     rendered();
 

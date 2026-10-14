@@ -1164,6 +1164,19 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * A link's address asks its column for a set width, not its own length:
+ * unbroken it is the widest thing in the table, which would share out its
+ * spare width by it and wrap the columns beside it. It goes under the
+ * link's words, and a narrower cell still narrows it.
+ */
+.message-prose th .message-link__target,
+.message-prose td .message-link__target {
+  display: block;
+  width: 24ch;
+  max-width: 100%;
+}
+
 .message-link {
   color: var(--zy-blue);
 }

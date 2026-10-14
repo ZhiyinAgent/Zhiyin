@@ -67,8 +67,9 @@ export const MarkdownMessage = memo(function MarkdownMessage({
               <span className={styles["message-link"]} title={target}>
                 {linkChildren}
                 <span className={styles["message-link__target"]}>
-                  {" "}
-                  — {target}
+                  {/* The dash stays with the address, never a line alone. */} —
+                  {" "}
+                  {target}
                 </span>
               </span>
             ) : (

@@ -429,7 +429,7 @@
 
 .dialog-shell__scrim {
   position: fixed;
-  z-index: var(--zy-layer-popover);
+  z-index: var(--zy-layer-modal);
   inset: 0;
   display: grid;
   place-items: center;

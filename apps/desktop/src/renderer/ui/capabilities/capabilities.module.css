@@ -24,7 +24,7 @@
 }
 
 .library-header > div:first-child {
-  flex: 1 1 300px;
+  flex: 1 1 200px;
 }
 
 .library-header > div:last-child {
@@ -65,7 +65,15 @@
   background: var(--zy-amber-fill);
 }
 
+/* The reason beside its two buttons while both fit, its last line never a
+   lone word; below that width the buttons go under it. */
+.shell-notice > span:first-child {
+  flex: 1 1 300px;
+  text-wrap: pretty;
+}
+
 .shell-notice__actions {
+  flex: none;
   display: flex;
   gap: 8px;
   align-items: center;

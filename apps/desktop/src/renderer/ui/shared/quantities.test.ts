@@ -2,13 +2,22 @@ import { describe, expect, it } from "vitest";
 import { elapsedTime, fileSize } from "./quantities.js";
 
 describe("a file size", () => {
-  it("is written in bytes, then whole kilobytes, then megabytes to a tenth", () => {
+  it("is written in bytes, then kilobytes, then megabytes to a tenth", () => {
     expect(fileSize(1)).toBe("1 byte");
     expect(fileSize(240)).toBe("240 bytes");
-    expect(fileSize(1_536)).toBe("2 KB");
     expect(fileSize(48_128)).toBe("47 KB");
     expect(fileSize(10 * 1024 * 1024)).toBe("10.0 MB");
     expect(fileSize(22_463_684)).toBe("21.4 MB");
+  });
+
+  it("keeps a tenth of a kilobyte below ten, where rounding would overstate it", () => {
+    expect(fileSize(1_536)).toBe("1.5 KB");
+    expect(fileSize(9 * 1024 + 900)).toBe("9.9 KB");
+    expect(fileSize(10 * 1024)).toBe("10 KB");
+  });
+
+  it("drops a tenth of zero", () => {
+    expect(fileSize(2_048)).toBe("2 KB");
   });
 });
 
@@ -17,6 +26,12 @@ describe("a length of time", () => {
     expect(elapsedTime(5_400)).toBe("5 s");
     expect(elapsedTime(80_000)).toBe("1 min 20 s");
     expect(elapsedTime(65 * 60_000 + 30_000)).toBe("1 h 5 min");
+  });
+
+  it("leaves out a remainder of zero", () => {
+    expect(elapsedTime(60_000)).toBe("1 min");
+    expect(elapsedTime(3 * 60_000 + 400)).toBe("3 min");
+    expect(elapsedTime(2 * 60 * 60_000 + 40_000)).toBe("2 h");
   });
 
   it("never goes below nothing", () => {

@@ -126,7 +126,8 @@ and fonts (`--zy-font-display`, `--zy-font-body`, `--zy-font-data`) are tokens
 too. Text is never set under 12 px; a size relative to its parent is written
 as `max(12px, …)`. What floats over the page takes its place from a
 `--zy-layer-` token, lowest first: `menu`, `confirm`, `popover`,
-`navigation`, `overlay`, `hover-tip` and `alert`.
+`navigation`, `modal`, `overlay`, `hover-tip` and `alert`. A dialog sits on
+`modal`, over the narrow window's navigation and its button.
 
 The global stylesheet also holds the shared basics any module may use as plain
 class names: `button`, with `button--accent` for the primary action,

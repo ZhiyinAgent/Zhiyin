@@ -126,8 +126,9 @@
      pieces of one part, such as a marker over its line, stays that part's. */
   --zy-layer-menu: 30; /* the app menu, the files drawer */
   --zy-layer-confirm: 35; /* a question asked over a menu */
-  --zy-layer-popover: 40; /* pickers, the reasoning panel, dialogs */
-  --zy-layer-navigation: 50; /* the sidebar over a narrow window */
+  --zy-layer-popover: 40; /* pickers, the reasoning panel */
+  --zy-layer-navigation: 50; /* the sidebar over a narrow window, and its button */
+  --zy-layer-modal: 55; /* dialogs, which hold the whole window */
   --zy-layer-overlay: 60; /* the changes viewer, tips, toasts */
   --zy-layer-hover-tip: 80;
   --zy-layer-alert: 100; /* errors, notices, the permissions overlay */
