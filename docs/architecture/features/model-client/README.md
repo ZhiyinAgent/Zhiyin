@@ -186,6 +186,11 @@ ignores it.
   only message the provider reads pictures from. A picture that answers a tool
   call is sent after it, as a user message. Each tool result carries the id of
   the call it answers.
+- **A round's results follow its calls directly**, in every format: whatever
+  else was kept among them, such as the picture one call made before the next
+  call's result, is sent after the round's last result, in the order it was
+  kept, with any cache mark still on the message it was asked for. A
+  conversation stored in the older order is sent the same way.
 - **A replay record goes back only to the provider that produced it.** It may
   be signed or encrypted for that provider alone; a turn written by another
   provider is sent with its words and reasoning only. OpenRouter is sent
@@ -337,6 +342,6 @@ behavior. Each lab's live check runs on each of its platforms whose key
 variable is set, with the cheapest model that takes tools: its key accepted
 and a wrong one or the other platform's refused, its model listed, a streamed
 answer with usage and cost, a tool round with reasoning sent back, an earlier
-tool turn kept without reasoning, a picture, and a repeated start read from
-the cache. `pnpm test:live` runs every live check with the keys in the
+tool turn kept without reasoning, a picture, a round of two calls whose first
+made a picture, and a repeated start read from the cache. `pnpm test:live` runs every live check with the keys in the
 repository's gitignored `.env.local`.

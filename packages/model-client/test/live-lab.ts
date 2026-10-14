@@ -374,6 +374,74 @@ export function checkLive(
       );
 
       it(
+        "accepts a round of two calls whose first made a picture",
+        async ({ skip }) => {
+          const client = await chosen();
+          const settings = await client.settings();
+          if (!settings.acceptsImages) skip("The model takes no pictures.");
+
+          // As a round is kept: the picture told after the call that made
+          // it, before the next call's result.
+          const reply = await answer(client, {
+            tools: [readNote],
+            maximumOutputTokens: 4096,
+            ...(settings.reasoning?.status === "available"
+              ? { reasoning: { enabled: true as const } }
+              : {}),
+            messages: [
+              {
+                role: "user",
+                content:
+                  "Use read_note to read notes 7 and 8, then say in one sentence what they say and what colour the square is.",
+              },
+              {
+                role: "assistant",
+                content: "",
+                toolCalls: [
+                  {
+                    id: "call_0123456781",
+                    name: "read_note",
+                    arguments: JSON.stringify({ note: 7 }),
+                  },
+                  {
+                    id: "call_0123456782",
+                    name: "read_note",
+                    arguments: JSON.stringify({ note: 8 }),
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                toolCallId: "call_0123456781",
+                name: "read_note",
+                content: "Note 7 holds a picture of a square.",
+              },
+              {
+                role: "user",
+                content: [
+                  { kind: "text", text: "The picture from read_note:" },
+                  {
+                    kind: "image",
+                    mediaType: "image/png",
+                    data: square(0, 0, 255),
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                toolCallId: "call_0123456782",
+                name: "read_note",
+                content: "Note 8 says the launch moved to December 4.",
+              },
+            ],
+          });
+
+          expect(reply.text).toMatch(/december/i);
+        },
+        liveTimeout,
+      );
+
+      it(
         "bills a repeated start from its cache",
         async () => {
           const client = await chosen();

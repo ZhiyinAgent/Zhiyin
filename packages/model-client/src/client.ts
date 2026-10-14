@@ -32,6 +32,7 @@ import {
   type ProviderAccountOptions,
 } from "./provider-account.js";
 import { withRetries, type RetryOptions } from "./retry.js";
+import { resultsAfterTheirCalls } from "./round-results.js";
 import { startingWithin } from "./stream.js";
 
 export type ProviderModelClientOptions = ProviderAccountOptions & {
@@ -173,15 +174,16 @@ export class ProviderModelClient implements ModelClient {
       );
     }
     const price = this.#provider.price?.(chosen.model, this.#region);
+    const ordered = resultsAfterTheirCalls(
+      ownReplaysOnly(request.messages, this.#provider.id),
+      request.cacheAfter,
+    );
     try {
       for await (const event of this.#provider.send({
         endpoint: this.#endpoint,
         apiKey,
         chosen,
-        request: {
-          ...request,
-          messages: ownReplaysOnly(request.messages, this.#provider.id),
-        },
+        request: { ...request, ...ordered },
         fetcher: startingWithin(
           this.#fetcher,
           this.#startTimeoutMs,
