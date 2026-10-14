@@ -11,8 +11,9 @@ import {
   ModelClientError,
   retryAfterMs,
   saysTooLong,
-  tokenLimitFrom,
   type FailureReport,
+  tooLarge,
+  overloaded,
 } from "../../failures.js";
 
 /** The status each documented type is sent with. */
@@ -54,12 +55,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
             ? `MiniMax refused the request: ${sentence}`
             : "MiniMax refused the request (HTTP 400).",
         );
-      const tokens = tokenLimitFrom(sentence);
-      return new ModelClientError(
-        "contextExceeded",
-        "The request is too large for the selected model.",
-        tokens ? { tokens } : {},
-      );
+      return tooLarge(sentence);
     }
     case 413:
       return new ModelClientError(
@@ -85,14 +81,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
         wait === undefined ? {} : { retryAfterMs: wait },
       );
     case 529:
-      return new ModelClientError(
-        "modelUnavailable",
-        "MiniMax is overloaded right now.",
-        {
-          retryable: true,
-          ...(wait === undefined ? {} : { retryAfterMs: wait }),
-        },
-      );
+      return overloaded("MiniMax is overloaded right now.", wait);
     default:
       return status >= 500 || status === 0
         ? new ModelClientError(

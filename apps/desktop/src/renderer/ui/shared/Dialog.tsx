@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import styles from "./shared.module.css";
 import { InsideLayer, useDismiss } from "./useDismiss.js";
 import { useModalFocus } from "./useModalFocus.js";
@@ -21,16 +21,7 @@ export function Dialog({
   const dialog = useRef<HTMLDivElement>(null);
   const layer = useDismiss(true, [dialog], onClose, { closeOnBlur: false });
 
-  useModalFocus(dialog);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useModalFocus(dialog, onClose);
 
   return (
     <WindowLayer>

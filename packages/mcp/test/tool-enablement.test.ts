@@ -4,12 +4,14 @@
  * merely hidden: a disabled tool must not be callable by name either.
  */
 
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { InMemoryMcpCredentials, type McpConnection } from "../src/index.js";
 import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 async function connectedServers() {
   const connection: McpConnection = {
@@ -21,7 +23,7 @@ async function connectedServers() {
     close: async () => {},
   };
   const servers = managed(
-    await mkdtemp(join(tmpdir(), "zhiyin-mcp-tools-")),
+    await folders.make("zhiyin-mcp-tools-"),
     async () => connection,
     new InMemoryMcpCredentials(),
   );

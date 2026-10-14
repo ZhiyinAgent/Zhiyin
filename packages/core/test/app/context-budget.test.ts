@@ -3,22 +3,16 @@
  * default for every conversation, and a conversation's own choice over it.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, emptyConversationLists } from "@zhiyin/contract";
 import { FileSessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function appAt(root: string) {
   let created = 0;
@@ -34,8 +28,7 @@ async function appAt(root: string) {
 
 describe("the context budget a person chooses", () => {
   it("is kept for one conversation, while the others follow the default, across a restart", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-budget-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-budget-");
     const app = await appAt(root);
     const chosen = await app.createTask();
     const following = await app.createTask();
@@ -92,8 +85,7 @@ describe("the context budget a person chooses", () => {
   });
 
   it("tells the window a conversation is compacting, and when it has finished", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-budget-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-budget-");
     const taskId = "task-1";
     await new FileSessions(root).saveWorkspace({
       tasks: [

@@ -19,7 +19,7 @@ export function HistoryRecoveryGate({
   recovery: HistoryRecovery;
   onChoose: (choice: "recover" | "startFresh") => Promise<void>;
   /** Shows the kept copy selected in its folder. */
-  onShowKept?: (path: string) => void;
+  onShowKept?: (path: string) => Promise<void>;
 }) {
   const [working, setWorking] = useState<"recover" | "startFresh" | "">("");
   const [error, setError] = useState("");
@@ -56,7 +56,16 @@ export function HistoryRecoveryGate({
             <button
               type="button"
               className="button button--small"
-              onClick={() => onShowKept(recovery.keptAt)}
+              onClick={() => {
+                setError("");
+                onShowKept(recovery.keptAt).catch((cause: unknown) =>
+                  setError(
+                    cause instanceof Error
+                      ? cause.message
+                      : "The kept copy could not be shown.",
+                  ),
+                );
+              }}
             >
               Show the kept copy
             </button>

@@ -7,19 +7,11 @@
  * so it must not write over it or offer to start afresh in its place.
  */
 
-import {
-  cp,
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rename,
-  rm,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { cp, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   FileSessions,
   historyFiles,
@@ -35,18 +27,12 @@ import {
   settingsFile,
 } from "./planted-history.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-formats-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-formats-");
 }
 
 function task(id: string) {

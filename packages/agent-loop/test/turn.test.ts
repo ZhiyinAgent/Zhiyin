@@ -1,6 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { access, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   emptyConversationLists,
@@ -8,6 +7,7 @@ import {
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
 import { ModelClientError, type ModelRequest } from "@zhiyin/model-client";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   currentApprovalId,
   pluginOffering,
@@ -19,6 +19,10 @@ import {
   fenced,
   wordsOf,
 } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("AgentLoop", () => {
   it("loads an enabled skill through permission handling and returns instructions to the model", async () => {
@@ -598,7 +602,7 @@ describe("AgentLoop", () => {
   });
 
   it("keeps a denied call from producing a real side effect and returns the rejection to the model", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-denied-tool-"));
+    const root = await folders.make("zhiyin-denied-tool-");
     const sentinel = join(root, "side-effect.txt");
     const requests: ModelRequest[] = [];
     const loop = loopFrom({

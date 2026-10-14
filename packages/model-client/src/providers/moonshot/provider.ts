@@ -11,7 +11,7 @@
 import type { ModelChoiceValue } from "../../choice.js";
 import type { ProviderError } from "../../failures.js";
 import type { ModelRequest } from "../../model-client.js";
-import { fromModelList, type ListedByApi } from "../../model-list.js";
+import { fromModelList, listedAt } from "../../model-list.js";
 import type { CatalogFetch, KeyCheck, Provider } from "../../provider.js";
 import {
   chatMessages,
@@ -21,7 +21,6 @@ import {
   sendChatCompletions,
   type ChatCompletionsDialect,
 } from "../../wires/chat-completions/send.js";
-import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { moonshotModels, thinkingSwitched } from "./models.js";
 
@@ -114,27 +113,11 @@ async function checkKey(
 }
 
 /** The models the account can use now, by its platform's own listing. */
-const listedByApi: ListedByApi = async (options) => {
-  const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
-  const response = await fetcher(`${hostOf(options.region)}/models`, {
-    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-  });
-  if (!response.ok) throw new Error("Kimi's model listing is unavailable.");
-  const listing = (await response.json()) as { data?: unknown };
-  if (!Array.isArray(listing.data))
-    throw new Error("Kimi's model listing is unreadable.");
-  return new Set(
-    listing.data.flatMap((model: unknown) =>
-      model &&
-      typeof model === "object" &&
-      "id" in model &&
-      typeof model.id === "string"
-        ? [model.id]
-        : [],
-    ),
-  );
-};
+const listedByApi = listedAt(
+  "Kimi",
+  (region) => `${hostOf(region)}/models`,
+  (apiKey) => ({ Authorization: `Bearer ${apiKey}` }),
+);
 
 export const moonshot: Provider = {
   id: "moonshot",

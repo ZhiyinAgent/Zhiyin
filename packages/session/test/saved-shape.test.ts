@@ -1,8 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   FileSessions,
   SessionStoreError,
@@ -16,18 +14,12 @@ import { plantHistory } from "./planted-history.js";
  * refused as damaged rather than read in part.
  */
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-saved-shape-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-saved-shape-");
 }
 
 const conversation: WorkspaceTask = {

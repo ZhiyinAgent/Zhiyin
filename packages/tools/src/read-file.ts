@@ -14,7 +14,7 @@
  * a read of something else.
  */
 
-import { open, realpath, stat } from "node:fs/promises";
+import { open, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   ToolCallInspection,
@@ -32,6 +32,7 @@ import {
   errorCode,
   isAbortError,
   normalizePath,
+  realLocation,
   scopeOf,
   toForwardSlashes,
   type PathScope,
@@ -280,16 +281,11 @@ export async function runReadTextFile(
     return { ok: false, reason: "Choose a folder before using files." };
 
   try {
-    const [realRoot, realTarget] = await Promise.all([
-      realpath(root),
-      realpath(resolve(root, input.path)),
-    ]);
+    const real = await realLocation(root, input.path);
+    const realTarget = real.path;
     // A link can point out of the workspace after the request was presented as
     // staying in it. The approval that was given was for the contained read.
-    if (
-      inspected.scope === "workspace" &&
-      scopeOf(realRoot, realTarget) !== "workspace"
-    ) {
+    if (inspected.scope === "workspace" && real.scope !== "workspace") {
       return {
         ok: false,
         reason: "The file leads outside the current workspace.",

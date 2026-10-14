@@ -4,17 +4,22 @@
  * Zhiyin recognises removed; the saved conversation keeps them as sent.
  */
 
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   conversationExport,
   conversationHtml,
   conversationJson,
   type ExportAbout,
 } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const about: ExportAbout = {
   appVersion: "0.1.0-alpha.1",
@@ -352,7 +357,7 @@ describe("the page for people", () => {
 
 describe("saving an export", () => {
   it("writes the file where the person chose, named after the conversation", async () => {
-    const folder = await mkdtemp(join(tmpdir(), "zhiyin-export-"));
+    const folder = await folders.make("zhiyin-export-");
     let suggested = "";
     const exporter = conversationExport(() => about);
 
@@ -372,7 +377,7 @@ describe("saving an export", () => {
   });
 
   it("writes nothing when the person cancels", async () => {
-    const folder = await mkdtemp(join(tmpdir(), "zhiyin-export-"));
+    const folder = await folders.make("zhiyin-export-");
     const exporter = conversationExport(() => about);
 
     const result = await exporter.save(

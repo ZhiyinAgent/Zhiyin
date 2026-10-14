@@ -19,5 +19,8 @@
     "@zhiyin/process-ownership": "workspace:*",
     "@zhiyin/workspace-containment": "workspace:*",
     "playwright-core": "1.63.0-alpha-2026-08-31"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

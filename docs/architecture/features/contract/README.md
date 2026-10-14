@@ -36,6 +36,9 @@ single feature can own it.
   lists; `emptyConversationLists` is the set a new one starts from.
 - **Saved history as the window sees it.** `ConversationSummary`,
   `HistoryRecovery`, `NewerHistory` and `SavedConversationsOutcome`.
+- **What a conversation read.** `FileRead`: when a file was last read for a
+  conversation, as it was then. The tools record it and check a write against
+  it; the session keeps it.
 - **The bridge.** `CoreApi` is the window's interface to the core; `AppEvent`
   is everything the core tells the window, on one stream. `CHANNEL` names each
   IPC channel, `COMMAND_CHANNELS` the command channels alone, and `BRIDGE_KEY`
@@ -49,6 +52,10 @@ single feature can own it.
   or say the call closes the document. A result carries `shown`, what the
   person then sees beside the conversation, and `cite`, the link to cite the
   document with (ADR 0018).
+- **Connections offered from inside the app.** `OfferedConnection` is what the
+  browser, the 3D studio, git, Python and the document compiler each hand the
+  connections feature, and `ConnectionTool` a tool as a connection lists it. A
+  `WritingConnection` also names the files its calls wrote.
 - `VisibleError`, a failure whose message is meant for the person, recognised
   across layers by its type.
 - `ALLOWED_EXTERNAL_URLS`, every page the window may ask to open in the

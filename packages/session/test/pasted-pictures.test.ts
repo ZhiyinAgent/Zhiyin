@@ -4,25 +4,17 @@
  * names, and removed only to stay inside their own folder's size.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-pictures-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-pictures-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A picture of `bytes` bytes, as the window hands it over. */
 function picture(name: string, bytes = 6) {

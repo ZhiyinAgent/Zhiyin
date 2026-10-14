@@ -1,12 +1,16 @@
-import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { TaskArtifact } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceArtifacts } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(files: Record<string, string> = {}): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-artifacts-"));
+  const root = await folders.make("zhiyin-artifacts-");
   for (const [path, text] of Object.entries(files))
     await writeFile(join(root, path), text, "utf8");
   return root;
@@ -116,7 +120,7 @@ describe("WorkspaceArtifacts", () => {
   });
 
   it("refuses a recorded path that leaves the workspace", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-artifacts-"));
+    const parent = await folders.make("zhiyin-artifacts-");
     const root = join(parent, "inside");
     await mkdir(root);
     await writeFile(join(parent, "secret.md"), "outside", "utf8");
@@ -146,7 +150,7 @@ describe("WorkspaceArtifacts", () => {
 
   it("copies a produced file to the chosen destination and reports a cancelled choice", async () => {
     const root = await workspace({ "brief.md": "Final draft" });
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-export-"));
+    const outside = await folders.make("zhiyin-export-");
     const artifacts = new WorkspaceArtifacts(() => root);
     const destination = join(outside, "brief.md");
 
@@ -167,7 +171,7 @@ describe("WorkspaceArtifacts", () => {
 
   it("reports a failed export instead of claiming the file was saved", async () => {
     const root = await workspace({ "brief.md": "Final draft" });
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-export-"));
+    const outside = await folders.make("zhiyin-export-");
     const artifacts = new WorkspaceArtifacts(() => root);
 
     await expect(
@@ -191,7 +195,7 @@ describe("WorkspaceArtifacts", () => {
   });
 
   it("owns explicit SVG view export and rejects active content", async () => {
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-export-"));
+    const outside = await folders.make("zhiyin-view-export-");
     const destination = join(outside, "release-flow.svg");
     const artifacts = new WorkspaceArtifacts(() => undefined);
 
@@ -214,7 +218,7 @@ describe("WorkspaceArtifacts", () => {
   });
 
   it("saves a diagram made of what a still picture is made of", async () => {
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-export-"));
+    const outside = await folders.make("zhiyin-view-export-");
     const artifacts = new WorkspaceArtifacts(() => undefined);
     // As the window saves a flowchart: its own stylesheet, markers, a
     // gradient, a shadow filter, and colours carried as inline style.
@@ -289,7 +293,7 @@ describe("WorkspaceArtifacts", () => {
     ],
     ["something that is not a drawing", "<html><svg></svg></html>"],
   ])("refuses to save %s", async (_case, svg) => {
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-export-"));
+    const outside = await folders.make("zhiyin-view-export-");
     const artifacts = new WorkspaceArtifacts(() => undefined);
     let asked = false;
 
@@ -307,7 +311,7 @@ describe("WorkspaceArtifacts", () => {
   });
 
   it("names an exported view's file from its title", async () => {
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-view-name-"));
+    const outside = await folders.make("zhiyin-view-name-");
     const artifacts = new WorkspaceArtifacts(() => undefined);
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>';
     const offered: string[] = [];

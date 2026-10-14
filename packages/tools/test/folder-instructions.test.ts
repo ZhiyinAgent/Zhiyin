@@ -1,11 +1,15 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function folder(files: Record<string, string>) {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-instructions-"));
+  const root = await folders.make("zhiyin-instructions-");
   for (const [path, text] of Object.entries(files)) {
     await mkdir(join(root, path, ".."), { recursive: true });
     await writeFile(join(root, path), text);
@@ -51,6 +55,19 @@ describe("folder instructions", () => {
     expect(read?.bytes).toBe(20_001);
     expect(Buffer.byteLength(read?.text ?? "")).toBeLessThanOrEqual(16_384);
     expect(read?.text).not.toContain("�");
+  });
+
+  it("hashes the whole file, past the part that is shown", async () => {
+    const shown = "a".repeat(20_000);
+    const first = await (
+      await folder({ "AGENTS.md": `${shown}one` })
+    ).folderInstructions();
+    const second = await (
+      await folder({ "AGENTS.md": `${shown}two` })
+    ).folderInstructions();
+
+    expect(first?.text).toBe(second?.text);
+    expect(first?.hash).not.toBe(second?.hash);
   });
 
   it("finds nothing in a folder without one, in a subfolder, or with no folder", async () => {

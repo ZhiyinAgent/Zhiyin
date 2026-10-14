@@ -9,13 +9,12 @@
 import type { ModelChoiceValue } from "../../choice.js";
 import { ModelClientError } from "../../failures.js";
 import type { ModelRequest } from "../../model-client.js";
-import { fromModelList, type ListedByApi } from "../../model-list.js";
+import { fromModelList, listedAt } from "../../model-list.js";
 import type { CatalogFetch, KeyCheck, Provider } from "../../provider.js";
 import {
   sendAnthropicMessages,
   type AnthropicMessagesDialect,
 } from "../../wires/anthropic-messages/send.js";
-import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { anthropicModels, thinkingOff } from "./models.js";
 
@@ -104,29 +103,12 @@ async function checkKey(
 }
 
 /** The models the account can use now, by Anthropic's own listing. */
-const listedByApi: ListedByApi = async (options) => {
-  const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
+const listedByApi = listedAt(
+  "Anthropic",
   // A thousand is the most one page holds; Anthropic lists far fewer.
-  const response = await fetcher(`${host}/v1/models?limit=1000`, {
-    headers: apiKey ? signed(apiKey) : {},
-  });
-  if (!response.ok)
-    throw new Error("Anthropic's model listing is unavailable.");
-  const listing = (await response.json()) as { data?: unknown };
-  if (!Array.isArray(listing.data))
-    throw new Error("Anthropic's model listing is unreadable.");
-  return new Set(
-    listing.data.flatMap((model: unknown) =>
-      model &&
-      typeof model === "object" &&
-      "id" in model &&
-      typeof model.id === "string"
-        ? [model.id]
-        : [],
-    ),
-  );
-};
+  () => `${host}/v1/models?limit=1000`,
+  signed,
+);
 
 export const anthropic: Provider = {
   id: "anthropic",

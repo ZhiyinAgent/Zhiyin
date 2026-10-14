@@ -15,14 +15,14 @@ land, and can turn a compiler's output into errors a model can act on.
 - **Does not own:** installing the engines (toolchains), showing or reading
   the PDF (the document viewer and the `read_document` tool), permission
   decisions, or the connection's lifecycle (MCP).
-- **Talks to other features only through:** `CompilerAutomation`, which
-  `documentsConnection()` in the capabilities group adapts into a built-in
+- **Talks to other features only through:** the contract's
+  `WritingConnection`, which `documentsConnection()` in the capabilities group adapts into a built-in
   connection the MCP feature serves.
 
 ## Public interface
 
 - `documentCompiler({ workspaceRoot, programs, containment?, run?, timeoutMs? })`
-  returns a `CompilerAutomation`: `listTools`, `callTool`, `inspect`,
+  returns a `WritingConnection`: `listTools`, `callTool`, `inspect`,
   `describeResult`, `produced` and `close`.
 - One tool, `compile_document`, takes the document's workspace-relative path
   and an optional output path. By default the PDF is written beside the
@@ -34,8 +34,7 @@ land, and can turn a compiler's output into errors a model can act on.
 - `diagnosticsFrom(output)`, the lines of a compiler's output a person or a
   model needs: the diagnostics, not the chatter.
 - The types these take and return: `ProgramContainer`, `ProgramContainment`,
-  `ProgramRun`, `RunProgram`, `CompilerPrograms`, `CompilerTool`,
-  `DocumentCompilerOptions`.
+  `ProgramRun`, `RunProgram`, `CompilerPrograms`, `DocumentCompilerOptions`.
 
 ## Invariants
 
@@ -58,9 +57,10 @@ land, and can turn a compiler's output into errors a model can act on.
   successful compile it is declared as produced and appears among the work's
   files. A failed compile produces nothing.
 - With no engine installed the connector offers no tool.
-- The approval names the document and the file that will be written. For
-  LaTeX it also says that Tectonic downloads the packages a document needs
-  from its package server.
+- The approval names the document and the file that will be written, and
+  says where packages come from: Tectonic downloads the packages a LaTeX
+  document needs from its package server, and Typst those a document imports
+  from its package registry.
 
 ## Testing notes
 

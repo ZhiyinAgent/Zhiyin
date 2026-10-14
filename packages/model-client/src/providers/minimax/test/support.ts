@@ -1,36 +1,18 @@
 /** MiniMax's side of the wire, as its documentation describes it. */
 
-import type {
-  ModelEvent,
-  ModelFetch,
-  ModelRequest,
-} from "../../../model-client.js";
-import { ProviderModelClient } from "../../../client.js";
-import type { CatalogFetch } from "../../../provider.js";
+import type { ModelFetch } from "../../../model-client.js";
+import {
+  labClient,
+  namedEvents,
+  recording as recordingOf,
+  refusal,
+  type LabClientOptions,
+  type Sent,
+} from "../../../../test/lab-wire.js";
 import { miniMax } from "../provider.js";
 
-const encoder = new TextEncoder();
-
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
-
-/** Server-sent events, each named by its type, in Anthropic's form. */
-function streamOf(events: readonly Record<string, unknown>[]): ModelFetch {
-  return async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    body: (async function* () {
-      for (const event of events)
-        yield encoder.encode(
-          `event: ${String(event["type"])}\ndata: ${JSON.stringify(event)}\n\n`,
-        );
-    })(),
-  });
-}
+export { drain } from "../../../../test/lab-wire.js";
+export type { Sent } from "../../../../test/lab-wire.js";
 
 /** A refusal in the status line, in the Anthropic error shape MiniMax uses. */
 export function refusing(
@@ -38,24 +20,19 @@ export function refusing(
   error?: { type: string; message: string },
   headers: Record<string, string> = {},
 ): ModelFetch {
-  return async () => ({
-    ok: false,
+  return refusal(
     status,
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    body: (async function* () {
-      if (error)
-        yield encoder.encode(
-          JSON.stringify({ type: "error", request_id: "req_1", error }),
-        );
-    })(),
-  });
+    error ? { type: "error", request_id: "req_1", error } : undefined,
+    headers,
+  );
 }
 
 /**
  * An answer that thought, signed its thinking, said something, and read most
- * of its input from the cache: 150k new, 850k cached, 100k out.
+ * of its input from the cache: 150k new, 850k cached, 100k out. Its events are
+ * named by their type, in Anthropic's form.
  */
-const answered = streamOf([
+const answered = namedEvents([
   {
     type: "message_start",
     message: {
@@ -110,42 +87,17 @@ const answered = streamOf([
 
 /** Records each request, then answers it as `answer` does. */
 export function recording(sent: Sent[], answer: ModelFetch = answered) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answer(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answer);
 }
 
 export function miniMaxClient(
-  options: {
+  options: LabClientOptions & {
     readonly region?: "international" | "mainland";
-    readonly model?: string;
-    readonly fetcher?: ModelFetch;
-    readonly catalogFetch?: CatalogFetch;
   } = {},
 ) {
-  const region = options.region ?? "international";
-  return new ProviderModelClient(miniMax, {
-    apiKey: async () => "sk-test",
+  return labClient(miniMax, "sk-test", {
+    ...options,
     model: options.model ?? "MiniMax-M3",
-    region,
-    modelInfo: (model) => miniMax.describe(model, { region }),
-    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-    ...(options.catalogFetch ? { catalogFetch: options.catalogFetch } : {}),
-    retry: { wait: async () => {}, random: () => 0 },
+    region: options.region ?? "international",
   });
-}
-
-export async function drain(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<ModelEvent[]> {
-  const events: ModelEvent[] = [];
-  for await (const event of client.send(request)) events.push(event);
-  return events;
 }

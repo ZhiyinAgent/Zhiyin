@@ -4,22 +4,16 @@
  * instead when it cannot, and on the message once sent.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, type PasteOutcome } from "@zhiyin/contract";
 import { FileSessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 const png = {
   name: "screenshot.png",
@@ -28,8 +22,7 @@ const png = {
 };
 
 async function coreSeeing(acceptsImages: boolean) {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-attached-"));
-  roots.push(root);
+  const root = await folders.make("zhiyin-attached-");
   const store = new FileSessions(root);
   const dependencies = stubDependencies(() => {});
   const workspace = loopFrom({

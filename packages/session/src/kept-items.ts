@@ -28,7 +28,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
-import type { MessageAttachment, PictureToKeep } from "@zhiyin/contract";
+import type {
+  FileRead,
+  MessageAttachment,
+  PictureToKeep,
+} from "@zhiyin/contract";
 import { isRecord } from "./saved-values.js";
 import { folderName } from "./history-store.js";
 
@@ -135,25 +139,6 @@ export type KeptItem =
 export type LocatedItem =
   | { readonly status: "ready"; readonly path: string; readonly bytes: number }
   | { readonly status: "missing"; readonly reason: string };
-
-/** When a file was last read for a conversation, as it was then. */
-export type FileRead = {
-  readonly modifiedMs: number;
-  readonly size: number;
-  readonly readAt: string;
-  readonly digest?: string;
-  readonly ranges?: readonly {
-    readonly first: number;
-    readonly last: number;
-  }[];
-  readonly totalLines?: number;
-  readonly whole?: boolean;
-  readonly pages?: readonly {
-    readonly first: number;
-    readonly last: number;
-  }[];
-  readonly totalPages?: number;
-};
 
 /** Lines as a reader numbers them: a final line needs no line break. */
 async function lineCount(path: string): Promise<number> {

@@ -23,8 +23,10 @@ Display and input tools work without a folder. The others need one, except
 reading what the conversation kept by its `output://` or `attachment://`
 address. The searches are offered only when the bundled ripgrep is present.
 `bash` is offered only where a bash is found, normally the one Git for Windows
-installs, and, in the app, where process containment is available. Where it
-is not, the shell is said to be unavailable with that reason, and checking
+installs, and, in the app, where process containment is available. The
+`bash.exe` in the Windows folder or among its app aliases starts WSL, whose
+commands would run outside that containment, so it is never used. Where no
+shell can be offered, it is said to be unavailable with the reason, and checking
 for a shell again does not change it.
 
 ## Boundaries
@@ -89,7 +91,7 @@ for a shell again does not change it.
   check the application passes back in.
 - `resolveShell()` finds the shell commands run in, once, when the tools are
   built: a shell that is not there is a capability that does not exist.
-- The types these take and return: `FileRead`, `CommandContainer`,
+- The types these take and return: `CommandContainer`,
   `CommandContainment`, `RecycleBin`, `OpenedPdf`, `PdfPagesSource`,
   `ToolResult`, `ShellAvailability`, `ToolCallInspection`, `ToolSpec`,
   `WorkspaceToolsOptions`.

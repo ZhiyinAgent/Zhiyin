@@ -122,6 +122,15 @@
   --zy-sidebar-width: 242px;
   --zy-radius-sm: 11px;
   --zy-radius-md: 18px;
+  /* What floats over the page, lowest first. A number that only orders the
+     pieces of one part, such as a marker over its line, stays that part's. */
+  --zy-layer-menu: 30; /* the app menu, the files drawer */
+  --zy-layer-confirm: 35; /* a question asked over a menu */
+  --zy-layer-popover: 40; /* pickers, the reasoning panel, dialogs */
+  --zy-layer-navigation: 50; /* the sidebar over a narrow window */
+  --zy-layer-overlay: 60; /* the changes viewer, tips, toasts */
+  --zy-layer-hover-tip: 80;
+  --zy-layer-alert: 100; /* errors, notices, the permissions overlay */
   --zy-font-display: "Bahnschrift", "Segoe UI Variable Display", sans-serif;
   --zy-font-body: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   --zy-font-instrument: "Segoe UI Variable Text", "Segoe UI", sans-serif;
@@ -407,6 +416,23 @@ textarea:focus-visible {
   letter-spacing: 0.12em;
   line-height: 1.2;
   text-transform: uppercase;
+}
+
+/* Motion a module names as global(zy-spin) or global(zy-progress): a
+   spinner's turn, and a hairline that travels while something loads. */
+@keyframes zy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zy-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,14 +11,13 @@
 import type { ModelChoiceValue } from "../../choice.js";
 import { ModelClientError } from "../../failures.js";
 import type { ModelRequest } from "../../model-client.js";
-import { fromModelList, type ListedByApi } from "../../model-list.js";
+import { fromModelList, listedAt } from "../../model-list.js";
 import type { CatalogFetch, KeyCheck, Provider } from "../../provider.js";
 import { responsesInput, responsesTools } from "../../wires/responses/input.js";
 import {
   sendResponses,
   type ResponsesDialect,
 } from "../../wires/responses/send.js";
-import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { openAiModels } from "./models.js";
 
@@ -91,25 +90,7 @@ async function checkKey(
 }
 
 /** The models the account can use now, by OpenAI's own listing. */
-const listedByApi: ListedByApi = async (options) => {
-  const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
-  const response = await fetcher(`${host}/models`, { headers: bearer(apiKey) });
-  if (!response.ok) throw new Error("OpenAI's model listing is unavailable.");
-  const listing = (await response.json()) as { data?: unknown };
-  if (!Array.isArray(listing.data))
-    throw new Error("OpenAI's model listing is unreadable.");
-  return new Set(
-    listing.data.flatMap((model: unknown) =>
-      model &&
-      typeof model === "object" &&
-      "id" in model &&
-      typeof model.id === "string"
-        ? [model.id]
-        : [],
-    ),
-  );
-};
+const listedByApi = listedAt("OpenAI", () => `${host}/models`, bearer);
 
 export const openAi: Provider = {
   id,

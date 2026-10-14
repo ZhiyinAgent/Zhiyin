@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { documentsConnection } from "@zhiyin/capabilities";
 import { ConversationRewind } from "@zhiyin/conversation-rewind";
 import { documentCompiler } from "@zhiyin/document-compiler";
@@ -7,9 +7,9 @@ import { InMemoryMcpCredentials, ManagedMcpServers } from "@zhiyin/mcp";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
 import { FileRecovery } from "@zhiyin/recovery";
 import { WorkspaceTools } from "@zhiyin/tools";
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   calls,
   currentApprovalId,
@@ -22,6 +22,10 @@ import {
   type LoopTestDependencies,
   type TestApp,
 } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** The shipped plugin that offers the document compiler, switched on. */
 const publishing = {
@@ -192,8 +196,8 @@ describe("conversation rewind composition", () => {
   });
 
   it("restores only recorded workspace file effects while rewinding the conversation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-rewind-"));
-    const storage = await mkdtemp(join(tmpdir(), "zhiyin-loop-recovery-"));
+    const root = await folders.make("zhiyin-loop-rewind-");
+    const storage = await folders.make("zhiyin-loop-recovery-");
     await writeFile(join(root, "note.txt"), "before", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});
@@ -252,8 +256,8 @@ describe("conversation rewind composition", () => {
   });
 
   it("deletes the copies kept for a conversation's changes with the conversation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-delete-"));
-    const storage = await mkdtemp(join(tmpdir(), "zhiyin-delete-recovery-"));
+    const root = await folders.make("zhiyin-delete-");
+    const storage = await folders.make("zhiyin-delete-recovery-");
     await writeFile(join(root, "note.txt"), "before", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});
@@ -301,8 +305,8 @@ describe("conversation rewind composition", () => {
   });
 
   it("undoes one turn's files and keeps the conversation, leaving a file changed since as it is", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-undo-"));
-    const storage = await mkdtemp(join(tmpdir(), "zhiyin-undo-recovery-"));
+    const root = await folders.make("zhiyin-undo-");
+    const storage = await folders.make("zhiyin-undo-recovery-");
     await writeFile(join(root, "note.txt"), "my note", "utf8");
     await writeFile(join(root, "draft.txt"), "my draft", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
@@ -382,8 +386,8 @@ describe("conversation rewind composition", () => {
   });
 
   it("refuses to review or undo a turn's files while the conversation is working", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-undo-busy-"));
-    const storage = await mkdtemp(join(tmpdir(), "zhiyin-undo-busy-recovery-"));
+    const root = await folders.make("zhiyin-undo-busy-");
+    const storage = await folders.make("zhiyin-undo-busy-recovery-");
     await writeFile(join(root, "note.txt"), "my note", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});
@@ -491,7 +495,7 @@ describe("conversation rewind composition", () => {
 
 describe("files a connection changes", () => {
   it("restores a PDF the built-in document compiler wrote over, byte for byte, and draws it again", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-compile-"));
+    const root = await folders.make("zhiyin-loop-compile-");
     const { agent, documents } = await compilingApp(root);
 
     const result = await approveThenRestore(agent, root);
@@ -505,7 +509,7 @@ describe("files a connection changes", () => {
   });
 
   it("shows what a compile changed in a PDF as its words before and after the turn, until the PDF changes again", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-compare-"));
+    const root = await folders.make("zhiyin-loop-compare-");
     const { agent } = await compilingApp(root);
     await agent.selectWorkspace(root);
     const taskId = await agent.createTask();
@@ -533,7 +537,7 @@ describe("files a connection changes", () => {
   });
 
   it("keeps no copy for a connection that is not built in, whatever it says it changes, and still asks", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-remote-"));
+    const root = await folders.make("zhiyin-loop-remote-");
     await writeFile(join(root, "paper.pdf"), earlierPdf);
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});
@@ -567,9 +571,7 @@ describe("files a connection changes", () => {
           return { ok: true, value: { content: [] } };
         },
       },
-      recovery: new FileRecovery(
-        await mkdtemp(join(tmpdir(), "zhiyin-loop-recovery-")),
-      ),
+      recovery: new FileRecovery(await folders.make("zhiyin-loop-recovery-")),
       rewind: new ConversationRewind(() => "rewind-remote"),
       model: {
         ...deps.model,
@@ -615,16 +617,14 @@ async function compilingApp(root: string) {
     workspace,
     plugins: pluginStore([publishing]),
     mcp: new ManagedMcpServers(
-      await mkdtemp(join(tmpdir(), "zhiyin-loop-mcp-")),
+      await folders.make("zhiyin-loop-mcp-"),
       async () => {
         throw new Error("No remote connections here.");
       },
       new InMemoryMcpCredentials(),
       { builtIns: [documentsConnection(compiler)] },
     ),
-    recovery: new FileRecovery(
-      await mkdtemp(join(tmpdir(), "zhiyin-loop-recovery-")),
-    ),
+    recovery: new FileRecovery(await folders.make("zhiyin-loop-recovery-")),
     rewind: new ConversationRewind(() => "rewind-compile"),
     model: {
       ...deps.model,

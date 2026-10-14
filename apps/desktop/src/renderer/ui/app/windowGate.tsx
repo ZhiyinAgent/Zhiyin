@@ -17,15 +17,16 @@ export function windowGate(
   commands: WorkspaceCommands,
 ): ReactElement | undefined {
   if (state.connection === "loading") return <WorkspaceSkeleton />;
+  const { openDataFolder, showInFolder } = commands;
   // History a newer version saved is not damage, so it is neither recovered
   // nor started over: nothing here opens it, and the way on is that version.
   if (state.newerHistory)
     return (
       <NewerHistoryGate
         newer={state.newerHistory}
-        onGetLatest={() => void commands.openExternalUrl(RELEASES_URL)}
-        {...(commands.openDataFolder
-          ? { onOpenDataFolder: () => void commands.openDataFolder?.() }
+        onGetLatest={() => commands.openExternalUrl(RELEASES_URL)}
+        {...(openDataFolder
+          ? { onOpenDataFolder: () => openDataFolder() }
           : {})}
       />
     );
@@ -37,7 +38,9 @@ export function windowGate(
       <HistoryRecoveryGate
         recovery={state.historyRecovery}
         onChoose={commands.recoverHistory}
-        onShowKept={(path) => void commands.showInFolder?.(path)}
+        {...(showInFolder
+          ? { onShowKept: (path: string) => showInFolder(path) }
+          : {})}
       />
     );
   if (

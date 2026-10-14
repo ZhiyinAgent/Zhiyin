@@ -1,11 +1,14 @@
 import { createServer } from "node:http";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openProcessContainer } from "@zhiyin/process-ownership";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { resolveGit } from "../src/index.js";
 import { runGit } from "../src/run-git.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * git run for the person has no one at a terminal to answer it. A remote that
@@ -30,7 +33,7 @@ describe.runIf(git && process.platform === "win32")(
         // in the global config; this one exists only for the test.
         vi.stubEnv(
           "GIT_CONFIG_GLOBAL",
-          join(await mkdtemp(join(tmpdir(), "zhiyin-git-home-")), "gitconfig"),
+          join(await folders.make("zhiyin-git-home-"), "gitconfig"),
         );
         let asked = 0;
         const server = createServer((_, response) => {
@@ -50,7 +53,7 @@ describe.runIf(git && process.platform === "win32")(
 
           const result = await runGit(
             git as string,
-            await mkdtemp(join(tmpdir(), "zhiyin-git-login-")),
+            await folders.make("zhiyin-git-login-"),
             ["ls-remote", `http://127.0.0.1:${port}/private.git`],
             undefined,
             { open: openProcessContainer },

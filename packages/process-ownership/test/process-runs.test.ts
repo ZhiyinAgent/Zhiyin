@@ -1,15 +1,19 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   openProcessContainer,
   runProcess,
   type ProcessContainment,
 } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * What a program Zhiyin runs gives back, and what it is given: its output is
@@ -56,7 +60,7 @@ function node(
     runProcess({
       executable: process.execPath,
       arguments: [join(fixtures, script), ...args],
-      cwd: cwd ?? (await mkdtemp(join(tmpdir(), "zhiyin-run-"))),
+      cwd: cwd ?? (await folders.make("zhiyin-run-")),
       timeoutMs: 60_000,
       ...(containment ? { containment } : {}),
       ...extra,
@@ -68,7 +72,7 @@ describe.each(paths)("a %s run", (_, containment) => {
     "is stopped, with everything it started, once its output passes the limit",
     { timeout: 60_000 },
     async () => {
-      const directory = await mkdtemp(join(tmpdir(), "zhiyin-flood-"));
+      const directory = await folders.make("zhiyin-flood-");
 
       const run = await node(containment, "flood.mjs", [directory], {
         maximumOutputBytes: 8 * 1024 * 1024,
@@ -83,7 +87,7 @@ describe.each(paths)("a %s run", (_, containment) => {
   );
 
   it("shows what a running program has printed so far, before it ends", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-live-"));
+    const directory = await folders.make("zhiyin-live-");
     const go = join(directory, "go");
     let printed: (() => Promise<{ stdout: string }>) | undefined;
 
@@ -224,7 +228,7 @@ describe.each(paths)("a %s run", (_, containment) => {
 
 describe.runIf(process.platform === "win32")("stopping a run", () => {
   it("ends it with Windows' own taskkill, never one placed earlier on the search path", async () => {
-    const decoys = await mkdtemp(join(tmpdir(), "zhiyin-decoy-"));
+    const decoys = await folders.make("zhiyin-decoy-");
     // A program that runs and ends at once, named as the real one.
     await copyFile(
       join(
@@ -234,7 +238,7 @@ describe.runIf(process.platform === "win32")("stopping a run", () => {
       ),
       join(decoys, "taskkill.exe"),
     );
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-stop-"));
+    const directory = await folders.make("zhiyin-stop-");
     const stop = new AbortController();
     const path = process.env["PATH"];
     process.env["PATH"] = `${decoys};${path ?? ""}`;

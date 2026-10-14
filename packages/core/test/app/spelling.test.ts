@@ -4,23 +4,17 @@
  * with how far each language has got.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, type AppEvent } from "@zhiyin/contract";
 import { FileSessions } from "@zhiyin/session";
 import { Spelling, type SpellcheckEngine } from "@zhiyin/spelling";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import { loopFrom, stubDependencies } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function checked(root: string) {
   const said: string[] = [];
@@ -50,9 +44,7 @@ async function checked(root: string) {
 }
 
 async function root() {
-  const folder = await mkdtemp(join(tmpdir(), "zhiyin-spelling-"));
-  roots.push(folder);
-  return folder;
+  return folders.make("zhiyin-spelling-");
 }
 
 describe("spelling", () => {

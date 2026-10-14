@@ -16,5 +16,8 @@
     "@modelcontextprotocol/client": "2.2.0",
     "@napi-rs/keyring": "2.0.0",
     "@zhiyin/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

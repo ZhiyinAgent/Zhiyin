@@ -15,5 +15,8 @@
   "dependencies": {
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/process-ownership": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

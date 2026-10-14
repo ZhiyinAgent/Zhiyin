@@ -5,27 +5,23 @@
  * what they are about is what reaches the disk.
  */
 
-import { appendFile, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { appendFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import { FileSessions, historyFiles, type Sessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { loopFrom, stubDependencies, until } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
 afterEach(async () => {
   vi.useRealTimers();
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
+  await folders.removeAll();
 });
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-opening-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-opening-");
 }
 
 function conversation(index: number): WorkspaceTask {

@@ -1,17 +1,20 @@
-import { copyFile, mkdtemp, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { estimatedTokens } from "@zhiyin/contract";
+import { afterEach, describe, expect, it } from "vitest";
+import { estimatedTokens, type FileRead } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   WorkspaceTools,
   type ConversationItems,
-  type FileRead,
   type ToolResult,
 } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "zhiyin-read-"));
+  return folders.make("zhiyin-read-");
 }
 
 function numberedLines(count: number): string {

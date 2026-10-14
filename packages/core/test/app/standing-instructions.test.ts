@@ -3,23 +3,17 @@
  * in Custom instructions, and their answer about each folder's AGENTS.md. ADR 0012.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, type FolderInstructions } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import { FileSessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import { loopFrom, stubDependencies } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 const agents: FolderInstructions = {
   path: "AGENTS.md",
@@ -84,8 +78,7 @@ async function answerFolderQuestion(
 
 describe("standing instructions kept by the app", () => {
   it("keeps the person's own instructions across a restart, and sends them", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-instructions-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-instructions-");
     const app = await appAt(root);
     await app.choices.setPersonalInstructions("Always answer in French.");
     await app.shutdown();
@@ -104,8 +97,7 @@ describe("standing instructions kept by the app", () => {
   });
 
   it("remembers the answer about a folder's instructions across a restart", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-instructions-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-instructions-");
     const app = await appAt(root);
     const first = await app.createTask();
     const running = app.start(first, "Summarise the reports");

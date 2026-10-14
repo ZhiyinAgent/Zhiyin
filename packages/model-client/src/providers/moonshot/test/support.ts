@@ -1,35 +1,18 @@
 /** Moonshot's side of the wire, as its Kimi API documentation describes it. */
 
-import type {
-  ModelEvent,
-  ModelFetch,
-  ModelRequest,
-} from "../../../model-client.js";
-import { ProviderModelClient } from "../../../client.js";
-import type { CatalogFetch } from "../../../provider.js";
+import type { ModelFetch } from "../../../model-client.js";
+import {
+  chunksThenDone,
+  labClient,
+  recording as recordingOf,
+  refusal,
+  type LabClientOptions,
+  type Sent,
+} from "../../../../test/lab-wire.js";
 import { moonshot } from "../provider.js";
 
-const encoder = new TextEncoder();
-
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
-
-/** A stream of Chat Completions chunks, then `[DONE]`. */
-function streamOf(chunks: readonly unknown[]): ModelFetch {
-  return async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    body: (async function* () {
-      for (const chunk of chunks)
-        yield encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`);
-      yield encoder.encode("data: [DONE]\n\n");
-    })(),
-  });
-}
+export { drain } from "../../../../test/lab-wire.js";
+export type { Sent } from "../../../../test/lab-wire.js";
 
 /** A refusal in the status line, with Moonshot's error type and sentence. */
 export function refusing(
@@ -37,14 +20,7 @@ export function refusing(
   error?: { readonly type: string; readonly message: string },
   headers: Record<string, string> = {},
 ): ModelFetch {
-  return async () => ({
-    ok: false,
-    status,
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    body: (async function* () {
-      if (error) yield encoder.encode(JSON.stringify({ error }));
-    })(),
-  });
+  return refusal(status, error ? { error } : undefined, headers);
 }
 
 /**
@@ -66,7 +42,7 @@ export function answering(
     completion_tokens: usage.completion,
     total_tokens: usage.prompt + usage.completion,
   };
-  return streamOf([
+  return chunksThenDone([
     {
       id: "answer-1",
       object: "chat.completion.chunk",
@@ -117,42 +93,17 @@ const answered = answering({
 
 /** Records each request, then answers it as `answer` does. */
 export function recording(sent: Sent[], answer: ModelFetch = answered) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answer(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answer);
 }
 
 export function moonshotClient(
-  options: {
+  options: LabClientOptions & {
     readonly region?: "international" | "mainland";
-    readonly model?: string;
-    readonly fetcher?: ModelFetch;
-    readonly catalogFetch?: CatalogFetch;
   } = {},
 ) {
-  const region = options.region ?? "international";
-  return new ProviderModelClient(moonshot, {
-    apiKey: async () => "sk-test",
+  return labClient(moonshot, "sk-test", {
+    ...options,
     model: options.model ?? "kimi-k3",
-    region,
-    modelInfo: (model) => moonshot.describe(model, { region }),
-    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-    ...(options.catalogFetch ? { catalogFetch: options.catalogFetch } : {}),
-    retry: { wait: async () => {}, random: () => 0 },
+    region: options.region ?? "international",
   });
-}
-
-export async function drain(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<ModelEvent[]> {
-  const events: ModelEvent[] = [];
-  for await (const event of client.send(request)) events.push(event);
-  return events;
 }

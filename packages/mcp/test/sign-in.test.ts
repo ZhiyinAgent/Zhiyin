@@ -6,10 +6,10 @@
  * conversation does opens a browser or registers Zhiyin anywhere.
  */
 
-import { mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   ManagedMcpServers,
   connectHttpMcpServer,
@@ -20,6 +20,10 @@ import {
   signInService,
   type SignInService,
 } from "./sign-in-service.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** Windows' credential store: at most 1,280 characters an entry. */
 class LimitedCredentials implements McpCredentialStore {
@@ -53,7 +57,7 @@ async function setUp(
   services.push(service);
   const credentials = new LimitedCredentials();
   const openBrowser = vi.fn(options.openBrowser ?? browserThatSignsIn);
-  const directory = await mkdtemp(join(tmpdir(), "zhiyin-sign-in-"));
+  const directory = await folders.make("zhiyin-sign-in-");
   const servers = new ManagedMcpServers(
     directory,
     connectHttpMcpServer,

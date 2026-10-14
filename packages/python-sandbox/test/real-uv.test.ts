@@ -11,26 +11,20 @@
  * It downloads a Python and one package, so it is slow the first time.
  */
 
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { pythonSandbox } from "../src/index.js";
 
 const uv = process.env["ZHIYIN_UV"];
-const roots: string[] = [];
-
 async function temporaryRoot(label: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `zhiyin-sandbox-live-${label}-`));
-  roots.push(root);
-  return root;
+  return folders.make(`zhiyin-sandbox-live-${label}-`);
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe.runIf(uv)("the real uv", () => {
   it("builds an environment apart from a project in the workspace, and runs a script in it", async () => {

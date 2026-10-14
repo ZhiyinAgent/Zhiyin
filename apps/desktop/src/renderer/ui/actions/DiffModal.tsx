@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { DocumentComparison, FileChange } from "@zhiyin/contract";
 import { ChangeReview } from "./ChangeReview.js";
 import { DocumentChangeReview } from "./DocumentChangeReview.js";
@@ -43,17 +43,7 @@ export function DiffModal({
   const titleId = useId();
   const current = changes.find((change) => change.path === openPath);
 
-  useModalFocus(dialog);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useModalFocus(dialog, onClose);
 
   return (
     <WindowLayer>

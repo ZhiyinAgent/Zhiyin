@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "@zhiyin/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

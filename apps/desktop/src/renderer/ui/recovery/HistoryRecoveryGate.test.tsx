@@ -86,7 +86,7 @@ describe("HistoryRecoveryGate", () => {
   });
 
   it("shows the kept copy where it is, when asked", () => {
-    const onShowKept = vi.fn();
+    const onShowKept = vi.fn(async () => {});
     render(
       <HistoryRecoveryGate
         recovery={partial}
@@ -98,6 +98,24 @@ describe("HistoryRecoveryGate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show the kept copy" }));
 
     expect(onShowKept).toHaveBeenCalledWith(partial.keptAt);
+  });
+
+  it("says so when the kept copy cannot be shown", async () => {
+    render(
+      <HistoryRecoveryGate
+        recovery={partial}
+        onChoose={vi.fn()}
+        onShowKept={async () => {
+          throw new Error("The folder could not be opened.");
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Show the kept copy" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The folder could not be opened.",
+    );
   });
 
   it("shows both choices as busy while one is being carried out", () => {

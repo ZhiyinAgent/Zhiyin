@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewerHistoryGate } from "./NewerHistoryGate.js";
 
@@ -14,8 +14,8 @@ describe("NewerHistoryGate", () => {
   });
 
   it("offers the newer version and the data folder, and nothing that changes the history", () => {
-    const download = vi.fn();
-    const folder = vi.fn();
+    const download = vi.fn(async () => {});
+    const folder = vi.fn(async () => {});
     render(
       <NewerHistoryGate
         newer={{ writtenBy: "0.2.0" }}
@@ -32,5 +32,33 @@ describe("NewerHistoryGate", () => {
     expect(download).toHaveBeenCalled();
     expect(folder).toHaveBeenCalled();
     expect(screen.getAllByRole("button")).toHaveLength(2);
+  });
+
+  it("says so when the release page or the data folder cannot be opened", async () => {
+    render(
+      <NewerHistoryGate
+        newer={{ writtenBy: "0.2.0" }}
+        onGetLatest={async () => {
+          throw new Error("The page could not be opened.");
+        }}
+        onOpenDataFolder={async () => {
+          throw new Error("The folder could not be opened.");
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Get the latest version" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The page could not be opened.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open data folder" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "The folder could not be opened.",
+      ),
+    );
   });
 });

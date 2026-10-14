@@ -36,9 +36,9 @@ export interface Artifacts {
     chooseDestination: DestinationChooser,
   ): Promise<ArtifactExport>;
 
-  /** Writes a renderer-produced inert image only after a direct user request. */
   /**
-   * Saves a rendered view. The file is named from the view's title here,
+   * Saves a rendered view, an inert image the renderer produced, only after a
+   * direct user request. The file is named from the view's title here,
    * because what a produced file is called is this feature's business and
    * nowhere else's.
    */

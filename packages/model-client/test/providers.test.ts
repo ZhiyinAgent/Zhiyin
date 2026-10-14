@@ -5,11 +5,11 @@
  * key kept for that provider and region.
  */
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ALLOWED_EXTERNAL_URLS } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   FileModelChoice,
   ModelProviders,
@@ -21,6 +21,10 @@ import type { SendInput } from "../src/provider.js";
 import { everyProvider } from "../src/providers/index.js";
 import { openRouter } from "../src/providers/openrouter/provider.js";
 import { testProvider, twoRegionProvider } from "./test-provider.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const encoder = new TextEncoder();
 
@@ -69,7 +73,7 @@ describe("reaching a model through one of several providers", () => {
   let asked: { url: string; key: string }[];
 
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), "zhiyin-providers-"));
+    directory = await folders.make("zhiyin-providers-");
     seen = [];
     asked = [];
   });

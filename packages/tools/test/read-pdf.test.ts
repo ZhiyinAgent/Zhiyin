@@ -1,18 +1,22 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import type { FileRead } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   WorkspaceTools,
   type ConversationItems,
-  type FileRead,
   type PdfPagesSource,
 } from "../src/index.js";
 import { simplePdf } from "./pdf-fixture.js";
 import { imageSize } from "../src/image-size.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspaceWith(pages: readonly string[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-pdf-"));
+  const root = await folders.make("zhiyin-pdf-");
   await writeFile(join(root, "report.pdf"), simplePdf(pages));
   return root;
 }
@@ -239,7 +243,7 @@ describe("reading a PDF", () => {
   }, 30_000);
 
   it("says a PDF it cannot open is a PDF it cannot open", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-pdf-"));
+    const root = await folders.make("zhiyin-pdf-");
     await writeFile(
       join(root, "broken.pdf"),
       Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(64, 7)]),
@@ -337,7 +341,7 @@ describe("reading a PDF", () => {
   }, 30_000);
 
   it("draws a very large page within the size a model will take", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-pdf-"));
+    const root = await folders.make("zhiyin-pdf-");
     // A page about the size of a poster, where drawing at full scale would go
     // past the pixel limit on its own.
     await writeFile(

@@ -32,6 +32,8 @@ export function RunningCommands({
   onListed: (commands: readonly RunningCommand[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  /** The conversation whose list could not be had, when one could not. */
+  const [unchecked, setUnchecked] = useState<string>();
   // Asked again only when the conversation changes, however often the
   // callers hand over new functions.
   const latest = useRef({ commands, onListed });
@@ -46,13 +48,25 @@ export function RunningCommands({
       .then((listed) => {
         if (current) latest.current.onListed(listed);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (current) setUnchecked(taskId);
+      });
     return () => {
       current = false;
     };
   }, [taskId]);
 
-  if (!running.length && !open) return null;
+  if (!running.length && !open)
+    return unchecked === taskId ? (
+      <span
+        className={styles["running-commands__unchecked"]}
+        role="status"
+        data-tip="Zhiyin could not ask which commands this conversation left running. Open it again to check."
+      >
+        <Icon name="code" />
+        <span>Running commands not checked</span>
+      </span>
+    ) : null;
   return (
     <>
       {running.length > 0 && (
@@ -111,6 +125,7 @@ function CommandRow({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [output, setOutput] = useState<string>();
+  const [unread, setUnread] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string>();
   const latest = useRef(commands);
@@ -131,9 +146,13 @@ function CommandRow({
       void latest.current
         .commandOutput(taskId, command.id)
         .then((printed) => {
-          if (current && printed) setOutput(lastLines(printed));
+          if (!current) return;
+          setUnread(false);
+          if (printed) setOutput(lastLines(printed));
         })
-        .catch(() => undefined);
+        .catch(() => {
+          if (current) setUnread(true);
+        });
     };
     look();
     const timer = setInterval(look, outputRefreshMs);
@@ -193,7 +212,9 @@ function CommandRow({
         aria-label={`Latest output of ${command.command}`}
       >
         {output === undefined
-          ? "Waiting for output…"
+          ? unread
+            ? "What it printed could not be read."
+            : "Waiting for output…"
           : output || "Nothing printed yet."}
       </pre>
     </li>

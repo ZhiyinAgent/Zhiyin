@@ -1,6 +1,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  type FileRead,
   type MessageAttachment,
   type PictureToKeep,
   type ProducedImage,
@@ -22,7 +23,6 @@ import { SessionStoreError } from "./errors.js";
 import { FolderOwnership, type OwnershipOptions } from "./owner-lock.js";
 import {
   KeptItems,
-  type FileRead,
   type KeptItem,
   type KeptKind,
   type KeptLimits,

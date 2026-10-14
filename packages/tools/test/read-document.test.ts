@@ -1,9 +1,13 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 import { simplePdf } from "./pdf-fixture.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A one-pixel PNG, so the bytes are a real picture rather than a stand-in. */
 const png = Buffer.from(
@@ -12,7 +16,7 @@ const png = Buffer.from(
 );
 
 async function folder(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-documents-"));
+  const root = await folders.make("zhiyin-documents-");
   await writeFile(join(root, "report.pdf"), simplePdf(["One", "Two", "Three"]));
   await writeFile(join(root, "chart.png"), png);
   await writeFile(join(root, "notes.md"), "Just words.", "utf8");

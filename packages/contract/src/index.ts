@@ -20,6 +20,7 @@ export * from "./usage-state.js";
 export * from "./workspace-snapshot.js";
 export * from "./window-changes.js";
 export * from "./tool-invocation.js";
+export type * from "./offered-connection.js";
 export * from "./core-api.js";
 export * from "./views.js";
 export * from "./errors.js";
@@ -46,6 +47,7 @@ export type {
   StoredPicture,
 } from "./pictures.js";
 export type { ModelHistoryEntry, ModelReplay } from "./model-history.js";
+export type { FileRead } from "./file-read.js";
 export { estimatedTokens, utf8Bytes } from "./token-estimate.js";
 export * from "./context-budget.js";
 export type * from "./reasoning.js";

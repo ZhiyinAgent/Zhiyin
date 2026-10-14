@@ -15,7 +15,7 @@
 import type { ModelChoiceValue } from "../../choice.js";
 import { ModelClientError } from "../../failures.js";
 import type { ModelRequest } from "../../model-client.js";
-import { fromModelList, type ListedByApi } from "../../model-list.js";
+import { fromModelList, listedAt } from "../../model-list.js";
 import type {
   CatalogFetch,
   KeyCheck,
@@ -26,7 +26,6 @@ import {
   sendAnthropicMessages,
   type AnthropicMessagesDialect,
 } from "../../wires/anthropic-messages/send.js";
-import { catalogFetch } from "../../keyed-fetch.js";
 import { classifyFailure } from "./failures.js";
 import { miniMaxModels } from "./models.js";
 
@@ -118,28 +117,11 @@ async function checkKey(
 }
 
 /** The models the account can use now, by MiniMax's own listing. */
-const listedByApi: ListedByApi = async (options) => {
-  const apiKey = await options.apiKey?.();
-  const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
-  const response = await fetcher(
-    `${hostOf(options.region)}/anthropic/v1/models`,
-    { headers: apiKey ? signed(apiKey) : {} },
-  );
-  if (!response.ok) throw new Error("MiniMax's model listing is unavailable.");
-  const listing = (await response.json()) as { data?: unknown };
-  if (!Array.isArray(listing.data))
-    throw new Error("MiniMax's model listing is unreadable.");
-  return new Set(
-    listing.data.flatMap((model: unknown) =>
-      model &&
-      typeof model === "object" &&
-      "id" in model &&
-      typeof model.id === "string"
-        ? [model.id]
-        : [],
-    ),
-  );
-};
+const listedByApi = listedAt(
+  "MiniMax",
+  (region) => `${hostOf(region)}/anthropic/v1/models`,
+  signed,
+);
 
 export const miniMax: Provider = {
   id: "minimax",

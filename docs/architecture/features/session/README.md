@@ -82,7 +82,7 @@ Failures are `SessionStoreError`s with a `code` (`corrupted`, `unavailable`,
 
 - `defaultKeptLimits`, the limits of each kind of kept item, as the table below
   gives them.
-- The types these take and return: `FileRead`, `KeptItem`, `KeptKind`,
+- The types these take and return: `KeptItem`, `KeptKind`,
   `KeptLimits`, `KeptSource`, `LocatedItem`, `OpenedConversation`, `RecycleBin`,
   `RecycleResult`, `SavedIndex`, `UpdateResult`, `Formats`, `Migration`,
   `HistoryFiles`, `SavedWorkspace`, `DamageReport`.

@@ -6,18 +6,15 @@
  * reaches an answer.
  */
 
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 // Distinctive on purpose: refusals say "outside" themselves.
 const secret = "secret-contents-that-must-not-leak";
@@ -26,7 +23,7 @@ let outside: string;
 let tools: WorkspaceTools;
 
 beforeEach(async () => {
-  const parent = await mkdtemp(join(tmpdir(), "zhiyin-links-"));
+  const parent = await folders.make("zhiyin-links-");
   const root = join(parent, "workspace");
   outside = join(parent, "outside");
   await mkdir(root);
@@ -115,6 +112,34 @@ describe("a folder link that leads out of the workspace", () => {
       reason: "The file must stay inside the current workspace.",
     });
     expect(await readdir(outside)).toEqual(["secret.txt"]);
+  });
+
+  it("is refused before a write through it is offered for approval", async () => {
+    expect(
+      await tools.inspect("write_file", {
+        path: "linked/planted.txt",
+        content: "planted",
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "The file must stay inside the current workspace.",
+    });
+  });
+
+  it("is refused before an edit through it is offered for approval", async () => {
+    expect(
+      await tools.inspect("multi_edit", {
+        edits: [
+          {
+            path: "linked/secret.txt",
+            replacements: [{ find: "secret", replace: "changed" }],
+          },
+        ],
+      }),
+    ).toEqual({
+      ok: false,
+      reason: "Every edited file must stay inside the current workspace.",
+    });
   });
 
   it("is not edited through", async () => {

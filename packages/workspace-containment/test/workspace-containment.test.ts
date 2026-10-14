@@ -1,11 +1,15 @@
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { locateInside, staysBelow, staysInside } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace() {
-  const parent = await mkdtemp(join(tmpdir(), "zhiyin-containment-"));
+  const parent = await folders.make("zhiyin-containment-");
   const root = join(parent, "inside");
   await mkdir(join(root, "reports"), { recursive: true });
   await writeFile(join(root, "reports", "q3.pdf"), "inside");

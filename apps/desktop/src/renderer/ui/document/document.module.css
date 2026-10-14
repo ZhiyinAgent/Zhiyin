@@ -302,7 +302,7 @@
   border: 2px solid var(--zy-line-strong);
   border-top-color: var(--zy-running);
   border-radius: 50%;
-  animation: document-spin 0.9s linear infinite;
+  animation: global(zy-spin) 0.9s linear infinite;
 }
 
 /* The icon sits on the first line of the text beside it, not in its middle. */
@@ -406,12 +406,6 @@
 .document-menu__list small {
   color: var(--zy-faint);
   font: 12px/1.3 var(--zy-font-data);
-}
-
-@keyframes document-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes document-page-waiting {

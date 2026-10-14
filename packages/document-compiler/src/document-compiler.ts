@@ -1,10 +1,9 @@
 import { stat } from "node:fs/promises";
 import { basename, extname, relative, resolve, sep } from "node:path";
 import type {
-  ActionDetail,
+  ConnectionTool,
   ProducedFile,
-  ToolCallInspection,
-  ToolInvocationResult,
+  WritingConnection,
 } from "@zhiyin/contract";
 import {
   runProcess as runProgram,
@@ -21,37 +20,6 @@ export type CompilerPrograms = {
   readonly tectonic?: string;
 };
 
-export type CompilerTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Readonly<Record<string, unknown>>;
-};
-
-export type CompilerAutomation = {
-  inspect(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-  ): Promise<ToolCallInspection>;
-  describeResult(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    result: ToolInvocationResult,
-  ): readonly ActionDetail[];
-  /** The PDF a call wrote, given the value that call returned. */
-  produced(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    value: unknown,
-  ): readonly ProducedFile[];
-  listTools(): Promise<readonly CompilerTool[]>;
-  callTool(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-  close(): Promise<void>;
-};
-
 export type DocumentCompilerOptions = {
   /** The one folder documents are compiled in. No folder, no compiling. */
   readonly workspaceRoot: () => string | undefined;
@@ -63,7 +31,7 @@ export type DocumentCompilerOptions = {
   readonly timeoutMs?: number;
 };
 
-const compileTool: CompilerTool = {
+const compileTool: ConnectionTool = {
   name: "compile_document",
   description:
     "Compile a Typst (.typ) or LaTeX (.tex) document in the workspace to PDF, and report the compiler's errors and warnings. The PDF is written beside the source unless another path is given.",
@@ -212,7 +180,7 @@ function textResult(text: string, isError = false) {
 
 export function documentCompiler(
   options: DocumentCompilerOptions,
-): CompilerAutomation {
+): WritingConnection {
   const run = options.run ?? runProgram;
   const timeoutMs = options.timeoutMs ?? 180_000;
   // Which file each successful result wrote, kept beside the result rather
@@ -273,12 +241,10 @@ export function documentCompiler(
             : "Compile a LaTeX document",
         target: request.relativeSource,
         command: `${request.engine} ${request.relativeSource} → ${request.relativeOutput}`,
-        ...(request.engine === "tectonic"
-          ? {
-              destination:
-                "Tectonic downloads the TeX packages this document needs from its package server.",
-            }
-          : {}),
+        destination:
+          request.engine === "tectonic"
+            ? "Tectonic downloads the TeX packages this document needs from its package server."
+            : "Typst downloads the packages this document imports from its package registry.",
         identity: JSON.stringify({
           engine: request.engine,
           source: request.source,

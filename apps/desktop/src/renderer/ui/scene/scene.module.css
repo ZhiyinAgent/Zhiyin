@@ -56,7 +56,7 @@
   width: 32%;
   height: 1px;
   background: var(--zy-accent-line);
-  animation: scene-panel-progress 1.4s ease-in-out infinite;
+  animation: global(zy-progress) 1.4s ease-in-out infinite;
 }
 
 .scene-panel__views {
@@ -215,7 +215,7 @@
   border: 2px solid var(--zy-line-strong);
   border-top-color: var(--zy-running);
   border-radius: 50%;
-  animation: scene-panel-spin 0.9s linear infinite;
+  animation: global(zy-spin) 0.9s linear infinite;
 }
 
 .scene-panel__note {
@@ -291,20 +291,5 @@
   }
   to {
     opacity: 1;
-  }
-}
-
-@keyframes scene-panel-progress {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(340%);
-  }
-}
-
-@keyframes scene-panel-spin {
-  to {
-    transform: rotate(360deg);
   }
 }

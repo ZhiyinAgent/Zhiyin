@@ -335,8 +335,10 @@ export function WorkspaceShell({
         state={state}
         commands={{
           ...commands,
-          // Pages open from many places on them; a failure is said here.
+          // Pages and conversations open from many places on them; a failure
+          // is said here.
           openExternalUrl: (url) => act(() => commands.openExternalUrl(url)),
+          selectTask: (id) => act(() => commands.selectTask(id)),
         }}
         onOpenSurface={openSurface}
         openKeyDialog={keyFirst}

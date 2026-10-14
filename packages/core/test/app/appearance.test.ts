@@ -3,22 +3,16 @@
  * handed to whatever the application paints the window with.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, type Appearance } from "@zhiyin/contract";
 import { FileSessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import { loopFrom, stubDependencies } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function painted(root: string) {
   const applied: Appearance[] = [];
@@ -33,8 +27,7 @@ async function painted(root: string) {
 
 describe("the appearance", () => {
   it("matches Windows until the person chooses, and paints the window with each choice", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-appearance-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-appearance-");
     const { app, applied } = await painted(root);
 
     expect(app.snapshot().appearance).toBeUndefined();
@@ -48,8 +41,7 @@ describe("the appearance", () => {
   });
 
   it("is the same after a restart, and painted before anything else is", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-appearance-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-appearance-");
     const before = await painted(root);
     await before.app.setAppearance("dark");
     await before.app.shutdown();

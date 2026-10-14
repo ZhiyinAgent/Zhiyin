@@ -3,14 +3,12 @@
  * from any one conversation's connection to it.
  */
 
-import type {
-  BuiltInMcpServer,
-  McpConnectionTool,
-} from "./connection-types.js";
+import type { ConnectionTool } from "@zhiyin/contract";
+import type { BuiltInMcpServer } from "./connection-types.js";
 import type { Failure } from "./connection-problems.js";
 
 export class BuiltInDescriptions {
-  readonly #descriptions = new Map<string, readonly McpConnectionTool[]>();
+  readonly #descriptions = new Map<string, readonly ConnectionTool[]>();
   readonly #describing = new Map<string, Promise<void>>();
   /** Not kept once it works: the fix, such as installing a browser, is outside. */
   readonly #failures = new Map<string, string>();
@@ -48,7 +46,7 @@ export class BuiltInDescriptions {
   }
 
   health(id: string): {
-    tools: readonly McpConnectionTool[] | undefined;
+    tools: readonly ConnectionTool[] | undefined;
     failure: Failure | undefined;
   } {
     const reason = this.#failures.get(id);

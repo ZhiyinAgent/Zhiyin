@@ -1,35 +1,22 @@
 /** Mistral's side of the wire, as its documentation describes it. */
 
-import type {
-  ModelEvent,
-  ModelFetch,
-  ModelRequest,
-} from "../../../model-client.js";
-import { ProviderModelClient } from "../../../client.js";
-import type { CatalogFetch } from "../../../provider.js";
+import type { ModelFetch } from "../../../model-client.js";
+import {
+  chunksThenDone,
+  labClient,
+  recording as recordingOf,
+  refusal,
+  type LabClientOptions,
+  type Sent,
+} from "../../../../test/lab-wire.js";
 import { mistral } from "../provider.js";
 
-const encoder = new TextEncoder();
-
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
-
-/** A stream of Chat Completions chunks, then `[DONE]`. */
-export function streamOf(chunks: readonly unknown[]): ModelFetch {
-  return async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    body: (async function* () {
-      for (const chunk of chunks)
-        yield encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`);
-      yield encoder.encode("data: [DONE]\n\n");
-    })(),
-  });
-}
+export {
+  chunksThenDone as streamOf,
+  drain,
+  untilFailure as drainUntilFailure,
+} from "../../../../test/lab-wire.js";
+export type { Sent } from "../../../../test/lab-wire.js";
 
 /** One streamed chunk of a response, as Mistral's examples show it. */
 export function chunk(
@@ -53,14 +40,7 @@ export function refusing(
   body?: unknown,
   headers: Record<string, string> = {},
 ): ModelFetch {
-  return async () => ({
-    ok: false,
-    status,
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    body: (async function* () {
-      if (body !== undefined) yield encoder.encode(JSON.stringify(body));
-    })(),
-  });
+  return refusal(status, body, headers);
 }
 
 /** Mistral's error body: the explanation at the top level, not wrapped. */
@@ -73,7 +53,7 @@ export function mistralError(
 }
 
 /** An answer that reasons, then says one word, then reports its usage. */
-const answered = streamOf([
+const answered = chunksThenDone([
   chunk({ role: "assistant", content: "" }),
   chunk({
     content: [
@@ -90,54 +70,13 @@ const answered = streamOf([
 
 /** Records each request, then answers it as `answer` does. */
 export function recording(sent: Sent[], answer: ModelFetch = answered) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answer(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answer);
 }
 
-export function mistralClient(
-  options: {
-    readonly model?: string;
-    readonly fetcher?: ModelFetch;
-    readonly catalogFetch?: CatalogFetch;
-  } = {},
-) {
-  return new ProviderModelClient(mistral, {
-    apiKey: async () => "mistral-test-key",
+export function mistralClient(options: LabClientOptions = {}) {
+  return labClient(mistral, "mistral-test-key", {
+    ...options,
     model: options.model ?? "mistral-large-4",
-    modelInfo: (model) => mistral.describe(model, {}),
-    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-    ...(options.catalogFetch ? { catalogFetch: options.catalogFetch } : {}),
-    now: () => new Date("2026-10-10T12:00:00Z"),
-    retry: { wait: async () => {}, random: () => 0 },
+    at: "2026-10-10T12:00:00Z",
   });
-}
-
-export async function drain(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<ModelEvent[]> {
-  const events: ModelEvent[] = [];
-  for await (const event of client.send(request)) events.push(event);
-  return events;
-}
-
-/** What arrived before the request failed, and the failure. */
-export async function drainUntilFailure(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<{ events: ModelEvent[]; error: Record<string, unknown> }> {
-  const events: ModelEvent[] = [];
-  try {
-    for await (const event of client.send(request)) events.push(event);
-  } catch (error) {
-    return { events, error: error as Record<string, unknown> };
-  }
-  throw new Error("The request did not fail.");
 }

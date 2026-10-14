@@ -13,12 +13,14 @@
  * that server's claim rather than as anything this app establishes.
  */
 
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { InMemoryMcpCredentials } from "../src/index.js";
 import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const schema = {
   type: "object",
@@ -35,7 +37,7 @@ const schema = {
 
 async function connected() {
   const servers = managed(
-    await mkdtemp(join(tmpdir(), "zhiyin-mcp-args-")),
+    await folders.make("zhiyin-mcp-args-"),
     async () => ({
       listTools: async () => [
         {

@@ -37,7 +37,7 @@ other module. Use them rather than drawing a new frame, dialog or placeholder.
   the top, the content as `children`, and an optional `footer` for its actions.
   `onClose` is called on Close, on Escape and on a press outside it. Focus moves
   into the dialog, Tab stays inside it, and focus returns to where it was when
-  the dialog closes. It stays open when the window loses focus, so something can
+  the dialog closes. With one dialog over another, Escape closes the top one. It stays open when the window loses focus, so something can
   be copied into it from another app. `className` styles the dialog's own box.
 - **`SurfacePanel`**: a page that takes the conversation's place. It takes a
   `label` (its accessible name), an `eyebrow`, a `title`, an optional
@@ -84,6 +84,17 @@ other module. Use them rather than drawing a new frame, dialog or placeholder.
   layer closes. `closeOnBlur` (on by default) also closes it when the window
   loses focus. While a layer is open, the top bar stops dragging the window, so
   a click there closes the layer instead.
+- **`useModalFocus(dialog, onEscape)`**: what makes a modal `Dialog` keyboard
+  friendly, for a modal drawn another way: focus moves in and comes back, Tab
+  goes round its controls, and Escape calls `onEscape`. The dialog holding
+  focus answers; with focus in none, the last one opened does.
+- **`Toggle`**: something on or off, drawn as a small slider: `on`,
+  `onChange` and `disabled`. Name it with `aria-label` or
+  `aria-labelledby`.
+- **`PointedTip`**: one sentence shown above the point it explains, with an
+  arrow down to it, while a small info button is pointed at or focused. `at`
+  is the middle of the button's top edge and `id` names it for
+  `aria-describedby`.
 - **`ChoiceSwitch`**: a few choices side by side, one of them on, such as a
   theme or a lab's platform. Its `choices` are real radio buttons, so the arrow
   keys move between them; `value` is the one on and `onChange` is told of a new
@@ -113,13 +124,17 @@ filled with, under `--zy-on-accent` text. States use `--zy-running`,
 `--zy-green`, `--zy-amber` and `--zy-danger`. Radii (`--zy-radius-sm`, `-md`)
 and fonts (`--zy-font-display`, `--zy-font-body`, `--zy-font-data`) are tokens
 too. Text is never set under 12 px; a size relative to its parent is written
-as `max(12px, …)`.
+as `max(12px, …)`. What floats over the page takes its place from a
+`--zy-layer-` token, lowest first: `menu`, `confirm`, `popover`,
+`navigation`, `overlay`, `hover-tip` and `alert`.
 
 The global stylesheet also holds the shared basics any module may use as plain
 class names: `button`, with `button--accent` for the primary action,
 `button--quiet` and `button--small`; `text-button`; `eyebrow`; and
-`instrument-label`. Everything else a module draws is styled by its own CSS
-Module, and a module never names another module's classes.
+`instrument-label`. It also holds the shared motion, which a module names as
+`global(zy-spin)`, a spinner's turn, and `global(zy-progress)`, a hairline
+that travels while something loads. Everything else a module draws is styled
+by its own CSS Module, and a module never names another module's classes.
 
 ## Lab rules
 

@@ -1,7 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type RewindCommitResult,
@@ -9,12 +6,17 @@ import {
 } from "@zhiyin/contract";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery, RecoveryReview } from "@zhiyin/recovery";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   ComposedRewind,
   FileRewindJournal,
   type RewindHost,
   type RewindJournal,
 } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const conversation = (id: string, folder?: string): WorkspaceTask => ({
   ...emptyConversationLists,
@@ -179,7 +181,7 @@ describe("applying a rewind", () => {
   });
 
   it("finishes a rewind after restart when files were restored but history was not saved", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-rewind-journal-"));
+    const directory = await folders.make("zhiyin-rewind-journal-");
     const journal = new FileRewindJournal(directory);
     let restores = 0;
     const { recovery } = recoveryRecording({
@@ -224,7 +226,7 @@ describe("applying a rewind", () => {
   });
 
   it("clears a journal left behind after conversation persistence", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-rewind-journal-"));
+    const directory = await folders.make("zhiyin-rewind-journal-");
     const stored = new FileRewindJournal(directory);
     let refuseComplete = true;
     const journal: RewindJournal = {

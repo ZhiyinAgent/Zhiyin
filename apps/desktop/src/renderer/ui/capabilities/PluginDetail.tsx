@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { PluginComponentState, PluginState } from "@zhiyin/contract";
-import { Icon, InfoTip } from "../shared/index.js";
+import { Icon, InfoTip, Toggle } from "../shared/index.js";
 import { inWords } from "./names.js";
 import styles from "./capabilities.module.css";
 
@@ -154,23 +154,18 @@ function ComponentRow({
       </span>
       <span className={styles["plugin-component__control"]}>
         {component.status !== "unavailable" && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={awaitingSetup ? false : component.enabled}
+          <Toggle
+            on={awaitingSetup ? false : component.enabled}
             aria-label={switchName(
               shownName,
               component.enabled && !awaitingSetup,
               pluginOn,
             )}
             disabled={awaitingSetup}
-            className={styles["plugin-switch"]}
-            onClick={() =>
+            onChange={() =>
               void actions.onToggle(component.id, !component.enabled)
             }
-          >
-            <span aria-hidden="true" />
-          </button>
+          />
         )}
       </span>
       <span className={styles["plugin-component__actions"]}>
@@ -347,16 +342,11 @@ export function PluginDetail({
         <div className={styles["plugin-details__title"]}>
           <h2>{plugin.name}</h2>
           <label className={styles["plugin-details__activation"]}>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={plugin.enabled}
+            <Toggle
+              on={plugin.enabled}
               aria-label={`${plugin.name} plugin: ${plugin.enabled ? "on" : "off"}`}
-              className={styles["plugin-switch"]}
-              onClick={() => void management.onToggle(!plugin.enabled)}
-            >
-              <span aria-hidden="true" />
-            </button>
+              onChange={(on) => void management.onToggle(on)}
+            />
             <span>{plugin.enabled ? "On" : "Off"}</span>
           </label>
         </div>

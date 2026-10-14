@@ -13,7 +13,7 @@
  * is settled twice, as read_file settles it.
  */
 
-import { open, readFile, realpath, stat } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { extname, relative, resolve } from "node:path";
 import type {
   ToolCallInspection,
@@ -41,6 +41,7 @@ import {
   errorCode,
   isAbortError,
   normalizePath,
+  realLocation,
   scopeOf,
   toForwardSlashes,
 } from "./workspace-path.js";
@@ -449,16 +450,11 @@ export async function runReadDocument(
     };
 
   try {
-    const [realRoot, realTarget] = await Promise.all([
-      realpath(root),
-      realpath(resolve(root, input.path)),
-    ]);
+    const real = await realLocation(root, input.path);
+    const realTarget = real.path;
     // A link can point out of the workspace after the request was presented as
     // staying in it. The approval that was given was for the contained read.
-    if (
-      inspected.scope === "workspace" &&
-      scopeOf(realRoot, realTarget) !== "workspace"
-    )
+    if (inspected.scope === "workspace" && real.scope !== "workspace")
       return {
         ok: false,
         reason: "The file leads outside the current workspace.",

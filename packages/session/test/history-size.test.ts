@@ -10,15 +10,13 @@
  * That is a heavy year of use, not a synthetic maximum.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type WorkspaceSnapshot,
   type WorkspaceTask,
 } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions, historyFiles, type HistoryFiles } from "../src/index.js";
 import { savedBytes } from "./planted-history.js";
 
@@ -52,18 +50,12 @@ const COMMIT_CEILING_MS = 1_000;
 const LAUNCH_CEILING_MS = 1_000;
 const FILE_BUDGET_MIB = 16;
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-history-size-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-history-size-");
 }
 
 /** The store's own file operations, counting what is read from each file and written to it. */

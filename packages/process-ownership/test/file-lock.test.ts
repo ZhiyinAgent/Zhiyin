@@ -1,11 +1,15 @@
 import { execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { holdExclusively } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * A file only one holder can have open at a time, which the operating system
@@ -16,7 +20,7 @@ import { holdExclusively } from "../src/index.js";
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 async function lockPath(): Promise<string> {
-  return join(await mkdtemp(join(tmpdir(), "zhiyin-lock-")), "owner.lock");
+  return join(await folders.make("zhiyin-lock-"), "owner.lock");
 }
 
 function held(attempt: ReturnType<typeof holdExclusively>) {

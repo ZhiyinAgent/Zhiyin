@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { access, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { WorkspaceTools } from "@zhiyin/tools";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { stubDependencies, until, loopFrom } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * The engine decides on what the implementation declared, and the loop is the
@@ -14,7 +18,7 @@ import { stubDependencies, until, loopFrom } from "./support.js";
  */
 describe("read scope", () => {
   async function readWith(path: string) {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-read-scope-"));
+    const parent = await folders.make("zhiyin-read-scope-");
     const root = join(parent, "workspace");
     await mkdir(root);
     await writeFile(join(root, "inside.txt"), "in", "utf8");
@@ -87,7 +91,7 @@ describe("read scope", () => {
 
 describe("approval binding", () => {
   it("rejects an out-of-workspace path before permission or execution", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-authority-"));
+    const root = await folders.make("zhiyin-authority-");
     const outside = join(dirname(root), "outside-authority.txt");
     const workspace = new WorkspaceTools(root, { shell: undefined });
     let permissionChecks = 0;
@@ -226,7 +230,7 @@ describe("approval binding", () => {
  */
 describe("what an action is recorded as having changed", () => {
   it("marks only an app-declared read as changing nothing; a write and a connector that calls itself read-only are not", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-read-only-"));
+    const root = await folders.make("zhiyin-read-only-");
     await writeFile(join(root, "notes.md"), "notes", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});

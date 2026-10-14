@@ -90,8 +90,8 @@ activating it.
   tools. The composition root wires it, because the MCP feature is
   constructed before this group.
 - `browserConnection`, `sceneConnection`, `gitConnection`,
-  `documentsConnection` and `pythonConnection` turn an application automation
-  into a built-in connection the MCP feature serves. The browser and the 3D
+  `documentsConnection` and `pythonConnection` turn a feature's
+  `OfferedConnection` into a built-in connection the MCP feature serves. The browser and the 3D
   studio get one automation per conversation; the others share one.
 - `pluginContentsDetails`, a plugin's components as a person reads them in an
   action result.

@@ -52,8 +52,9 @@ for its launch; nothing listens on a port.
   overview, back to the start, and the size the view is drawn at. `close()`
   ends the session.
 - `sceneAutomation(session, { workspaceRoot, blender, directory,
-  openToBlender })` returns the tools for the model: `listTools`, `callTool`,
-  `inspect`, `describeResult`, `produced` and `close`. `openToBlender` lets
+  openToBlender })` returns the tools for the model, a `WritingConnection`:
+  `listTools`, `callTool`, `inspect`, `describeResult`, `produced` and
+  `close`. `openToBlender` lets
   Blender write in the workspace; `workspaceOpening(open)` is the one the app
   uses. `describeSceneTools(blender)` lists the tools without starting
   Blender.
@@ -81,8 +82,7 @@ for its launch; nothing listens on a port.
   - `blender_run_script` runs any Blender Python in the session.
 - `studioTools`, the 3D studio's tools as the model is offered them.
 - The types these take and return: `ConversationScenesOptions`, `SceneCommand`,
-  `SceneOutcome`, `SceneSessionOptions`, `SceneAutomation`,
-  `SceneAutomationOptions`, `LaunchSession`, `OpenFolder`,
+  `SceneOutcome`, `SceneSessionOptions`, `SceneAutomationOptions`, `LaunchSession`, `OpenFolder`,
   `SessionLaunchOptions`, `SessionProcess`, `StudioTool`.
 
 ## Invariants

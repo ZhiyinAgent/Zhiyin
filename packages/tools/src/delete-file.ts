@@ -10,7 +10,7 @@
  * showed as permanent, and a Recycle Bin refusal after approval deletes nothing.
  */
 
-import { lstat, readdir, realpath, rm } from "node:fs/promises";
+import { lstat, opendir, realpath, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import type {
   FileChange,
@@ -109,8 +109,8 @@ function inputOf(args: unknown): Input | undefined {
 async function folderSize(path: string) {
   let files = 0;
   let bytes = 0;
-  const entries = await readdir(path, { recursive: true, withFileTypes: true });
-  for (const entry of entries) {
+  // Read as it goes, so a folder of any size is walked only up to the count.
+  for await (const entry of await opendir(path, { recursive: true })) {
     if (!entry.isFile()) continue;
     if (files === maximumCounted) return { files, bytes, more: true };
     files += 1;
@@ -137,15 +137,20 @@ async function targetOf(
     };
   // The folder it sits in, with links resolved, must still be the workspace:
   // a linked folder must not carry a deletion somewhere else.
-  const folder = await realpath(dirname(absolute)).catch(() => undefined);
-  const canonical = folder ? join(folder, basename(absolute)) : undefined;
-  if (!canonical || !staysInside(realRoot, canonical))
-    return folder
-      ? {
-          ok: false,
-          reason: "Only files and folders inside the workspace can be deleted.",
-        }
-      : { ok: false, reason: `${path} does not exist.`, correctable: true };
+  let folder: string;
+  try {
+    folder = await realpath(dirname(absolute));
+  } catch (error) {
+    return ["ENOENT", "ENOTDIR"].includes(errorCode(error) as string)
+      ? { ok: false, reason: `${path} does not exist.`, correctable: true }
+      : { ok: false, reason: `${path} could not be checked before deleting.` };
+  }
+  const canonical = join(folder, basename(absolute));
+  if (!staysInside(realRoot, canonical))
+    return {
+      ok: false,
+      reason: "Only files and folders inside the workspace can be deleted.",
+    };
   let entry;
   try {
     entry = await lstat(canonical);

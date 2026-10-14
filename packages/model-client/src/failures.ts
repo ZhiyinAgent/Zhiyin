@@ -168,6 +168,27 @@ export function tokenLimitFrom(
   };
 }
 
+/** A request past the model's context, with the sizes where the sentence states them. */
+export function tooLarge(sentence: string | undefined): ModelClientError {
+  const tokens = tokenLimitFrom(sentence);
+  return new ModelClientError(
+    "contextExceeded",
+    "The request is too large for the selected model.",
+    tokens ? { tokens } : {},
+  );
+}
+
+/** A lab too busy to answer now: worth trying again, after any wait it asked for. */
+export function overloaded(
+  message: string,
+  wait: number | undefined,
+): ModelClientError {
+  return new ModelClientError("modelUnavailable", message, {
+    retryable: true,
+    ...(wait === undefined ? {} : { retryAfterMs: wait }),
+  });
+}
+
 export type FailureHeaders = { get(name: string): string | null };
 
 export function retryAfterMs(headers: FailureHeaders | undefined) {
@@ -202,6 +223,12 @@ export type FailureReport = {
   /** Inside a stream whose status already went out as 200. */
   readonly inStream?: boolean;
 };
+
+/** The provider's own sentence about a failure, where it gave one. */
+export function said(failure: FailureReport): string | undefined {
+  const message = failure.error?.message;
+  return typeof message === "string" && message.trim() ? message : undefined;
+}
 
 /** The `error` object most providers wrap their explanation in. */
 function errorObject(parsed: unknown): ProviderError | undefined {

@@ -1,22 +1,19 @@
-import {
-  mkdtemp,
-  mkdir,
-  realpath,
-  rm,
-  symlink,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("WorkspaceTools", () => {
   it("exposes no file tools before folder selection and changes their boundary together", async () => {
     const tools = new WorkspaceTools();
     expect(tools.list().map((tool) => tool.name)).not.toContain("read_file");
-    const first = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
-    const second = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const first = await folders.make("zhiyin-tools-");
+    const second = await folders.make("zhiyin-tools-");
     await writeFile(join(first, "note.txt"), "first");
     await writeFile(join(second, "note.txt"), "second");
     await tools.selectWorkspace(first);
@@ -34,7 +31,7 @@ describe("WorkspaceTools", () => {
    * person is still looking at, for a folder they never moved to.
    */
   it("keeps working in the previous folder when a folder change fails", async () => {
-    const first = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const first = await folders.make("zhiyin-tools-");
     await writeFile(join(first, "note.txt"), "first");
     const tools = new WorkspaceTools();
     await tools.selectWorkspace(first);
@@ -51,7 +48,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("keeps working in the previous folder when the chosen path is a file", async () => {
-    const first = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const first = await folders.make("zhiyin-tools-");
     await writeFile(join(first, "note.txt"), "first");
     const tools = new WorkspaceTools();
     await tools.selectWorkspace(first);
@@ -67,7 +64,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("advertises and reads a UTF-8 file inside the workspace", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     await mkdir(join(root, "docs"));
     await writeFile(join(root, "docs", "notes.md"), "Project notes", "utf8");
     const tools = new WorkspaceTools(root);
@@ -110,7 +107,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("describes the workspace and lists a directory without reading file contents", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     await mkdir(join(root, "apps"));
     await mkdir(join(root, "apps", "desktop"));
     await writeFile(join(root, "package.json"), '{"private":true}', "utf8");
@@ -164,7 +161,7 @@ describe("WorkspaceTools", () => {
    * can bound.
    */
   it("names a listing outside the workspace as leaving it", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const parent = await folders.make("zhiyin-tools-");
     const root = join(parent, "workspace");
     await mkdir(root);
     await mkdir(join(parent, "outside"));
@@ -196,7 +193,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("rejects invalid arguments before presenting a permission request", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     const tools = new WorkspaceTools(root);
 
     expect(await tools.inspect("read_file", {})).toEqual({
@@ -213,7 +210,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("names a read outside the workspace as leaving it", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const parent = await folders.make("zhiyin-tools-");
     const root = join(parent, "workspace");
     await mkdir(root);
     await writeFile(join(parent, "secret.txt"), "outside", "utf8");
@@ -242,7 +239,7 @@ describe("WorkspaceTools", () => {
    * exist for, and the only one where refusing is right.
    */
   it("refuses a link that leads out of a workspace read nobody was asked about", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const parent = await folders.make("zhiyin-tools-");
     const root = join(parent, "workspace");
     await mkdir(root);
     await mkdir(join(parent, "outside"));
@@ -273,7 +270,7 @@ describe("WorkspaceTools", () => {
    * reason it is settled twice.
    */
   it("refuses a workspace file swapped for a link out, after it was inspected", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const parent = await folders.make("zhiyin-tools-");
     const root = join(parent, "workspace");
     await mkdir(root);
     // Distinctive on purpose: the refusal says the word "outside" itself, so a
@@ -307,7 +304,7 @@ describe("WorkspaceTools", () => {
    * for what it is rather than read, or crash on the way.
    */
   it("refuses a workspace file swapped for a folder, after it was inspected", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     await writeFile(join(root, "report.txt"), "a report", "utf8");
     const tools = new WorkspaceTools(root);
 
@@ -327,7 +324,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("finds which workspace files contain a piece of text, without asking", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     await mkdir(join(root, "notes"));
     await mkdir(join(root, "node_modules"));
     await writeFile(
@@ -358,7 +355,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("keeps a search inside the workspace", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const parent = await folders.make("zhiyin-tools-");
     const root = join(parent, "workspace");
     await mkdir(root);
     const tools = new WorkspaceTools(root);
@@ -372,7 +369,7 @@ describe("WorkspaceTools", () => {
   });
 
   it("names a missing workspace file in the failure", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-tools-"));
+    const root = await folders.make("zhiyin-tools-");
     const tools = new WorkspaceTools(root);
 
     await expect(

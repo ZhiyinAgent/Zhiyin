@@ -1,4 +1,5 @@
 import type {
+  ConnectionTool,
   McpConnectionTestOutcome,
   McpServerDefinition,
   McpServerState,
@@ -7,11 +8,7 @@ import type {
   ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
-import type {
-  BuiltInMcpServer,
-  McpConnection,
-  McpConnectionTool,
-} from "./connection-types.js";
+import type { BuiltInMcpServer, McpConnection } from "./connection-types.js";
 import { actionTitle, routedName } from "./action-title.js";
 import { asArguments } from "./call-arguments.js";
 import {
@@ -141,12 +138,12 @@ export interface McpServers {
 
 type ConnectedServer = {
   readonly connection: McpConnection;
-  readonly tools: readonly McpConnectionTool[];
+  readonly tools: readonly ConnectionTool[];
 };
 
 type RoutedTool = {
   readonly server: McpServerDefinition;
-  readonly tool: McpConnectionTool;
+  readonly tool: ConnectionTool;
   readonly connection: McpConnection;
   readonly connectionKey: string;
 };
@@ -290,7 +287,7 @@ export class ManagedMcpServers implements McpServers {
    * since no single conversation's connection speaks for all of them.
    */
   #builtInHealth(server: BuiltInMcpServer): {
-    tools: readonly McpConnectionTool[] | undefined;
+    tools: readonly ConnectionTool[] | undefined;
     failure: Failure | undefined;
   } {
     if (server.scope === "conversation" && server.describe)

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { CoreApi, SpecialistRun, TaskAction } from "@zhiyin/contract";
 import { ActionHistory } from "./ActionHistory.js";
 import {
@@ -51,20 +51,9 @@ export function SpecialistRunModal({
   const hasReport = Boolean(handoff || stopped);
   const [tab, setTab] = useState<Tab>(hasReport ? "report" : "calls");
 
-  useModalFocus(dialog);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // A call's own inspector opened from here is above this dialog, and is
-      // the one Escape is meant for.
-      const dialogs = document.querySelectorAll('[role="dialog"]');
-      if (dialogs[dialogs.length - 1] !== dialog.current) return;
-      event.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // A call's own inspector opened from here is above this dialog, and is
+  // the one Escape is meant for.
+  useModalFocus(dialog, onClose);
 
   const tabs: readonly [Tab, string, number | undefined][] = [
     ["report", "Report", undefined],

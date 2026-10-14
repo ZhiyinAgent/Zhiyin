@@ -2,12 +2,10 @@ import { describe, expect, it } from "vitest";
 import type {
   CommandFileChanges,
   McpServerState,
+  OfferedConnection,
   ToolchainState,
   ToolSpec,
 } from "@zhiyin/contract";
-import type { BrowserAutomation } from "@zhiyin/interactive-browser";
-import type { GitAutomation } from "@zhiyin/git-connector";
-import type { SceneAutomation } from "@zhiyin/blender-studio";
 import type { McpServers } from "@zhiyin/mcp";
 import type { DamagedPlugin, PluginView, Plugins } from "@zhiyin/plugins";
 import {
@@ -1678,7 +1676,7 @@ describe("the browser as a built-in connection", () => {
     const server = browserConnection(
       (conversationId) => {
         opened.push(conversationId);
-        return { conversationId } as unknown as BrowserAutomation;
+        return { conversationId } as unknown as OfferedConnection;
       },
       async () => [{ name: "browser_navigate" }],
     );
@@ -1734,7 +1732,7 @@ describe("the 3D studio as a built-in connection", () => {
           produced: () => [
             { path: `${conversationId}.png`, change: "created", bytes: 1 },
           ],
-        } as unknown as SceneAutomation;
+        } as unknown as OfferedConnection;
       },
       async () => [
         {
@@ -1800,7 +1798,7 @@ describe("the 3D studio as a built-in connection", () => {
 describe("git as a built-in connection", () => {
   function fakeAutomation() {
     const inspected: string[] = [];
-    const automation: GitAutomation = {
+    const automation: OfferedConnection = {
       inspect: async (name) => {
         inspected.push(name);
         return { ok: true, action: name, target: "repo", command: name };

@@ -5,14 +5,18 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { clearAbandonedProfiles } from "../src/abandoned-profiles.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 it("removes the profiles of Zhiyin processes that are gone, and only those", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "zhiyin-profiles-"));
+  const directory = await folders.make("zhiyin-profiles-");
   const ended = spawnSync(process.execPath, ["-e", ""]).pid;
   for (const name of [
     `zhiyin-browser-${ended}-abc123`,

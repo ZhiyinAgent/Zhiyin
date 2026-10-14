@@ -1,30 +1,22 @@
 import {
   appendFile,
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
-  rm,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileUsageTelemetry } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-usage-test-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-usage-test-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("FileUsageTelemetry", () => {
   it("preserves concurrent usage records across restart", async () => {

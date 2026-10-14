@@ -1,10 +1,14 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools, type ConversationItems } from "../src/index.js";
 import { imageSize } from "../src/image-size.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A one-pixel PNG, so the bytes are a real picture rather than a stand-in. */
 const png = Buffer.from(
@@ -13,7 +17,7 @@ const png = Buffer.from(
 );
 
 async function workspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "zhiyin-image-"));
+  return folders.make("zhiyin-image-");
 }
 
 describe("looking at an image", () => {

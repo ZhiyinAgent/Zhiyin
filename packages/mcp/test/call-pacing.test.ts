@@ -1,9 +1,11 @@
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { InMemoryMcpCredentials, McpRateRefusedError } from "../src/index.js";
 import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const found = { content: [{ type: "text", text: "found" }] };
 
@@ -43,7 +45,7 @@ async function recordingServers(
   let mostInFlight = 0;
   let connections = 0;
   const servers = managed(
-    await mkdtemp(join(tmpdir(), "zhiyin-mcp-pacing-")),
+    await folders.make("zhiyin-mcp-pacing-"),
     async () => {
       connections += 1;
       return {

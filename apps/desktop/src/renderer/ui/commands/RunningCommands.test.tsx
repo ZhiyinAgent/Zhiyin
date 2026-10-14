@@ -61,6 +61,46 @@ describe("a conversation's running commands", () => {
     expect(core.runningCommands).toHaveBeenCalledWith("task-1");
   });
 
+  it("says so when it cannot ask which commands run, rather than showing none", async () => {
+    render(
+      <RunningCommands
+        taskId="task-1"
+        running={[]}
+        commands={commands({
+          runningCommands: vi.fn(async () => {
+            throw new Error("The core did not answer.");
+          }),
+        })}
+        onListed={() => {}}
+      />,
+    );
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Running commands not checked",
+    );
+  });
+
+  it("says so when what a command printed cannot be read", async () => {
+    render(
+      <RunningCommands
+        taskId="task-1"
+        running={[build]}
+        commands={commands({
+          commandOutput: vi.fn(async () => {
+            throw new Error("The core did not answer.");
+          }),
+        })}
+        onListed={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "1 command running" }));
+
+    expect(
+      await screen.findByText("What it printed could not be read."),
+    ).toBeVisible();
+  });
+
   it("says first why each command was run, and what stopping it does", () => {
     render(
       <RunningCommands

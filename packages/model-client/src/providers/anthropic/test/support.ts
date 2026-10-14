@@ -1,38 +1,19 @@
 /** Anthropic's side of the wire, as its documentation describes it. */
 
-import type {
-  ModelEvent,
-  ModelFetch,
-  ModelRequest,
-} from "../../../model-client.js";
-import { ProviderModelClient } from "../../../client.js";
-import type { CatalogFetch } from "../../../provider.js";
+import type { ModelFetch } from "../../../model-client.js";
+import {
+  labClient,
+  namedEvents,
+  recording as recordingOf,
+  refusal,
+  type LabClientOptions,
+  type Sent,
+} from "../../../../test/lab-wire.js";
 import { anthropic } from "../provider.js";
 
-const encoder = new TextEncoder();
-
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
-
-/** Server-sent events, each named by its type as Anthropic names them. */
-export function streamOf(
-  events: readonly Record<string, unknown>[],
-): ModelFetch {
-  return async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    body: (async function* () {
-      for (const event of events)
-        yield encoder.encode(
-          `event: ${String(event["type"])}\ndata: ${JSON.stringify(event)}\n\n`,
-        );
-    })(),
-  });
-}
+// Anthropic names each server-sent event by its type.
+export { drain, namedEvents as streamOf } from "../../../../test/lab-wire.js";
+export type { Sent } from "../../../../test/lab-wire.js";
 
 /** A refusal in the status line, in Anthropic's error shape. */
 export function refusing(
@@ -40,17 +21,11 @@ export function refusing(
   error?: { type: string; message: string; details?: unknown },
   headers: Record<string, string> = {},
 ): ModelFetch {
-  return async () => ({
-    ok: false,
+  return refusal(
     status,
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    body: (async function* () {
-      if (error)
-        yield encoder.encode(
-          JSON.stringify({ type: "error", error, request_id: "req_1" }),
-        );
-    })(),
-  });
+    error ? { type: "error", error, request_id: "req_1" } : undefined,
+    headers,
+  );
 }
 
 /** An answer that thought, said something, and used the cache. */
@@ -119,41 +94,14 @@ export function answer(
 /** Records each request, then answers it as `answer` does. */
 export function recording(
   sent: Sent[],
-  answered: ModelFetch = streamOf(answer()),
+  answered: ModelFetch = namedEvents(answer()),
 ) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answered(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answered);
 }
 
-export function anthropicClient(
-  options: {
-    readonly model?: string;
-    readonly fetcher?: ModelFetch;
-    readonly catalogFetch?: CatalogFetch;
-  } = {},
-) {
-  return new ProviderModelClient(anthropic, {
-    apiKey: async () => "sk-ant-test",
+export function anthropicClient(options: LabClientOptions = {}) {
+  return labClient(anthropic, "sk-ant-test", {
+    ...options,
     model: options.model ?? "claude-opus-5-5",
-    modelInfo: (model) => anthropic.describe(model, {}),
-    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-    ...(options.catalogFetch ? { catalogFetch: options.catalogFetch } : {}),
-    retry: { wait: async () => {}, random: () => 0 },
   });
-}
-
-export async function drain(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<ModelEvent[]> {
-  const events: ModelEvent[] = [];
-  for await (const event of client.send(request)) events.push(event);
-  return events;
 }

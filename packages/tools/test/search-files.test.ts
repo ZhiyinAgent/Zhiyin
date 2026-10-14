@@ -4,16 +4,20 @@
  * either exact or says it is a lower bound.
  */
 
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 import { runSearchFiles } from "../src/search-files.js";
 import { bundledRipgrep } from "../src/ripgrep.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(files: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-search-"));
+  const root = await folders.make("zhiyin-search-");
   for (const [name, text] of Object.entries(files)) {
     await mkdir(dirname(join(root, name)), { recursive: true });
     await writeFile(join(root, name), text);

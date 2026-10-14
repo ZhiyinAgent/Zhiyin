@@ -1,7 +1,4 @@
-import { describe, expect, it } from "vitest";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type { McpServerState } from "@zhiyin/contract";
 import {
   InMemoryMcpCredentials,
@@ -9,6 +6,7 @@ import {
   type McpConnectionFactory,
   type McpServers,
 } from "@zhiyin/mcp";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   calls,
   loopFrom,
@@ -17,6 +15,10 @@ import {
   stubDependencies,
   type TestApp,
 } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A shipped plugin with one remote connector, switched on. */
 const research = {
@@ -42,7 +44,7 @@ async function activatingResearch(connect: McpConnectionFactory) {
     ...deps,
     plugins: pluginStore([research]),
     mcp: new ManagedMcpServers(
-      await mkdtemp(join(tmpdir(), "zhiyin-loop-connectors-")),
+      await folders.make("zhiyin-loop-connectors-"),
       connect,
       new InMemoryMcpCredentials(),
       {

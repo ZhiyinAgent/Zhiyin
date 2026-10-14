@@ -12,14 +12,14 @@
  * person to choose.
  */
 
-import { appendFile, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { appendFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions } from "../src/index.js";
 import {
   conversationFolder,
@@ -29,18 +29,12 @@ import {
   settingsFile,
 } from "./planted-history.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-damaged-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-damaged-");
 }
 
 function task(id: string) {

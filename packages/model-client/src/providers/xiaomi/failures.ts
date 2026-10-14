@@ -9,14 +9,11 @@ import {
   ModelClientError,
   retryAfterMs,
   saysTooLong,
-  tokenLimitFrom,
   type FailureReport,
+  said,
+  tooLarge,
+  overloaded,
 } from "../../failures.js";
-
-function said(failure: FailureReport): string | undefined {
-  const message = failure.error?.message;
-  return typeof message === "string" && message.trim() ? message : undefined;
-}
 
 function rejected(status: number, sentence: string | undefined) {
   return new ModelClientError(
@@ -32,14 +29,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
   const wait = retryAfterMs(failure.headers);
   switch (failure.status) {
     case 400: {
-      if (saysTooLong(sentence)) {
-        const tokens = tokenLimitFrom(sentence);
-        return new ModelClientError(
-          "contextExceeded",
-          "The request is too large for the selected model.",
-          tokens ? { tokens } : {},
-        );
-      }
+      if (saysTooLong(sentence)) return tooLarge(sentence);
       return rejected(failure.status, sentence);
     }
     case 401:
@@ -77,14 +67,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
         wait === undefined ? {} : { retryAfterMs: wait },
       );
     case 503:
-      return new ModelClientError(
-        "modelUnavailable",
-        "Xiaomi MiMo is overloaded right now.",
-        {
-          retryable: true,
-          ...(wait === undefined ? {} : { retryAfterMs: wait }),
-        },
-      );
+      return overloaded("Xiaomi MiMo is overloaded right now.", wait);
     default:
       return failure.status >= 500 || failure.status === 0
         ? new ModelClientError(

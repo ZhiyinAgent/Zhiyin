@@ -16,47 +16,12 @@ import type {
   BrowserLauncher,
   InteractiveBrowser,
 } from "./interactive-browser.js";
-import type {
-  ActionDetail,
-  ToolCallInspection,
-  ToolInvocationResult,
-} from "@zhiyin/contract";
+import type { ConnectionTool, OfferedConnection } from "@zhiyin/contract";
 import {
   inspectBrowser,
   describeBrowserResult,
   describedBrowserTools,
 } from "./browser-presentation.js";
-
-/**
- * The connection shape the application registers with the MCP feature.
- * Declared here rather than imported from a peer feature; the capabilities
- * group adapts this feature's own interface.
- */
-export type AutomationTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Readonly<Record<string, unknown>>;
-};
-
-export type BrowserAutomation = {
-  inspect(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-  ): Promise<ToolCallInspection>;
-  describeResult(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    result: ToolInvocationResult,
-  ): readonly ActionDetail[];
-  listTools(): Promise<readonly AutomationTool[]>;
-  callTool(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    signal?: AbortSignal,
-    binding?: string,
-  ): Promise<unknown>;
-  close(): Promise<void>;
-};
 
 /**
  * `@playwright/mcp` publishes CommonJS. Required rather than imported so this
@@ -205,7 +170,7 @@ function offeredTools(
   tools: readonly ListedTool[],
   seeing: boolean,
   preview: boolean,
-): readonly AutomationTool[] {
+): readonly ConnectionTool[] {
   return [
     ...tools
       // A tool nobody has described cannot be put behind an honest
@@ -269,7 +234,7 @@ export async function describeBrowserAutomation(
     /** Whether a conversation's browser can preview the chosen workspace. */
     readonly workspacePreview: boolean;
   },
-): Promise<readonly AutomationTool[]> {
+): Promise<readonly ConnectionTool[]> {
   const availability = await launcher.available();
   if (!availability.available) throw new Error(availability.reason);
   const create = options.createConnection ?? packagedConnection;
@@ -296,7 +261,7 @@ export async function describeBrowserAutomation(
 export function browserAutomation(
   browser: InteractiveBrowser,
   options: BrowserAutomationOptions = {},
-): BrowserAutomation {
+): OfferedConnection {
   let client: Client | undefined;
   let server: { close?(): Promise<void> } | undefined;
   let starting: Promise<Client> | undefined;

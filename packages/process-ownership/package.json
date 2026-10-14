@@ -14,5 +14,8 @@
   },
   "dependencies": {
     "koffi": "3.2.1"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

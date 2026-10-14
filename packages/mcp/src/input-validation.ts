@@ -1,5 +1,5 @@
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
-import type { McpConnectionTool } from "./connection-types.js";
+import type { ConnectionTool } from "@zhiyin/contract";
 
 type Check = (input: unknown) => string | undefined;
 
@@ -26,7 +26,7 @@ function compile(schema: Readonly<Record<string, unknown>>): Check | null {
  * nothing when they fit or the schema cannot be read.
  */
 export function inputMismatch(
-  tool: McpConnectionTool,
+  tool: ConnectionTool,
   args: Readonly<Record<string, unknown>>,
 ): string | undefined {
   const schema = tool.inputSchema;

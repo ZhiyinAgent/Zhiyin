@@ -1,18 +1,22 @@
-import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { WorkspaceTools } from "@zhiyin/tools";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { loopFrom, stubDependencies, until } from "./support.js";
 import {
   matchingPermission,
   offeredPermission,
 } from "../src/tools/conversation-permissions.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 describe("conversation permissions", () => {
   it("checks every edit target, connector version, and excluded deletion", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-scope-"));
+    const root = await folders.make("zhiyin-scope-");
     await mkdir(join(root, "reports"));
     await mkdir(join(root, "finance"));
     const edit = (paths: string[]) => ({
@@ -266,9 +270,7 @@ describe("conversation permissions", () => {
   });
 
   it("covers later edits in one folder, then asks after revocation and in another conversation", async () => {
-    const root = await mkdtemp(
-      join(tmpdir(), "zhiyin-conversation-permission-"),
-    );
+    const root = await folders.make("zhiyin-conversation-permission-");
     await mkdir(join(root, "reports"));
     await mkdir(join(root, "finance"));
     const workspace = new WorkspaceTools(root, { shell: undefined });

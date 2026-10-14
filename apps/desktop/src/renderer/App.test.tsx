@@ -13,6 +13,7 @@ import {
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
 import { App } from "./App.js";
+import { stubCommands } from "./stubCommands.js";
 
 /** A core that answers the handshake the way the real one does. */
 const emptySnapshot: WorkspaceSnapshot = {
@@ -35,6 +36,7 @@ function fakeCore(version: string): CoreApi & {
   const resendTask = vi.fn<CoreApi["resendTask"]>(async () => {});
 
   return {
+    ...stubCommands,
     frontendReady: async () => {
       handlers.forEach((handler) => {
         handler({ kind: "coreReady", data: { version } });
@@ -42,98 +44,8 @@ function fakeCore(version: string): CoreApi & {
       });
     },
     createTask: async () => "core-task-1",
-    selectTask: async () => {},
     resendTask,
-    renameTask: async () => {},
-    deleteTask: async () => {},
     sendMessage,
-    keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
-    setContextBudget: async () => {},
-    setDefaultContextBudget: async () => {},
-    setPersonalInstructions: async () => {},
-    setNotifications: async () => {},
-    openDataFolder: async () => {},
-    showInFolder: async () => {},
-    setAppearance: async () => {},
-    setSpelling: async () => {},
-    keepPicture: async () => ({
-      status: "refused" as const,
-      reason: "Not in this test.",
-    }),
-    condenseNow: async () => {},
-    openAttachment: async () => {},
-    previewRewind: async () => {
-      throw new Error("No rewind preview configured for this test.");
-    },
-    commitRewind: async () => ({ files: [] }),
-    previewUndo: async () => {
-      throw new Error("No undo preview configured for this test.");
-    },
-    commitUndo: async () => ({ files: [] }),
-    compareDocument: async () => ({ after: [] }),
-    interruptTask: async () => {},
-    answerNow: async () => false,
-    sendNow: async () => false,
-    takeBackMessage: async () => {},
-    runningCommands: async () => [],
-    commandOutput: async () => undefined,
-    stopCommand: async () => {},
-    resolveApproval: async () => {},
-    revokeConversationPermission: async () => {},
-    resolveUserInput: async () => {},
-    setComponentEnabled: async () => {},
-    componentContent: async () => undefined,
-    overrideComponent: async () => {},
-    resetComponent: async () => {},
-    installToolchain: async () => {},
-    setPluginEnabled: async () => {},
-    installPlugin: async () => ({ status: "cancelled" }),
-    updatePlugin: async () => ({ status: "cancelled" }),
-    rollbackPlugin: async () => {},
-    removePlugin: async () => {},
-    createPlugin: async () => {},
-    savePluginContents: async () => {},
-    editablePluginContents: async () => undefined,
-    setMcpServerToolEnabled: async () => {},
-    testMcpConnection: async () => ({ ok: false, reason: "Not configured." }),
-    saveMcpServerToken: async () => {},
-    clearMcpServerToken: async () => {},
-    signInToMcpServer: async () => ({ status: "cancelled" }),
-    cancelMcpSignIn: async () => {},
-    refreshConnections: async () => {},
-    checkMcpConnection: async () => {
-      throw new Error("Not configured.");
-    },
-    shellAvailability: async () => ({ available: true }),
-    recheckShell: async () => ({ available: true }),
-    openExternalUrl: async () => {},
-    driveBrowser: async () => {},
-    lookAtScene: async () => {},
-    chooseWorkspaceView: async () => {},
-    showDocument: async () => ({ ok: true }),
-    closeDocument: async () => {},
-    drawDocumentPage: async () => ({ ok: false, reason: "Not drawn here." }),
-    openDocument: async () => {},
-    showDocumentInFolder: async () => {},
-    listProviders: async () => [],
-    saveProviderApiKey: async () => ({ status: "accepted" as const }),
-    clearProviderApiKey: async () => {},
-    listModels: async () => ({ status: "ready" as const, models: [] }),
-    listModelProviders: async () => ({
-      status: "unavailable" as const,
-      reason: "not in this test",
-    }),
-    selectModel: async () => {},
-    previewArtifact: async () => ({
-      status: "missing" as const,
-      path: "",
-      reason: "Not available in this test.",
-    }),
-    exportArtifact: async () => ({ status: "cancelled" as const }),
-    exportView: async () => ({ status: "cancelled" as const }),
-    exportConversation: async () => ({ status: "cancelled" as const }),
-    answerViewCheck: async () => {},
-    onViewCheck: () => () => {},
     onAppEvent: (handler) => {
       handlers.push(handler);
       return () => {
@@ -572,6 +484,57 @@ describe("App", () => {
     act(() => receive(words(1, " six")));
     expect(
       await screen.findByText("One two three four five six"),
+    ).toBeVisible();
+  });
+
+  it("offers to reconnect when a conversation it asked for again cannot be sent, rather than leaving it stale", async () => {
+    const core = fakeCore("0.1.0");
+    core.resendTask.mockRejectedValue(new Error("The core did not answer."));
+    const original = core.onAppEvent;
+    let receive!: (event: AppEvent) => void;
+    core.onAppEvent = (handler) => {
+      receive = handler;
+      return original(handler);
+    };
+    render(<App core={core} />);
+    await screen.findByRole("heading", { name: "What should we work on?" });
+    act(() =>
+      receive({
+        kind: "workspaceSnapshot",
+        data: {
+          ...emptySnapshot,
+          tasks: [
+            {
+              id: "notes",
+              title: "Notes",
+              updatedLabel: "Now",
+              titleSource: "generated",
+              updatedAt: "2026-10-05T09:00:00.000Z",
+              ...emptyConversationLists,
+              messages: [
+                { id: "answer", role: "assistant", text: "One", sequence: 0 },
+              ],
+              phase: { kind: "interrupted" },
+            },
+          ],
+          selectedTaskId: "notes",
+        },
+      }),
+    );
+
+    act(() =>
+      receive({
+        kind: "taskUpdated",
+        data: {
+          taskId: "notes",
+          sequence: 3,
+          appended: [{ messageId: "answer", text: " four" }],
+        },
+      }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Let’s reconnect." }),
     ).toBeVisible();
   });
 });

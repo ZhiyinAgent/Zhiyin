@@ -1,21 +1,17 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { RunProcess } from "@zhiyin/process-ownership";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { compiledBlenderPython } from "../src/index.js";
 
-const roots: string[] = [];
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A folder laid out as an unpacked Blender is, with nothing that runs. */
 async function unpackedBlender(python = true): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-compiled-"));
-  roots.push(root);
+  const root = await folders.make("zhiyin-compiled-");
   const home = join(root, "staged", "blender-9.9.9-windows-x64");
   await mkdir(join(home, "9.9", "scripts"), { recursive: true });
   await mkdir(join(home, "9.9", "python", "lib"), { recursive: true });

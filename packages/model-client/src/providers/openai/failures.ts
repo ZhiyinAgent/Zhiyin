@@ -14,8 +14,10 @@ import {
   ModelClientError,
   retryAfterMs,
   saysTooLong,
-  tokenLimitFrom,
   type FailureReport,
+  said,
+  tooLarge,
+  overloaded,
 } from "../../failures.js";
 
 /** Billing and limit codes of a 429, and what the person is told. */
@@ -53,11 +55,6 @@ const pictureCodes: ReadonlySet<string> = new Set([
   "failed_to_download_image",
   "image_file_not_found",
 ]);
-
-function said(failure: FailureReport): string | undefined {
-  const message = failure.error?.message;
-  return typeof message === "string" && message.trim() ? message : undefined;
-}
 
 function field(failure: FailureReport, name: "code" | "type") {
   const value = (failure.error as Record<string, unknown> | undefined)?.[name];
@@ -117,14 +114,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
   if (failure.inStream) return inStream(code, sentence);
   switch (failure.status) {
     case 400: {
-      if (saysTooLong(sentence)) {
-        const tokens = tokenLimitFrom(sentence);
-        return new ModelClientError(
-          "contextExceeded",
-          "The request is too large for the selected model.",
-          tokens ? { tokens } : {},
-        );
-      }
+      if (saysTooLong(sentence)) return tooLarge(sentence);
       return rejected(sentence, `HTTP ${failure.status}`);
     }
     case 401:
@@ -147,14 +137,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
       );
     }
     case 503:
-      return new ModelClientError(
-        "modelUnavailable",
-        "The model is overloaded at OpenAI right now.",
-        {
-          retryable: true,
-          ...(wait === undefined ? {} : { retryAfterMs: wait }),
-        },
-      );
+      return overloaded("The model is overloaded at OpenAI right now.", wait);
     default:
       return failure.status >= 500 || failure.status === 0
         ? new ModelClientError(

@@ -1,12 +1,16 @@
-import { mkdtemp, mkdir, writeFile, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspacePreview } from "../src/workspace-preview.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("workspace preview", () => {
   it("serves workspace HTML and assets until explicitly stopped and confirms shutdown", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    const root = await folders.make("zhiyin-preview-");
     await writeFile(
       join(root, "index.html"),
       '<link rel="stylesheet" href="style.css"><h1>Preview</h1>',
@@ -34,7 +38,7 @@ describe("workspace preview", () => {
   });
 
   it("answers the browser's own favicon request instead of leaving an error", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    const root = await folders.make("zhiyin-preview-");
     await writeFile(join(root, "index.html"), "<h1>Preview</h1>");
     const preview = new WorkspacePreview(() => root);
     try {
@@ -57,7 +61,7 @@ describe("workspace preview", () => {
   });
 
   it("serves a favicon the workspace does have", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    const root = await folders.make("zhiyin-preview-");
     await writeFile(join(root, "index.html"), "<h1>Preview</h1>");
     await writeFile(join(root, "favicon.ico"), "icon bytes");
     const preview = new WorkspacePreview(() => root);
@@ -79,8 +83,8 @@ describe("workspace preview", () => {
   });
 
   it("refuses traversal, outside links, unauthorized requests, and a changed workspace", async () => {
-    let root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
-    const outside = await mkdtemp(join(tmpdir(), "zhiyin-preview-outside-"));
+    let root = await folders.make("zhiyin-preview-");
+    const outside = await folders.make("zhiyin-preview-outside-");
     await writeFile(join(root, "index.html"), "inside");
     await writeFile(join(outside, "secret.txt"), "outside");
     await symlink(outside, join(root, "linked"), "junction");
@@ -104,11 +108,11 @@ describe("workspace preview", () => {
   });
 
   it("refuses an approved preview when its workspace changes before execution", async () => {
-    let root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    let root = await folders.make("zhiyin-preview-");
     await writeFile(join(root, "index.html"), "first");
     const preview = new WorkspacePreview(() => root);
     const binding = JSON.stringify(await preview.inspect("index.html"));
-    root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    root = await folders.make("zhiyin-preview-");
     await writeFile(join(root, "index.html"), "second");
     await expect(
       preview.open("index.html", undefined, binding),
@@ -117,7 +121,7 @@ describe("workspace preview", () => {
   });
 
   it("does not start or retain a preview after cancellation", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-preview-"));
+    const root = await folders.make("zhiyin-preview-");
     await mkdir(join(root, "site"));
     await writeFile(join(root, "site/index.html"), "preview");
     const preview = new WorkspacePreview(() => root);

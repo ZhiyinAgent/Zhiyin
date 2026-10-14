@@ -1,8 +1,12 @@
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { gitAutomation, resolveGit } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const emptyEnvironment: NodeJS.ProcessEnv = { PATH: "" };
 
@@ -66,7 +70,7 @@ withGit("gitAutomation against a real repository", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), "zhiyin-git-connector-"));
+    root = await folders.make("zhiyin-git-connector-");
     process.env.GIT_AUTHOR_NAME = "Test";
     process.env.GIT_AUTHOR_EMAIL = "test@example.com";
     process.env.GIT_COMMITTER_NAME = "Test";
@@ -219,7 +223,7 @@ withGit("gitAutomation against a real repository", () => {
 
   it("commits in the workspace's repository when Zhiyin inherited variables naming another", async () => {
     // As a terminal, or a git hook, that started Zhiyin would have left them.
-    const elsewhere = await mkdtemp(join(tmpdir(), "zhiyin-git-elsewhere-"));
+    const elsewhere = await folders.make("zhiyin-git-elsewhere-");
     await execGitInit(git as string, elsewhere);
     process.env.GIT_DIR = join(elsewhere, ".git");
     process.env.GIT_INDEX_FILE = join(elsewhere, ".git", "other-index");

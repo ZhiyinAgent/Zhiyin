@@ -1,7 +1,50 @@
-import { describe, expect, it } from "vitest";
-import { WorkspaceTools, shellAvailability } from "../src/index.js";
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { delimiter, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import {
+  WorkspaceTools,
+  resolveShell,
+  shellAvailability,
+} from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const emptyEnvironment: NodeJS.ProcessEnv = { PATH: "" };
+
+describe("the bash WSL puts on PATH", () => {
+  it("is never taken for the shell: its commands would run in a Linux machine Zhiyin does not contain", async () => {
+    const root = await folders.make("zhiyin-wsl-");
+    const windows = join(root, "Windows");
+    const local = join(root, "Local");
+    const system = join(windows, "System32");
+    const aliases = join(local, "Microsoft", "WindowsApps");
+    const tools = join(root, "tools");
+    try {
+      for (const folder of [system, aliases, tools]) {
+        await mkdir(folder, { recursive: true });
+        await writeFile(join(folder, "bash.exe"), "");
+      }
+      const environment = {
+        SystemRoot: windows,
+        LOCALAPPDATA: local,
+        PATH: [system, aliases].join(delimiter),
+      };
+
+      expect(shellAvailability(environment).available).toBe(false);
+      expect(
+        resolveShell({
+          ...environment,
+          PATH: [system, aliases, tools].join(delimiter),
+        }),
+      ).toBe(join(tools, "bash.exe"));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("shell availability", () => {
   it("is available when a real shell is found", () => {

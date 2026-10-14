@@ -256,6 +256,9 @@ importers:
       '@zhiyin/recovery':
         specifier: workspace:*
         version: link:../recovery
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
       '@zhiyin/tools':
         specifier: workspace:*
         version: link:../tools
@@ -268,8 +271,16 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
-  packages/audit: {}
+  packages/audit:
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/blender-studio:
     dependencies:
@@ -282,6 +293,10 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/capabilities:
     dependencies:
@@ -291,12 +306,6 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
-      '@zhiyin/document-compiler':
-        specifier: workspace:*
-        version: link:../document-compiler
-      '@zhiyin/git-connector':
-        specifier: workspace:*
-        version: link:../git-connector
       '@zhiyin/interactive-browser':
         specifier: workspace:*
         version: link:../interactive-browser
@@ -306,9 +315,6 @@ importers:
       '@zhiyin/plugins':
         specifier: workspace:*
         version: link:../plugins
-      '@zhiyin/python-sandbox':
-        specifier: workspace:*
-        version: link:../python-sandbox
       '@zhiyin/toolchains':
         specifier: workspace:*
         version: link:../toolchains
@@ -323,6 +329,10 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/conversation-rewind:
     dependencies:
@@ -393,6 +403,9 @@ importers:
       '@zhiyin/recovery':
         specifier: workspace:*
         version: link:../recovery
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
       '@zhiyin/toolchains':
         specifier: workspace:*
         version: link:../toolchains
@@ -411,6 +424,10 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/document-viewer:
     dependencies:
@@ -427,6 +444,9 @@ importers:
       '@zhiyin/process-ownership':
         specifier: workspace:*
         version: link:../process-ownership
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/git-connector:
     dependencies:
@@ -436,6 +456,10 @@ importers:
       '@zhiyin/process-ownership':
         specifier: workspace:*
         version: link:../process-ownership
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/interactive-browser:
     dependencies:
@@ -457,6 +481,10 @@ importers:
       playwright-core:
         specifier: 1.63.0-alpha-2026-08-31
         version: 1.63.0-alpha-2026-08-31
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/mcp:
     dependencies:
@@ -469,6 +497,10 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/model-client:
     dependencies:
@@ -478,6 +510,10 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/pdf-engine:
     dependencies:
@@ -502,12 +538,20 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/process-ownership:
     dependencies:
       koffi:
         specifier: 3.2.1
         version: 3.2.1
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/python-sandbox:
     dependencies:
@@ -517,6 +561,10 @@ importers:
       '@zhiyin/process-ownership':
         specifier: workspace:*
         version: link:../process-ownership
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/recovery:
     dependencies:
@@ -541,6 +589,10 @@ importers:
       '@zhiyin/recovery':
         specifier: workspace:*
         version: link:../recovery
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/session:
     dependencies:
@@ -550,12 +602,22 @@ importers:
       '@zhiyin/process-ownership':
         specifier: workspace:*
         version: link:../process-ownership
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/spelling:
     dependencies:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
+
+  packages/temporary-folders: {}
 
   packages/toolchains:
     dependencies:
@@ -565,6 +627,10 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/tools:
     dependencies:
@@ -586,12 +652,20 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../workspace-containment
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/usage:
     dependencies:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../contract
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
   packages/views:
     dependencies:
@@ -599,7 +673,11 @@ importers:
         specifier: workspace:*
         version: link:../contract
 
-  packages/workspace-containment: {}
+  packages/workspace-containment:
+    devDependencies:
+      '@zhiyin/temporary-folders':
+        specifier: workspace:*
+        version: link:../temporary-folders
 
 packages:
 

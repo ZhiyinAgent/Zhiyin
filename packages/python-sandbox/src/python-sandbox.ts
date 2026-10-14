@@ -1,42 +1,13 @@
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import type {
-  ActionDetail,
-  ToolCallInspection,
-  ToolInvocationResult,
-} from "@zhiyin/contract";
+import type { ConnectionTool, OfferedConnection } from "@zhiyin/contract";
 import {
   runProcess as runProgram,
   type ProcessContainment as ProgramContainment,
   type ProcessRun as ProgramRun,
   type RunProcess as RunProgram,
 } from "@zhiyin/process-ownership";
-
-export type SandboxTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Readonly<Record<string, unknown>>;
-};
-
-export type SandboxAutomation = {
-  inspect(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-  ): Promise<ToolCallInspection>;
-  describeResult(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    result: ToolInvocationResult,
-  ): readonly ActionDetail[];
-  listTools(): Promise<readonly SandboxTool[]>;
-  callTool(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-  close(): Promise<void>;
-};
 
 export type PythonSandboxOptions = {
   /** The folder scripts read and write in. No folder, no running. */
@@ -70,7 +41,7 @@ export const defaultPackages = [
 const notInstalled =
   "The Python environment is not installed. Install it from the Data Science plugin before running scripts.";
 
-const tools: readonly SandboxTool[] = [
+const tools: readonly ConnectionTool[] = [
   {
     name: "run_python",
     description:
@@ -160,7 +131,7 @@ function pythonEnvironment(): Record<string, string | undefined> {
 
 export function pythonSandbox(
   options: PythonSandboxOptions,
-): SandboxAutomation {
+): OfferedConnection {
   const run = options.run ?? runProgram;
   const timeoutMs = options.timeoutMs ?? 300_000;
   const prepareTimeoutMs = options.prepareTimeoutMs ?? 900_000;

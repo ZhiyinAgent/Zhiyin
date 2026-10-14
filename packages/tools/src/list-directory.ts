@@ -1,4 +1,4 @@
-import { readdir, realpath, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import type {
   ToolCallInspection,
@@ -12,6 +12,7 @@ import {
   errorCode,
   isAbortError,
   normalizePath,
+  realLocation,
   scopeOf,
   toForwardSlashes,
   type PathScope,
@@ -175,16 +176,11 @@ export async function runListDirectory(
   if (!input) return { ok: false, reason: "The directory input is invalid." };
 
   try {
-    const [realRoot, realTarget] = await Promise.all([
-      realpath(root),
-      realpath(resolve(root, input.path)),
-    ]);
+    const real = await realLocation(root, input.path);
+    const realTarget = real.path;
     // A link can point out of the workspace after the request was presented as
     // staying in it. The approval that was given was for the contained listing.
-    if (
-      inspected.scope === "workspace" &&
-      scopeOf(realRoot, realTarget) !== "workspace"
-    ) {
+    if (inspected.scope === "workspace" && real.scope !== "workspace") {
       return {
         ok: false,
         reason: "The directory leads outside the current workspace.",

@@ -1,5 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createServer, type ServerResponse } from "node:http";
 import {
@@ -7,7 +6,7 @@ import {
   SdkErrorCode,
   SdkHttpError,
 } from "@modelcontextprotocol/client";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   InMemoryMcpCredentials,
   ManagedMcpServers,
@@ -15,11 +14,16 @@ import {
   McpUnauthorizedError,
   connectHttpMcpServer,
   type McpConnection,
-  type McpConnectionTool,
   type McpConnectionFactory,
 } from "../src/index.js";
+import type { ConnectionTool } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import type { McpCredentialStore } from "../src/credentials.js";
 import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * Choices about connections are written by reading the whole settings file,
@@ -29,7 +33,7 @@ import { managed } from "./declarations.js";
 describe("ManagedMcpServers concurrent choices", () => {
   it("keeps every tool choice made at the same time", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [{ name: "read" }],
         callTool: async () => ({ content: [] }),
@@ -67,7 +71,7 @@ describe("connections come only from declarations", () => {
   function engine(
     credentials: McpCredentialStore = new InMemoryMcpCredentials(),
   ) {
-    return mkdtemp(join(tmpdir(), "zhiyin-mcp-")).then((directory) =>
+    return folders.make("zhiyin-mcp-").then((directory) =>
       managed(
         directory,
         async () => ({
@@ -156,7 +160,7 @@ describe("connections come only from declarations", () => {
 
   it("marks as reading only the tools its declaration names, never on the server's own annotation", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [
           { name: "search" },
@@ -185,7 +189,7 @@ describe("connections come only from declarations", () => {
   it("does not open a withheld application connection for a conversation", async () => {
     const opened: string[] = [];
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => {
         throw new Error("no package servers here");
       },
@@ -215,7 +219,7 @@ describe("connections come only from declarations", () => {
 describe("ManagedMcpServers", () => {
   it("does not let remote result metadata claim built-in presentation", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [{ name: "browser_navigate" }],
         callTool: async () => ({
@@ -243,7 +247,7 @@ describe("ManagedMcpServers", () => {
   });
   it("vouches for the files a built-in connection says a call will change, and never for a remote one", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [
           {
@@ -300,7 +304,7 @@ describe("ManagedMcpServers", () => {
   it("uses trusted built-in presentation while preserving approval identity and result failure", async () => {
     let root = "workspace-a";
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => {
         throw new Error("No external connection");
       },
@@ -384,7 +388,7 @@ describe("ManagedMcpServers", () => {
   it("lets a built-in connection declare the files a successful call produced", async () => {
     let fails = false;
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => {
         throw new Error("No external connection");
       },
@@ -615,7 +619,7 @@ describe("ManagedMcpServers", () => {
   it("refuses a connection changed after its action was approved", async () => {
     let executed = false;
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [{ name: "read" }],
         callTool: async () => {
@@ -648,7 +652,7 @@ describe("ManagedMcpServers", () => {
     expect(executed).toBe(false);
   });
   it("preserves tool execution failures without losing the connection", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -679,7 +683,7 @@ describe("ManagedMcpServers", () => {
     );
     const traceback =
       "Traceback (most recent call last):\n  File \"<string>\", line 9\nKeyError: 'amount'";
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -716,7 +720,7 @@ describe("ManagedMcpServers", () => {
       { content: [], structuredContent: ["not", "an", "object"] },
       { content: [], isError: "yes" },
     ];
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -743,7 +747,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("accepts text, image, and structured result content", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -780,7 +784,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("accepts an embedded text resource returned for a repository file", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const result = {
       content: [
         { type: "text", text: "successfully downloaded text file" },
@@ -818,7 +822,7 @@ describe("ManagedMcpServers", () => {
   it("distinguishes cancellation before dispatch from a late resolved remote result", async () => {
     let release!: (value: unknown) => void;
     let dispatched = 0;
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -865,7 +869,7 @@ describe("ManagedMcpServers", () => {
 
   it("preserves uncertainty when a dispatched remote call throws after cancellation", async () => {
     let reject!: (error: Error) => void;
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -902,7 +906,7 @@ describe("ManagedMcpServers", () => {
     });
   });
   it("shortens an oversized result instead of throwing the whole answer away", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -938,7 +942,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("takes a picture out of the text and carries it as a picture", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const picture = "A".repeat(400_000);
     const servers = managed(
       directory,
@@ -974,7 +978,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("carries only as many pictures as a turn can hold, and says so", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -1021,7 +1025,7 @@ describe("ManagedMcpServers", () => {
       close,
     };
     const connect = vi.fn<McpConnectionFactory>(async () => connection);
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(directory, connect, new InMemoryMcpCredentials());
 
     await servers.declare({
@@ -1089,7 +1093,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports a failed server's state and tries again when asked or switched back on", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const connect = vi.fn(async () => {
       throw new Error("offline");
     });
@@ -1141,7 +1145,7 @@ describe("ManagedMcpServers", () => {
     ];
     for (const [error, sentence] of causes) {
       const servers = managed(
-        await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+        await folders.make("zhiyin-mcp-"),
         async () => {
           throw error;
         },
@@ -1165,7 +1169,7 @@ describe("ManagedMcpServers", () => {
 
   it("names the connection that is down when one of its tools is called", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => {
         throw new SdkError(SdkErrorCode.RequestTimeout, "Request timed out");
       },
@@ -1204,7 +1208,7 @@ describe("ManagedMcpServers", () => {
       };
     });
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       connect,
       new InMemoryMcpCredentials(),
       [],
@@ -1237,7 +1241,7 @@ describe("ManagedMcpServers", () => {
       throw new McpUnauthorizedError("refused");
     });
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       connect,
       new InMemoryMcpCredentials(),
       [],
@@ -1271,7 +1275,7 @@ describe("ManagedMcpServers", () => {
       close,
     }));
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       connect,
       new InMemoryMcpCredentials(),
       [],
@@ -1316,7 +1320,7 @@ describe("ManagedMcpServers", () => {
       };
     });
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       connect,
       new InMemoryMcpCredentials(),
       [],
@@ -1375,7 +1379,7 @@ describe("ManagedMcpServers", () => {
     const address = server.address();
     if (!address || typeof address === "string")
       throw new Error("No test port");
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       connectHttpMcpServer,
@@ -1412,7 +1416,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports a refused sign-in apart from an unreachable server", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => {
@@ -1440,7 +1444,7 @@ describe("ManagedMcpServers", () => {
 
   it("withdraws tools and asks for a new token when a call is refused", async () => {
     const close = vi.fn(async () => {});
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -1474,7 +1478,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("forgets a saved token when the endpoint changes", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const credentials = new InMemoryMcpCredentials();
     const servers = managed(
       directory,
@@ -1503,7 +1507,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("forgets a saved token when the server is removed", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const credentials = new InMemoryMcpCredentials();
     const servers = managed(
       directory,
@@ -1528,7 +1532,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reconnects after a token is saved and after it is cleared", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const credentials = new InMemoryMcpCredentials();
     const tokens: (string | undefined)[] = [];
     const servers = managed(
@@ -1566,7 +1570,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports unreachable secure storage without claiming a token is absent", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -1604,8 +1608,44 @@ describe("ManagedMcpServers", () => {
     );
   });
 
+  it("asks secure storage again once it comes back, rather than keeping it unavailable", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let locked = true;
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      {
+        get: async () => {
+          if (locked) throw new Error("locked");
+          return "saved-token";
+        },
+        set: async () => {},
+        delete: async () => {},
+      },
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "unavailable" },
+    });
+
+    locked = false;
+
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "saved" },
+    });
+  });
+
   it("refuses to connect to an endpoint that carries its own credentials", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const connect = vi.fn(async () => ({
       listTools: async () => [],
       callTool: async () => ({ content: [] }),
@@ -1631,7 +1671,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("refuses to send a token across the network over plain http, and connects to this computer over it", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const connect = vi.fn(async () => ({
       listTools: async () => [],
       callTool: async () => ({ content: [] }),
@@ -1665,7 +1705,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("offers a built-in connection's tools without any saved definition", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => {
@@ -1708,7 +1748,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("keeps built-in connections working, and leaves declared ones waiting, when the saved settings are damaged", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const remoteClose = vi.fn(async () => {});
     const servers = managed(
       directory,
@@ -1760,7 +1800,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("keeps a built-in connection available and reports its actual tool error", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const close = vi.fn(async () => {});
     const servers = managed(
       directory,
@@ -1795,7 +1835,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("routes a conversation-scoped built-in only through that conversation's connection", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const opened: string[] = [];
     const closed: string[] = [];
     const servers = managed(
@@ -1849,7 +1889,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("refuses to declare, configure, or credential a built-in connection", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -1890,7 +1930,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports a built-in that cannot start, without losing the others", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const servers = managed(
       directory,
       async () => ({
@@ -1930,7 +1970,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("retries an unscoped built-in that failed once fixed, and asks again next time", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     let missing = true;
     const servers = managed(
       directory,
@@ -1970,7 +2010,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports a conversation-scoped built-in's tools and readiness without opening a conversation", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     const opened: (string | undefined)[] = [];
     const servers = managed(
       directory,
@@ -2010,7 +2050,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("reports why a conversation-scoped built-in cannot work here, and asks again next time", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     let refusal: string | undefined = "No supported browser could be started.";
     const servers = managed(
       directory,
@@ -2054,7 +2094,7 @@ describe("ManagedMcpServers", () => {
   });
 
   it("closes built-in connections when the application shuts down", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "zhiyin-mcp-"));
+    const directory = await folders.make("zhiyin-mcp-");
     let closed = false;
     const servers = managed(
       directory,
@@ -2111,7 +2151,7 @@ describe("connectors connect when they are used", () => {
   ) {
     const dialed: string[] = [];
     const servers = new ManagedMcpServers(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async (definition) => {
         dialed.push(definition.id);
         return {
@@ -2219,7 +2259,7 @@ describe("a connector call is checked against the tool's input schema", () => {
 
   async function withTool(inputSchema: Record<string, unknown>) {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [{ name: "search", inputSchema }],
         callTool: async () => ({ content: [] }),
@@ -2288,9 +2328,9 @@ describe("a connector call is checked against the tool's input schema", () => {
 
 describe("a connector's tools follow what the server says it offers", () => {
   it("offers the new tools once a connected server says its list changed", async () => {
-    let announce: ((tools: readonly McpConnectionTool[]) => void) | undefined;
+    let announce: ((tools: readonly ConnectionTool[]) => void) | undefined;
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-")),
+      await folders.make("zhiyin-mcp-"),
       async () => ({
         listTools: async () => [{ name: "search" }],
         callTool: async () => ({ content: [] }),
@@ -2377,7 +2417,7 @@ describe("a connector's tools follow what the server says it offers", () => {
         async () => undefined,
       );
       try {
-        const changed = new Promise<readonly McpConnectionTool[]>((resolve) =>
+        const changed = new Promise<readonly ConnectionTool[]>((resolve) =>
           connection.onToolsChanged?.(resolve),
         );
         expect((await connection.listTools()).map((tool) => tool.name)).toEqual(

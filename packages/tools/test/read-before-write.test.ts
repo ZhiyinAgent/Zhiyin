@@ -1,12 +1,13 @@
-import { mkdtemp, readFile, stat, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import {
-  WorkspaceTools,
-  type ConversationItems,
-  type FileRead,
-} from "../src/index.js";
+import { afterEach, describe, expect, it } from "vitest";
+import type { FileRead } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import { WorkspaceTools, type ConversationItems } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 function rememberedReads(): ConversationItems {
   const reads = new Map<string, FileRead>();
@@ -23,7 +24,7 @@ function rememberedReads(): ConversationItems {
 
 describe("an existing file the model intends to change", () => {
   it("must have been read in this conversation before a replacement is approved", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(join(root, "report.txt"), "Owner's draft.");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     const write = { path: "report.txt", content: "Assistant's draft." };
@@ -60,7 +61,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("refuses an edit after someone changes the file following the read", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(join(root, "report.txt"), "First draft.");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     await tools.execute(
@@ -91,7 +92,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("detects a same-size external change even when the timestamp is restored", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     const path = join(root, "report.txt");
     await writeFile(path, "First draft.");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
@@ -115,7 +116,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("allows the model to revise a complete file it just created", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     expect(
       await tools.execute(
@@ -135,7 +136,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("still knows the whole of a file it wrote after reading a few of its lines", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     const text = [
       "#set par(leading: 0.8em)",
@@ -177,7 +178,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("does not treat one page of a larger file as a complete read", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(join(root, "long.txt"), "line\n".repeat(2_100));
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     await tools.execute(
@@ -209,7 +210,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("allows a partial multi_edit only where the model saw the replaced lines", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(
       join(root, "long.txt"),
       [
@@ -262,7 +263,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("lets the model edit a file again after its own edit, without re-reading it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(join(root, "page.html"), "<h1>Title</h1>\n<p>Body</p>\n");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     await tools.execute(
@@ -297,7 +298,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("still refuses an edit after its own edit when someone else then changes the file", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(join(root, "notes.txt"), "one\ntwo\n");
     const tools = new WorkspaceTools(root, { items: rememberedReads() });
     await tools.execute(
@@ -335,7 +336,7 @@ describe("an existing file the model intends to change", () => {
   });
 
   it("after its own edit, keeps unseen lines unseen and shifts seen ones", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-seen-"));
+    const root = await folders.make("zhiyin-seen-");
     await writeFile(
       join(root, "long.txt"),
       [

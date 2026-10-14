@@ -104,7 +104,8 @@ export class ConnectionTokens {
           ? { status: "signed-in" }
           : { status: "none" };
     } catch {
-      state = { status: "unavailable", reason: STORAGE_UNAVAILABLE };
+      // Not kept: storage that comes back is asked again on the next look.
+      return { status: "unavailable", reason: STORAGE_UNAVAILABLE };
     }
     this.#states.set(id, state);
     return state;
@@ -114,10 +115,7 @@ export class ConnectionTokens {
     try {
       await this.#store.set(id, token);
     } catch (error) {
-      this.#states.set(id, {
-        status: "unavailable",
-        reason: STORAGE_UNAVAILABLE,
-      });
+      this.#states.delete(id);
       throw new Error(STORAGE_UNAVAILABLE, { cause: error });
     }
     this.#states.set(id, { status: "saved" });
@@ -128,10 +126,7 @@ export class ConnectionTokens {
       await this.#signedIn.write(id, signedIn);
     } catch (error) {
       await this.#signedIn.delete(id).catch(() => undefined);
-      this.#states.set(id, {
-        status: "unavailable",
-        reason: STORAGE_UNAVAILABLE,
-      });
+      this.#states.delete(id);
       throw new Error(STORAGE_UNAVAILABLE, { cause: error });
     }
     this.#states.set(id, { status: "signed-in" });
@@ -145,10 +140,7 @@ export class ConnectionTokens {
       this.#states.set(id, { status: "none" });
       return true;
     } catch {
-      this.#states.set(id, {
-        status: "unavailable",
-        reason: STORAGE_UNAVAILABLE,
-      });
+      this.#states.delete(id);
       return false;
     }
   }

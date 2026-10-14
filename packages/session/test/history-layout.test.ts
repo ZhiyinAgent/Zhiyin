@@ -5,18 +5,11 @@
  * their summaries and ordered by when each conversation last changed.
  */
 
-import {
-  mkdtemp,
-  open,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { open, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions } from "../src/index.js";
 import {
   conversationFolder,
@@ -24,18 +17,12 @@ import {
   plantHistory,
 } from "./planted-history.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-history-layout-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-history-layout-");
 }
 
 function task(id: string, updatedAt: string) {

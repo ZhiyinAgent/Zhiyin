@@ -8,25 +8,24 @@
  * is ever deleted permanently that the approval did not show as permanent.
  */
 
-import {
-  mkdtemp,
-  mkdir,
-  readFile,
-  realpath,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { userInfo } from "node:os";
 import { join, relative } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools, type RecycleBin } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * Resolved, because the temporary folder can be named by its short 8.3 form
  * (`RUNNER~1`) while the tools pass the Recycle Bin long, resolved paths.
  */
 async function workspace(): Promise<string> {
-  const root = await realpath(await mkdtemp(join(tmpdir(), "zhiyin-delete-")));
+  const root = await realpath(await folders.make("zhiyin-delete-"));
   await writeFile(join(root, "notes.md"), "Notes.");
   await writeFile(join(root, "huge.iso"), "A large image.");
   await mkdir(join(root, "build", "cache"), { recursive: true });
@@ -261,6 +260,54 @@ describe("delete_file", () => {
       reason: "build/app.js is inside build, which is already being deleted.",
       correctable: true,
     });
+  });
+
+  it("says a target could not be checked when Windows refuses to look, not that it is absent", async () => {
+    const root = await workspace();
+    const denied = join(root, "private");
+    await mkdir(join(denied, "inner"), { recursive: true });
+    await writeFile(join(denied, "inner", "notes.md"), "Kept from view.");
+    const user = userInfo().username;
+    execFileSync("icacls", [denied, "/deny", `${user}:(OI)(CI)(F)`]);
+    try {
+      const tools = new WorkspaceTools(root, {
+        recycleBin: recycleBin(root).bin,
+      });
+
+      expect(
+        await tools.inspect("delete_file", {
+          paths: ["private/inner/notes.md"],
+        }),
+      ).toEqual({
+        ok: false,
+        reason: "private/inner/notes.md could not be checked before deleting.",
+      });
+    } finally {
+      execFileSync("icacls", [denied, "/remove:d", user]);
+    }
+  });
+
+  it("counts a large folder's files only up to its limit, and says there are more", async () => {
+    const root = await workspace();
+    const crowded = join(root, "crowded");
+    await mkdir(crowded);
+    for (let first = 0; first < 10_001; first += 500)
+      await Promise.all(
+        Array.from({ length: Math.min(500, 10_001 - first) }, (_, index) =>
+          writeFile(join(crowded, `${first + index}.txt`), ""),
+        ),
+      );
+    const tools = new WorkspaceTools(root, {
+      recycleBin: recycleBin(root).bin,
+    });
+
+    const inspection = await tools.inspect("delete_file", {
+      paths: ["crowded"],
+    });
+
+    expect(JSON.stringify(inspection)).toContain(
+      "crowded, a folder with more than 10000 files",
+    );
   });
 
   it("asks again when a target changed after it was shown", async () => {

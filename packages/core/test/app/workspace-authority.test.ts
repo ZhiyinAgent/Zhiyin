@@ -5,29 +5,21 @@
  * at one folder while telling the person it is working in another.
  */
 
-import { mkdtemp, rename, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rename } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileSessions } from "@zhiyin/session";
 import { WorkspaceTools } from "@zhiyin/tools";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { stubDependencies, until, loopFrom } from "./support.js";
 
-const temporary: string[] = [];
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 async function temporaryDirectory(label: string) {
-  const path = await mkdtemp(join(tmpdir(), `zhiyin-${label}-`));
-  temporary.push(path);
-  return path;
+  return folders.make(`zhiyin-${label}-`);
 }
-
-afterEach(async () => {
-  await Promise.all(
-    temporary
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
-  );
-});
 
 function loopWithFolders(options: {
   readonly failSaveAfter?: number;
@@ -248,8 +240,7 @@ describe("AgentLoop folder authority across a restart", () => {
     await first.loop.createTask();
     await first.loop.selectWorkspace(work);
 
-    await rename(work, `${work}-moved`);
-    temporary.push(`${work}-moved`);
+    await rename(work, join(await temporaryDirectory("moved"), "work"));
     const second = await launch(data);
 
     expect(second.tools.workspaceRoot()).toBeUndefined();
@@ -289,8 +280,7 @@ describe("a conversation whose folder moved", () => {
     await loop.selectWorkspace(gone);
     const other = await loop.createTask();
     await loop.selectWorkspace(here);
-    await rename(gone, `${gone}-moved`);
-    temporary.push(`${gone}-moved`);
+    await rename(gone, join(await temporaryDirectory("moved"), "gone"));
 
     await loop.selectTask(moved);
 

@@ -1,8 +1,8 @@
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import type { ToolCallInspection } from "@zhiyin/contract";
-import type { ConversationItems, FileRead } from "./conversation-items.js";
+import type { FileRead, ToolCallInspection } from "@zhiyin/contract";
+import type { ConversationItems } from "./conversation-items.js";
 
 export type ReadStateContext = {
   readonly items?: ConversationItems | undefined;

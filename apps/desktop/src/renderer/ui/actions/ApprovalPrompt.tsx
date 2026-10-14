@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type {
   ApprovalRequest,
   FileChange,
@@ -8,7 +7,7 @@ import type {
 import { ApprovalChoice, type ApprovalDecision } from "./ApprovalChoice.js";
 import { ApprovalEvidence } from "./ApprovalEvidence.js";
 import { DiffModal } from "./DiffModal.js";
-import { Icon, visibleText } from "../shared/index.js";
+import { Icon, PointedTip, visibleText } from "../shared/index.js";
 import styles from "./actions.module.css";
 
 type ApprovalPromptProps = {
@@ -220,20 +219,13 @@ function ApprovalClaim({
         </button>
       </span>{" "}
       {claim}
-      {claimTipAt &&
-        createPortal(
-          <span
-            id={claimTipId}
-            role="tooltip"
-            className={styles["approval__claim-tip"]}
-            style={{ left: claimTipAt.x, top: claimTipAt.y }}
-          >
-            This explanation was written by the AI. It can be wrong or
-            deliberately misleading. Check what will run and what will change
-            before you approve.
-          </span>,
-          document.body,
-        )}
+      {claimTipAt && (
+        <PointedTip id={claimTipId} at={claimTipAt}>
+          This explanation was written by the AI. It can be wrong or
+          deliberately misleading. Check what will run and what will change
+          before you approve.
+        </PointedTip>
+      )}
     </p>
   );
 }

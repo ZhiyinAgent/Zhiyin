@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 /** What the keyboard can reach inside a dialog. */
 const reachable =
@@ -10,11 +10,19 @@ const drawn = (element: HTMLElement) =>
 
 /**
  * Keeps the keyboard inside a modal dialog: focus moves into it when it
- * opens, Tab and Shift+Tab go round its own controls, and focus goes back to
- * where it was when it closes. The dialog holding focus answers Tab; with
- * focus in none, the last one opened does. Escape stays each dialog's own.
+ * opens, Tab and Shift+Tab go round its own controls, Escape closes it, and
+ * focus goes back to where it was when it closes. The dialog holding focus
+ * answers the keys; with focus in none, the last one opened does, so Escape
+ * closes one dialog at a time.
  */
-export function useModalFocus(dialog: RefObject<HTMLElement | null>) {
+export function useModalFocus(
+  dialog: RefObject<HTMLElement | null>,
+  onEscape?: () => void,
+) {
+  const escape = useRef(onEscape);
+  useLayoutEffect(() => {
+    escape.current = onEscape;
+  });
   useEffect(() => {
     const returnTo =
       document.activeElement instanceof HTMLElement
@@ -23,10 +31,22 @@ export function useModalFocus(dialog: RefObject<HTMLElement | null>) {
     dialog.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       const own = dialog.current;
-      if (event.key !== "Tab" || !own) return;
+      if (!own) return;
       const focused = document.activeElement;
-      const modals = document.querySelectorAll('[role="dialog"][aria-modal]');
-      if (!own.contains(focused) && modals[modals.length - 1] !== own) return;
+      const modals = [
+        ...document.querySelectorAll('[role="dialog"][aria-modal]'),
+      ];
+      if (event.key === "Escape") {
+        const answering =
+          modals.find((modal) => modal.contains(focused)) ?? modals.at(-1);
+        if (answering !== own || !escape.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        escape.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      if (!own.contains(focused) && modals.at(-1) !== own) return;
       const controls = [...own.querySelectorAll<HTMLElement>(reachable)].filter(
         drawn,
       );

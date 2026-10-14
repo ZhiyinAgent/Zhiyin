@@ -1,16 +1,20 @@
-import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
 import { WorkspaceArtifacts } from "@zhiyin/artifacts";
 import { WorkspaceTools } from "@zhiyin/tools";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   currentApprovalId,
   stubDependencies,
   until,
   loopFrom,
 } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 function writesFile(path: string) {
   return {
@@ -106,7 +110,7 @@ describe("AgentLoop artifacts", () => {
   });
 
   it("offers a produced file for review and export only while the task still knows it", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-"));
+    const root = await folders.make("zhiyin-loop-");
     await writeFile(join(root, "brief.md"), "A finished brief.", "utf8");
     const tools = new WorkspaceTools(root);
     const deps = stubDependencies(() => {});
@@ -143,10 +147,7 @@ describe("AgentLoop artifacts", () => {
       reason: "This task has no record of that file.",
     });
 
-    const destination = join(
-      await mkdtemp(join(tmpdir(), "zhiyin-export-")),
-      "copy.md",
-    );
+    const destination = join(await folders.make("zhiyin-export-"), "copy.md");
     await expect(
       loop.exportArtifact(taskId, "brief.md", async () => destination),
     ).resolves.toEqual({ status: "saved", destination });
@@ -162,7 +163,7 @@ describe("AgentLoop artifacts", () => {
    * person is asked about afresh.
    */
   it("refuses an approved create that became an overwrite before it ran, and tells the model why", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-"));
+    const root = await folders.make("zhiyin-loop-");
     const tools = new WorkspaceTools(root);
     const deps = stubDependencies(() => {});
     let turns = 0;
@@ -240,7 +241,7 @@ describe("AgentLoop artifacts", () => {
   });
 
   it("says an approved write will replace an existing file before it runs", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-loop-"));
+    const root = await folders.make("zhiyin-loop-");
     await writeFile(join(root, "brief.md"), "The earlier draft.", "utf8");
     const tools = new WorkspaceTools(root);
     const deps = stubDependencies(() => {});

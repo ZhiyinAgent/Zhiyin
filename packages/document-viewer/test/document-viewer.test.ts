@@ -1,6 +1,5 @@
 import {
   mkdir,
-  mkdtemp,
   open,
   realpath,
   rm,
@@ -8,12 +7,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { DocumentPanelState } from "@zhiyin/contract";
 import { loadCanvas } from "@zhiyin/pdf-engine";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   DocumentViewer,
   mayOpenInItsOwnApp,
@@ -22,8 +21,12 @@ import {
 import { pdf, protectedPdf } from "./pdf-builder.js";
 import { containment, serviceProcess } from "./processes.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace() {
-  const parent = await mkdtemp(join(tmpdir(), "zhiyin-documents-"));
+  const parent = await folders.make("zhiyin-documents-");
   const root = join(parent, "work");
   await mkdir(join(root, "reports"), { recursive: true });
   await writeFile(join(root, "reports", "q3.pdf"), pdf({ pages: 3 }));

@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
-import { constants, getPriority, tmpdir } from "node:os";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { constants, getPriority } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import koffi from "koffi";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   containmentAvailability,
   openProcessContainer,
@@ -12,10 +13,14 @@ import {
   runProcess,
 } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
 async function workingDirectory() {
-  return mkdtemp(join(tmpdir(), "zhiyin-containment-"));
+  return folders.make("zhiyin-containment-");
 }
 
 /** Polls rather than sleeps, so a slow machine waits and a fast one does not. */

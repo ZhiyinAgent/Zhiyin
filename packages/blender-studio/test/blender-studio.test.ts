@@ -1,15 +1,14 @@
 import {
   mkdir,
-  mkdtemp,
   readFile,
   readdir,
   realpath,
-  rm,
   writeFile,
 } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join, parse } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   ConversationScenes,
   sceneAutomation,
@@ -21,23 +20,15 @@ import {
   type Behaviour,
 } from "./stand-in-blender.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
+
 const started: ConversationScenes[] = [];
 // Sessions are ended before their folders go: one still drawing a preview
 // would be writing into a folder as it is removed. A write already under way
 // when its session ends is waited out.
 afterEach(async () => {
   await Promise.all(started.splice(0).map((scenes) => scenes.closeAll()));
-  await Promise.all(
-    roots.splice(0).map((root) =>
-      rm(root, {
-        recursive: true,
-        force: true,
-        maxRetries: 10,
-        retryDelay: 20,
-      }),
-    ),
-  );
+  await folders.removeAll();
 });
 
 /** Waits for something the session does after answering, such as a preview. */
@@ -57,8 +48,7 @@ async function setUp(
 ) {
   // By its full name: Windows may give the temp folder by a short one, and
   // the tools hand Blender the folder as it really is.
-  const root = await realpath(await mkdtemp(join(tmpdir(), "zhiyin-studio-")));
-  roots.push(root);
+  const root = await realpath(await folders.make("zhiyin-studio-"));
   const workspace = join(root, "workspace");
   const data = join(root, "data");
   await mkdir(workspace, { recursive: true });

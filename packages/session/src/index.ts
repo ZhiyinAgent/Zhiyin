@@ -7,7 +7,6 @@ export * from "./session.js";
 
 export {
   defaultKeptLimits,
-  type FileRead,
   type KeptItem,
   type KeptKind,
   type KeptLimits,

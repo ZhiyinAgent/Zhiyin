@@ -7,6 +7,7 @@ import type {
 import type { ConversationTools } from "@zhiyin/capabilities";
 import type { ModelMessage, ModelTool } from "@zhiyin/model-client";
 import { agentSystemMessage } from "./system-message.js";
+import { boundedText, recordFrom } from "./generated-fields.js";
 import { harnessNotice } from "../turn/notices.js";
 
 /**
@@ -80,23 +81,6 @@ export function specialistRunsText(
 export const conversationTitleLimit = 72;
 
 const maximumConversationTitleLength = conversationTitleLimit;
-
-function recordFrom(value: string): Record<string, unknown> | undefined {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function boundedText(value: unknown, maximum: number): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const text = value.trim().replace(/\s+/g, " ");
-  return text && text.length <= maximum ? text : undefined;
-}
 
 export function conversationTitleFrom(value: string): string | undefined {
   const record = recordFrom(value);

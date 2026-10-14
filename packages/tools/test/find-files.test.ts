@@ -4,16 +4,20 @@
  * look everywhere it says how far it got instead of implying it did.
  */
 
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 import { runFindFiles } from "../src/find-files.js";
 import { bundledRipgrep } from "../src/ripgrep.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(files: readonly string[]): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-find-"));
+  const root = await folders.make("zhiyin-find-");
   for (const file of files) {
     await mkdir(join(root, file, ".."), { recursive: true });
     await writeFile(join(root, file), "x");

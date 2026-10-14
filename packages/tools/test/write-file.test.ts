@@ -1,18 +1,15 @@
-import {
-  chmod,
-  mkdtemp,
-  mkdir,
-  readdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "zhiyin-write-"));
+  return folders.make("zhiyin-write-");
 }
 
 describe("write_file", () => {

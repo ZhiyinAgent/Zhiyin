@@ -12,20 +12,24 @@
  * way would pass unchanged.
  */
 
-import { describe, expect, it } from "vitest";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it } from "vitest";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { WorkspaceTools } from "@zhiyin/tools";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { stubDependencies, loopFrom } from "./support.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** Split one fragment per character, which is the slowest a call can arrive. */
 const call = JSON.stringify({ path: "inside.txt" });
 
 describe("a turn whose round takes a while to compose", () => {
   it("tells the window something while the model is still writing the call", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-responsiveness-"));
+    const root = await folders.make("zhiyin-responsiveness-");
     await writeFile(join(root, "inside.txt"), "in", "utf8");
     const workspace = new WorkspaceTools(root, { shell: undefined });
 

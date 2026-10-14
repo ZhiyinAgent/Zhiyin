@@ -7,6 +7,8 @@
  * not run.
  */
 
+import { realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 import { staysInside } from "@zhiyin/workspace-containment";
 
 /** Tools speak workspace-relative, forward-slashed paths, on every platform. */
@@ -35,6 +37,27 @@ export type PathScope = "workspace" | "outside";
 
 export function scopeOf(root: string, target: string): PathScope {
   return staysInside(root, target) ? "workspace" : "outside";
+}
+
+/**
+ * Where an existing path really is once every link in it and in the root is
+ * followed: the second application of the rule, when the tool runs. A path that
+ * may not exist yet, or whose last link is itself what is acted on, resolves
+ * differently, so writing and deleting do their own.
+ */
+export async function realLocation(
+  root: string,
+  path: string,
+): Promise<{
+  readonly root: string;
+  readonly path: string;
+  readonly scope: PathScope;
+}> {
+  const [realRoot, real] = await Promise.all([
+    realpath(root),
+    realpath(resolve(root, path)),
+  ]);
+  return { root: realRoot, path: real, scope: scopeOf(realRoot, real) };
 }
 
 export function errorCode(error: unknown): unknown {

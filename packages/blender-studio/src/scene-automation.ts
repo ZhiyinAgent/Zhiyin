@@ -2,11 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
-  ActionDetail,
   FileChange,
   ProducedFile,
-  ToolCallInspection,
-  ToolInvocationResult,
+  WritingConnection,
 } from "@zhiyin/contract";
 import {
   folderFor,
@@ -17,7 +15,7 @@ import {
   type Refusal,
 } from "./paths.js";
 import type { SceneCommand, SceneSession } from "./scene-session.js";
-import { studioTools, type StudioTool } from "./tools.js";
+import { studioTools } from "./tools.js";
 import {
   addRows,
   cameraRows,
@@ -35,19 +33,6 @@ import {
 } from "./wording.js";
 
 type Args = Readonly<Record<string, unknown>>;
-
-export type SceneAutomation = {
-  listTools(): Promise<readonly StudioTool[]>;
-  inspect(name: string, args: Args): Promise<ToolCallInspection>;
-  callTool(name: string, args: Args, signal?: AbortSignal): Promise<unknown>;
-  describeResult(
-    name: string,
-    args: Args,
-    result: ToolInvocationResult,
-  ): readonly ActionDetail[];
-  produced(name: string, args: Args, value: unknown): readonly ProducedFile[];
-  close(): Promise<void>;
-};
 
 export type SceneAutomationOptions = {
   readonly workspaceRoot: () => string | undefined;
@@ -424,7 +409,7 @@ async function produced(written: readonly Written[]): Promise<ProducedFile[]> {
 export function sceneAutomation(
   session: SceneSession,
   options: SceneAutomationOptions,
-): SceneAutomation {
+): WritingConnection {
   const wrote = new WeakMap<object, readonly ProducedFile[]>();
   return {
     /** Asked again every look, so installing Blender is noticed without a restart. */

@@ -193,6 +193,15 @@ async function planWrite(
       reason: "The text is too large to write in one action.",
     };
   }
+  // Links are followed here as they are when writing, so a write a link would
+  // carry out of the folder is refused before it is offered for approval.
+  const realRoot = await realpath(root).catch(() => undefined);
+  if (realRoot && !(await resolveWritablePath(realRoot, input.path))) {
+    return {
+      ok: false,
+      reason: "The file must stay inside the current workspace.",
+    };
+  }
 
   const target = await describeTarget(root, input);
   if (target.kind === "blocked") return { ok: false, reason: target.reason };

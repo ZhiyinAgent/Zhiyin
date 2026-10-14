@@ -10,6 +10,4 @@ export { WorkspaceUploads, type UploadFile } from "./workspace-uploads.js";
 export {
   browserAutomation,
   describeBrowserAutomation,
-  type BrowserAutomation,
-  type AutomationTool,
 } from "./automation-server.js";

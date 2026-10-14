@@ -1,12 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type WorkspaceSnapshot,
   type WorkspaceTask,
 } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions, SessionStoreError } from "../src/index.js";
 import {
   plantHistory,
@@ -14,8 +12,6 @@ import {
   savedSettings,
   savedText,
 } from "./planted-history.js";
-
-const roots: string[] = [];
 
 describe("saved reasoning", () => {
   it("restores reasoning and the conversation's selected effort", async () => {
@@ -288,9 +284,7 @@ describe("saved reasoning", () => {
 });
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-session-test-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-session-test-");
 }
 
 const snapshot: WorkspaceSnapshot = {
@@ -426,11 +420,9 @@ function withoutCompaction(task: WorkspaceTask): WorkspaceTask {
   return rest;
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("FileSessions workspace persistence", () => {
   it("commits overlapping snapshots in submission order", async () => {

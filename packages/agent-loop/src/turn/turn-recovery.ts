@@ -7,6 +7,19 @@ import type { TurnRecords } from "./turn-records.js";
 import { modelFailure, TurnFailure } from "./turn-shared.js";
 import type { WorkLedger } from "./work-limits.js";
 
+/** Withdraws what the model answered since the round began, leaving no empty answer behind. */
+async function withdrawRound(
+  records: TurnRecords,
+  taskId: string,
+  messagesBeforeRound: number,
+): Promise<void> {
+  for (const message of records
+    .task(taskId)
+    .messages.slice(messagesBeforeRound))
+    if (message.role === "assistant")
+      await records.withdrawAssistantMessage(taskId, message.id);
+}
+
 export async function recoverConnectionFailure(options: {
   readonly error: unknown;
   readonly taskId: string;
@@ -25,11 +38,7 @@ export async function recoverConnectionFailure(options: {
   )
     return false;
 
-  for (const message of records
-    .task(taskId)
-    .messages.slice(options.messagesBeforeRound))
-    if (message.role === "assistant")
-      await records.withdrawAssistantMessage(taskId, message.id);
+  await withdrawRound(records, taskId, options.messagesBeforeRound);
 
   if (options.previousRecoveries > 0)
     throw new TurnFailure(
@@ -68,11 +77,7 @@ export async function recoverLongThought(options: {
       "The model kept reasoning without answering or acting, and was stopped twice. Try again, or choose less reasoning or another model.",
       ["tryAgain", "chooseModel"],
     );
-  for (const message of records
-    .task(taskId)
-    .messages.slice(options.messagesBeforeRound))
-    if (message.role === "assistant")
-      await records.withdrawAssistantMessage(taskId, message.id);
+  await withdrawRound(records, taskId, options.messagesBeforeRound);
   await records.showWorking(
     taskId,
     "The model reasoned at length without acting. Asking it to decide",
@@ -98,11 +103,7 @@ export async function recoverAnswerNow(options: {
   readonly history: ModelHistory;
 }): Promise<void> {
   const { taskId, records, history } = options;
-  for (const message of records
-    .task(taskId)
-    .messages.slice(options.messagesBeforeRound))
-    if (message.role === "assistant")
-      await records.withdrawAssistantMessage(taskId, message.id);
+  await withdrawRound(records, taskId, options.messagesBeforeRound);
   await records.showWorking(
     taskId,
     "Answering now",
@@ -125,11 +126,7 @@ export async function recoverSentNow(options: {
   readonly records: TurnRecords;
 }): Promise<void> {
   const { taskId, records } = options;
-  for (const message of records
-    .task(taskId)
-    .messages.slice(options.messagesBeforeRound))
-    if (message.role === "assistant")
-      await records.withdrawAssistantMessage(taskId, message.id);
+  await withdrawRound(records, taskId, options.messagesBeforeRound);
   await records.showWorking(
     taskId,
     "Reading your message",

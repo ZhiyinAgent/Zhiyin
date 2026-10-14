@@ -13,6 +13,9 @@ import {
   sendAnthropicMessages,
   type AnthropicMessagesDialect,
 } from "../src/wires/anthropic-messages/send.js";
+import { recording as recordingOf, type Sent } from "./lab-wire.js";
+
+export type { Sent } from "./lab-wire.js";
 
 const encoder = new TextEncoder();
 
@@ -75,26 +78,12 @@ export function answering(events: readonly Record<string, unknown>[]) {
   return streaming(sse(events));
 }
 
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
-
 /** Records each request, then answers it as `answer` does. */
 export function recording(
   sent: Sent[],
   answer: ModelFetch = answering(finished("end_turn")),
 ) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answer(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answer);
 }
 
 type SendOptions = {

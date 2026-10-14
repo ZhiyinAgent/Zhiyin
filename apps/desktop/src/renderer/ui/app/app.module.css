@@ -193,7 +193,7 @@
    the trigger and sets the offsets. */
 .workspace-picker__menu {
   position: fixed;
-  z-index: 40;
+  z-index: var(--zy-layer-popover);
   display: grid;
   gap: 1px;
   width: max-content;
@@ -341,7 +341,7 @@
   right: 0;
   left: 0;
   bottom: 38px;
-  z-index: 30;
+  z-index: var(--zy-layer-menu);
   display: grid;
   gap: 1px;
   padding: 5px;
@@ -554,7 +554,7 @@
 .task-context-menu,
 .task-delete-confirm {
   position: fixed;
-  z-index: 35;
+  z-index: var(--zy-layer-confirm);
   padding: 5px;
   border: 1px solid var(--zy-line-strong);
   border-radius: 9px;
@@ -758,7 +758,7 @@
 
 .command-error {
   position: fixed;
-  z-index: 100;
+  z-index: var(--zy-layer-alert);
   bottom: 24px;
   left: 50%;
   display: flex;
@@ -789,7 +789,7 @@
    taking no room of its own. */
 .restart-anchor {
   position: relative;
-  z-index: 100;
+  z-index: var(--zy-layer-alert);
   flex: none;
   height: 0;
 }
@@ -798,7 +798,7 @@
    its header, until the person dismisses it. */
 .restart-notice {
   position: absolute;
-  z-index: 100;
+  z-index: var(--zy-layer-alert);
   top: 32px;
   left: 50%;
   display: flex;
@@ -925,7 +925,7 @@
     */
     top: calc(20px + (var(--zy-title-bar-height) - 38px) / 2);
     left: 16px;
-    z-index: 60;
+    z-index: var(--zy-layer-overlay);
     width: 38px;
     height: 38px;
     border: 1px solid var(--zy-line);
@@ -955,7 +955,7 @@
   .app-shell--navigation-open > .app-sidebar {
     position: absolute;
     inset: 0 auto 0 0;
-    z-index: 50;
+    z-index: var(--zy-layer-navigation);
     display: flex !important;
     width: min(300px, 90vw);
     /* The same offset the conversation pane uses, so the drawer's own brand row
@@ -1259,7 +1259,7 @@
 }
 .conversation-permissions__overlay {
   position: fixed;
-  z-index: 100;
+  z-index: var(--zy-layer-alert);
   inset: 0;
   display: grid;
   place-items: center;
@@ -1446,7 +1446,7 @@
    never take clicks meant for what is under them. */
 .toast-region {
   position: fixed;
-  z-index: 60;
+  z-index: var(--zy-layer-overlay);
   top: 52px;
   left: 50%;
   display: grid;

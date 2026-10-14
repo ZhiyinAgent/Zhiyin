@@ -5,19 +5,14 @@
 
 import type {
   ActionDetail,
+  ConnectionTool,
   ProducedFile,
   ToolCallInspection,
   ToolInvocationResult,
 } from "@zhiyin/contract";
 
-export type McpConnectionTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Readonly<Record<string, unknown>>;
-};
-
 export interface McpConnection {
-  listTools(): Promise<readonly McpConnectionTool[]>;
+  listTools(): Promise<readonly ConnectionTool[]>;
   callTool(
     name: string,
     args: Readonly<Record<string, unknown>>,
@@ -29,9 +24,7 @@ export interface McpConnection {
    * Hears the server say its tools changed, with the tools it now offers. Only
    * a server that announces such changes ever calls the listener.
    */
-  onToolsChanged?(
-    listener: (tools: readonly McpConnectionTool[]) => void,
-  ): void;
+  onToolsChanged?(listener: (tools: readonly ConnectionTool[]) => void): void;
 }
 
 /**
@@ -75,5 +68,5 @@ export type BuiltInMcpServer = {
    * without any conversation. Throws with a reason a person can read when it
    * cannot.
    */
-  describe?(): Promise<readonly McpConnectionTool[]>;
+  describe?(): Promise<readonly ConnectionTool[]>;
 };

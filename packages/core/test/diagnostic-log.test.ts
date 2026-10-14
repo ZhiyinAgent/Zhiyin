@@ -1,8 +1,8 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { DiagnosticLog, recordCrashes } from "../src/index.js";
 
 /**
@@ -11,18 +11,12 @@ import { DiagnosticLog, recordCrashes } from "../src/index.js";
  * only, and never so much that it fills the disk.
  */
 
-const folders: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    folders.splice(0).map((path) => rm(path, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function logsFolder() {
-  const path = await mkdtemp(join(tmpdir(), "zhiyin-logs-"));
-  folders.push(path);
-  return path;
+  return folders.make("zhiyin-logs-");
 }
 
 const at = (iso: string) => () => new Date(iso);

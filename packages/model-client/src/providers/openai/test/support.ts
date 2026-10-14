@@ -1,21 +1,18 @@
 /** OpenAI's side of the wire, as its documentation describes it. */
 
-import type {
-  ModelEvent,
-  ModelFetch,
-  ModelRequest,
-} from "../../../model-client.js";
-import { ProviderModelClient } from "../../../client.js";
-import type { CatalogFetch } from "../../../provider.js";
+import type { ModelFetch } from "../../../model-client.js";
+import {
+  labClient,
+  namedEvents,
+  recording as recordingOf,
+  refusal,
+  type LabClientOptions,
+  type Sent,
+} from "../../../../test/lab-wire.js";
 import { openAi } from "../provider.js";
 
-const encoder = new TextEncoder();
-
-export type Sent = {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Record<string, unknown>;
-};
+export { drain } from "../../../../test/lab-wire.js";
+export type { Sent } from "../../../../test/lab-wire.js";
 
 /** One event as OpenAI streams it. */
 export type StreamedEvent = Readonly<Record<string, unknown>> & {
@@ -24,17 +21,7 @@ export type StreamedEvent = Readonly<Record<string, unknown>> & {
 
 /** A stream of Responses events, each typed on its event line. */
 export function streamOf(events: readonly StreamedEvent[]): ModelFetch {
-  return async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    body: (async function* () {
-      for (const event of events)
-        yield encoder.encode(
-          `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-        );
-    })(),
-  });
+  return namedEvents(events);
 }
 
 /** A refusal in the status line, in OpenAI's error envelope. */
@@ -43,24 +30,20 @@ export function refusing(
   error?: { message: string; type?: string; code?: string | null },
   headers: Record<string, string> = {},
 ): ModelFetch {
-  return async () => ({
-    ok: false,
+  return refusal(
     status,
-    headers: { get: (name) => headers[name.toLowerCase()] ?? null },
-    body: (async function* () {
-      if (error)
-        yield encoder.encode(
-          JSON.stringify({
-            error: {
-              type: "invalid_request_error",
-              param: null,
-              code: null,
-              ...error,
-            },
-          }),
-        );
-    })(),
-  });
+    error
+      ? {
+          error: {
+            type: "invalid_request_error",
+            param: null,
+            code: null,
+            ...error,
+          },
+        }
+      : undefined,
+    headers,
+  );
 }
 
 /** The reasoning item a turn produced, as finished. */
@@ -147,40 +130,13 @@ export function answeredWith(used = usage(100_000, 60_000, 10_000, 5_000)) {
 
 /** Records each request, then answers it as `answer` does. */
 export function recording(sent: Sent[], answer: ModelFetch = answeredWith()) {
-  const fetcher: ModelFetch = async (url, init) => {
-    sent.push({
-      url,
-      headers: init.headers,
-      body: JSON.parse(init.body) as Record<string, unknown>,
-    });
-    return answer(url, init);
-  };
-  return fetcher;
+  return recordingOf(sent, answer);
 }
 
-export function openAiClient(
-  options: {
-    readonly model?: string;
-    readonly fetcher?: ModelFetch;
-    readonly catalogFetch?: CatalogFetch;
-  } = {},
-) {
-  return new ProviderModelClient(openAi, {
-    apiKey: async () => "sk-test",
+export function openAiClient(options: LabClientOptions = {}) {
+  return labClient(openAi, "sk-test", {
+    ...options,
     model: options.model ?? "gpt-6.1-sol",
-    modelInfo: (model) => openAi.describe(model, {}),
-    ...(options.fetcher ? { fetcher: options.fetcher } : {}),
-    ...(options.catalogFetch ? { catalogFetch: options.catalogFetch } : {}),
-    now: () => new Date("2026-10-10T12:00:00Z"),
-    retry: { wait: async () => {}, random: () => 0 },
+    at: "2026-10-10T12:00:00Z",
   });
-}
-
-export async function drain(
-  client: ProviderModelClient,
-  request: ModelRequest,
-): Promise<ModelEvent[]> {
-  const events: ModelEvent[] = [];
-  for await (const event of client.send(request)) events.push(event);
-  return events;
 }

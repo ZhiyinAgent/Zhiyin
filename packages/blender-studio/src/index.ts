@@ -15,10 +15,7 @@ export type {
   SceneSessionOptions,
 } from "./scene-session.js";
 export { sceneAutomation } from "./scene-automation.js";
-export type {
-  SceneAutomation,
-  SceneAutomationOptions,
-} from "./scene-automation.js";
+export type { SceneAutomationOptions } from "./scene-automation.js";
 export { containedSessionLaunch, workspaceOpening } from "./session-process.js";
 export type {
   LaunchSession,

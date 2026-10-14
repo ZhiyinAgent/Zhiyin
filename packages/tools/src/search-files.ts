@@ -13,7 +13,6 @@
  * the bundled ripgrep, so a whole folder is searched and the count is real.
  */
 
-import { realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
   ToolCallInspection,
@@ -33,6 +32,7 @@ import {
   errorCode,
   isAbortError,
   normalizePath,
+  realLocation,
   scopeOf,
 } from "./workspace-path.js";
 
@@ -199,9 +199,9 @@ export async function runSearchFiles(
   if (!input) return { ok: false, reason: "The search input is invalid." };
 
   try {
-    const realRoot = await realpath(root);
-    const base = await realpath(resolve(realRoot, input.path));
-    if (scopeOf(realRoot, base) !== "workspace") {
+    const real = await realLocation(root, input.path);
+    const realRoot = real.root;
+    if (real.scope !== "workspace") {
       return {
         ok: false,
         reason: "The search must stay inside the current workspace.",

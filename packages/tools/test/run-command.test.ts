@@ -1,8 +1,8 @@
-import { copyFile, mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { copyFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { estimatedTokens } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   resolveShell,
   WorkspaceTools,
@@ -10,11 +10,15 @@ import {
   type ToolResult,
 } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 const shell = resolveShell();
 
 /** Keeps outputs in a folder of its own, one conversation's at a time. */
 async function keptItems(): Promise<ConversationItems> {
-  const folder = await mkdtemp(join(tmpdir(), "zhiyin-kept-"));
+  const folder = await folders.make("zhiyin-kept-");
   const items = new Map<string, string>();
   return {
     locate: async (conversationId, kind, id) => {
@@ -42,7 +46,7 @@ function valueOf(result: ToolResult): Record<string, unknown> {
 
 describe.skipIf(!shell)("a command's output", () => {
   it("returns at most the token limit inline, and keeps the whole of it to read again", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-command-"));
+    const root = await folders.make("zhiyin-command-");
     // 20,000 numbered lines, about 500,000 characters.
     await writeFile(
       join(root, "print.mjs"),
@@ -82,7 +86,7 @@ describe.skipIf(!shell)("a command's output", () => {
   }, 60_000);
 
   it("keeps nothing when the whole output fits", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-command-"));
+    const root = await folders.make("zhiyin-command-");
     const tools = new WorkspaceTools(root, {
       shell,
       items: await keptItems(),
@@ -102,7 +106,7 @@ describe.skipIf(!shell)("a command's output", () => {
   }, 60_000);
 
   it("tells Python it starts to read and write UTF-8, as its output is read", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-command-"));
+    const root = await folders.make("zhiyin-command-");
     const tools = new WorkspaceTools(root, { shell });
 
     const value = valueOf(

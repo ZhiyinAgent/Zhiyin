@@ -1,8 +1,4 @@
-import type {
-  ActionDetail,
-  ToolCallInspection,
-  ToolInvocationResult,
-} from "@zhiyin/contract";
+import type { ConnectionTool, OfferedConnection } from "@zhiyin/contract";
 import { resolveGit } from "./resolve-git.js";
 import { describeGitResult, gitTools, type GitToolSpec } from "./tools.js";
 import type { GitContainment } from "./run-git.js";
@@ -10,36 +6,6 @@ import type { GitContainment } from "./run-git.js";
 const unavailableMessage =
   "No git was found. Zhiyin runs git through the one that ships with Git for Windows.";
 const installUrl = "https://git-scm.com/download/win";
-
-/**
- * The connection shape the application registers with the MCP feature.
- * Declared here rather than imported from a peer feature; the capabilities
- * group adapts this feature's own interface.
- */
-export type GitConnectionTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema?: Readonly<Record<string, unknown>>;
-};
-
-export type GitAutomation = {
-  inspect(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-  ): Promise<ToolCallInspection>;
-  describeResult(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    result: ToolInvocationResult,
-  ): readonly ActionDetail[];
-  listTools(): Promise<readonly GitConnectionTool[]>;
-  callTool(
-    name: string,
-    args: Readonly<Record<string, unknown>>,
-    signal?: AbortSignal,
-  ): Promise<unknown>;
-  close(): Promise<void>;
-};
 
 export type GitAutomationOptions = {
   /** The one folder git operates in. No folder selected means no git tool. */
@@ -49,12 +15,14 @@ export type GitAutomationOptions = {
   readonly resolveGit?: () => string | undefined;
 };
 
-function specOf(tool: { readonly spec: GitToolSpec }): GitConnectionTool {
+function specOf(tool: { readonly spec: GitToolSpec }): ConnectionTool {
   const { name, description, inputSchema } = tool.spec;
   return { name, description, inputSchema };
 }
 
-export function gitAutomation(options: GitAutomationOptions): GitAutomation {
+export function gitAutomation(
+  options: GitAutomationOptions,
+): OfferedConnection {
   const resolve = options.resolveGit ?? resolveGit;
   const byName = new Map(gitTools.map((tool) => [tool.spec.name, tool]));
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useId, useRef } from "react";
 import type { ActionDetail, CoreApi, TaskAction } from "@zhiyin/contract";
 import { ChangeReview } from "./ChangeReview.js";
 import { actionTitle } from "./actionTitle.js";
@@ -49,16 +49,7 @@ export function ActionInspector({
   const shown =
     action.changes?.filter((change) => !named.includes(change)) ?? [];
 
-  useModalFocus(dialog);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  useModalFocus(dialog, onClose);
 
   return (
     <WindowLayer>

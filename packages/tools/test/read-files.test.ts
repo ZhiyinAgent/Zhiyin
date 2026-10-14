@@ -5,19 +5,19 @@
  * be read does not stop the others.
  */
 
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { estimatedTokens } from "@zhiyin/contract";
-import {
-  WorkspaceTools,
-  type ConversationItems,
-  type FileRead,
-} from "../src/index.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { estimatedTokens, type FileRead } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import { WorkspaceTools, type ConversationItems } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 async function workspace(files: Record<string, string>): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-read-files-"));
+  const root = await folders.make("zhiyin-read-files-");
   for (const [name, text] of Object.entries(files))
     await writeFile(join(root, name), text);
   return root;

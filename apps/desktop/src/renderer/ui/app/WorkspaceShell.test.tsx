@@ -24,107 +24,7 @@ import {
   type WorkspaceTask,
 } from "./workspaceState.js";
 import { WorkspaceShell } from "./WorkspaceShell.js";
-
-/** Every command the shell may reach for, doing nothing. */
-const stubCommands: CoreApi = {
-  frontendReady: async () => {},
-  createTask: async () => "task-1",
-  selectTask: async () => {},
-  resendTask: async () => {},
-  renameTask: async () => {},
-  deleteTask: async () => {},
-  sendMessage: async () => {},
-  keepPaste: async () => ({ status: "refused", reason: "Not kept here." }),
-  setContextBudget: async () => {},
-  setDefaultContextBudget: async () => {},
-  setPersonalInstructions: async () => {},
-  setNotifications: async () => {},
-  openDataFolder: async () => {},
-  showInFolder: async () => {},
-  setAppearance: async () => {},
-  setSpelling: async () => {},
-  keepPicture: async () => ({
-    status: "refused" as const,
-    reason: "Not in this test.",
-  }),
-  condenseNow: async () => {},
-  openAttachment: async () => {},
-  previewRewind: async () => {
-    throw new Error("No rewind preview configured for this test.");
-  },
-  commitRewind: async () => ({ files: [] }),
-  previewUndo: async () => {
-    throw new Error("No undo preview configured for this test.");
-  },
-  commitUndo: async () => ({ files: [] }),
-  compareDocument: async () => ({ after: [] }),
-  interruptTask: async () => {},
-  answerNow: async () => false,
-  sendNow: async () => false,
-  takeBackMessage: async () => {},
-  runningCommands: async () => [],
-  commandOutput: async () => undefined,
-  stopCommand: async () => {},
-  resolveApproval: async () => {},
-  revokeConversationPermission: async () => {},
-  resolveUserInput: async () => {},
-  setComponentEnabled: async () => {},
-  componentContent: async () => undefined,
-  overrideComponent: async () => {},
-  resetComponent: async () => {},
-  installToolchain: async () => {},
-  setPluginEnabled: async () => {},
-  installPlugin: async () => ({ status: "cancelled" }),
-  updatePlugin: async () => ({ status: "cancelled" }),
-  rollbackPlugin: async () => {},
-  removePlugin: async () => {},
-  createPlugin: async () => {},
-  savePluginContents: async () => {},
-  editablePluginContents: async () => undefined,
-  setMcpServerToolEnabled: async () => {},
-  testMcpConnection: async () => ({ ok: false, reason: "Not configured." }),
-  saveMcpServerToken: async () => {},
-  clearMcpServerToken: async () => {},
-  signInToMcpServer: async () => ({ status: "cancelled" }),
-  cancelMcpSignIn: async () => {},
-  refreshConnections: async () => {},
-  checkMcpConnection: async () => {
-    throw new Error("Not configured.");
-  },
-  shellAvailability: async () => ({ available: true }),
-  recheckShell: async () => ({ available: true }),
-  settleSavedConversations: async () => ({ done: 0, failed: 0 }),
-  openExternalUrl: async () => {},
-  driveBrowser: async () => {},
-  lookAtScene: async () => {},
-
-  chooseWorkspaceView: async () => {},
-  showDocument: async () => ({ ok: true }),
-  closeDocument: async () => {},
-  drawDocumentPage: async () => ({ ok: false, reason: "Not drawn here." }),
-  openDocument: async () => {},
-  showDocumentInFolder: async () => {},
-  listProviders: async () => [],
-  saveProviderApiKey: async () => ({ status: "accepted" as const }),
-  clearProviderApiKey: async () => {},
-  listModels: async () => ({ status: "ready" as const, models: [] }),
-  listModelProviders: async () => ({
-    status: "unavailable" as const,
-    reason: "not in this test",
-  }),
-  selectModel: async () => {},
-  previewArtifact: async () => ({
-    status: "missing",
-    path: "",
-    reason: "none",
-  }),
-  exportArtifact: async () => ({ status: "cancelled" }),
-  exportView: async () => ({ status: "cancelled" }),
-  exportConversation: async () => ({ status: "cancelled" }),
-  onAppEvent: () => () => {},
-  onViewCheck: () => () => {},
-  answerViewCheck: async () => {},
-};
+import { stubCommands } from "../../stubCommands.js";
 
 describe("WorkspaceShell", () => {
   it("keeps the conversation and final answer beside the browser with the selector in the header", () => {
@@ -3967,6 +3867,57 @@ describe("the app's settings", () => {
     expect(
       screen.queryByRole("region", { name: "Usage overview" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("says so when a conversation chosen on the Usage page cannot be opened", async () => {
+    const selectTask = vi.fn<CoreApi["selectTask"]>(async () => {
+      throw new Error("That conversation could not be opened.");
+    });
+    const range = (days: 7 | 30) => ({
+      days,
+      requests: 3,
+      inputTokens: 30,
+      outputTokens: 6,
+      costUsd: 0.5,
+      pricedRequests: 3,
+      activity: [],
+      models: [],
+      conversations: [
+        {
+          conversationId: "task-2",
+          requests: 3,
+          pricedRequests: 3,
+          costUsd: 0.5,
+        },
+      ],
+    });
+    render(
+      <Live
+        initial={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId: "task-1",
+          tasks: [
+            { ...failed().tasks[0]!, id: "task-1", title: "Today" },
+            { ...failed().tasks[0]!, id: "task-2", title: "Survey tools" },
+          ],
+          usage: {
+            status: "ready",
+            costSource: "provider-reported",
+            ranges: { "7": range(7), "30": range(30) },
+          },
+        })}
+        commands={{ ...stubCommands, selectTask }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Usage" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Survey tools" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That conversation could not be opened.",
+    );
   });
 
   it("names a conversation on the Usage page that has not been opened since Zhiyin started", () => {

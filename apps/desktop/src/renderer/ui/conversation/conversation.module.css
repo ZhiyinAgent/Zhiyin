@@ -1374,7 +1374,7 @@
 
 .reasoning-controls__panel {
   position: fixed;
-  z-index: 40;
+  z-index: var(--zy-layer-popover);
   bottom: 0;
   left: 0;
   width: 248px;
@@ -1786,46 +1786,6 @@
 .context-ring__about:hover,
 .context-ring__about:focus-visible {
   color: var(--zy-text);
-}
-
-/* Above the icon, centred on it, with a small arrow pointing down to it. */
-.context-ring__tip {
-  position: fixed;
-  z-index: 60;
-  width: max-content;
-  max-width: 240px;
-  padding: 8px 10px;
-  transform: translate(-50%, calc(-100% - 10px));
-  border: 1px solid var(--zy-line-strong);
-  border-radius: 10px;
-  background: var(--zy-panel);
-  box-shadow: var(--zy-shadow-pop);
-  color: var(--zy-text);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
-  pointer-events: none;
-  animation: context-ring-tip 120ms ease-out;
-}
-
-.context-ring__tip::after {
-  position: absolute;
-  bottom: -5px;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translateX(-50%) rotate(45deg);
-  border-right: 1px solid var(--zy-line-strong);
-  border-bottom: 1px solid var(--zy-line-strong);
-  background: var(--zy-panel);
-  content: "";
-}
-
-@keyframes context-ring-tip {
-  from {
-    opacity: 0;
-    translate: 0 3px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

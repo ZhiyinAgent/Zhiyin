@@ -16,5 +16,8 @@
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/conversation-rewind": "workspace:*",
     "@zhiyin/recovery": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

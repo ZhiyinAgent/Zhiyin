@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
@@ -13,6 +10,7 @@ import {
   type WorkspaceTask,
   type WorkStep,
 } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions, type SavedWorkspace } from "../src/index.js";
 import { plantHistory } from "./planted-history.js";
 
@@ -25,18 +23,12 @@ import { plantHistory } from "./planted-history.js";
  * this file stops compiling until it is.
  */
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-saved-names-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-saved-names-");
 }
 
 const at = "2026-10-05T09:00:00.000Z";

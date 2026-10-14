@@ -60,4 +60,27 @@ describe("Dialog", () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("closes only the dialog on top with Escape when one opens over another", () => {
+    const outer = vi.fn();
+    const inner = vi.fn();
+    const { rerender } = render(
+      <Dialog title="Outer" onClose={outer}>
+        <p>Outer body</p>
+      </Dialog>,
+    );
+    rerender(
+      <Dialog title="Outer" onClose={outer}>
+        <p>Outer body</p>
+        <Dialog title="Inner" onClose={inner}>
+          <p>Inner body</p>
+        </Dialog>
+      </Dialog>,
+    );
+
+    fireEvent.keyDown(document.activeElement ?? document, { key: "Escape" });
+
+    expect(inner).toHaveBeenCalledOnce();
+    expect(outer).not.toHaveBeenCalled();
+  });
 });

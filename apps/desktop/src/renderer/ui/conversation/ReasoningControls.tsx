@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useId,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   REASONING_EFFORTS,
@@ -13,6 +6,7 @@ import {
   type ReasoningSelection,
 } from "@zhiyin/contract";
 import { Icon, useDismiss } from "../shared/index.js";
+import { usePanelAbove } from "./usePanelAbove.js";
 import styles from "./conversation.module.css";
 
 const effortOrder = REASONING_EFFORTS;
@@ -32,29 +26,12 @@ export function ReasoningControls({
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const slider = useRef<HTMLInputElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const available = capabilities.status === "available";
 
   if (open && (disabled || !available)) setOpen(false);
 
-  useLayoutEffect(() => {
-    if (!open) return;
-    function position() {
-      if (!trigger.current || !panel.current) return;
-      const anchor = trigger.current.getBoundingClientRect();
-      const width = panel.current.getBoundingClientRect().width;
-      panel.current.style.left = `${Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12))}px`;
-      panel.current.style.bottom = `${window.innerHeight - anchor.top + 10}px`;
-    }
-    position();
-    window.addEventListener("resize", position);
-    document.addEventListener("scroll", position, true);
-    return () => {
-      window.removeEventListener("resize", position);
-      document.removeEventListener("scroll", position, true);
-    };
-  }, [open]);
+  const panel = usePanelAbove<HTMLDivElement>(open, trigger);
 
   useEffect(() => {
     if (open) slider.current?.focus();

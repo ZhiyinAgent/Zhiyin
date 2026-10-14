@@ -1,26 +1,20 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   FilePluginStore,
   PluginStoreError,
   loadPluginDirectory,
 } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(label: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `zhiyin-plugin-${label}-`));
-  roots.push(root);
-  return root;
+  return folders.make(`zhiyin-plugin-${label}-`);
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 type PackageOptions = {
   readonly name?: string;
@@ -130,6 +124,22 @@ describe("portable plugin directories", () => {
         },
       ],
     });
+  });
+
+  it("refuses a package of more files and folders than a plugin needs, without reading on", async () => {
+    const source = await writePackage(await temporaryRoot("crowded"));
+    const references = join(source, "references");
+    await mkdir(references);
+    // The package already holds plugin.json and its skill (four entries).
+    await Promise.all(
+      Array.from({ length: 1_996 }, (_, index) =>
+        writeFile(join(references, `${index}.md`), ""),
+      ),
+    );
+
+    await expect(loadPluginDirectory(source, personal)).rejects.toThrow(
+      "A plugin package may hold at most 2,000 files and folders.",
+    );
   });
 
   it("refuses a connector reached over plain http, unless it runs on this computer", async () => {

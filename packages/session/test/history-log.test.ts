@@ -1,14 +1,7 @@
-import {
-  appendFile,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { appendFile, readFile, readdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { HistoryLog, historyFiles } from "../src/history-log.js";
 import { changesBetween } from "../src/history-changes.js";
 
@@ -17,20 +10,15 @@ import { changesBetween } from "../src/history-changes.js";
  * each save's edits as one line. A line is a whole save or nothing.
  */
 
-const roots: string[] = [];
-
 /** Where a log is kept, in a folder of its own. */
 async function temporaryFile(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-history-log-"));
-  roots.push(root);
+  const root = await folders.make("zhiyin-history-log-");
   return join(root, "conversation.jsonl");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 async function saved(
   file: string,

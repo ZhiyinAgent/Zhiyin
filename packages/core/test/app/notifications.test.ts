@@ -4,13 +4,11 @@
  * person has not turned them off.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { CHANNEL, type ToolCallInspection } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import { FileSessions } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { Core } from "../../src/index.js";
 import type { Notice } from "../../src/attention.js";
 import {
@@ -20,13 +18,9 @@ import {
   until,
 } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 /** An app whose model asks to write one file, which the person must approve. */
 async function asking(root: string) {
@@ -91,8 +85,7 @@ async function asking(root: string) {
 
 describe("notifications", () => {
   it("tell the person a turn needs their approval, and open that conversation when clicked", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-notify-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-notify-");
     const { app, shown } = await asking(root);
     const first = await app.createTask();
     const second = await app.createTask();
@@ -115,8 +108,7 @@ describe("notifications", () => {
   });
 
   it("stay off once the person turns them off, across a restart", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-notify-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-notify-");
     const before = await asking(root);
     await before.app.choices.setNotifications(false);
     await before.app.shutdown();

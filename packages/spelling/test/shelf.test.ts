@@ -1,24 +1,13 @@
 import { createHash } from "node:crypto";
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { DictionaryShelf } from "../src/index.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 const bytes = Buffer.from("BDic dictionary bytes for the test");
 const sha256 = createHash("sha256").update(bytes).digest("hex");
@@ -30,8 +19,7 @@ const dictionary = {
 };
 
 async function onDisk() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-spelling-"));
-  roots.push(root);
+  const root = await folders.make("zhiyin-spelling-");
   const bundled = join(root, "bundled");
   const installed = join(root, "session", "Dictionaries");
   await mkdir(bundled, { recursive: true });

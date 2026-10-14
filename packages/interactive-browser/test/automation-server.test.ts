@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   browserAutomation,
   describeBrowserAutomation,
@@ -13,6 +13,10 @@ import {
   type BrowserSessionState,
   type InteractiveBrowser,
 } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /**
  * A stand-in for the packaged Playwright server: it answers the two protocol
@@ -437,7 +441,7 @@ describe("which browser tools are offered at all", () => {
 
 describe("files a page asks for", () => {
   async function folder(): Promise<{ root: string; output: string }> {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-uploads-"));
+    const parent = await folders.make("zhiyin-uploads-");
     const root = join(parent, "workspace");
     await mkdir(join(root, "reports"), { recursive: true });
     await writeFile(join(root, "reports", "q3.csv"), "region,total\n", "utf8");

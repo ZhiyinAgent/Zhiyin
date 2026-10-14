@@ -14,7 +14,8 @@ import type {
   ModelPrice,
   ReasoningCapabilities,
 } from "@zhiyin/contract";
-import type { CatalogOptions, Provider } from "./provider.js";
+import { catalogFetch } from "./keyed-fetch.js";
+import type { CatalogFetch, CatalogOptions, Provider } from "./provider.js";
 
 /** The key a provider with a single platform lists its prices under. */
 export const ONE_PLATFORM = "default";
@@ -51,6 +52,39 @@ export type ModelList = {
 export type ListedByApi = (
   options: CatalogOptions,
 ) => Promise<ReadonlySet<string>>;
+
+/**
+ * A listing read as most labs answer it, `{ data: [{ id }, …] }`, at the
+ * address for the account's platform, signed with its key where it has one.
+ */
+export function listedAt(
+  name: string,
+  address: (region: string | undefined) => string,
+  sign: (apiKey: string) => Readonly<Record<string, string>>,
+): ListedByApi {
+  return async (options) => {
+    const apiKey = await options.apiKey?.();
+    const fetcher: CatalogFetch = options.fetcher ?? catalogFetch;
+    const response = await fetcher(address(options.region), {
+      headers: apiKey ? sign(apiKey) : {},
+    });
+    if (!response.ok)
+      throw new Error(`${name}'s model listing is unavailable.`);
+    const listing = (await response.json()) as { data?: unknown };
+    if (!Array.isArray(listing.data))
+      throw new Error(`${name}'s model listing is unreadable.`);
+    return new Set(
+      listing.data.flatMap((model: unknown) =>
+        model &&
+        typeof model === "object" &&
+        "id" in model &&
+        typeof model.id === "string"
+          ? [model.id]
+          : [],
+      ),
+    );
+  };
+}
 
 const platform = (region: string | undefined) => region ?? ONE_PLATFORM;
 

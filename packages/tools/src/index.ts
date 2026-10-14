@@ -6,7 +6,7 @@
 
 export * from "./tools.js";
 
-export type { ConversationItems, FileRead } from "./conversation-items.js";
+export type { ConversationItems } from "./conversation-items.js";
 export type { CommandContainer, CommandContainment } from "./run-command.js";
 export type { RecycleBin } from "./delete-file.js";
 export { checkRecyclable } from "./recycle-check.js";

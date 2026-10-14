@@ -78,7 +78,8 @@ says about itself is shown as its claim.
   and headless use.
 - The types these take and return: `SignInOptions`, `McpConnectionFactory`,
   `DeclaredMcpServer`, `DeclaredMcpServers`, `McpExecuteOptions`,
-  `McpConnectionTool`, `McpConnection`, `McpCredentialStore`.
+  `McpConnection`, `McpCredentialStore`. A connection lists its tools as the
+  contract's `ConnectionTool`.
 
 ## Invariants
 
@@ -150,7 +151,8 @@ says about itself is shown as its claim.
   refusal, one refresh at a time; a refused refresh forgets it and withdraws
   the tools. A saved key is sent in preference to a sign-in.
 - When secure storage cannot be reached, the state says so rather than
-  reporting that no credential exists, and saving fails.
+  reporting that no credential exists, and saving fails. Storage that comes
+  back is asked again on the next look.
 
 ### Calls
 

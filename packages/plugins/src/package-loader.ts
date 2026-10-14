@@ -64,6 +64,12 @@ function resolvePackagePath(
   return destination;
 }
 
+/**
+ * Far more than a plugin of skills, specialists and connectors needs, so the
+ * walk of a package stays short whatever a folder holds.
+ */
+const maximumEntries = 2_000;
+
 async function assertSafeTree(root: string): Promise<string> {
   const resolvedRoot = await realpath(root).catch(() => {
     throw new InvalidPluginError("The plugin directory could not be opened.");
@@ -71,8 +77,14 @@ async function assertSafeTree(root: string): Promise<string> {
   if (!(await lstat(resolvedRoot)).isDirectory())
     throw new InvalidPluginError("The plugin source must be a directory.");
 
+  let entries = 0;
   const visit = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
+      entries += 1;
+      if (entries > maximumEntries)
+        throw new InvalidPluginError(
+          `A plugin package may hold at most ${maximumEntries.toLocaleString("en-US")} files and folders.`,
+        );
       const path = resolve(directory, entry.name);
       if (!staysInside(resolvedRoot, path))
         throw new InvalidPluginError(

@@ -18,14 +18,14 @@ and every call needs the person's approval.
   workspace's own project files.
 - **Does not own:** installing `uv` (toolchains), permission decisions, or the
   connection's lifecycle (MCP).
-- **Talks to other features only through:** `SandboxAutomation`, which
-  `pythonConnection()` in the capabilities group adapts into a built-in
+- **Talks to other features only through:** the contract's
+  `OfferedConnection`, which `pythonConnection()` in the capabilities group adapts into a built-in
   connection the MCP feature serves.
 
 ## Public interface
 
 - `pythonSandbox({ workspaceRoot, directory, uv, containment?, run?, ... })`
-  returns a `SandboxAutomation`: `listTools`, `callTool`, `inspect`,
+  returns an `OfferedConnection`: `listTools`, `callTool`, `inspect`,
   `describeResult` and `close`.
 - Three tools: `run_python` (code, or the workspace-relative path of a `.py`
   file, with arguments), `install_python_package`, and
@@ -37,7 +37,7 @@ and every call needs the person's approval.
   may run for five minutes, and building the environment for fifteen. Tests
   may replace the runner.
 - The types these take and return: `ProgramContainer`, `ProgramContainment`,
-  `ProgramRun`, `RunProgram`, `SandboxTool`, `PythonSandboxOptions`.
+  `ProgramRun`, `RunProgram`, `PythonSandboxOptions`.
 
 ## Invariants
 

@@ -5,6 +5,7 @@ import {
   RestartNotice,
   useToast,
 } from "../../ui/app/index.js";
+import { RunningCommands } from "../../ui/commands/index.js";
 import { UserTurn } from "../../ui/conversation/index.js";
 import { Onboarding } from "../../ui/onboarding/index.js";
 import {
@@ -18,6 +19,13 @@ import { useState, type ReactNode } from "react";
 import type { Appearance, SpellingState } from "@zhiyin/contract";
 import { demoSpellingLanguages } from "../fixtures/spelling.js";
 import type { ComponentCatalogEntry } from "./entry.js";
+
+const labBuild = {
+  id: "J1",
+  command: "npm run build",
+  explanation: "Builds the release to check that it still compiles.",
+  startedAt: Date.now() - 125_000,
+};
 
 export const appEntries: ComponentCatalogEntry[] = [
   {
@@ -39,7 +47,7 @@ export const appEntries: ComponentCatalogEntry[] = [
         ]}
         onDelete={() => undefined}
         onDismiss={() => undefined}
-        onShowKept={() => undefined}
+        onShowKept={async () => undefined}
       />
     ),
   },
@@ -81,7 +89,7 @@ export const appEntries: ComponentCatalogEntry[] = [
           keptAt: "C:/Users/sam/AppData/Roaming/Zhiyin/history.damaged.json",
         }}
         onChoose={async () => undefined}
-        onShowKept={() => undefined}
+        onShowKept={async () => undefined}
       />
     ),
   },
@@ -120,8 +128,8 @@ export const appEntries: ComponentCatalogEntry[] = [
     render: () => (
       <NewerHistoryGate
         newer={{ writtenBy: "0.2.0" }}
-        onGetLatest={() => undefined}
-        onOpenDataFolder={() => undefined}
+        onGetLatest={async () => undefined}
+        onOpenDataFolder={async () => undefined}
       />
     ),
   },
@@ -134,6 +142,43 @@ export const appEntries: ComponentCatalogEntry[] = [
       <div className="lab-stack">
         <ConnectionRecovery onRetry={() => undefined} />
         <ConnectionRecovery triedAgain onRetry={() => undefined} />
+      </div>
+    ),
+  },
+  {
+    id: "running-commands",
+    title: "Running commands",
+    description:
+      "In the conversation's header while commands it started run on: how many, opening on each with what it printed last and a way to stop it. When the list cannot be had, it says so rather than showing none.",
+    render: () => (
+      // Each at its own width, as in the header.
+      <div className="lab-stack" style={{ justifyItems: "start" }}>
+        <RunningCommands
+          taskId="lab-running"
+          running={[labBuild]}
+          commands={{
+            runningCommands: async () => [labBuild],
+            commandOutput: async () => ({
+              stdout:
+                "vite v7 building for production…\n✓ 412 modules transformed.\n",
+              stderr: "",
+            }),
+            stopCommand: async () => undefined,
+          }}
+          onListed={() => undefined}
+        />
+        <RunningCommands
+          taskId="lab-unchecked"
+          running={[]}
+          commands={{
+            runningCommands: async () => {
+              throw new Error("The core did not answer.");
+            },
+            commandOutput: async () => undefined,
+            stopCommand: async () => undefined,
+          }}
+          onListed={() => undefined}
+        />
       </div>
     ),
   },

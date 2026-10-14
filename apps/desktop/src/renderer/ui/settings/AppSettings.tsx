@@ -4,7 +4,7 @@ import type {
   SpellingChoice,
   SpellingState,
 } from "@zhiyin/contract";
-import { ChoiceSwitch, CloseButton } from "../shared/index.js";
+import { ChoiceSwitch, CloseButton, Toggle } from "../shared/index.js";
 import { SpellingLanguages } from "./SpellingLanguages.js";
 import styles from "./settings.module.css";
 
@@ -100,24 +100,19 @@ export function AppSettings({
               title="Check spelling"
               description="Underlines words that look misspelled as you type. Right-click one to correct it."
               control={(label, description) => (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={spelling.enabled}
+                <Toggle
+                  on={spelling.enabled}
                   aria-labelledby={label}
                   aria-describedby={description}
-                  className={styles["setting-switch"]}
-                  onClick={() =>
+                  onChange={(enabled) =>
                     void change(() =>
                       onSpelling({
-                        enabled: !spelling.enabled,
+                        enabled,
                         languages: spelling.languages.map(({ code }) => code),
                       }),
                     )
                   }
-                >
-                  <span aria-hidden="true" />
-                </button>
+                />
               )}
             />
             {spelling.enabled && (
@@ -147,19 +142,12 @@ export function AppSettings({
               title="Notifications"
               description="When Zhiyin needs your approval or an answer, or finishes a long task, while you are in another app."
               control={(label, description) => (
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={notifications}
+                <Toggle
+                  on={notifications}
                   aria-labelledby={label}
                   aria-describedby={description}
-                  className={styles["setting-switch"]}
-                  onClick={() =>
-                    void change(() => onNotifications(!notifications))
-                  }
-                >
-                  <span aria-hidden="true" />
-                </button>
+                  onChange={(on) => void change(() => onNotifications(on))}
+                />
               )}
             />
           </SettingsGroup>

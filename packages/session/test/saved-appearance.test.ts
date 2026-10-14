@@ -3,10 +3,8 @@
  * already the right colour. That read must never stop the app opening.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   FileSessions,
   SessionStoreError,
@@ -14,18 +12,12 @@ import {
 } from "../src/index.js";
 import { damage, plantHistory, settingsFile } from "./planted-history.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-appearance-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-appearance-");
 }
 
 const empty: SavedWorkspace = {

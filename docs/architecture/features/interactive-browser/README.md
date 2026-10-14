@@ -62,7 +62,8 @@ some sites refuse headless browsers.
   also deletes the conversation's browser folder.
 - `browserAutomation(browser, { acceptsImages, outputDirectory })` is the
   automation server for one session, the one `browserConnection()` serves:
-  `listTools`, `inspect`, `callTool`, `describeResult`, `close`.
+  an `OfferedConnection` with `listTools`, `inspect`, `callTool`,
+  `describeResult` and `close`.
 - `describeBrowserAutomation(launcher, options)` lists the tools a
   conversation would be offered without a conversation and without starting a
   browser. It fails with the launcher's reason when no browser can run here.
@@ -71,8 +72,8 @@ some sites refuse headless browsers.
   with no browser and the browser is testable with no session.
 - `WorkspaceUploads(root)` checks that each file a page asks for is in the open
   folder, and stages the approved copy the upload sends.
-- The types these take and return: `UploadFile`, `BrowserAutomation`,
-  `AutomationTool`, `BrowserFrame`, `BrowserSessionState`,
+- The types these take and return: `UploadFile`, `BrowserFrame`,
+  `BrowserSessionState`,
   `BrowserAvailability`, `BrowserViewport`, `BrowserTarget`,
   `BrowserContainment`, `BrowserSessionOptions`.
 

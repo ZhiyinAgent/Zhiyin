@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { NewerHistory } from "@zhiyin/contract";
 import { Icon, StandalonePage } from "../shared/index.js";
 import styles from "./recovery.module.css";
@@ -16,14 +17,24 @@ export function NewerHistoryGate({
   onOpenDataFolder,
 }: {
   newer: NewerHistory;
-  onGetLatest?: () => void;
-  onOpenDataFolder?: () => void;
+  onGetLatest?: () => Promise<void>;
+  onOpenDataFolder?: () => Promise<void>;
 }) {
+  const [error, setError] = useState("");
+  const opening = (open: () => Promise<void>) => () => {
+    setError("");
+    open().catch((cause: unknown) =>
+      setError(
+        cause instanceof Error ? cause.message : "That could not be opened.",
+      ),
+    );
+  };
   return (
     <StandalonePage
       label="SAVED CONVERSATIONS"
       title="Your history needs a newer Zhiyin."
       introduction={`It was saved by Zhiyin ${newer.writtenBy}, a newer version than this one, which cannot open it. Nothing in it has been changed. Install Zhiyin ${newer.writtenBy} or later to open it again.`}
+      {...(error ? { error } : {})}
       {...(onGetLatest || onOpenDataFolder
         ? {
             actions: (
@@ -32,7 +43,7 @@ export function NewerHistoryGate({
                   <button
                     type="button"
                     className="button"
-                    onClick={onOpenDataFolder}
+                    onClick={opening(onOpenDataFolder)}
                   >
                     Open data folder
                   </button>
@@ -41,7 +52,7 @@ export function NewerHistoryGate({
                   <button
                     type="button"
                     className="button button--accent"
-                    onClick={onGetLatest}
+                    onClick={opening(onGetLatest)}
                   >
                     Get the latest version
                     <Icon name="arrow-up" />

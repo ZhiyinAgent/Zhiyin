@@ -34,8 +34,12 @@ export function App({
     const copy = new WindowCopy();
     const unsubscribe = core.onAppEvent((event) => {
       const update = copy.receive(event);
+      // A resend fails only when the core cannot be reached; reconnecting
+      // sends the workspace whole again.
       for (const taskId of update?.resend ?? [])
-        void core.resendTask(taskId).catch(() => undefined);
+        void core.resendTask(taskId).catch(() => {
+          if (mounted) setConnectionError(true);
+        });
       if (update?.snapshot)
         dispatch({ type: "workspaceHydrated", snapshot: update.snapshot });
       else if (update?.task)

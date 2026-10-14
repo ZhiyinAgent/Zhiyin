@@ -25,7 +25,8 @@ import {
   type ModelWindow,
   type StandingInstruction,
 } from "@zhiyin/contract";
-import { Dialog, Icon, useDismiss } from "../shared/index.js";
+import { Dialog, Icon, PointedTip, useDismiss } from "../shared/index.js";
+import { usePanelAbove } from "./usePanelAbove.js";
 import { InstructionSources } from "./InstructionSources.js";
 import styles from "./conversation.module.css";
 
@@ -94,7 +95,6 @@ export function ContextRing({
   const panelId = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [breakdown, setBreakdown] = useState(false);
   const [condensing, setCondensing] = useState(false);
@@ -110,28 +110,15 @@ export function ContextRing({
 
   if (open && disabled) setOpen(false);
 
+  const panel = usePanelAbove<HTMLDivElement>(open, trigger);
   useLayoutEffect(() => {
     if (!open) return;
-    function position() {
-      if (!trigger.current || !panel.current) return;
-      const anchor = trigger.current.getBoundingClientRect();
-      const width = panel.current.getBoundingClientRect().width;
-      panel.current.style.left = `${Math.max(12, Math.min(anchor.left, window.innerWidth - width - 12))}px`;
-      panel.current.style.bottom = `${window.innerHeight - anchor.top + 10}px`;
-    }
-    position();
     // Drawn at the end of the page, so focus is taken to it, or the keyboard
     // could not reach it.
     panel.current
       ?.querySelector<HTMLInputElement>('input[type="radio"]:checked')
       ?.focus();
-    window.addEventListener("resize", position);
-    document.addEventListener("scroll", position, true);
-    return () => {
-      window.removeEventListener("resize", position);
-      document.removeEventListener("scroll", position, true);
-    };
-  }, [open]);
+  }, [open, panel]);
 
   useDismiss(open, [root, panel], () => setOpen(false));
 
@@ -499,18 +486,11 @@ function BreakdownRow({
         >
           <Icon name="info" />
         </button>
-        {at &&
-          createPortal(
-            <span
-              id={tipId}
-              role="tooltip"
-              className={styles["context-ring__tip"]}
-              style={{ left: at.x, top: at.y }}
-            >
-              {meaning}
-            </span>,
-            document.body,
-          )}
+        {at && (
+          <PointedTip id={tipId} at={at}>
+            {meaning}
+          </PointedTip>
+        )}
       </th>
       <td>{tokens < 1_000 ? `${tokens}` : short(tokens)}</td>
     </tr>

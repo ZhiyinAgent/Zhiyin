@@ -1,22 +1,16 @@
-import { mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-kept-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-kept-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** Moves an item's own timestamp back, as if it had been kept that long ago. */
 async function age(path: string, days: number): Promise<void> {

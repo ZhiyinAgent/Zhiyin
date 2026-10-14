@@ -9,19 +9,15 @@
  */
 
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { WorkspaceSnapshot } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions, SessionStoreError } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot() {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-owner-test-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-owner-test-");
 }
 
 /**
@@ -33,11 +29,9 @@ function launch(root: string, pid: number) {
   return new FileSessions(root, { pid });
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const snapshot: WorkspaceSnapshot = {
   runtime: { tasks: "available", capabilities: "available" },

@@ -40,6 +40,7 @@ const PACKAGE_LAYERS = {
   "process-ownership": "platform",
   "workspace-containment": "platform",
   "pdf-engine": "platform",
+  "temporary-folders": "platform",
   mcp: "feature",
   toolchains: "feature",
   plugins: "feature",

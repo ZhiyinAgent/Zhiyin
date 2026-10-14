@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { crc32 } from "node:zlib";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   DownloadedToolchains,
   pinnedToolchains,
@@ -12,19 +12,13 @@ import {
   type ToolchainSpec,
 } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-toolchains-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-toolchains-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 /** A zip archive with stored (uncompressed) entries, names taken verbatim. */
 function storedZip(entries: Readonly<Record<string, string>>): Buffer {

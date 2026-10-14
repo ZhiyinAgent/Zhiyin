@@ -64,7 +64,7 @@
   width: 32%;
   height: 1px;
   background: var(--zy-accent-line);
-  animation: browser-panel-progress 1.4s ease-in-out infinite;
+  animation: global(zy-progress) 1.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -211,13 +211,7 @@
   border: 2px solid var(--zy-line-strong);
   border-top-color: var(--zy-running);
   border-radius: 50%;
-  animation: browser-panel-spin 0.9s linear infinite;
-}
-
-@keyframes browser-panel-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: global(zy-spin) 0.9s linear infinite;
 }
 
 /* The icon sits on the first line of the text beside it, not in its middle. */
@@ -297,13 +291,4 @@
   flex: none;
   align-self: center;
   margin: 8px;
-}
-
-@keyframes browser-panel-progress {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(340%);
-  }
 }

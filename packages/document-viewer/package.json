@@ -18,6 +18,7 @@
     "@zhiyin/workspace-containment": "workspace:*"
   },
   "devDependencies": {
-    "@zhiyin/process-ownership": "workspace:*"
+    "@zhiyin/process-ownership": "workspace:*",
+    "@zhiyin/temporary-folders": "workspace:*"
   }
 }

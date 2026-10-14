@@ -15,12 +15,9 @@
   "dependencies": {
     "@zhiyin/blender-studio": "workspace:*",
     "@zhiyin/contract": "workspace:*",
-    "@zhiyin/document-compiler": "workspace:*",
-    "@zhiyin/git-connector": "workspace:*",
     "@zhiyin/interactive-browser": "workspace:*",
     "@zhiyin/mcp": "workspace:*",
     "@zhiyin/plugins": "workspace:*",
-    "@zhiyin/python-sandbox": "workspace:*",
     "@zhiyin/toolchains": "workspace:*",
     "@zhiyin/tools": "workspace:*"
   }

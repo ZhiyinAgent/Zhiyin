@@ -22,8 +22,8 @@ there is no second implementation of git's storage format to audit.
   separate skill), or the shell tool's availability. Both this connector and
   the shell tool rely on Git for Windows but detect it separately, so one's
   failure never hides the other's state.
-- **Talks to other features only through:** `GitAutomation`, which
-  `gitConnection()` in the capabilities group adapts into a built-in MCP
+- **Talks to other features only through:** the contract's
+  `OfferedConnection`, which `gitConnection()` in the capabilities group adapts into a built-in MCP
   server. It imports no other feature, only the contract and the
   process-ownership mechanism.
 
@@ -33,11 +33,9 @@ there is no second implementation of git's storage format to audit.
   checks `ZHIYIN_GIT`, then the usual Git for Windows install folders, then
   `PATH`. Nothing is cached, so a new install is found the next time anything
   asks.
-- `gitAutomation({ workspaceRoot, containment?, resolveGit? })` returns a
-  `GitAutomation`: `listTools`, `callTool`, `inspect`, `describeResult` and
-  `close`.
-- `GitAutomation` and `GitConnectionTool` are the shapes `gitConnection()`
-  adapts.
+- `gitAutomation({ workspaceRoot, containment?, resolveGit? })` returns an
+  `OfferedConnection`: `listTools`, `callTool`, `inspect`, `describeResult`
+  and `close`.
 - `gitInstallUrl`, where Git for Windows is downloaded, offered when Git is
   missing.
 - The types these take and return: `GitContainer`, `GitContainment`,

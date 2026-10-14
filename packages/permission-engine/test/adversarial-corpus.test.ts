@@ -105,6 +105,45 @@ const corpus: readonly CorpusCase[] = [
     outcome: "ask",
   },
   {
+    name: "a skill action that declares a change remains approval-required",
+    rationale:
+      "Only a skill's reads run on their own; anything it would change is decided by the person.",
+    action: action(
+      "skill",
+      "load_skill",
+      { id: "publishing/typst" },
+      undefined,
+      { access: "change", scope: "workspace" },
+    ),
+    outcome: "ask",
+  },
+  {
+    name: "a plugin action that declares a change remains approval-required",
+    rationale:
+      "Describing an enabled plugin is a read; a plugin action that would change something is decided by the person.",
+    action: action(
+      "plugin",
+      "inspect_plugin",
+      { id: "publishing" },
+      undefined,
+      { access: "change", scope: "workspace" },
+    ),
+    outcome: "ask",
+  },
+  {
+    name: "a plugin read does not need approval whatever scope it names",
+    rationale:
+      "Reading what an enabled plugin contains reaches no workspace and no service, so a scope it names grants and removes nothing.",
+    action: action(
+      "plugin",
+      "inspect_plugin",
+      { id: "publishing" },
+      undefined,
+      { access: "read", scope: "outside" },
+    ),
+    outcome: "allow",
+  },
+  {
     name: "an unknown built-in remains approval-required",
     rationale:
       "Adding a new tool must not silently inherit the authority of an existing read-only tool.",

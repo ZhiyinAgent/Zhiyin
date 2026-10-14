@@ -11,7 +11,7 @@ import {
   McpUnauthorizedError,
   UNAUTHORIZED,
 } from "./connection-problems.js";
-import type { McpConnectionTool } from "./connection-types.js";
+import type { ConnectionTool } from "@zhiyin/contract";
 import type { McpConnectionFactory } from "./mcp.js";
 
 /**
@@ -58,7 +58,7 @@ function retryAfterMs(value: string | null): number | undefined {
  */
 const maximumDescription = 4_000;
 
-function described(tool: Tool): McpConnectionTool {
+function described(tool: Tool): ConnectionTool {
   const description =
     tool.description && tool.description.length > maximumDescription
       ? `${tool.description.slice(0, maximumDescription - 1)}…`
@@ -75,7 +75,7 @@ export const connectHttpMcpServer: McpConnectionFactory = async (
   token,
   refresh,
 ) => {
-  const listeners: ((tools: readonly McpConnectionTool[]) => void)[] = [];
+  const listeners: ((tools: readonly ConnectionTool[]) => void)[] = [];
   const client = new Client(
     { name: "zhiyin", version: "0.1.0" },
     {

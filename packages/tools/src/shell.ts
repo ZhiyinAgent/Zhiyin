@@ -5,6 +5,7 @@
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import type { ShellAvailability } from "@zhiyin/contract";
+import { staysInside } from "@zhiyin/workspace-containment";
 
 /**
  * Candidate locations for a real bash, in the order they are trusted. An
@@ -31,7 +32,21 @@ function bashCandidates(environment: NodeJS.ProcessEnv): string[] {
       join(base, "Programs", "Git", "bin", "bash.exe"),
     ]),
     ...fromPath,
-  ];
+  ].filter((candidate) => !startsWsl(candidate, environment));
+}
+
+/**
+ * The `bash.exe` Windows keeps in its own folder and among its app aliases
+ * starts WSL: a command would run in a Linux machine, outside the containment
+ * every command Zhiyin starts is given.
+ */
+function startsWsl(candidate: string, environment: NodeJS.ProcessEnv): boolean {
+  const local = environment["LOCALAPPDATA"];
+  return [
+    environment["SystemRoot"],
+    environment["windir"],
+    local ? join(local, "Microsoft", "WindowsApps") : undefined,
+  ].some((folder) => folder !== undefined && staysInside(folder, candidate));
 }
 
 /**

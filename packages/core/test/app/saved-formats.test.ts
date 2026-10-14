@@ -4,26 +4,20 @@
  * the update question does. ADR 0022.
  */
 
-import { mkdir, mkdtemp, readdir, rename, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, rename } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
 import { FileSessions, type Formats } from "@zhiyin/session";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { loopFrom, stubDependencies } from "./support.js";
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-formats-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-formats-");
 }
 
 function conversation(index: number): WorkspaceTask {

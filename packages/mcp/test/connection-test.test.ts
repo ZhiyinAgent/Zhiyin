@@ -4,17 +4,19 @@
  * must not disturb a server that is already connected.
  */
 
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { InMemoryMcpCredentials, McpUnauthorizedError } from "../src/index.js";
 import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("test()", () => {
   it("reports the tools a working endpoint offers, without saving anything", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      await folders.make("zhiyin-mcp-test-"),
       async () => ({
         listTools: async () => [{ name: "search", description: "Search." }],
         callTool: async () => ({ content: [] }),
@@ -42,7 +44,7 @@ describe("test()", () => {
 
   it("reports a reason when the endpoint refuses the connection", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      await folders.make("zhiyin-mcp-test-"),
       async () => {
         throw new Error("connection refused");
       },
@@ -64,7 +66,7 @@ describe("test()", () => {
 
   it("reports an unauthorized credential apart from an unreachable server", async () => {
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      await folders.make("zhiyin-mcp-test-"),
       async () => {
         throw new McpUnauthorizedError("refused");
       },
@@ -95,7 +97,7 @@ describe("test()", () => {
     async (url, reason) => {
       let dialled = false;
       const servers = managed(
-        await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+        await folders.make("zhiyin-mcp-test-"),
         async () => {
           dialled = true;
           throw new Error("must not be reached");
@@ -116,7 +118,7 @@ describe("test()", () => {
   it("does not disturb an already-connected server with the same id", async () => {
     let closedTest = false;
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      await folders.make("zhiyin-mcp-test-"),
       async (definition) => ({
         listTools: async () => [{ name: "tool" }],
         callTool: async () => ({ content: [] }),
@@ -151,7 +153,7 @@ describe("saveToken()", () => {
   it("keeps no token for a connection nothing declares", async () => {
     const credentials = new InMemoryMcpCredentials();
     const servers = managed(
-      await mkdtemp(join(tmpdir(), "zhiyin-mcp-test-")),
+      await folders.make("zhiyin-mcp-test-"),
       async () => {
         throw new Error("must not be reached");
       },

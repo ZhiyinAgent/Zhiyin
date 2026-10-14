@@ -1,26 +1,20 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   documentCompiler,
   type CompilerPrograms,
   type RunProgram,
 } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function workspace(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-compiler-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-compiler-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const installed: CompilerPrograms = {
   typst: "C:/programs/typst.exe",
@@ -339,7 +333,7 @@ describe("compiling a document", () => {
 });
 
 describe("what a person is asked to approve", () => {
-  it("names the document, the file it writes, and where LaTeX fetches packages", async () => {
+  it("names the document, the file it writes, and where each engine fetches packages", async () => {
     const root = await workspace();
     const { compiler } = compilerWriting(root);
 
@@ -358,6 +352,7 @@ describe("what a person is asked to approve", () => {
       ok: true,
       action: "Compile a Typst document",
       command: expect.stringContaining("→ paper.pdf"),
+      destination: expect.stringContaining("packages this document imports"),
     });
   });
 

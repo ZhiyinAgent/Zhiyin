@@ -1,7 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   AGENT_PLUGINS_SCHEMA,
   FilePluginSettings,
@@ -157,18 +157,13 @@ describe("plugin package validation", () => {
   });
 });
 
-const roots: string[] = [];
+const folders = new TemporaryFolders();
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+afterEach(() => folders.removeAll());
 
 describe("plugin settings", () => {
   it("refuses to open a damaged settings file instead of treating it as empty", async () => {
-    const root = await mkdtemp(join(tmpdir(), "zhiyin-plugin-settings-"));
-    roots.push(root);
+    const root = await folders.make("zhiyin-plugin-settings-");
     await writeFile(join(root, "plugin-settings.json"), "{ not json", "utf8");
 
     await expect(new FilePluginSettings(root).read()).rejects.toMatchObject({

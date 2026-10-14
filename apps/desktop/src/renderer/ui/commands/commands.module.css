@@ -23,6 +23,25 @@
   background: var(--zy-wash-strong);
 }
 
+/* In the button's place and of its size, with nothing to press. */
+.running-commands__unchecked {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px dashed var(--zy-line-strong);
+  border-radius: 7px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.running-commands__unchecked svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
 .running-commands__list {
   display: grid;
   gap: 16px;

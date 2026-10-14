@@ -1,28 +1,21 @@
 /** Filesystem failures must never replace the last committed history. */
 
-import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { appendFile, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type WorkspaceSnapshot,
 } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions, historyFiles, type HistoryFiles } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-write-failure-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-write-failure-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 function snapshot(title: string): WorkspaceSnapshot {
   return {

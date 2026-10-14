@@ -35,6 +35,7 @@
     "@zhiyin/permission-engine": "workspace:*",
     "@zhiyin/plugins": "workspace:*",
     "@zhiyin/recovery": "workspace:*",
+    "@zhiyin/temporary-folders": "workspace:*",
     "@zhiyin/toolchains": "workspace:*",
     "@zhiyin/tools": "workspace:*"
   }

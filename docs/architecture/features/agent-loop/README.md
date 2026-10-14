@@ -109,6 +109,10 @@ out still runs, and is named in the background.
   and `WorkLedger`, what one stretch of work has spent, renewed when the person
   chooses Continue; a specialist keeps a ledger of its own.
 - The types these take and return: `WorkLimits`.
+- `@zhiyin/agent-loop/testing`, for tests only: `stubDependencies(emit)`,
+  every feature a turn reaches answering plainly and reaching nothing, and
+  `pluginsOffering(views)`. The core's tests build theirs on it, so a
+  dependency the loop gains is stubbed once.
 
 ## Invariants
 

@@ -1,12 +1,16 @@
-import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { BrowserSessions, type InteractiveBrowser } from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 describe("conversation browser sessions", () => {
   it("takes a conversation's browser folder, its downloads among it, away with the conversation", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    const parent = await folders.make("zhiyin-browser-output-");
     const folderOf = (conversationId: string) => join(parent, conversationId);
     for (const conversationId of ["first", "second"]) {
       await mkdir(folderOf(conversationId));

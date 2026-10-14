@@ -1,11 +1,15 @@
-import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "../src/index.js";
 
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
 async function workspace(files: Record<string, string> = {}): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-edit-"));
+  const root = await folders.make("zhiyin-edit-");
   for (const [path, text] of Object.entries(files))
     await writeFile(join(root, path), text, "utf8");
   return root;
@@ -278,7 +282,7 @@ describe("multi_edit", () => {
   });
 
   it("refuses to edit a file that does not exist, and never quietly retries an escape", async () => {
-    const parent = await mkdtemp(join(tmpdir(), "zhiyin-edit-"));
+    const parent = await folders.make("zhiyin-edit-");
     const root = join(parent, "inside");
     await mkdir(root);
     await writeFile(join(parent, "outside.md"), "secret", "utf8");

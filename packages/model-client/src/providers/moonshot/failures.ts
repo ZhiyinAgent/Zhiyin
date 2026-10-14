@@ -10,8 +10,9 @@ import {
   ModelClientError,
   retryAfterMs,
   saysTooLong,
-  tokenLimitFrom,
   type FailureReport,
+  said,
+  tooLarge,
 } from "../../failures.js";
 
 /**
@@ -27,11 +28,6 @@ function doesNotFit(sentence: string | undefined): boolean {
     ) ||
       saysTooLong(sentence))
   );
-}
-
-function said(failure: FailureReport): string | undefined {
-  const message = failure.error?.message;
-  return typeof message === "string" && message.trim() ? message : undefined;
 }
 
 function typeOf(failure: FailureReport): string | undefined {
@@ -87,14 +83,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
 
   switch (failure.status) {
     case 400: {
-      if (doesNotFit(sentence)) {
-        const tokens = tokenLimitFrom(sentence);
-        return new ModelClientError(
-          "contextExceeded",
-          "The request is too large for the selected model.",
-          tokens ? { tokens } : {},
-        );
-      }
+      if (doesNotFit(sentence)) return tooLarge(sentence);
       return refusedRequest(failure, sentence);
     }
     case 401:

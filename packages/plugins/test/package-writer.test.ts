@@ -1,22 +1,16 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { loadPluginDirectory, writePluginDirectory } from "../src/index.js";
 
-const roots: string[] = [];
-
 async function temporaryRoot(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "zhiyin-plugin-writer-"));
-  roots.push(root);
-  return root;
+  return folders.make("zhiyin-plugin-writer-");
 }
 
-afterEach(async () => {
-  await Promise.all(
-    roots.splice(0).map((root) => rm(root, { recursive: true, force: true })),
-  );
-});
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const provenance = { source: "personal", sourceId: "authored" } as const;
 
