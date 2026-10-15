@@ -39,6 +39,8 @@ const auxiliaryTokenFloor = 800;
 export class AuxiliaryWork {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
+  /** The stops of each conversation's open requests for names and labels. */
+  readonly #presenting = new Map<string, Set<AbortController>>();
 
   constructor(
     deps: AgentLoopDependencies,
@@ -48,12 +50,27 @@ export class AuxiliaryWork {
     this.#records = parts.records;
   }
 
-  /** Names a conversation from its first message, unless it was renamed. */
+  /**
+   * Stops the conversation's open requests for names and labels, because the
+   * lab is limiting its requests and the answer is waiting on one of them. A
+   * label stopped this way is not shown; the code's own copy stays.
+   */
+  giveWay(taskId: string): void {
+    for (const presenting of this.#presenting.get(taskId) ?? [])
+      presenting.abort();
+  }
+
+  /**
+   * Names a conversation from its first message, unless it was renamed. Says
+   * `"gaveWay"` when the request was stopped for the answer, for the name to
+   * be asked again once the turn is over.
+   */
   async nameConversation(
     taskId: string,
     firstMessage: string,
     signal: AbortSignal,
-  ): Promise<void> {
+  ): Promise<"gaveWay" | undefined> {
+    const presenting = new AbortController();
     const response = await this.askGuidance(
       taskId,
       {
@@ -74,16 +91,19 @@ export class AuxiliaryWork {
         signal,
       },
       signal,
+      presenting,
     );
+    if (presenting.signal.aborted && !signal.aborted) return "gaveWay";
     const title = response ? conversationTitleFrom(response) : undefined;
-    if (!title || signal.aborted) return;
+    if (!title || signal.aborted) return undefined;
     const task = this.#records.task(taskId);
-    if (task.titleSource === "manual") return;
+    if (task.titleSource === "manual") return undefined;
     await this.#records.replaceTask({
       ...task,
       title,
       titleSource: "generated",
     });
+    return undefined;
   }
 
   /**
@@ -136,13 +156,30 @@ export class AuxiliaryWork {
     return response ? actionLabelFrom(response) : undefined;
   }
 
-  /** Presentation: names, and the copy shown around an action. */
+  /**
+   * Presentation: names, and the copy shown around an action. It gives way to
+   * the conversation's answer (`giveWay`), through `presenting` when given.
+   */
   async askGuidance(
     taskId: string,
     request: ModelRequest,
     signal: AbortSignal,
+    presenting = new AbortController(),
   ): Promise<string | undefined> {
-    return this.#ask(taskId, this.#deps.guidanceModel, request, signal);
+    const open = this.#presenting.get(taskId) ?? new Set();
+    this.#presenting.set(taskId, open.add(presenting));
+    const stopped = AbortSignal.any([signal, presenting.signal]);
+    try {
+      return await this.#ask(
+        taskId,
+        this.#deps.guidanceModel,
+        { ...request, signal: stopped },
+        stopped,
+      );
+    } finally {
+      open.delete(presenting);
+      if (!open.size) this.#presenting.delete(taskId);
+    }
   }
 
   /**

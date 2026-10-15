@@ -178,6 +178,8 @@ export class ModelRound {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
   readonly #shown: boolean;
+  /** Told when the lab refuses a request for how many are being sent. */
+  readonly #rateLimited: (taskId: string) => void;
   /** What each conversation's last counted request sent, and when. */
   readonly #lastCounted = new Map<
     string,
@@ -190,10 +192,12 @@ export class ModelRound {
     deps: AgentLoopDependencies,
     records: TurnRecords,
     audience: RoundAudience = "conversation",
+    rateLimited: (taskId: string) => void = () => {},
   ) {
     this.#deps = deps;
     this.#records = records;
     this.#shown = audience === "conversation";
+    this.#rateLimited = rateLimited;
   }
 
   /**
@@ -308,6 +312,11 @@ export class ModelRound {
         }
         // The wait before a repeat is counted down already; silence is
         // counted from when the repeat is sent.
+        if (
+          (event.kind === "restarting" || event.kind === "retrying") &&
+          event.reason === "rateLimited"
+        )
+          this.#rateLimited(taskId);
         listen(
           quietAfter +
             (event.kind === "restarting" || event.kind === "retrying"

@@ -61,6 +61,16 @@ class MemoryRewindJournal implements RewindJournal {
   }
 }
 
+/**
+ * Whether `current` is `rewound` as saved. Saving records when it happened,
+ * so those two fields are not compared.
+ */
+function savedAs(current: WorkspaceTask, rewound: WorkspaceTask): boolean {
+  const unstamped = (task: WorkspaceTask) =>
+    JSON.stringify({ ...task, updatedAt: "", updatedLabel: "" });
+  return unstamped(current) === unstamped(rewound);
+}
+
 function journalKey(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -273,7 +283,7 @@ export class ComposedRewind implements Rewind {
       try {
         await host.open?.(operation.conversationId);
         const current = host.task(operation.conversationId);
-        if (JSON.stringify(current) === JSON.stringify(operation.task)) {
+        if (savedAs(current, operation.task)) {
           await this.#journal.complete(operation.id);
           completed = true;
           continue;

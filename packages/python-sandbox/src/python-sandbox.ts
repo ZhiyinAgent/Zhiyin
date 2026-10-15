@@ -279,7 +279,7 @@ export function pythonSandbox(
         ? {}
         : {
             destination:
-              "Preparing the Python environment downloads Python and its default packages from python.org's package index.",
+              "Preparing the Python environment downloads Python, as built by Astral's python-build-standalone project, and its default packages from pypi.org.",
           };
       if (name === "run_python") {
         const code = args["code"];

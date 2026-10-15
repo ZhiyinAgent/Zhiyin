@@ -106,7 +106,8 @@ described in the [component library](../../component-library.md).
 - **The keyboard reaches everything.** The focus ring shows for keyboard focus.
   Escape closes what is open, one dialog at a time, and returns focus to what
   opened it; a dialog keeps focus inside itself, Tab and Shift+Tab going round
-  its own controls. A control drawn as an icon alone is named on hover and
+  its own controls in the order it shows them, from a body that scrolls too. A
+  control drawn as an icon alone is named on hover and
   keyboard focus, and one that cannot be used yet says what it is waiting for.
   What floats closes on a press outside it, top layer first; menus also close
   when the window loses focus, dialogs stay open.

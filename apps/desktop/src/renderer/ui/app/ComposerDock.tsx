@@ -20,6 +20,7 @@ type ComposerProps = ComponentProps<typeof Composer>;
  * there is one, and the composer with the folder it works in.
  */
 export function ComposerDock({
+  composerKey,
   state,
   task,
   commands,
@@ -33,6 +34,8 @@ export function ComposerDock({
   onUserInput,
   onReturnToConversation,
 }: {
+  /** Which composer this is: a new key starts an empty one. */
+  composerKey: string;
   state: WorkspaceState;
   task: WorkspaceTask | null;
   commands: WorkspaceCommands;
@@ -103,7 +106,7 @@ export function ComposerDock({
       )}
       <div className={styles["workspace-composer"]} hidden={hidden}>
         <Composer
-          key={task?.id ?? "new"}
+          key={composerKey}
           {...(state.provider.reasoning
             ? { reasoningCapabilities: state.provider.reasoning }
             : {})}

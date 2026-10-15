@@ -131,6 +131,35 @@ describe("a Moonshot failure", () => {
     });
   });
 
+  it("says the account takes few requests at once, and that a top-up raises the limit", async () => {
+    expect(
+      await failure(429, {
+        type: "rate_limit_reached_error",
+        message:
+          "Your account org-0123<ak-abc> request reached max organization concurrency: 1, please try again after 1 seconds",
+      }),
+    ).toMatchObject({
+      code: "rateLimited",
+      retryable: true,
+      message:
+        "This Kimi account takes 1 request at a time, and another was still open. Kimi raises the limit as the account is topped up.",
+    });
+  });
+
+  it("says the account reached its requests per minute, and that a top-up raises the limit", async () => {
+    expect(
+      await failure(429, {
+        type: "rate_limit_reached_error",
+        message: "Organization-level RPM limit reached",
+      }),
+    ).toMatchObject({
+      code: "rateLimited",
+      retryable: true,
+      message:
+        "This Kimi account reached the number of requests it may send in a minute. Kimi raises the limit as the account is topped up.",
+    });
+  });
+
   it("sends the request again when Moonshot's service is overloaded, which is not the account's limit", async () => {
     expect(
       await failure(

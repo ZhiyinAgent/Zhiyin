@@ -64,7 +64,8 @@ crash interrupted, and takes the backup around each file change. It is a group
   touching files, the group writes the intended result to a journal in the
   app's data folder, records the file results before saving the conversation,
   and clears the entry once saved. At startup, `resume` finishes a pending
-  entry. If the saved conversation matches neither its state before the
+  entry. The intended result counts as saved whatever time the save recorded
+  on it. If the saved conversation matches neither its state before the
   operation nor the intended result, that conversation stays blocked: no
   turn, rewind or undo starts in it. The host is asked to open the
   conversation first, since after a restart it may not be loaded. One entry

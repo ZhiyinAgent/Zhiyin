@@ -53,6 +53,25 @@ export function useModalFocus(
       const at = controls.findIndex((control) => control === focused);
       const first = controls[0];
       const last = controls.at(-1);
+      if (at === -1 && focused && focused !== own && own.contains(focused)) {
+        // Focus on something the list does not name, such as a body that
+        // scrolls, which Chromium lets the keyboard reach: the next control is
+        // the one after it in the dialog, or before it with Shift.
+        const next = event.shiftKey
+          ? controls.findLast(
+              (control) =>
+                control.compareDocumentPosition(focused) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            )
+          : controls.find(
+              (control) =>
+                focused.compareDocumentPosition(control) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+        event.preventDefault();
+        (next ?? (event.shiftKey ? last : first))?.focus();
+        return;
+      }
       if (!first || !last) event.preventDefault();
       else if (event.shiftKey && at <= 0) {
         event.preventDefault();

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
@@ -387,7 +387,11 @@ withGit("gitAutomation against a real repository", () => {
     expect(failed).toEqual([]);
     expect(await readdir(ran)).toEqual([]);
 
-    // The same read, run as git runs it by default, does start them.
+    // The same read, run as git runs it by default, does start them. A file
+    // git last saw at another time has its entry refreshed, so the index is
+    // written and the hook runs, however fast the steps above went.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    await utimes(join(root, ".gitmodules"), hourAgo, hourAgo);
     await gitOutput(root, ["status"]);
     expect(await readdir(ran)).toEqual(
       expect.arrayContaining(["hook", "odd", "submodule"]),

@@ -180,6 +180,9 @@ export class TestHost implements TurnHost {
     if (!this.tasks.some((item) => item.id === task.id)) return;
     if (this.savesSlowly)
       await new Promise((resolve) => setTimeout(resolve, 1));
+    // As the app does: a write whose author lost the conversation while it
+    // was being saved is dropped.
+    if (!options.commit()) return;
     const updated = {
       ...settledWhenTurnEnded(task),
       updatedAt: this.#now().toISOString(),

@@ -275,11 +275,18 @@ export class SpecialistExecution {
         taskId: string,
         result: SpecialistExecutionResult,
       ) => void;
+      /** Told when the lab refuses one of its requests for their number. */
+      readonly rateLimited: (taskId: string) => void;
     },
   ) {
     this.#deps = deps;
     this.#records = parts.records;
-    this.#round = new ModelRound(deps, parts.records, "specialist");
+    this.#round = new ModelRound(
+      deps,
+      parts.records,
+      "specialist",
+      parts.rateLimited,
+    );
     this.#toolCalls = parts.toolCalls;
     this.#ownership = parts.ownership;
     this.#onSettled = parts.onSettled;

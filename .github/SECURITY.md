@@ -145,7 +145,10 @@ files inside the folder.
 
 Remote connectors use Streamable HTTP MCP. Their tool descriptions and
 results are untrusted, and a server's own read-only labels are ignored, so
-every call asks unless you allowed that tool for the conversation.
+every call asks unless you allowed that tool for the conversation. To list a
+connector's tools, Zhiyin connects to it without asking whenever a
+conversation can use it, such as once a plugin it belongs to is active; that
+sends the connector's key or sign-in and nothing from the conversation.
 
 A connector takes a pasted key or, where its service offers the standard MCP
 sign-in (OAuth 2.1 with PKCE), a sign-in in your own browser. During a

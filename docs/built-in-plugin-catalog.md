@@ -71,7 +71,7 @@ Specialists: `data-cleansing-specialist`, `insights-synthesizer`.
 
 Connector: the Python environment, a `uv`-managed environment for one-off
 data work, with pandas, polars, NumPy, SciPy, Matplotlib, seaborn,
-statsmodels, and openpyxl for Excel workbooks. It is kept apart from the person's own projects, which keep their
+statsmodels, and openpyxl for Excel workbooks. Its packages are kept apart from the person's own projects, which keep their
 own environments.
 
 ## Deep Research & Synthesis

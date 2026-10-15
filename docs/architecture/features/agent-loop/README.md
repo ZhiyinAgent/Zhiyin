@@ -22,7 +22,10 @@ an expected cache miss (ADR 0012).
 
 The loop also names a new conversation from its first message, alongside the
 turn so the first answer does not wait for the name, and in the background
-names an action whose call did not say what it is for. The working
+names an action whose call did not say what it is for. When the lab refuses one
+of the conversation's requests for how many are being sent, the open requests
+for names and labels stop, so the answer gets the place; a name stopped this
+way is asked again once the turn is over. The working
 model keeps its own plan with `update_plan` (ADR 0013). None of this can affect
 permission or execution.
 
@@ -124,10 +127,12 @@ out still runs, and is named in the background.
   browser and its 3D scene, stays open with its connections (ADR 0029). The
   commands end even when the stop cannot be saved. Other conversations keep
   working.
-- Stopping gives the conversation back at once. Every write is checked against
-  its exact owning turn before it is committed, so a stopped turn's late
-  answer cannot overwrite the turn that replaced it or reach a deleted
-  conversation. Nothing resumes a stopped turn: a specialist it stopped is
+- Stopping gives the conversation back at once. A write begun while a turn
+  owns the conversation is committed only if that turn still owns it, so a
+  stopped turn's late answer cannot overwrite the turn that replaced it or
+  reach a deleted conversation. While nothing runs in the conversation, no
+  write starts work in it: none puts it back to working or to a question, or
+  records an action or specialist as running. Nothing resumes a stopped turn: a specialist it stopped is
   reported to the next turn the person starts, after a restart too.
 - A turn that fails before it starts, such as one whose folder cannot be
   entered, gives its conversation back, so the next message starts a turn.

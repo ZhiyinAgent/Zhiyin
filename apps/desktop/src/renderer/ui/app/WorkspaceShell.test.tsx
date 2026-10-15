@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   emptyConversationLists,
@@ -1535,6 +1535,73 @@ describe("WorkspaceShell", () => {
         "Review the recent changes",
         undefined,
       ),
+    );
+  });
+
+  /**
+   * The core opens a new conversation before it says it made it, so the
+   * window shows that conversation while its first message is still being
+   * sent. A send that fails there leaves the words where they were typed.
+   */
+  it("keeps a new conversation's first message in the composer when it could not be sent", async () => {
+    const ready = {
+      connection: "ready" as const,
+      runtime: {
+        tasks: "available" as const,
+        capabilities: "available" as const,
+      },
+    };
+    const draft: WorkspaceTask = {
+      id: "task-new",
+      title: "New task",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "draft" },
+    };
+    function Opening() {
+      const [state, setState] = useState(createWorkspaceState(ready));
+      const commands = useMemo(
+        () => ({
+          ...stubCommands,
+          createTask: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [draft],
+                selectedTaskId: draft.id,
+              }),
+            );
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return draft.id;
+          },
+          sendMessage: async () => {
+            throw new Error("Choose a model before sending.");
+          },
+        }),
+        [],
+      );
+      return (
+        <WorkspaceShell
+          state={state}
+          dispatch={() => undefined}
+          commands={commands}
+        />
+      );
+    }
+    render(<Opening />);
+
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Plan a trip to Xi'an" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByText(/Your message could not be sent/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Zhiyin")).toHaveValue(
+      "Plan a trip to Xi'an",
     );
   });
 

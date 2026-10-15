@@ -280,7 +280,9 @@ ignores all four.
   both name the stored model and point to the Model page. A rate limit is reported
   as every allowed upstream being out of capacity, and an empty routing result
   as no allowed upstream serving the model, not as the account being throttled
-  or the model being down.
+  or the model being down. Kimi's limits on requests open at once and per
+  minute are told as the account's own, with the open-request count where Kimi
+  gives it, and say a top-up raises them.
 - **An upstream error that explains nothing is said to be one, and sent
   again.** OpenRouter's bare "Provider returned error", untyped or `unmapped`,
   before the stream or inside it, is an `unexplainedError`: it names the

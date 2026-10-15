@@ -134,6 +134,8 @@ export class TurnLoop {
       readonly pendingHandoffs: PendingHandoffs;
       readonly commandEndings: CommandEndings;
       readonly context: ContextGuard;
+      /** Told when the lab refuses one of the turn's requests for their number. */
+      readonly rateLimited: (taskId: string) => void;
     },
   ) {
     this.#deps = deps;
@@ -146,7 +148,12 @@ export class TurnLoop {
     this.#ownership = parts.ownership;
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#commandEndings = parts.commandEndings;
-    this.#round = new ModelRound(deps, parts.records);
+    this.#round = new ModelRound(
+      deps,
+      parts.records,
+      "conversation",
+      parts.rateLimited,
+    );
     this.#context = parts.context;
     this.#plan = new PlanProgress(parts.records);
   }

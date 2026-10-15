@@ -131,6 +131,16 @@ export function WorkspaceShell({
     readonly attachments?: readonly MessageAttachment[];
   }>();
   const [keyFirst, setKeyFirst] = useState(false);
+  // Which empty composer is showing, counted up each time a new conversation
+  // is started, so each starts empty.
+  const [blank, setBlank] = useState(0);
+  // The conversation the empty composer's own first message is opening. The
+  // core shows it before the message is sent, and the composer stays the same
+  // one there, so a send that fails leaves the words where they were typed.
+  const [opening, setOpening] = useState<{
+    readonly blank: number;
+    readonly taskId?: string;
+  }>();
   // The person's message open for editing where it is, as taskId:messageId.
   const [editingMessage, setEditingMessage] = useState<string>();
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -229,7 +239,17 @@ export function WorkspaceShell({
     attachments?: readonly MessageAttachment[],
   ) {
     let taskId = selectedTask?.id;
-    if (!taskId) await budget.adopt((taskId = await commands.createTask()));
+    if (!taskId) {
+      setOpening({ blank });
+      try {
+        taskId = await commands.createTask();
+      } catch (error) {
+        setOpening(undefined);
+        throw error;
+      }
+      setOpening({ blank, taskId });
+      await budget.adopt(taskId);
+    }
     setComposerDraft(undefined);
     await sendComposerMessage(commands.sendMessage, {
       taskId,
@@ -253,6 +273,8 @@ export function WorkspaceShell({
   function startNewTask() {
     setNavigationOpen(false);
     dispatch({ type: "newTaskStarted" });
+    setOpening(undefined);
+    setBlank((count) => count + 1);
     // The core is told too. Every snapshot it sends says which conversation is
     // open, so leaving it believing the last one still is means the next
     // snapshot — choosing a folder, for instance — puts that conversation back
@@ -487,6 +509,15 @@ export function WorkspaceShell({
                   />
                 )}
                 <ComposerDock
+                  composerKey={
+                    !selectedTask
+                      ? `new:${blank}`
+                      : opening &&
+                          (opening.taskId ?? selectedTask.id) ===
+                            selectedTask.id
+                        ? `new:${opening.blank}`
+                        : selectedTask.id
+                  }
                   state={state}
                   task={selectedTask}
                   commands={commands}
