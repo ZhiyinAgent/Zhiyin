@@ -277,10 +277,11 @@ describe("delete_file", () => {
     const user = userInfo().username;
     execFileSync("icacls", [denied, "/deny", `${user}:(OI)(CI)(F)`]);
     try {
-      // On GitHub's machine the folder cannot be listed but the file in it can
-      // still be looked at by its path: there is nothing refused to check.
-      const refused = await realpath(join(denied, "inner", "notes.md"))
-        .then(lstat)
+      // Looked at as the delete check looks: its folder resolved, then the
+      // file in it. On GitHub's machine Windows answers both through the
+      // refusal, and there is nothing refused to check.
+      const refused = await realpath(join(denied, "inner"))
+        .then((folder) => lstat(join(folder, "notes.md")))
         .then(
           () => false,
           () => true,
