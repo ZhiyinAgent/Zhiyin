@@ -9,8 +9,8 @@
  */
 
 import {
+  lstat,
   mkdir,
-  readdir,
   readFile,
   realpath,
   stat,
@@ -277,13 +277,15 @@ describe("delete_file", () => {
     const user = userInfo().username;
     execFileSync("icacls", [denied, "/deny", `${user}:(OI)(CI)(F)`]);
     try {
-      // An elevated administrator, as on GitHub's machine, still reads the
-      // folder through the refusal: there is nothing refused to check here.
-      const refused = await readdir(denied).then(
-        () => false,
-        () => true,
-      );
-      context.skip(!refused, "Windows lets this account read past a refusal.");
+      // On GitHub's machine the folder cannot be listed but the file in it can
+      // still be looked at by its path: there is nothing refused to check.
+      const refused = await realpath(join(denied, "inner", "notes.md"))
+        .then(lstat)
+        .then(
+          () => false,
+          () => true,
+        );
+      context.skip(!refused, "Windows lets this account look past a refusal.");
       const tools = new WorkspaceTools(root, {
         recycleBin: recycleBin(root).bin,
       });
