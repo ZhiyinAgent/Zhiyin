@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists, type WorkspaceTask } from "@zhiyin/contract";
@@ -52,12 +58,15 @@ async function plantInterruptedRewind(options: {
 }) {
   const changed = "changed by discarded work";
   const restored = "original bytes";
-  const target = join(options.workspaceDirectory, "notes.txt");
   // Where the app keeps its copies: a restore takes one from nowhere else.
   const copies = join(options.dataDirectory, "recovery", "rewind-action");
   const backup = join(copies, "0.bin");
   await mkdir(options.workspaceDirectory, { recursive: true });
   await mkdir(copies, { recursive: true });
+  // A review names the folder by its real path, long names and all, as the
+  // app records it; a temporary folder can be reached by a short name.
+  const workspaceRoot = await realpath(options.workspaceDirectory);
+  const target = join(workspaceRoot, "notes.txt");
   await writeFile(
     target,
     options.conversationSaved ? restored : changed,
@@ -77,7 +86,7 @@ async function plantInterruptedRewind(options: {
     task: rewoundTask,
     review: {
       id,
-      workspaceRoot: options.workspaceDirectory,
+      workspaceRoot,
       files: [{ path: "notes.txt", action: "restore", status: "recoverable" }],
       targets: [
         {
