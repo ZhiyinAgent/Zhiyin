@@ -1,6 +1,6 @@
 {
   "name": "zhiyin",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "private": true,
   "description": "An AI agent for your PC: tell it what you need in plain words, and it does the work. Free and open source, for Windows.",
   "author": "Bastien HOTTELET",

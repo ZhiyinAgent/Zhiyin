@@ -25,7 +25,7 @@ takes a few minutes.
 https://github.com/user-attachments/assets/3162f301-8551-42c1-bea6-934ddd791d20
 
 <p align="center">
-  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
+  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.3/Zhiyin-Setup-0.1.0-alpha.3.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
 </p>
 
 > [!NOTE]
@@ -84,9 +84,9 @@ your Windows account's access, so review each one; the
 ### Install the developer preview
 
 Download
-[`Zhiyin-Setup-0.1.0-alpha.2.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe)
+[`Zhiyin-Setup-0.1.0-alpha.3.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.3/Zhiyin-Setup-0.1.0-alpha.3.exe)
 from the
-[`v0.1.0-alpha.2`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.2)
+[`v0.1.0-alpha.3`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.3)
 prerelease. Microsoft Defender SmartScreen warns before it runs: choose **More
 info**, then **Run anyway**.
 
@@ -100,9 +100,9 @@ You also need:
   commands, and which the Git connector uses.
 
 To check the installer before running it, compare
-`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.2.exe` with the SHA-256 in the
+`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.3.exe` with the SHA-256 in the
 release notes, and confirm its origin with
-`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.2.exe --repo ZhiyinAgent/Zhiyin`.
+`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.3.exe --repo ZhiyinAgent/Zhiyin`.
 The release workflow publishes only an alpha tag that matches the app's
 version, after the full gate passes, with `SHA256SUMS.txt` and a
 build-provenance attestation.
