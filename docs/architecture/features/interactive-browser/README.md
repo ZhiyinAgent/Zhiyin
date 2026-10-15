@@ -110,11 +110,12 @@ some sites refuse headless browsers.
 - **A download stays with the conversation.** It lands in the conversation's
   own browser folder, never the person's Downloads folder, and the answer
   names it. That folder, with the copies of what was uploaded, is deleted
-  with the conversation.
+  with the conversation. A download larger than 1 GB, on any of the
+  browser's pages, is stopped and nothing of it is kept.
 - **A browser that goes away is reported.** When the page or the connection
-  is lost, the session becomes `failed` with a reason and the automation
-  context is withdrawn. A closed session refuses navigation and takeover input
-  rather than reopening.
+  is lost, the session becomes `failed` with a reason, the automation
+  context is withdrawn, and what is left of the browser is ended. A closed
+  session refuses navigation and takeover input rather than reopening.
 
 ### What the person sees
 
@@ -161,6 +162,11 @@ some sites refuse headless browsers.
   their size and last change, so a file changed since is not sent. The page is
   given a copy kept in the conversation's browser folder, the one place the
   browser reads from.
+- **The browser opens only web pages**: `https:`, `http:` and `about:blank`,
+  whether the agent or the person sends it. Any other scheme, such as the
+  browser's own pages, `view-source:` or `data:`, is refused before the
+  browser sees it. An address typed without a scheme is read as `https://`,
+  or `http://` for this computer.
 - **Each agent action is announced before it runs**, through
   `markAgentAction`; a refused tool is not announced. Closing the automation
   server leaves the page open for whoever is still reading it.

@@ -96,11 +96,11 @@ and the limit where the provider stated them. The codes are `noModel`,
 `unexplainedError`, `networkFailure` and `malformedResponse`.
 
 The composition root builds `ModelProviders` with `FileModelChoice` (the
-stored choice). For a test run or the benchmark, `ZHIYIN_MODEL` fixes the
-model instead, on the provider and region named by `ZHIYIN_PROVIDER` and
-`ZHIYIN_REGION` (OpenRouter when unnamed). Outside an installed app,
-`ZHIYIN_MODEL_ENDPOINT` sends every request to another host; an installed app
-ignores it.
+stored choice). Outside an installed app, for a test run or the benchmark,
+`ZHIYIN_MODEL` fixes the model instead, on the provider and region named by
+`ZHIYIN_PROVIDER` and `ZHIYIN_REGION` (OpenRouter when unnamed), and
+`ZHIYIN_MODEL_ENDPOINT` sends every request to another host. An installed app
+ignores all four.
 - `ProviderCredentials`, one platform's key as the person saved it.
 - `fetchOpenRouterCatalog` and `fetchOpenRouterModelProviders`, OpenRouter's
   model catalogue and the upstreams one model may be routed to.

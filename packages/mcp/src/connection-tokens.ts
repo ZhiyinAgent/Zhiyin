@@ -28,6 +28,11 @@ export class ConnectionTokens {
   readonly #states = new Map<string, McpCredentialState>();
   /** One refresh at a time per connection: a second would void the first. */
   readonly #refreshing = new Map<string, Promise<string | undefined>>();
+  /**
+   * Moves on whenever the person signs in, pastes a key or signs out, so a
+   * refresh that set off before then knows its answer is no longer wanted.
+   */
+  readonly #generations = new Map<string, number>();
   readonly #now: () => number;
 
   constructor(store: McpCredentialStore, now: () => number = Date.now) {
@@ -64,7 +69,16 @@ export class ConnectionTokens {
     return refreshing;
   }
 
+  #generation(id: string): number {
+    return this.#generations.get(id) ?? 0;
+  }
+
+  #moveOn(id: string): void {
+    this.#generations.set(id, this.#generation(id) + 1);
+  }
+
   async #refresh(id: string): Promise<string | undefined> {
+    const generation = this.#generation(id);
     const signedIn = await this.#signedIn.read(id);
     if (!signedIn) return undefined;
     const refreshToken = signedIn.tokens.refresh_token;
@@ -79,6 +93,12 @@ export class ConnectionTokens {
         ...(signedIn.metadata ? { metadata: signedIn.metadata } : {}),
         ...(signedIn.resource ? { resource: new URL(signedIn.resource) } : {}),
       });
+      // The person signed out or in again while it was asked for.
+      if (generation !== this.#generation(id))
+        return (
+          (await this.#store.get(id)) ??
+          (await this.#signedIn.read(id))?.tokens.access_token
+        );
       const next: SignedIn = {
         ...signedIn,
         tokens: { refresh_token: refreshToken, ...tokens },
@@ -88,7 +108,8 @@ export class ConnectionTokens {
       return next.tokens.access_token;
     } catch (error) {
       // A refusal ends the sign-in; an unreachable service leaves it for later.
-      if (error instanceof OAuthError) await this.forget(id);
+      if (error instanceof OAuthError && generation === this.#generation(id))
+        await this.forget(id);
       return undefined;
     }
   }
@@ -112,6 +133,7 @@ export class ConnectionTokens {
   }
 
   async save(id: string, token: string): Promise<void> {
+    this.#moveOn(id);
     try {
       await this.#store.set(id, token);
     } catch (error) {
@@ -122,6 +144,7 @@ export class ConnectionTokens {
   }
 
   async saveSignIn(id: string, signedIn: SignedIn): Promise<void> {
+    this.#moveOn(id);
     try {
       await this.#signedIn.write(id, signedIn);
     } catch (error) {
@@ -134,6 +157,7 @@ export class ConnectionTokens {
 
   /** Forgets the key and the sign-in. True only when both are known gone. */
   async forget(id: string): Promise<boolean> {
+    this.#moveOn(id);
     try {
       await this.#store.delete(id);
       await this.#signedIn.delete(id);

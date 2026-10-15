@@ -71,12 +71,35 @@ const credentialText: readonly [RegExp, string][] = [
     `$1${credentialOmitted}`,
   ],
   [
+    /(--(?:password|passwd|token|api-?key|secret)=)(["'])(?:(?!\2)[^\\\r\n]|\\.)*\2/gi,
+    `$1$2${credentialOmitted}$2`,
+  ],
+  [
     new RegExp(
       String.raw`(--(?:password|passwd|token|api-?key|secret)=)${notOmitted}[^\s"']+`,
       "gi",
     ),
     `$1${credentialOmitted}`,
   ],
+  // A user and password given to a command, as curl takes them.
+  [
+    new RegExp(
+      String.raw`(\s(?:-u|--user)(?:\s+|=)["']?[^\s:"']+:)${notOmitted}[^\s"']+`,
+      "g",
+    ),
+    `$1${credentialOmitted}`,
+  ],
+  [
+    /(-----BEGIN [A-Z ]*PRIVATE KEY-----)[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----)/g,
+    `$1\n${credentialOmitted}\n$2`,
+  ],
+  [
+    /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+    credentialOmitted,
+  ],
+  [/\bnpm_[A-Za-z0-9]{36}\b/g, credentialOmitted],
+  // Zhipu's keys: an id and a secret, joined by a dot.
+  [/\b[0-9a-f]{32}\.[A-Za-z0-9]{16}\b/g, credentialOmitted],
   [
     /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+(@)/gi,
     `$1${credentialOmitted}$2`,
@@ -93,8 +116,22 @@ const credentialText: readonly [RegExp, string][] = [
   [/\bAKIA[0-9A-Z]{16}\b/g, credentialOmitted],
 ];
 
-/** A JSON field holding text: `"name": "value"`. */
+/**
+ * A field holding quoted text, its name quoted or not and either quote used:
+ * `"name": "value"`, `'name': 'value'`, `name: "value"`.
+ */
+const quotedField =
+  /((["']?)\b([A-Za-z_][\w-]{0,99})\2\s*:\s*)(["'])(?:(?!\4)[^\\\r\n]|\\.)*\4/g;
+
+/** A JSON field holding text, whatever its name: `"OPENAI-KEY": "value"`. */
 const jsonText = /("([^"\\\r\n]{1,100})"\s*:\s*)"(?:[^"\\]|\\.)*"/g;
+
+/**
+ * A name set to quoted text in code or a shell, whatever the case of the
+ * name: `password='x'`, `SECRET="two words"`. Quoted, the value is whole.
+ */
+const quotedAssignment =
+  /\b([A-Za-z_][A-Za-z0-9_]*)(\s*=\s*)(["'])(?:(?!\3)[^\\\r\n]|\\.)*\3/g;
 
 /**
  * An upper-case variable set to a value, as in a `.env` file, a shell or
@@ -115,6 +152,20 @@ export function textWithoutCredentials(text: string): string {
     .replace(jsonText, (field: string, head: string, name: string) =>
       namesCredential(name) ? `${head}"${credentialOmitted}"` : field,
     )
+    .replace(
+      quotedField,
+      (field: string, head: string, _q: string, name: string, quote: string) =>
+        namesCredential(name)
+          ? `${head}${quote}${credentialOmitted}${quote}`
+          : field,
+    )
+    .replace(
+      quotedAssignment,
+      (set: string, name: string, between: string, quote: string) =>
+        namesCredential(name)
+          ? `${name}${between}${quote}${credentialOmitted}${quote}`
+          : set,
+    )
     .replace(assignment, (set: string, name: string, between: string) =>
       namesCredential(name) ? `${name}${between}${credentialOmitted}` : set,
     );
@@ -131,15 +182,23 @@ export function textWithoutCredentials(text: string): string {
 export function withoutCredentials(value: unknown): unknown {
   if (typeof value === "string") return textWithoutCredentials(value);
   if (Array.isArray(value)) return value.map(withoutCredentials);
-  if (value && typeof value === "object")
+  if (value && typeof value === "object") {
+    // An entry naming itself, as a call's inputs are listed: its value is
+    // what its name says it is.
+    const named =
+      "name" in value &&
+      typeof value.name === "string" &&
+      namesCredential(value.name);
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,
         (credentialField.test(key) && entry !== undefined && entry !== null) ||
-        (typeof entry === "string" && namesCredential(key))
+        (typeof entry === "string" &&
+          (namesCredential(key) || (named && key === "value")))
           ? credentialOmitted
           : withoutCredentials(entry),
       ]),
     );
+  }
   return value;
 }

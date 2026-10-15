@@ -138,6 +138,32 @@ function quoteWindowsArgument(value: string): string {
   return `${quoted}${"\\".repeat(backslashes * 2)}"`;
 }
 
+/**
+ * Windows reads each of these strings up to its first NUL, so a value carrying
+ * one would start something other than what it says. Refused before anything
+ * is opened, rather than cut where Windows would cut it.
+ */
+function refuseNul(options: ContainedProcessOptions): void {
+  const named: [string, string][] = [
+    ["program", options.executable],
+    ["folder", options.cwd],
+    ["output file", options.stdout],
+    ["error file", options.stderr],
+    ...options.arguments.map((value): [string, string] => ["argument", value]),
+    ...Object.entries(options.environment ?? {}).flatMap(
+      ([name, value]): [string, string][] => [
+        ["environment name", name],
+        ["environment value", value ?? ""],
+      ],
+    ),
+  ];
+  const held = named.find(([, value]) => value.includes("\0"));
+  if (held)
+    throw new Error(
+      `The process was not started: its ${held[0]} holds a NUL character.`,
+    );
+}
+
 function writableCommandLine(
   executable: string,
   args: readonly string[],
@@ -313,6 +339,7 @@ export function openProcessContainer(
     },
     launch(options: ContainedProcessOptions): ContainedProcess {
       if (closed) throw new Error("This process container is already closed.");
+      refuseNul(options);
       const security = {
         nLength: api.securityAttributesSize,
         lpSecurityDescriptor: null,

@@ -1,5 +1,13 @@
-import { stat } from "node:fs/promises";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { realpath, stat } from "node:fs/promises";
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import type {
   ConnectionTool,
   ProducedFile,
@@ -66,6 +74,8 @@ function engineFor(path: string): Engine | undefined {
 }
 
 type Request = {
+  /** The workspace folder, with links resolved. */
+  readonly root: string;
   readonly engine: Engine;
   readonly source: string;
   readonly output: string;
@@ -73,11 +83,68 @@ type Request = {
   readonly relativeOutput: string;
 };
 
-/** What a call asks for, or why it cannot be asked for at all. */
-function requestFrom(
+/**
+ * Where a path really is, every link followed in the part of it that exists:
+ * a PDF not written yet is placed by the folder it would be written in.
+ */
+async function realPlace(path: string): Promise<string | undefined> {
+  const rest: string[] = [];
+  for (let existing = path; ;) {
+    try {
+      return join(await realpath(existing), ...rest);
+    } catch (error) {
+      const parent = dirname(existing);
+      if (
+        (error as { code?: unknown }).code !== "ENOENT" ||
+        parent === existing
+      )
+        return undefined;
+      rest.unshift(basename(existing));
+      existing = parent;
+    }
+  }
+}
+
+const outsideFolder = "Documents are compiled inside the workspace folder.";
+
+/**
+ * What a call asks for, or why it cannot be asked for at all: checked by the
+ * paths as written, then again where they really lead, so a link inside the
+ * folder does not carry a read or a write out of it.
+ */
+async function requestFrom(
   root: string,
   args: unknown,
-): Request | { readonly reason: string } {
+): Promise<Request | { readonly reason: string }> {
+  const written = writtenRequest(root, args);
+  if ("reason" in written) return written;
+  const [realRoot, source, output] = await Promise.all([
+    realpath(root).catch(() => undefined),
+    realPlace(written.source),
+    realPlace(written.output),
+  ]);
+  if (!realRoot) return { reason: "The workspace folder could not be read." };
+  if (
+    !source ||
+    !output ||
+    !staysBelow(realRoot, source) ||
+    !staysBelow(realRoot, output)
+  )
+    return { reason: outsideFolder };
+  return {
+    ...written,
+    root: realRoot,
+    source,
+    output,
+    relativeSource: relative(realRoot, source),
+    relativeOutput: relative(realRoot, output),
+  };
+}
+
+function writtenRequest(
+  root: string,
+  args: unknown,
+): Omit<Request, "root"> | { readonly reason: string } {
   const record = (args ?? {}) as Record<string, unknown>;
   const path = record["path"];
   const output = record["output"];
@@ -98,7 +165,7 @@ function requestFrom(
       : `${path.slice(0, path.lastIndexOf("."))}.pdf`,
   );
   if (!staysBelow(root, source) || !staysBelow(root, target))
-    return { reason: "Documents are compiled inside the workspace folder." };
+    return { reason: outsideFolder };
   if (!target.toLowerCase().endsWith(".pdf"))
     return { reason: "The compiled document is a PDF." };
   // Tectonic is given a folder and names the PDF after the source.
@@ -119,7 +186,8 @@ function requestFrom(
   };
 }
 
-function argumentsFor(request: Request, root: string): readonly string[] {
+function argumentsFor(request: Request): readonly string[] {
+  const root = request.root;
   // Typst is told the project root, so a document can only read from the
   // workspace. Tectonic is run untrusted, which disables shell escape.
   return request.engine === "typst"
@@ -208,7 +276,7 @@ export function documentCompiler(
       const root = options.workspaceRoot();
       if (!root)
         return { ok: false, reason: "Choose a folder before compiling." };
-      const request = requestFrom(root, args);
+      const request = await requestFrom(root, args);
       if ("reason" in request) return { ok: false, reason: request.reason };
       const programs = await options.programs();
       if (!programs[request.engine])
@@ -257,7 +325,7 @@ export function documentCompiler(
         return textResult(`Unknown tool “${name}”.`, true);
       const root = options.workspaceRoot();
       if (!root) return textResult("Choose a folder before compiling.", true);
-      const request = requestFrom(root, args);
+      const request = await requestFrom(root, args);
       if ("reason" in request) return textResult(request.reason, true);
       let programs: CompilerPrograms;
       try {
@@ -279,14 +347,14 @@ export function documentCompiler(
       );
       const { exitCode, stdout, stderr } = await run({
         executable,
-        arguments: argumentsFor(request, root),
-        cwd: root,
+        arguments: argumentsFor(request),
+        cwd: request.root,
         timeoutMs,
         ...(signal ? { signal } : {}),
         ...(options.containment ? { containment: options.containment } : {}),
       });
       const output = `${stdout}\n${stderr}`;
-      const diagnostics = diagnosticsFrom(output, root);
+      const diagnostics = diagnosticsFrom(output, request.root);
       if (exitCode !== 0)
         return textResult(
           shortened(

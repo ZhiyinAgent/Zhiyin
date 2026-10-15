@@ -250,17 +250,50 @@ function targetFrom({
   };
 }
 
+/** The most one download may be: a page can send a file of any size. */
+const defaultMaximumDownloadBytes = 1024 ** 3;
+
+/**
+ * Stops any download, on any of the context's pages, once it is larger than
+ * the most a download may be. The browser writes a download to disk as it
+ * arrives, so one with no end would fill it.
+ */
+async function capDownloads(
+  browser: Browser,
+  context: BrowserContext,
+  maximumBytes: number,
+): Promise<void> {
+  const control = await browser.newBrowserCDPSession();
+  const watch = async (page: Page) => {
+    const session = await context.newCDPSession(page);
+    session.on("Page.downloadProgress", (event) => {
+      if (
+        event.state === "inProgress" &&
+        Math.max(event.receivedBytes, event.totalBytes) > maximumBytes
+      )
+        void control
+          .send("Browser.cancelDownload", { guid: event.guid })
+          .catch(() => undefined);
+    });
+    await session.send("Page.enable");
+  };
+  context.on("page", (page) => void watch(page).catch(() => undefined));
+  await Promise.all(context.pages().map(watch));
+}
+
 async function connectedTarget(
   browser: Browser,
   channel: string,
   pid: number | undefined,
   viewport: BrowserViewport,
+  maximumDownloadBytes: number,
   closeOwner: () => Promise<void>,
 ): Promise<BrowserTarget> {
   const context =
     browser.contexts()[0] ?? (await browser.newContext({ viewport }));
   const page = context.pages()[0] ?? (await context.newPage());
   await page.setViewportSize(viewport);
+  await capDownloads(browser, context, maximumDownloadBytes);
   const cdp = await context.newCDPSession(page);
   await cdp.send("Page.enable");
   return targetFrom({
@@ -279,6 +312,7 @@ async function atomicLaunch(
   containment: BrowserContainment,
   viewport: BrowserViewport,
   pixelDensity: number,
+  maximumDownloadBytes: number,
 ): Promise<BrowserTarget> {
   const container = containment.open();
   const directory = await mkdtemp(
@@ -331,6 +365,7 @@ async function atomicLaunch(
       selected.channel,
       owned.pid,
       viewport,
+      maximumDownloadBytes,
       async () => {
         container.close();
         await exited.catch(() => undefined);
@@ -394,6 +429,8 @@ export function playwrightBrowserLauncher(
   options: {
     /** Device pixels per CSS pixel of the screen the panel is shown on. */
     readonly pixelDensity?: () => number;
+    /** The most one download may be before it is stopped. */
+    readonly maximumDownloadBytes?: number;
   } = {},
 ): BrowserLauncher {
   const density = () => {
@@ -424,7 +461,12 @@ export function playwrightBrowserLauncher(
     launch: async (viewport) => {
       // Once a run, before its first browser: what a killed Zhiyin left.
       await (cleared ??= clearAbandonedProfiles(tmpdir()));
-      return atomicLaunch(containment, viewport, density());
+      return atomicLaunch(
+        containment,
+        viewport,
+        density(),
+        options.maximumDownloadBytes ?? defaultMaximumDownloadBytes,
+      );
     },
   };
 }

@@ -64,6 +64,20 @@ describe("credentials in a record", () => {
     });
   });
 
+  it("blanks the value of an entry whose name says it is a credential, as a call's inputs are listed", () => {
+    expect(
+      withoutCredentials([
+        { name: "api_key", value: "k1a2b3" },
+        { name: "query", value: "odyssey" },
+        { name: "eos_token", value: "</s>" },
+      ]),
+    ).toEqual([
+      { name: "api_key", value: credentialOmitted },
+      { name: "query", value: "odyssey" },
+      { name: "eos_token", value: "</s>" },
+    ]);
+  });
+
   it("leaves a model's special tokens and token counts as they were", () => {
     const record = {
       eos_token: "</s>",
@@ -129,12 +143,52 @@ describe("credentials in text", () => {
     ],
     [`key AIza${"A1b2C3d4e5".repeat(3)}F6g7h`, `key ${credentialOmitted}`],
     [`token hf_${"A1b2C3d4e5".repeat(3)}F6g7`, `token ${credentialOmitted}`],
+    [
+      'mysql --password="hunter2" -u root',
+      `mysql --password="${credentialOmitted}" -u root`,
+    ],
+    [
+      "mysql --password='hunter2' -u root",
+      `mysql --password='${credentialOmitted}' -u root`,
+    ],
+    [
+      'export SECRET="correct horse battery staple"',
+      `export SECRET="${credentialOmitted}"`,
+    ],
+    ['PASSWORD="ab cd"', `PASSWORD="${credentialOmitted}"`],
+    [
+      "connect(user='ana', password='hunter2')",
+      `connect(user='ana', password='${credentialOmitted}')`,
+    ],
+    [
+      "curl -u admin:hunter2 https://example.com",
+      `curl -u admin:${credentialOmitted} https://example.com`,
+    ],
+    ["{'password': 'hunter2'}", `{'password': '${credentialOmitted}'}`],
+    ['password: "hunter2"', `password: "${credentialOmitted}"`],
+    [
+      "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlLXZhbHVl",
+      `token ${credentialOmitted}`,
+    ],
+    [`npm_${"A1b2C3d4e5".repeat(3)}F6g7h8`, credentialOmitted],
+    [
+      `key ${"0123456789abcdef".repeat(2)}.AbCdEfGhIjKlMnOp`,
+      `key ${credentialOmitted}`,
+    ],
+    [
+      "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD9\n-----END RSA PRIVATE KEY-----",
+      `-----BEGIN RSA PRIVATE KEY-----\n${credentialOmitted}\n-----END RSA PRIVATE KEY-----`,
+    ],
   ])("removes %s", (text, expected) => {
     expect(textWithoutCredentials(text)).toBe(expected);
   });
 
   it.each([
     "mysql --password=hunter2 -u root",
+    'mysql --password="hunter2" -u root',
+    'export SECRET="correct horse battery staple"',
+    "curl -u admin:hunter2 https://example.com",
+    "-----BEGIN PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD9\n-----END PRIVATE KEY-----",
     "x-api-key: k1a2b3",
     "MOONSHOT_API_KEY=k1a2b3",
     "https://api.example.com/v1?api_key=k1a2b3",
@@ -161,6 +215,10 @@ describe("credentials in text", () => {
     "MAX_TOKENS=4096",
     '{"eos_token": "</s>", "max_tokens": 4096}',
     "https://example.com/search?q=token",
+    "eos_token = '</s>'",
+    'max_tokens = "4096"',
+    "curl -u admin https://example.com",
+    "Read the -----BEGIN PRIVATE KEY----- line first.",
   ])("leaves %s alone", (text) => {
     expect(textWithoutCredentials(text)).toBe(text);
   });

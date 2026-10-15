@@ -292,6 +292,16 @@ export async function declaredConnectionsOf(
   return declaredConnections(await plugins.list());
 }
 
+/**
+ * The installed packages that cannot be read right now, whose connectors keep
+ * their saved keys and choices until they open again.
+ */
+export async function unreadablePackagesOf(
+  plugins: Plugins,
+): Promise<readonly string[]> {
+  return (await plugins.damaged()).map((plugin) => plugin.name);
+}
+
 export class ComposedCapabilities implements Capabilities {
   readonly #members: CapabilityMembers;
   /**

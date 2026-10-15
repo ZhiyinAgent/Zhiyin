@@ -55,6 +55,7 @@ export async function runGit(
   args: readonly string[],
   signal?: AbortSignal,
   containment?: GitContainment,
+  settings: readonly (readonly [string, string])[] = [],
 ): Promise<GitInvocation> {
   const result = await runProcess({
     executable: git,
@@ -72,6 +73,7 @@ export async function runGit(
       GCM_INTERACTIVE: "never",
       GIT_EDITOR: "true",
       GIT_PAGER: "cat",
+      ...configuredBy(settings),
     },
   });
   if (result.failure === "containment")
@@ -90,11 +92,32 @@ export async function runGit(
 }
 
 /**
- * A git call that only reads, run so it starts no program the repository's
- * own settings name. A folder can arrive with its `.git`, from an archive or
- * a shared drive, and those settings can name a file monitor, a signature
- * checker and filters, each a program git would otherwise start. Diff tools
- * and converters are left out by the calls that show changes.
+ * Settings given to git as its environment's own: each name and value apart,
+ * so a name holding "=", which `-c name=value` would split in the wrong
+ * place, is set as it is. They pass to any git a git call starts.
+ */
+function configuredBy(
+  settings: readonly (readonly [string, string])[],
+): Record<string, string> {
+  if (!settings.length) return {};
+  return Object.fromEntries([
+    ["GIT_CONFIG_COUNT", String(settings.length)],
+    ...settings.flatMap(([name, value], index) => [
+      [`GIT_CONFIG_KEY_${index}`, name],
+      [`GIT_CONFIG_VALUE_${index}`, value],
+    ]),
+  ]);
+}
+
+/**
+ * A git call that only reads, run so it starts no program the repository
+ * brings. A folder can arrive with its `.git`, from an archive or a shared
+ * drive, and its settings can name a file monitor, a signature checker and
+ * filters, each a program git would otherwise start. Its hooks run when a
+ * read refreshes the index, which a read without optional locks never
+ * writes. Diff tools and converters are left out by the calls that show
+ * changes, and a submodule's work tree, whose own settings this never reads,
+ * by the calls that look at work trees.
  */
 export async function readGit(
   git: string,
@@ -117,21 +140,22 @@ export async function readGit(
       .map((line) => /^filter\.(.+)\.(?:clean|smudge|process) /.exec(line)?.[1])
       .filter((name): name is string => name !== undefined),
   );
-  const settings = [
-    "core.fsmonitor=false",
-    "log.showSignature=false",
-    ...[...drivers].flatMap((driver) => [
-      `filter.${driver}.clean=`,
-      `filter.${driver}.smudge=`,
-      `filter.${driver}.process=`,
-      `filter.${driver}.required=false`,
+  const settings: [string, string][] = [
+    ["core.fsmonitor", "false"],
+    ["log.showSignature", "false"],
+    ...[...drivers].flatMap((driver): [string, string][] => [
+      [`filter.${driver}.clean`, ""],
+      [`filter.${driver}.smudge`, ""],
+      [`filter.${driver}.process`, ""],
+      [`filter.${driver}.required`, "false"],
     ]),
   ];
   return runGit(
     git,
     cwd,
-    [...settings.flatMap((setting) => ["-c", setting]), ...args],
+    ["--no-optional-locks", ...args],
     signal,
     containment,
+    settings,
   );
 }

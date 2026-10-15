@@ -12,6 +12,7 @@ import {
   ComposedCapabilities,
   browserConnection,
   declaredConnectionsOf,
+  unreadablePackagesOf,
   gitConnection,
   sceneConnection,
   type CapabilityMembers,
@@ -1552,6 +1553,19 @@ describe("what a person has set up", () => {
         readOnlyTools: ["tavily_search"],
       }),
     ]);
+  });
+
+  it("names the installed packages that cannot be read, so their connectors keep what is saved", async () => {
+    const damaged: DamagedPlugin = {
+      name: "deep-research",
+      version: "1.0.0",
+      editing: "override",
+      reason: "Its manifest is not valid JSON.",
+    };
+
+    expect(
+      await unreadablePackagesOf(pluginsHolding([], [], [damaged])),
+    ).toEqual(["deep-research"]);
   });
 
   it("reads a skill's content with what it replaced, and an app-made plugin's whole content", async () => {

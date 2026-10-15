@@ -116,7 +116,8 @@ shows live pages.
   Closing one leaves the others.
 - **Windows' own app is offered only for documents and pictures**: PDFs,
   common picture formats, and Word, Excel and PowerPoint files. Nothing
-  Windows could run is offered.
+  Windows could run is offered, and a link is judged by the file it leads
+  to.
 - **A PDF the model reads is read in a contained process too**, one shared by
   every conversation, started on the first read and ended after a minute with
   nothing read. A page stuck in it costs that answer, within the time limit,

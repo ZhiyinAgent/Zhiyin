@@ -152,6 +152,55 @@ describe("running Python in the sandbox", () => {
     });
   });
 
+  it("gives Python and uv Windows' own variables and the network's, and nothing that points them elsewhere", async () => {
+    const planted = {
+      PYTHONPATH: "C:\\elsewhere",
+      PYTHONSTARTUP: "C:\\elsewhere\\start.py",
+      UV_INDEX_URL: "https://packages.example/simple",
+      VIRTUAL_ENV: "C:\\elsewhere\\.venv",
+      GITHUB_TOKEN: "ghp_planted",
+      HTTPS_PROXY: "http://proxy.example:8080",
+    };
+    const before = { ...process.env };
+    Object.assign(process.env, planted);
+    try {
+      const { sandbox, calls, interpreter } = await sandboxWith();
+
+      await sandbox.callTool("run_python", { code: "print(1)" });
+
+      const given = calls.map((call, index) => ({
+        program: call.executable === interpreter ? "python" : "uv",
+        environment: environments[index] ?? {},
+      }));
+      expect(given.map((run) => run.program)).toEqual(
+        expect.arrayContaining(["uv", "python"]),
+      );
+      // Windows names ignore case, and a terminal may spell them its own way.
+      const read = (environment: object, name: string) =>
+        Object.entries(environment).find(
+          ([key]) => key.toUpperCase() === name.toUpperCase(),
+        )?.[1];
+      for (const { environment } of given) {
+        expect(read(environment, "SystemRoot")).toBe(process.env["SystemRoot"]);
+        expect(read(environment, "PATH")).toBe(process.env["PATH"]);
+        expect(read(environment, "HTTPS_PROXY")).toBe(
+          "http://proxy.example:8080",
+        );
+        for (const name of [
+          "PYTHONPATH",
+          "PYTHONSTARTUP",
+          "UV_INDEX_URL",
+          "VIRTUAL_ENV",
+          "GITHUB_TOKEN",
+        ])
+          expect(read(environment, name)).toBeUndefined();
+      }
+    } finally {
+      for (const name of Object.keys(planted)) delete process.env[name];
+      Object.assign(process.env, before);
+    }
+  });
+
   it("keeps the script it was given out of the person's folder, and removes it after", async () => {
     const { sandbox, calls, workspace, directory } = await sandboxWith();
 
@@ -395,6 +444,18 @@ describe("what the sandbox offers", () => {
     ).toMatchObject({
       detail:
         "A script runs with your own access: it can read and change your files and use the network.",
+    });
+  });
+
+  it("shows a long script whole, line by line, as what will run", async () => {
+    const { sandbox } = await sandboxWith();
+    const code = Array.from(
+      { length: 400 },
+      (_, line) => `print("line ${line} of a long script")`,
+    ).join("\n");
+
+    expect(await sandbox.inspect("run_python", { code })).toMatchObject({
+      command: code,
     });
   });
 

@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import { WorkspacePreview } from "./workspace-preview.js";
 import { WorkspaceUploads } from "./workspace-uploads.js";
+import { browserAddress } from "./browser-address.js";
 import type { ProcessContainment } from "@zhiyin/process-ownership";
 
 export type BrowserFrame = {
@@ -242,7 +243,8 @@ export class BrowserSession implements InteractiveBrowser {
     return () => this.#actionListeners.delete(listener);
   }
 
-  async open(url?: string): Promise<void> {
+  async open(given?: string): Promise<void> {
+    const url = given === undefined ? undefined : webAddress(given);
     if (this.#target) {
       if (url) await this.navigate(url);
       return;
@@ -295,7 +297,8 @@ export class BrowserSession implements InteractiveBrowser {
     }
   }
 
-  async navigate(url: string): Promise<void> {
+  async navigate(given: string): Promise<void> {
+    const url = webAddress(given);
     await this.#act(async (target) => {
       this.#publish({ ...this.#state, loading: true });
       await target.goto(url);
@@ -386,11 +389,15 @@ export class BrowserSession implements InteractiveBrowser {
   }
 
   async #lost(): Promise<void> {
-    if (!this.#target) return;
+    const target = this.#target;
+    if (!target) return;
     ++this.#epoch;
-    await this.preview?.close();
     this.#target = undefined;
     this.#frame = undefined;
+    // A page can go while its browser runs on; what is left of it is ended
+    // rather than left running unseen.
+    await target.close().catch(() => undefined);
+    await this.preview?.close();
     this.#publish({
       ...closedState,
       status: "failed",
@@ -418,4 +425,11 @@ export class BrowserSession implements InteractiveBrowser {
     this.#state = state;
     for (const listener of this.#stateListeners) listener(state);
   }
+}
+
+/** The address to send the browser to, or the reason it is not sent. */
+function webAddress(given: string): string {
+  const address = browserAddress(given);
+  if (!address.ok) throw new Error(address.reason);
+  return address.url;
 }

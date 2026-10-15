@@ -108,6 +108,23 @@ describe("connections come only from declarations", () => {
     });
   });
 
+  it("keeps a connection's token and tool choices while its package cannot be read", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = await engine(credentials);
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+    await servers.setToolEnabled(search.id, "search", false);
+
+    await servers.damage("research");
+    expect(await credentials.get(search.id)).toBe("secret");
+
+    await servers.repair("research", [search]);
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "saved" },
+      tools: [{ name: "search", enabled: false }],
+    });
+  });
+
   it("keeps every token when the declarations cannot be read", async () => {
     const credentials = new InMemoryMcpCredentials();
     const servers = await engine(credentials);

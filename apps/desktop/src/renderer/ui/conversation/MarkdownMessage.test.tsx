@@ -80,3 +80,19 @@ describe("a citation in an answer (ADR 0018)", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 });
+
+describe("a picture an answer names", () => {
+  // An answer is the model's text, and an address in it is the model's
+  // choice: drawing it would make the window fetch whatever it names.
+  it.each([
+    ["a network share", "![chart](//files.example/share/chart.png)"],
+    ["a file on this computer", "![chart](file:///C:/Users/me/chart.png)"],
+    ["a relative path", "![chart](../../chart.png)"],
+    ["a web address", "![chart](https://example.com/chart.png)"],
+  ])("loads nothing from %s, and keeps its words", (_kind, text) => {
+    const { container } = render(<MarkdownMessage>{text}</MarkdownMessage>);
+
+    expect(container.querySelector("img")).toBeNull();
+    expect(screen.getByText("chart")).toBeVisible();
+  });
+});

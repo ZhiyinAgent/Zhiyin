@@ -116,8 +116,11 @@ single feature can own it.
   aside until it arrives; the rest of a workspace change still applies.
 - Credential removal knows a field or a variable holding a credential by how
   its name ends, however it is written (`OPENAI_API_KEY`, `openaiApiKey`,
-  `db-password`), and also takes key headers, keys in a URL's query and keys
-  with a known prefix. It leaves a lower-case name ending in "token" alone, so
+  `db-password`), and also takes key headers, keys in a URL's query, keys
+  with a known prefix or shape, private key blocks and a password given to a
+  command. A quoted value is removed whole, and an entry listed as a name and
+  a value, as a call's inputs are, loses its value when its name says it is a
+  credential. It leaves a lower-case name ending in "token" alone, so
   a model's special tokens stay readable, and code that reads a key, such as
   `API_KEY = os.getenv(…)`, as it is. Removing again changes nothing.
 - A text's size is counted in UTF-8 bytes as an encoder would count it, in any

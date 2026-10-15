@@ -306,6 +306,41 @@ describe.runIf(process.platform === "win32")("process containment", () => {
     },
   );
 
+  /**
+   * Windows reads its strings up to the first NUL, so a value carrying one
+   * would start something other than what it says: the rest of an argument,
+   * a shorter program path, a different folder.
+   */
+  it.each([
+    [
+      "an argument",
+      { arguments: ["-e", "require('fs').writeFileSync('ran','')", "a\0b"] },
+    ],
+    ["the program", { executable: `${process.execPath}\0.txt` }],
+    ["the folder", { cwd: "C:\\\0" }],
+    ["an environment value", { environment: { NOTE: "a\0b" } }],
+    ["an environment name", { environment: { "NO\0TE": "a" } }],
+  ])("starts nothing when %s holds a NUL character", async (_where, change) => {
+    const directory = await workingDirectory();
+    const container = openProcessContainer();
+    try {
+      expect(() =>
+        container.launch({
+          executable: process.execPath,
+          arguments: ["-e", "require('fs').writeFileSync('ran','')"],
+          cwd: directory,
+          stdout: join(directory, "stdout.txt"),
+          stderr: join(directory, "stderr.txt"),
+          ...change,
+        }),
+      ).toThrow(/NUL/);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await expect(readFile(join(directory, "ran"))).rejects.toThrow();
+    } finally {
+      container.close();
+    }
+  });
+
   it(
     "keeps Zhiyin's own file work going while many processes it started are still running",
     { timeout: 60_000 },

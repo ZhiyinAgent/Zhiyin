@@ -157,7 +157,8 @@ described in the [component library](../../component-library.md).
   at a steady pace while it streams and whole once the turn stops. A link
   never navigates the window: a web address is shown as text, and a link to a
   document in the folder, with an optional `#page=N`, is a button that asks the
-  core to show that page.
+  core to show that page. A picture in model text is shown as its words: the
+  window never fetches an address the model wrote.
 - A person reading the end of a conversation is kept at the end while it grows,
   until they move the view away with a wheel, a finger, a scroll key or the
   scrollbar. When the column changes width, the message being read stays put.
@@ -292,8 +293,11 @@ described in the [component library](../../component-library.md).
 
 ### Security and boundaries
 
-- The window runs sandboxed with no Node, cannot navigate, and loads only its
-  own files and `data:` images; web and document pages reach it as pictures.
+- The window runs sandboxed with no Node and cannot navigate, open another
+  window, change the base its links resolve against, or be granted any
+  permission a page can ask for. Besides its own assets, it draws pictures
+  only from `data:` addresses Zhiyin built from what it read itself; web and
+  document pages reach it that way too.
 - Each folder under `ui` is a module used only through its `index.ts`. Of the
   renderer's own code a module imports only `shared`, never another module, the
   shell or the demo; the shell composes modules and passes one module's pieces

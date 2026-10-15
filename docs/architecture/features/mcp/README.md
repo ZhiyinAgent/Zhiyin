@@ -44,7 +44,8 @@ says about itself is shown as its claim.
 - The declaration source lists every declared connector as
   `{ id, name, url, enabled, requestsPerMinute?, readOnlyTools? }`. This
   feature stores no definition of its own: it remembers only the endpoint a
-  saved credential belongs to and which tools a person switched off.
+  saved credential belongs to and which tools a person switched off. A second
+  source names the packages that cannot be read right now.
 - A `BuiltInMcpServer` has an `id`, a `name` and `open()`, and may be scoped
   per conversation, describe its own calls and results, and declare the files
   a call produced.
@@ -102,7 +103,8 @@ says about itself is shown as its claim.
   withdraws its tools at once.
 - A connector nothing declares any more is forgotten with its credential and
   tool choices, so reinstalling its package starts clean. When the
-  declarations cannot be read, nothing changes.
+  declarations cannot be read, nothing changes, and a connector whose package
+  cannot be read keeps its credential and choices until the package opens.
 - When the saved connection settings cannot be read, which tools a person
   switched off is unknown, so no declared connector is reached: each is
   closed and shown failed with the reason, and nothing is forgotten or
@@ -149,7 +151,9 @@ says about itself is shown as its claim.
 - A sign-in is kept only once the service has issued tokens; cancelling or
   declining keeps nothing. It is refreshed a minute before it ends and after a
   refusal, one refresh at a time; a refused refresh forgets it and withdraws
-  the tools. A saved key is sent in preference to a sign-in.
+  the tools. A refresh that returns after the person signed out, signed in
+  again or saved a key changes nothing. A saved key is sent in preference to
+  a sign-in.
 - When secure storage cannot be reached, the state says so rather than
   reporting that no credential exists, and saving fails. Storage that comes
   back is asked again on the next look.

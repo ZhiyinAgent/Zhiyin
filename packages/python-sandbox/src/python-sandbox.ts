@@ -104,13 +104,6 @@ function textResult(text: string, isError = false) {
   };
 }
 
-function shortened(value: string, maximum = 16_000): string {
-  const trimmed = value.trim();
-  return trimmed.length > maximum
-    ? `${trimmed.slice(0, maximum)}\n… the rest of the output was too long to include.`
-    : trimmed;
-}
-
 /**
  * What a run printed, as whole as the process layer kept it: its start and its
  * end. What the model is shown of it is bounded where every tool's result is,
@@ -121,12 +114,70 @@ function reported(run: ProgramRun): string {
 }
 
 /**
+ * The variables Python and uv are given, by name, whatever their case: what
+ * Windows programs expect to find, and how this computer reaches the network.
+ * Nothing else passes, so a variable left by a terminal cannot point either at
+ * another environment, package index or startup script, and a credential kept
+ * in a variable does not reach a script the model wrote.
+ */
+const passed = new Set(
+  [
+    "ALLUSERSPROFILE",
+    "APPDATA",
+    "COMMONPROGRAMFILES",
+    "COMMONPROGRAMFILES(X86)",
+    "COMMONPROGRAMW6432",
+    "COMPUTERNAME",
+    "COMSPEC",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "LOCALAPPDATA",
+    "NUMBER_OF_PROCESSORS",
+    "OS",
+    "PATH",
+    "PATHEXT",
+    "PROCESSOR_ARCHITECTURE",
+    "PROCESSOR_IDENTIFIER",
+    "PROCESSOR_LEVEL",
+    "PROCESSOR_REVISION",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES(X86)",
+    "PROGRAMW6432",
+    "PUBLIC",
+    "SYSTEMDRIVE",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "USERDOMAIN",
+    "USERNAME",
+    "USERPROFILE",
+    "WINDIR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "REQUESTS_CA_BUNDLE",
+  ].map((name) => name.toUpperCase()),
+);
+
+/**
  * Python on Windows reads and writes in the console's code page unless told
  * otherwise, so a script printing "é" or reading a UTF-8 file fails or garbles
  * it. These make UTF-8 its default for files and for what it prints.
  */
 function pythonEnvironment(): Record<string, string | undefined> {
-  return { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+  return {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([name]) =>
+        passed.has(name.toUpperCase()),
+      ),
+    ),
+    PYTHONUTF8: "1",
+    PYTHONIOENCODING: "utf-8",
+  };
 }
 
 export function pythonSandbox(
@@ -239,10 +290,8 @@ export function pythonSandbox(
           ok: true,
           action: "Run a Python script",
           target: typeof path === "string" ? path : "a script",
-          command:
-            typeof code === "string"
-              ? shortened(code, 4_000)
-              : `python ${String(path)}`,
+          // Whole: what is approved is what runs.
+          command: typeof code === "string" ? code : `python ${String(path)}`,
           detail:
             "A script runs with your own access: it can read and change your files and use the network.",
           ...preparing,

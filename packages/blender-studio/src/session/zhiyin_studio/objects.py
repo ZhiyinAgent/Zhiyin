@@ -49,6 +49,7 @@ from .common import (
     world_bounds,
     world_mesh,
 )
+from .model_reads import named_outside, reading_inside
 
 MODEL_IMPORTERS = {
     ".glb": lambda path: bpy.ops.import_scene.gltf(filepath=path),
@@ -59,8 +60,6 @@ MODEL_IMPORTERS = {
     ".fbx": lambda path: bpy.ops.import_scene.fbx(filepath=path),
     ".usd": lambda path: bpy.ops.wm.usd_import(filepath=path),
     ".usda": lambda path: bpy.ops.wm.usd_import(filepath=path),
-    ".usdc": lambda path: bpy.ops.wm.usd_import(filepath=path),
-    ".usdz": lambda path: bpy.ops.wm.usd_import(filepath=path),
 }
 
 
@@ -414,22 +413,34 @@ def svg_drawing(spec, name):
     return group, [as_mesh(shape) for shape in shapes]
 
 
-def model_file(path, name, workspace):
-    extension = os.path.splitext(path)[1].lower()
-    need(extension in MODEL_IMPORTERS, f"Models can be read from {', '.join(sorted(MODEL_IMPORTERS))} files.")
-    before = set(bpy.data.objects)
-    read_before = files_read()
-    MODEL_IMPORTERS[extension](path)
-    imported = [o for o in bpy.data.objects if o not in before]
-    need(imported, f"{os.path.basename(path)} holds nothing Blender could import.")
-    # A model file names its pictures and parts by paths of its own, which the
-    # workspace check on the model's path does not cover.
-    reaching = outside(files_read() - read_before, workspace) if workspace else []
+def reads_outside(path, reaching):
     need(
         not reaching,
         f"{os.path.basename(path)} reads files outside the workspace ({', '.join(reaching[:3])}). "
         "Copy what it needs into the workspace and point the model file at the copies.",
     )
+
+
+def model_file(path, name, workspace):
+    extension = os.path.splitext(path)[1].lower()
+    need(extension in MODEL_IMPORTERS, f"Models can be read from {', '.join(sorted(MODEL_IMPORTERS))} files.")
+    # A model file names its geometry, pictures and parts by paths of its own,
+    # which the workspace check on the model's path does not cover.
+    if workspace:
+        reads_outside(path, named_outside(path, workspace))
+    before = set(bpy.data.objects)
+    read_before = files_read()
+    with reading_inside(workspace) if workspace else contextlib.nullcontext([]) as refused:
+        try:
+            MODEL_IMPORTERS[extension](path)
+        except RuntimeError:
+            # An importer that met a refused file says so in its own words.
+            reads_outside(path, refused)
+            raise
+    reads_outside(path, refused)
+    imported = [o for o in bpy.data.objects if o not in before]
+    need(imported, f"{os.path.basename(path)} holds nothing Blender could import.")
+    reads_outside(path, outside(files_read() - read_before, workspace) if workspace else [])
     group = bpy.data.objects.new(name, None)
     link(group)
     for obj in imported:

@@ -113,8 +113,11 @@ for its launch; nothing listens on a port.
   workspace has it, however the path was written, so the approval and the
   conversation's files agree.
 - **A model file reads nothing from outside the workspace.** A model whose
-  pictures or parts lie outside is refused and leaves the scene as it was. A
-  scene file that uses files kept elsewhere opens, and the answer names them.
+  pictures, geometry, materials or parts lie outside is refused and leaves the
+  scene as it was; what an importer would read itself is refused before it is
+  read. USD is read as text only (`.usd` and `.usda`): what a binary USD file
+  reads cannot be checked, so it is refused. A scene file that uses files kept
+  elsewhere opens, and the answer names them.
 - **An export writes the one file it names.** No materials, pictures or data
   are written beside it, and objects it names are exported even when hidden.
 - **A change is saved, answered, then previewed.** After every command that

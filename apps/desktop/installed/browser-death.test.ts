@@ -198,7 +198,7 @@ describe.runIf(process.platform === "win32")(
           ).zhiyin;
           await bridge.driveBrowser({
             kind: "open",
-            url: "data:text/html,<title>Contained</title>",
+            url: "about:blank",
           });
         });
 

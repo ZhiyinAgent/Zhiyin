@@ -515,6 +515,18 @@ describe("the documents a conversation shows", () => {
     });
   });
 
+  it("judges whether Windows may open a file by the file a link leads to, not the link's name", async () => {
+    const { root } = await workspace();
+    await writeFile(join(root, "setup.exe"), "MZ");
+    await symlink(join(root, "setup.exe"), join(root, "report.pdf"), "file");
+    const { documents } = viewer(root);
+
+    await expect(documents.locate(root, "report.pdf")).resolves.toMatchObject({
+      ok: true,
+      openable: false,
+    });
+  });
+
   it("offers Windows' own app for documents and pictures, and never for a program", () => {
     for (const path of [
       "a.pdf",

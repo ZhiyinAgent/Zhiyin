@@ -89,6 +89,9 @@ activating it.
   MCP feature connects, with each connector's request rate and read-only
   tools. The composition root wires it, because the MCP feature is
   constructed before this group.
+- `unreadablePackagesOf(plugins)` names the installed packages that cannot
+  be read, so their connectors keep their saved credentials meanwhile; it is
+  wired the same way.
 - `browserConnection`, `sceneConnection`, `gitConnection`,
   `documentsConnection` and `pythonConnection` turn a feature's
   `OfferedConnection` into a built-in connection the MCP feature serves. The browser and the 3D

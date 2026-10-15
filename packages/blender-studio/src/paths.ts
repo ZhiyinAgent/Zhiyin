@@ -37,10 +37,9 @@ export const kinds = {
     ".stl",
     ".ply",
     ".fbx",
+    // USD as text only: what a binary USD file reads cannot be checked.
     ".usd",
     ".usda",
-    ".usdc",
-    ".usdz",
   ],
   drawing: [".svg"],
   font: [".ttf", ".otf", ".ttc"],

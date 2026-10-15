@@ -158,7 +158,8 @@ for a shell again does not change it.
 - Execution deletes permanently only what the approved inspection showed as
   permanent; a Recycle Bin refusal after approval deletes nothing. Targets
   stay inside the folder with links resolved, and a target that changed after
-  it was shown changes the approval identity.
+  it was shown changes the approval identity. The folder itself is never a
+  target, however its name is spelled.
 
 ### Commands (ADR 0007)
 
@@ -175,7 +176,9 @@ for a shell again does not change it.
   before it runs, pointing the model to `delete_file`. The command is split
   into the simple commands bash would run, including substituted and nested
   ones, and code handed to a shell or Python with `-c`, alone or among other
-  options. This recognises deletions; it does not prove there are none. A
+  options, or to `cmd` with `/c` or Git Bash's `//c`. A git subcommand is
+  found after git's own options, such as `-C` and `-c`. This recognises
+  deletions; it does not prove there are none. A
   program that deletes on its own, or a command whose program name is only
   put together as it runs, still goes through the shell approval.
 - Output is bounded inline to about 5,000 tokens of standard output and 1,500

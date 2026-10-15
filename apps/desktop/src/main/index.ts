@@ -156,6 +156,12 @@ function createWindow(): BrowserWindow {
 
   window.webContents.on("will-navigate", (event) => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // The window needs no camera, microphone, notification or any other
+  // permission a page can ask for, so it is granted none.
+  window.webContents.session.setPermissionRequestHandler(
+    (_contents, _permission, answer) => answer(false),
+  );
+  window.webContents.session.setPermissionCheckHandler(() => false);
 
   const load = (restarted: boolean) => {
     const query = restarted ? { restarted: "1" } : undefined;

@@ -299,6 +299,100 @@ withGit("gitAutomation against a real repository", () => {
       expect.arrayContaining(["fsmonitor", "process"]),
     );
   });
+
+  /**
+   * The same rule, for what a repository brings that its settings do not
+   * name outright: a hook git runs when a read refreshes the index, a filter
+   * whose name holds "=", and a submodule's settings, which the parent's never
+   * mention.
+   */
+  it("runs no hook, and nothing a submodule or an odd filter name brings, when it is only read", async () => {
+    const ran = join(root, "ran");
+    const marking = (name: string) =>
+      `touch '${join(ran, name).replaceAll("\\", "/")}';`;
+    await mkdir(ran);
+    const sub = await folders.make("zhiyin-git-submodule-");
+    await execGitInit(git as string, sub);
+    await writeFile(join(sub, "sub.txt"), "a\n", "utf8");
+    await gitOutput(sub, ["add", "sub.txt"]);
+    await gitOutput(sub, ["commit", "-m", "Sub"]);
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    await gitOutput(root, [
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      sub.replaceAll("\\", "/"),
+      "sub",
+    ]);
+    await gitOutput(root, ["commit", "-m", "Add submodule"]);
+
+    await writeFile(
+      join(root, ".git", "hooks", "post-index-change"),
+      `#!/bin/sh\n${marking("hook")}\n`,
+      "utf8",
+    );
+    await gitOutput(root, [
+      "config",
+      "filter.a=b.clean",
+      `${marking("odd")} cat`,
+    ]);
+    await writeFile(
+      join(root, ".git", "info", "attributes"),
+      "*.txt filter=a=b\n",
+      "utf8",
+    );
+    const subGit = join(root, ".git", "modules", "sub");
+    await gitOutput(root, [
+      "config",
+      "--file",
+      join(subGit, "config"),
+      "filter.inner.clean",
+      `${marking("submodule")} cat`,
+    ]);
+    await mkdir(join(subGit, "info"), { recursive: true });
+    await writeFile(
+      join(subGit, "info", "attributes"),
+      "*.txt filter=inner\n",
+      "utf8",
+    );
+    // Changed at the same size, so git has to read each file to know.
+    const sameSize = async (path: string) => {
+      const before = await readFile(path, "utf8");
+      await writeFile(
+        path,
+        `${before[0] === "a" ? "b" : "a"}${before.slice(1)}`,
+      );
+    };
+    await sameSize(join(root, "note.txt"));
+    await sameSize(join(root, "sub", "sub.txt"));
+
+    const failed: string[] = [];
+    for (const [name, args] of [
+      ["git_status", {}],
+      ["git_diff", {}],
+      ["git_diff", { staged: true }],
+      ["git_log", { limit: 5 }],
+      ["git_show", { ref: "HEAD" }],
+      ["git_branch", {}],
+      ["git_stash", { action: "list" }],
+    ] as const) {
+      const result = await run(name, args);
+      if (result.isError) failed.push(`${name}: ${result.text}`);
+    }
+    await automation.inspect("git_commit", { message: "Add other" });
+
+    expect(failed).toEqual([]);
+    expect(await readdir(ran)).toEqual([]);
+
+    // The same read, run as git runs it by default, does start them.
+    await gitOutput(root, ["status"]);
+    expect(await readdir(ran)).toEqual(
+      expect.arrayContaining(["hook", "odd", "submodule"]),
+    );
+  });
 });
 
 /** Git's own variables that tie a command to one repository, as it lists them. */

@@ -39,7 +39,8 @@ land, and can turn a compiler's output into errors a model can act on.
 ## Invariants
 
 - A document is compiled inside the workspace folder only. A source or output
-  outside it is refused before anything runs.
+  outside it, as written or where a link leads, is refused before anything
+  runs.
 - The engine follows the file: `.typ` runs Typst and `.tex` runs Tectonic.
   Anything else is refused, and so is an output that is not a PDF. Tectonic
   names the PDF after its source, so a LaTeX output under another name is

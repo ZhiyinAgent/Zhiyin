@@ -36,6 +36,12 @@ export const MarkdownMessage = memo(function MarkdownMessage({
         skipHtml
         remarkPlugins={[remarkGfm]}
         components={{
+          // The address of a picture in an answer is the model's choice, and
+          // drawing it would have the window fetch whatever it names: a file on
+          // this computer or a network share as readily as a web page. The
+          // answer keeps the picture's words; pictures reach the window only
+          // as data Zhiyin read itself.
+          img: ({ alt }) => (alt ? <span>{alt}</span> : null),
           table: ({ children: tableChildren }) => (
             <div className={styles["message-table-scroll"]}>
               <table>{tableChildren}</table>

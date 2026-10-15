@@ -123,7 +123,7 @@ const statusTool: GitToolDefinition = {
     return invoke(
       git,
       root,
-      ["status", "--porcelain=v1", "-b"],
+      ["status", "--porcelain=v1", "-b", "--ignore-submodules=dirty"],
       signal,
       containment,
       true,
@@ -173,6 +173,7 @@ const diffTool: GitToolDefinition = {
         "diff",
         "--no-ext-diff",
         "--no-textconv",
+        "--ignore-submodules=dirty",
         ...(staged ? ["--staged"] : []),
       ],
       signal,

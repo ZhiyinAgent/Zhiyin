@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
@@ -9,7 +9,7 @@ import {
 } from "../src/index.js";
 
 async function workspace(): Promise<string> {
-  return folders.make("zhiyin-compiler-");
+  return realpath(await folders.make("zhiyin-compiler-"));
 }
 
 const folders = new TemporaryFolders();
@@ -230,6 +230,32 @@ describe("compiling a document", () => {
           { text: "Documents are compiled inside the workspace folder." },
         ],
       });
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a document or an output that a link inside the folder leads out of it", async () => {
+    const root = await workspace();
+    const outside = await workspace();
+    await writeFile(join(outside, "paper.typ"), "= Title\n", "utf8");
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await symlink(outside, join(root, "linked"), "junction");
+    const { compiler, calls } = compilerWriting(root);
+
+    for (const args of [
+      { path: "linked/paper.typ" },
+      { path: "paper.typ", output: "linked/paper.pdf" },
+    ]) {
+      expect(await compiler.inspect("compile_document", args)).toEqual({
+        ok: false,
+        reason: "Documents are compiled inside the workspace folder.",
+      });
+      expect(await compiler.callTool("compile_document", args)).toMatchObject({
+        isError: true,
+        content: [
+          { text: "Documents are compiled inside the workspace folder." },
+        ],
+      });
+    }
     expect(calls).toEqual([]);
   });
 

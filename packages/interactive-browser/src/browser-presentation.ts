@@ -4,6 +4,7 @@ import type {
   ToolInvocationResult,
 } from "@zhiyin/contract";
 import type { InteractiveBrowser } from "./interactive-browser.js";
+import { browserAddress } from "./browser-address.js";
 
 const names: Record<string, string> = {
   browser_navigate: "Open page",
@@ -165,18 +166,11 @@ export async function inspectBrowser(
     typeof args.url === "string" ? args.url : page || "Zhiyin’s browser";
   let identity: string | undefined;
   let shown = args;
-  if (
-    name === "browser_navigate" &&
-    typeof args.url === "string" &&
-    // A browser reads a scheme in any case, after any leading space.
-    /^\s*file:/i.test(args.url)
-  )
-    return {
-      ok: false,
-      correctable: true,
-      reason:
-        "Use browser_preview with a workspace-relative file path to view local HTML. File URLs are not supported.",
-    };
+  if (name === "browser_navigate" && typeof args.url === "string") {
+    const address = browserAddress(args.url);
+    if (!address.ok)
+      return { ok: false, correctable: true, reason: address.reason };
+  }
   if (name === "browser_preview") {
     if (
       !browser.preview ||

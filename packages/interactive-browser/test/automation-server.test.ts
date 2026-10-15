@@ -255,6 +255,20 @@ describe("browser automation", () => {
     ).rejects.toThrow("No supported browser could be started.");
   });
 
+  it("refuses an address that is not a web page, before the browser sees it", async () => {
+    const server = fakeAutomationServer();
+    const automation = browserAutomation(fakeBrowser(), {
+      createConnection: server.createConnection,
+    });
+
+    const result = await automation.callTool("browser_navigate", {
+      url: "view-source:https://example.com/",
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(server.lastArguments()).toBeUndefined();
+  });
+
   it("starts one server however many callers arrive at once", async () => {
     const started: number[] = [];
     const server = fakeAutomationServer();

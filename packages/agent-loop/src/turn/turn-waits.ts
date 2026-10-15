@@ -203,6 +203,7 @@ export class TurnWaits {
                       call.name,
                       call.arguments,
                       inspection.destination,
+                      { whole: true },
                     ),
                 }
               : {}),

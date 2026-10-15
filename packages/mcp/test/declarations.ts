@@ -15,6 +15,9 @@ export type DeclaringServers = ManagedMcpServers & {
   declare(server: DeclaredMcpServer): Promise<void>;
   switchTo(id: string, enabled: boolean): Promise<void>;
   undeclare(id: string): Promise<void>;
+  /** The package can no longer be read, so it declares nothing it can name. */
+  damage(name: string): Promise<void>;
+  repair(name: string, servers: readonly DeclaredMcpServer[]): Promise<void>;
   failDeclarations(failing: boolean): void;
 };
 
@@ -27,12 +30,14 @@ export function managed(
 ): DeclaringServers {
   let declared: DeclaredMcpServer[] = [];
   let failing = false;
+  const damaged = new Set<string>();
   const servers = new ManagedMcpServers(directory, connect, credentials, {
     builtIns,
     declared: async () => {
       if (failing) throw new Error("packages are unreadable");
       return declared.map((server) => ({ ...server }));
     },
+    unreadable: async () => [...damaged],
     now,
   });
   const settle = async () => {
@@ -54,6 +59,16 @@ export function managed(
     },
     async undeclare(id: string) {
       declared = declared.filter((item) => item.id !== id);
+      await settle();
+    },
+    async damage(name: string) {
+      damaged.add(name);
+      declared = declared.filter((item) => !item.id.startsWith(`${name}/`));
+      await settle();
+    },
+    async repair(name: string, servers: readonly DeclaredMcpServer[]) {
+      damaged.delete(name);
+      declared = [...declared, ...servers.map((server) => ({ ...server }))];
       await settle();
     },
     failDeclarations(next: boolean) {

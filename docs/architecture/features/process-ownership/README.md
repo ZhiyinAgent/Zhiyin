@@ -105,7 +105,8 @@ a process that may write only where it is let in (ADR 0028).
   as long as the process lives.
 - **Arguments arrive exactly.** Each is quoted the way Windows splits a
   command line, so quotes, trailing backslashes, spaces and empty arguments
-  arrive as given.
+  arrive as given. A program path, folder, argument or environment variable
+  holding a NUL character starts nothing: Windows would stop reading it there.
 - **The environment is exactly what the caller gives**, or Zhiyin's own when
   it gives none, never with a model key Zhiyin was given: variables named
   `ZHIYIN_…API_KEY` are left out either way.

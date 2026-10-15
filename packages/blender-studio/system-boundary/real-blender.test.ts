@@ -411,6 +411,96 @@ describe.runIf(blender)("a real Blender", () => {
     expect(contained.isError).toBeUndefined();
   });
 
+  /**
+   * A model file can name other files for its importer to read: a glTF its
+   * geometry, an OBJ its materials, a USD file other scenes. Those reads leave
+   * no picture behind to find afterwards, so they are refused as they would
+   * happen, before the importer reads outside the folder.
+   */
+  it("refuses a model whose geometry, materials or parts are read from outside the workspace", async () => {
+    const triangle = Buffer.from(
+      new Float32Array([0, 0, 0, 0.1, 0, 0, 0, 0.1, 0]).buffer,
+    );
+    await writeFile(join(root, "outside.bin"), triangle);
+    await writeFile(
+      join(workspace, "geometry.gltf"),
+      JSON.stringify({
+        asset: { version: "2.0" },
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        nodes: [{ mesh: 0, name: "Tri" }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+        buffers: [{ byteLength: 36, uri: "../outside.bin" }],
+        bufferViews: [{ buffer: 0, byteLength: 36 }],
+        accessors: [
+          {
+            bufferView: 0,
+            componentType: 5126,
+            count: 3,
+            type: "VEC3",
+            min: [0, 0, 0],
+            max: [0.1, 0.1, 0],
+          },
+        ],
+      }),
+    );
+    await writeFile(join(root, "outside.mtl"), "newmtl Red\nKd 1 0 0\n");
+    await writeFile(
+      join(workspace, "materials.obj"),
+      "mtllib ../outside.mtl\nv 0 0 0\nv 0.1 0 0\nv 0 0.1 0\nusemtl Red\nf 1 2 3\n",
+    );
+    await writeFile(
+      join(root, "outside.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
+    await writeFile(
+      join(workspace, "parts.usda"),
+      '#usda 1.0\ndef Xform "Root" (\n  references = @../outside.usda@</Tri>\n) {\n}\n',
+    );
+    const before = await call("blender_describe_scene", {});
+
+    const refused = [];
+    for (const path of ["geometry.gltf", "materials.obj", "parts.usda"])
+      refused.push(
+        await call("blender_add_objects", {
+          objects: [{ name: "Reaching", kind: "model", path }],
+        }),
+      );
+    const after = await call("blender_describe_scene", {});
+
+    for (const answer of refused) {
+      expect(answer.isError).toBe(true);
+      expect(answer.said).toMatch(/outside the workspace/);
+    }
+    expect(after.said).toBe(before.said);
+  });
+
+  it("brings in a USD text file whose parts are in the workspace, and refuses binary USD it cannot check", async () => {
+    await writeFile(
+      join(workspace, "part.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
+    await writeFile(
+      join(workspace, "assembly.usda"),
+      '#usda 1.0\ndef Xform "Root" (\n  references = @./part.usda@</Tri>\n) {\n}\n',
+    );
+    await writeFile(join(workspace, "binary.usd"), "PXR-USDC\0\0\0\0");
+
+    const contained = await call("blender_add_objects", {
+      objects: [{ name: "Assembly", kind: "model", path: "assembly.usda" }],
+    });
+    const binary = await call("blender_add_objects", {
+      objects: [{ name: "Binary", kind: "model", path: "binary.usd" }],
+    });
+    await call("blender_edit_objects", {
+      edits: [{ object: "Assembly", delete: true }],
+    });
+
+    expect(contained.isError).toBeUndefined();
+    expect(binary.isError).toBe(true);
+    expect(binary.said).toMatch(/binary USD/);
+  });
+
   it("leaves the scene as it was when a render is refused", async () => {
     const before = await call("blender_describe_scene", {
       objects: ["Plate"],

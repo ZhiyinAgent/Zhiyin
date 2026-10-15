@@ -155,6 +155,9 @@ out still runs, and is named in the background.
   going on beside it, the turn's or a specialist's, does not replace it, and a
   turn that ends or fails while a specialist's prompt waits leaves that prompt
   showing.
+- A prompt shows each of the call's inputs whole, however long. The action's
+  record afterwards may keep only both ends of a long input, and says how much
+  it left out.
 - After approval the action is inspected again. If it no longer matches what
   the person approved, such as a create that became an overwrite, it does not
   run. The model is told why and can propose it again for a fresh approval.

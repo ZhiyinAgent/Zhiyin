@@ -62,14 +62,18 @@ and every call needs the person's approval.
 - A failure reports what the run or the build printed, with the exit code. The
   whole output is passed on, so a traceback at the end survives; how much of
   it the model sees is decided where every tool's answer is sized.
-- Python reads and writes UTF-8 whatever the console's code page, and
-  otherwise inherits Zhiyin's environment variables.
+- Python reads and writes UTF-8 whatever the console's code page. Python and
+  `uv` are given only the variables Windows programs expect and those that
+  say how to reach the network (proxies and certificates), so no variable
+  points them at another environment, package index or startup script, and
+  no credential kept in a variable reaches a script.
 - With no `uv` installed the connector offers no tool, and it offers all three
   as soon as `uv` is installed.
 - The approval says what a call will do and where anything is downloaded
   from: Python and the default packages when the environment is first built,
   and added packages from pypi.org. Running a script says that it runs with
   the person's own access to files and the network.
+- A script to run is shown whole, with its line breaks, however long.
 
 ## Testing notes
 

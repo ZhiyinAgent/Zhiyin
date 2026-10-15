@@ -77,6 +77,13 @@ export type DeclaredMcpServer = {
 
 export type DeclaredMcpServers = () => Promise<readonly DeclaredMcpServer[]>;
 
+/**
+ * The packages that cannot be read right now, by name. Their connectors, whose
+ * ids start with the package's name and a slash, are declared by nobody until
+ * the package opens again, and keep what is remembered about them meanwhile.
+ */
+export type UnreadableMcpPackages = () => Promise<readonly string[]>;
+
 /** What running a connector's tool may be given beside its name and arguments. */
 export type McpExecuteOptions = {
   readonly signal?: AbortSignal | undefined;
@@ -173,6 +180,7 @@ export class ManagedMcpServers implements McpServers {
   readonly #tokens: ConnectionTokens;
   readonly #builtIns: readonly BuiltInMcpServer[];
   readonly #declared: DeclaredMcpServers;
+  readonly #unreadable: UnreadableMcpPackages;
   readonly #connected = new Map<string, ConnectedServer>();
   readonly #connecting = new Map<string, Promise<void>>();
   readonly #epochs = new Map<string, number>();
@@ -199,11 +207,13 @@ export class ManagedMcpServers implements McpServers {
     {
       builtIns = [],
       declared = async () => [],
+      unreadable = async () => [],
       now = Date.now,
       signInOptions,
     }: {
       readonly builtIns?: readonly BuiltInMcpServer[];
       readonly declared?: DeclaredMcpServers;
+      readonly unreadable?: UnreadableMcpPackages;
       readonly now?: (() => number) | undefined;
       readonly signInOptions?: SignInOptions | undefined;
     } = {},
@@ -215,6 +225,7 @@ export class ManagedMcpServers implements McpServers {
     this.#tokens = new ConnectionTokens(store, now);
     this.#builtIns = builtIns;
     this.#declared = declared;
+    this.#unreadable = unreadable;
   }
 
   /** Built-in connections have no stored definition to look up. */
@@ -994,8 +1005,12 @@ export class ManagedMcpServers implements McpServers {
    */
   async #reconcile(): Promise<McpServerDefinition[]> {
     let declared: readonly DeclaredMcpServer[];
+    let unreadable: readonly string[];
     try {
-      declared = await this.#declared();
+      [declared, unreadable] = await Promise.all([
+        this.#declared(),
+        this.#unreadable(),
+      ]);
     } catch (error) {
       throw new Error("Connections could not be read.", { cause: error });
     }
@@ -1018,6 +1033,8 @@ export class ManagedMcpServers implements McpServers {
     for (const id of Object.keys(state)) {
       if (byId.has(id)) continue;
       await this.#disconnect(id);
+      // Not undeclared, only unread: kept for when its package opens again.
+      if (unreadable.some((name) => id.startsWith(`${name}/`))) continue;
       this.#signIns.forget(id);
       if (await this.#tokens.forget(id)) {
         delete next[id];

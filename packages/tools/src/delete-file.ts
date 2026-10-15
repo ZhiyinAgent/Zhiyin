@@ -24,7 +24,7 @@ import {
   errorCode,
   normalizePath,
 } from "./workspace-path.js";
-import { staysInside } from "@zhiyin/workspace-containment";
+import { staysBelow, staysInside } from "@zhiyin/workspace-containment";
 
 /** The person's Recycle Bin, supplied by the application. */
 export type RecycleBin = {
@@ -119,6 +119,11 @@ async function folderSize(path: string) {
   return { files, bytes, more: false };
 }
 
+const workspaceItself: Refusal = {
+  ok: false,
+  reason: "The workspace folder itself cannot be deleted.",
+};
+
 async function targetOf(
   root: string,
   realRoot: string,
@@ -130,11 +135,7 @@ async function targetOf(
       ok: false,
       reason: "Only files and folders inside the workspace can be deleted.",
     };
-  if (resolve(root) === absolute)
-    return {
-      ok: false,
-      reason: "The workspace folder itself cannot be deleted.",
-    };
+  if (!staysBelow(root, absolute)) return workspaceItself;
   // The folder it sits in, with links resolved, must still be the workspace:
   // a linked folder must not carry a deletion somewhere else.
   let folder: string;
@@ -151,6 +152,9 @@ async function targetOf(
       ok: false,
       reason: "Only files and folders inside the workspace can be deleted.",
     };
+  // Windows names ignore case, so the folder's own name in other letters is
+  // the folder; the shared rule, not string equality, says so.
+  if (!staysBelow(realRoot, canonical)) return workspaceItself;
   let entry;
   try {
     entry = await lstat(canonical);

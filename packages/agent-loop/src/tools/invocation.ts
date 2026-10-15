@@ -9,6 +9,10 @@
  * Values are bounded from the middle rather than the end. The start of a value
  * says what it is and the end says where it stops; cutting the tail off a long
  * argument leaves a reader unable to tell a complete value from a clipped one.
+ *
+ * Only the record is bounded. A call waiting for approval is shown whole: what
+ * a person allows is what runs, and a part they could not see is a part they
+ * did not allow.
  */
 
 import type { ToolInvocation } from "@zhiyin/contract";
@@ -32,11 +36,14 @@ function jsonText(value: unknown): string {
 }
 
 /** Keeps both ends, and says exactly how much of the middle went missing. */
-function boundValue(text: string): {
+function boundValue(
+  text: string,
+  whole: boolean,
+): {
   readonly value: string;
   readonly omitted?: number;
 } {
-  if (text.length <= maximumValueCharacters) return { value: text };
+  if (whole || text.length <= maximumValueCharacters) return { value: text };
   const half = Math.floor(maximumValueCharacters / 2);
   return {
     value: `${text.slice(0, half)}${text.slice(text.length - half)}`,
@@ -52,6 +59,7 @@ export function describeInvocation(
   name: string,
   rawArguments: string,
   via?: string,
+  { whole = false }: { readonly whole?: boolean } = {},
 ): ToolInvocation {
   let parsed: unknown;
   try {
@@ -61,7 +69,7 @@ export function describeInvocation(
       name: readableToolName(name),
       ...(via ? { via } : {}),
       arguments: [
-        { name: "Unreadable input", ...boundValue(rawArguments.trim()) },
+        { name: "Unreadable input", ...boundValue(rawArguments.trim(), whole) },
       ],
     };
   }
@@ -72,7 +80,7 @@ export function describeInvocation(
       arguments:
         parsed === undefined
           ? []
-          : [{ name: "Input", ...boundValue(jsonText(parsed)) }],
+          : [{ name: "Input", ...boundValue(jsonText(parsed), whole) }],
     };
   }
   return {
@@ -80,7 +88,7 @@ export function describeInvocation(
     ...(via ? { via } : {}),
     arguments: Object.entries(parsed).map(([key, value]) => ({
       name: key,
-      ...boundValue(jsonText(value)),
+      ...boundValue(jsonText(value), whole),
     })),
   };
 }

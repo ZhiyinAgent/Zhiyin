@@ -3,7 +3,7 @@
  * but a browser can prove that a frame is a picture of a page, that a click
  * lands on it, or that there is a process to contain.
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { BrowserContext } from "playwright-core";
 import {
   BrowserSession,
@@ -65,12 +65,39 @@ it("says what a browser that ended at once printed, and its exit code", async ()
   );
 });
 
-const page = `data:text/html,${encodeURIComponent(
-  `<title>Takeover</title>
+/** The pages these tests open, served over http: the browser opens only web pages. */
+const fixtures: Record<string, string> = {
+  Takeover: `<title>Takeover</title>
    <style>body{margin:0;font:16px sans-serif}button{width:200px;height:80px}</style>
    <button onclick="document.title='clicked'">Go</button>
    <input id="typed">`,
-)}`;
+  Opener: `<title>Opener</title>
+   <style>body{margin:0}a{display:block;width:200px;height:80px}</style>
+   <a target="_blank" href="about:blank">Open</a>`,
+  Second: "<title>Second</title>",
+  Smooth:
+    "<title>Smooth</title><style>html { scroll-behavior: smooth } section { height: 900px }</style>" +
+    "<section></section><section></section><section></section><section></section>",
+};
+const fixtureServer = createServer((request, response) => {
+  const body = fixtures[(request.url ?? "/").slice(1)];
+  response.writeHead(body === undefined ? 404 : 200, {
+    "content-type": "text/html; charset=utf-8",
+  });
+  response.end(body ?? "");
+});
+await new Promise<void>((done) => fixtureServer.listen(0, "127.0.0.1", done));
+afterAll(() => {
+  fixtureServer.closeAllConnections();
+  fixtureServer.close();
+});
+function served(name: string): string {
+  const address = fixtureServer.address();
+  if (!address || typeof address === "string") throw new Error("No port");
+  return `http://127.0.0.1:${address.port}/${name}`;
+}
+
+const page = served("Takeover");
 
 /** Polls a condition rather than sleeping for a guessed duration. */
 async function waitFor(
@@ -363,11 +390,7 @@ describe.runIf(availability.available)("a real browser session", () => {
    * so the browser allows it — and that is the path a popup really arrives by.
    */
   it("keeps its own page when a click opens a popup", async () => {
-    const opener = `data:text/html,${encodeURIComponent(
-      `<title>Opener</title>
-       <style>body{margin:0}a{display:block;width:200px;height:80px}</style>
-       <a target="_blank" href="about:blank">Open</a>`,
-    )}`;
+    const opener = served("Opener");
     const session = new BrowserSession({
       launcher,
       viewport: { width: 800, height: 600 },
@@ -404,7 +427,7 @@ describe.runIf(availability.available)("a real browser session", () => {
       () =>
         new BrowserSession({ launcher, viewport: { width: 800, height: 600 } }),
     );
-    const other = `data:text/html,${encodeURIComponent("<title>Second</title>")}`;
+    const other = served("Second");
     try {
       await sessions.browser("first").open(page);
       await sessions.browser("second").open(other);
@@ -686,6 +709,74 @@ describe.runIf(availability.available)("a real browser session", () => {
   }, 180_000);
 
   /**
+   * The browser writes a download to disk as it arrives, so a page sending a
+   * file with no end would fill it. One past the most a download may be is
+   * stopped, and nothing of it is kept.
+   */
+  it("stops a download larger than the most a download may be", async () => {
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    let stopped = false;
+    const server = createServer((request, response) => {
+      if (request.url === "/file") {
+        response.writeHead(200, {
+          "Content-Disposition": 'attachment; filename="endless.bin"',
+          "Content-Type": "application/octet-stream",
+        });
+        const chunk = Buffer.alloc(1024 * 1024);
+        const timer = setInterval(() => response.write(chunk), 10);
+        response.on("close", () => {
+          clearInterval(timer);
+          stopped = true;
+        });
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(`<title>Files</title><a href="/file">Get it</a>`);
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher: playwrightBrowserLauncher(
+        { open: openProcessContainer },
+        { maximumDownloadBytes: 5 * 1024 * 1024 },
+      ),
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = (
+        (await automation.callTool("browser_snapshot", {})) as {
+          content: { text?: string }[];
+        }
+      ).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+      const reference = snapshot.match(/"Get it"[^\n]*\[ref=(e\d+)\]/)?.[1];
+
+      await automation.callTool("browser_click", {
+        element: "Get it",
+        target: reference,
+      });
+      await waitFor(() => stopped, 30_000);
+
+      expect(
+        (await readdir(output).catch((): string[] => [])).filter((name) =>
+          name.includes("endless"),
+        ),
+      ).toEqual([]);
+    } finally {
+      await automation.close();
+      await session.close();
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 120_000);
+
+  /**
    * A page styled with `scroll-behavior: smooth` animates every scroll its
    * code asks for, so a position read straight after the scroll, or a picture
    * taken then, shows where the page was rather than where it is going.
@@ -696,12 +787,7 @@ describe.runIf(availability.available)("a real browser session", () => {
       viewport: { width: 390, height: 844 },
     });
     try {
-      await session.open(
-        `data:text/html,${encodeURIComponent(
-          "<title>Smooth</title><style>html { scroll-behavior: smooth } section { height: 900px }</style>" +
-            "<section></section><section></section><section></section><section></section>",
-        )}`,
-      );
+      await session.open(served("Smooth"));
       await waitFor(() => session.state().title === "Smooth");
       const shown = (session.automation() as BrowserContext).pages()[0]!;
 

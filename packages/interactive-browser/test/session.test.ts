@@ -141,6 +141,29 @@ describe("BrowserSession", () => {
     });
   });
 
+  it("opens only web pages, whoever asks", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open("https://example.com/");
+
+    for (const url of ["view-source:https://example.com/", "edge://settings"]) {
+      await expect(session.navigate(url)).rejects.toThrow(/web/);
+      await expect(session.open(url)).rejects.toThrow(/web/);
+    }
+    expect(session.state().url).toBe("https://example.com/");
+  });
+
+  it("reads an address typed without its scheme as a web address", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+
+    await session.open("example.com/docs");
+    expect(session.state().url).toBe("https://example.com/docs");
+
+    await session.navigate("localhost:5173");
+    expect(session.state().url).toBe("http://localhost:5173/");
+  });
+
   it("reports a browser that will not start instead of pretending", async () => {
     const fake = fakeBrowser({
       launchError: new Error("Edge is not installed"),
@@ -287,6 +310,16 @@ describe("BrowserSession", () => {
     );
     expect(session.automation()).toBeUndefined();
     expect(session.lastFrame()).toBeUndefined();
+  });
+
+  it("ends what is left of a browser whose page went away on its own", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open();
+
+    fake.lose();
+
+    await vi.waitFor(() => expect(fake.closed()).toBe(true));
   });
 
   it("refuses to act on a browser that is not open", async () => {

@@ -455,4 +455,73 @@ describe("the application's composition", () => {
       expect(completions().every((url) => url.startsWith(host))).toBe(true);
     },
   );
+
+  it.each([
+    [
+      "an installed app lets the person choose, and answers with their choice",
+      true,
+      { choosing: "chosen", model: "z-ai/glm-5.3-flash" },
+    ],
+    [
+      "a development run answers with the model it names, which stays fixed",
+      false,
+      { choosing: "refused", model: "deepseek/deepseek-v4.1-flash" },
+    ],
+  ])(
+    "takes a fixed model from the environment only outside an installed app: %s",
+    { timeout: 60_000 },
+    async (_case, packaged, expected) => {
+      process.env["ZHIYIN_MODEL"] = "deepseek/deepseek-v4.1-flash";
+      const models: unknown[] = [];
+      const answering = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        (input: string | URL | Request, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (
+            url.endsWith("/chat/completions") &&
+            typeof init?.body === "string"
+          )
+            models.push((JSON.parse(init.body) as { model?: unknown }).model);
+          return answering(input, init);
+        },
+      );
+      const core = buildCore({
+        dataDirectory,
+        builtInPluginsDirectory: fileURLToPath(
+          new URL("../../../../packages/plugins/built-in", import.meta.url),
+        ),
+        workspaceDirectory,
+        version: "test",
+        packaged,
+        send: () => undefined,
+        chooseFolder: async () => undefined,
+        chooseSaveLocation: async () => undefined,
+        openExternal: async () => {},
+        openPath: async () => {},
+        showInFolder: async () => {},
+        startDrawing: async () => {
+          throw new Error("Nothing is drawn in this test.");
+        },
+      });
+      core.start();
+      let choosing: string | undefined;
+      try {
+        await core.receive(CHANNEL.frontendReady, []);
+        choosing = await core
+          .receive(CHANNEL.selectModel, ["z-ai/glm-5.3-flash", []])
+          .then(
+            () => "chosen",
+            () => "refused",
+          );
+        const taskId = (await core.receive(CHANNEL.createTask, [])) as string;
+        await core.receive(CHANNEL.sendMessage, [taskId, "Hello"]);
+        await eventually(() => models.length > 0);
+      } finally {
+        await core.shutdown();
+      }
+
+      expect({ choosing, model: models[0] }).toEqual(expected);
+    },
+  );
 });

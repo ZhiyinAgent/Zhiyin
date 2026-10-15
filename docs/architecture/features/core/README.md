@@ -291,7 +291,9 @@ answers every other command:
 - The data folder is `Zhiyin` under the person's application data however the
   app was started; a folder given on the command line wins.
 - A diagnostic log keeps one JSON line per event, a file per day under the
-  data folder's `logs`, for two weeks, and is never sent anywhere. An
+  data folder's `logs`, for two weeks, and is never sent anywhere. What it
+  writes, an error's words and stack included, has the credentials the
+  contract recognises removed. An
   exception nobody handled is recorded and the process keeps running. An
   error of Zhiyin's own that ended a turn is recorded with its stack and its
   conversation's id. A conversation that would not open is recorded with its

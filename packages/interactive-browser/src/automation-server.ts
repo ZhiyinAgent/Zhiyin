@@ -22,6 +22,7 @@ import {
   describeBrowserResult,
   describedBrowserTools,
 } from "./browser-presentation.js";
+import { browserAddress } from "./browser-address.js";
 
 /**
  * `@playwright/mcp` publishes CommonJS. Required rather than imported so this
@@ -397,12 +398,24 @@ export function browserAutomation(
       // an interrupted turn or a renamed tool must not slip past the same rule.
       if (!describedBrowserTools.has(name))
         throw new Error(`${name} is not available in Zhiyin’s browser.`);
+      // Checked again where the call is made, not only when it was shown: an
+      // inspection is a description, and this is the browser being sent.
+      const address =
+        name === "browser_navigate"
+          ? browserAddress(typeof args.url === "string" ? args.url : "")
+          : undefined;
+      if (address && !address.ok)
+        return {
+          isError: true,
+          content: [{ type: "text", text: address.reason }],
+        };
       browser.markAgentAction();
       if (name === "browser_close") {
         await browser.close();
         return { content: [{ type: "text", text: "Browser closed." }] };
       }
       let given = modelArguments(name, args);
+      if (address?.ok) given = { ...given, url: address.url };
       if (
         name === "browser_file_upload" &&
         Array.isArray(args.paths) &&
