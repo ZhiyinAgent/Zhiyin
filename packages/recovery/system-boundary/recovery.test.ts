@@ -6,6 +6,7 @@ import {
   writeFile,
   mkdir,
   rm,
+  symlink,
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -649,6 +650,58 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     expect((await recovery.restore(review)).files).toEqual([
       { path: "note.txt", status: "restored" },
     ]);
+  });
+
+  it("keeps and puts back files in a folder opened through a link", async () => {
+    const { root: real, recovery } = await fixture();
+    // The folder as a person might open it: by a junction to where it is.
+    const parent = await mkdtemp(join(tmpdir(), "zhiyin-recovery-linked-"));
+    const root = join(parent, "workspace");
+    await symlink(real, root, "junction");
+    await writeFile(join(root, "note.txt"), "before");
+
+    const prepared = await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    expect(prepared.files.map((file) => file.status)).toEqual(["protected"]);
+    await writeFile(join(root, "note.txt"), "after");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "note.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "note.txt", change: "updated" }],
+      },
+    ]);
+    expect(review.files).toEqual([
+      { path: "note.txt", action: "restore", status: "recoverable" },
+    ]);
+
+    expect((await recovery.restore(review)).files).toEqual([
+      { path: "note.txt", status: "restored" },
+    ]);
+    expect(await readFile(join(real, "note.txt"), "utf8")).toBe("before");
+  });
+
+  it("keeps no copy of a file a link inside the folder leads out to", async () => {
+    const { root, recovery } = await fixture();
+    const outside = await mkdtemp(join(tmpdir(), "zhiyin-recovery-outside-"));
+    await writeFile(join(outside, "note.txt"), "outside");
+    await symlink(outside, join(root, "elsewhere"), "junction");
+
+    const prepared = await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "elsewhere/note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    expect(prepared.files.map((file) => file.status)).toEqual(["unprotected"]);
   });
 
   it("reports a missing retained copy without preventing other files from restoring", async () => {
