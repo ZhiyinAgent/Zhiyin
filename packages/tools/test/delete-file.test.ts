@@ -8,7 +8,14 @@
  * is ever deleted permanently that the approval did not show as permanent.
  */
 
-import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { join, relative } from "node:path";
@@ -262,7 +269,7 @@ describe("delete_file", () => {
     });
   });
 
-  it("says a target could not be checked when Windows refuses to look, not that it is absent", async () => {
+  it("says a target could not be checked when Windows refuses to look, not that it is absent", async (context) => {
     const root = await workspace();
     const denied = join(root, "private");
     await mkdir(join(denied, "inner"), { recursive: true });
@@ -270,6 +277,13 @@ describe("delete_file", () => {
     const user = userInfo().username;
     execFileSync("icacls", [denied, "/deny", `${user}:(OI)(CI)(F)`]);
     try {
+      // An elevated administrator, as on GitHub's machine, still reads the
+      // folder through the refusal: there is nothing refused to check here.
+      const refused = await readdir(denied).then(
+        () => false,
+        () => true,
+      );
+      context.skip(!refused, "Windows lets this account read past a refusal.");
       const tools = new WorkspaceTools(root, {
         recycleBin: recycleBin(root).bin,
       });
