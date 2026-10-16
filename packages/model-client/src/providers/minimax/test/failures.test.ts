@@ -68,6 +68,15 @@ describe("a MiniMax failure", () => {
     ).toMatchObject({ code: "outOfCredits", retryable: false });
   });
 
+  it("does not take a number 1008 in another sentence for an empty balance", async () => {
+    expect(
+      await failure(400, {
+        type: "invalid_request_error",
+        message: "max_tokens must be at most 1008 for this model",
+      }),
+    ).toMatchObject({ code: "requestRejected" });
+  });
+
   it("points at the key on the Model page when MiniMax rejects it", async () => {
     expect(
       await failure(401, {

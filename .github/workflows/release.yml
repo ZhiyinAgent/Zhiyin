@@ -63,8 +63,12 @@ jobs:
             throw "Tag version $($Matches.version) does not match desktop version $($desktop.version)."
           }
 
+      # The gate installs the programs some tests need, each verified against
+      # its pinned digest. Nothing is restored from a cache for a release.
       - name: Run the full repository gate
         shell: powershell
+        env:
+          ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1 -Full
 
       - name: Prepare installer, checksum, and release notes
@@ -88,7 +92,9 @@ jobs:
           [System.IO.File]::WriteAllText($checksums, "$checksumLine`n", [System.Text.Encoding]::ASCII)
 
           $notes = Join-Path $installer.DirectoryName 'RELEASE_NOTES.md'
-          @(
+          # UTF-8 without a byte-order mark, which Set-Content would write and
+          # GitHub would show at the start of the notes.
+          $text = @(
             '## Developer preview'
             ''
             'This alpha is a convenience build for developers evaluating Zhiyin. It is Windows-only and not code-signed yet, so Microsoft Defender SmartScreen may warn before it runs. It has no automatic update channel. Clone and build the tagged source when you need the most inspectable installation path.'
@@ -102,7 +108,8 @@ jobs:
             '```text'
             $checksumLine
             '```'
-          ) | Set-Content -LiteralPath $notes -Encoding utf8
+          ) -join "`n"
+          [System.IO.File]::WriteAllText($notes, "$text`n", (New-Object System.Text.UTF8Encoding $false))
 
           "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
           "checksums=$checksums" >> $env:GITHUB_OUTPUT

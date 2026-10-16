@@ -189,6 +189,7 @@ function LibraryExample() {
       onOverrideComponent={async () => {}}
       onResetComponent={async () => {}}
       onInstallToolchain={async () => {}}
+      onCancelToolchainInstall={async () => {}}
       onTestConnection={async () => ({
         ok: true,
         tools: [{ name: "search", description: "Search.", enabled: true }],

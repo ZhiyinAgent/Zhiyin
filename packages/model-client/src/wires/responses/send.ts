@@ -23,6 +23,7 @@ import {
   endedEarly,
   eventIn,
   streamedEvents,
+  unnamedRequest,
   type StreamingDialect,
 } from "../streamed-request.js";
 import { responsesFormat, type ResponsesReplayData } from "./input.js";
@@ -98,7 +99,7 @@ function failureOf(code: unknown, message: unknown): ProviderError {
 /** What the request used, counting cached input inside the input. */
 function usageOf(
   response: ResponseObject,
-  requestId: string | undefined,
+  requestId: string,
   model: string | undefined,
 ): ModelUsage | undefined {
   const usage = response.usage;
@@ -107,7 +108,7 @@ function usageOf(
   const written = count(usage.input_tokens_details?.cache_write_tokens);
   const reasoning = count(usage.output_tokens_details?.reasoning_tokens);
   return {
-    requestId: requestId ?? "unknown",
+    requestId,
     model: model ?? "unknown",
     inputTokens: count(usage.input_tokens) ?? 0,
     outputTokens: count(usage.output_tokens) ?? 0,
@@ -270,7 +271,11 @@ export async function* sendResponses(
 
   if (!ended) throw endedEarly(dialect);
   noteResponse(ended.response);
-  const usage = usageOf(ended.response, requestId, responseModel);
+  const usage = usageOf(
+    ended.response,
+    requestId ?? unnamedRequest(),
+    responseModel,
+  );
   if (usage) yield { kind: "usage", usage };
 
   const items = finished.size

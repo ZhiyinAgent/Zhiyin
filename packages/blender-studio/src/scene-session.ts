@@ -204,6 +204,11 @@ export class SceneSession {
     return this.#scene?.relative;
   }
 
+  /** The scene file the session works on, wherever it is, if one is open. */
+  sceneFile(): string | undefined {
+    return this.#scene?.absolute;
+  }
+
   /**
    * Runs one command in the scene, after every command before it. Opening a
    * scene names its file both ways, so the session can open it again later.

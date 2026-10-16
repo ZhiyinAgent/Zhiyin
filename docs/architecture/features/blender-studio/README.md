@@ -105,7 +105,10 @@ for its launch; nothing listens on a port.
   a script saved in a scene file.
 - **Nothing changes before a scene is open.** The scene file is a
   workspace-relative `.blend` that stays inside the workspace, and creating
-  one never replaces an existing file.
+  one never replaces an existing file. A scene opened in a folder the
+  conversation has since left is not open in the new one: nothing there
+  changes it, and a scene the new folder contains is named as that folder
+  has it.
 - **Every file a tool names stays in the workspace.** Pictures, fonts,
   drawings and models it reads, and renders and exports it writes, are
   workspace-relative paths with an expected kind of file. Anything else is
@@ -449,11 +452,12 @@ The session's launch is replaceable, so lifecycles, refusals, time limits and
 approvals are tested against a stand-in session. The script inside Blender,
 the pipes and the previews are tested against a real Blender when
 `ZHIYIN_BLENDER` names its executable; without it those tests are skipped and
-say so.
+say so. CI's gate installs Blender for them, so there they run.
 
 The compile step is tested for what it asks of Blender's Python. Blender
 installed from its real archive, compiled and started once, is tested when
-`ZHIYIN_BLENDER_ARCHIVE` names the archive; without it that test is skipped.
+`ZHIYIN_BLENDER_ARCHIVE` names the archive; without it that test is skipped,
+except in CI, which keeps the archive for it.
 
 When EEVEE cannot render, previews fall back to Cycles on the processor. No
 test covers that path: it needs a PC whose graphics EEVEE cannot use.

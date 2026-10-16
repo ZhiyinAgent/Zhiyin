@@ -58,6 +58,26 @@ describe.runIf(process.platform === "win32")("the drawing host", () => {
     host.close();
   });
 
+  it("counts a request's own work against its time limit, not the time it waited behind others", async () => {
+    const processes = starting(() => fixtureProcess("one-at-a-time.mjs"));
+    const host = new DrawingHost({
+      start: processes.start,
+      containment,
+      // Each request takes 600 ms of work; four at once take 2.4 s in all.
+      timeoutMs: 1_500,
+    });
+
+    const answers = await Promise.all(
+      ["r1", "r2", "r3", "r4"].map((revision) => host.release(revision)),
+    );
+
+    expect(answers).toEqual(
+      Array.from({ length: 4 }, () => ({ ok: true, kind: "released" })),
+    );
+    expect(processes.started).toHaveLength(1);
+    host.close();
+  });
+
   it("ends a process that commits more memory than it is allowed, and only that process", async () => {
     const processes = starting(() => fixtureProcess("allocates.mjs"));
     const host = new DrawingHost({

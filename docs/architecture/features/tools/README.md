@@ -142,7 +142,9 @@ for a shell again does not change it.
 - Matching tolerates line endings, a byte-order mark, trailing whitespace, a
   block's indentation and line numbers copied from a read, and nothing about
   the words; an exact match always wins. A file keeps its line endings and
-  byte-order mark through an edit; a new file is written exactly as given.
+  byte-order mark through an edit; a new file is written exactly as given. A
+  file that is not UTF-8 is not edited, since writing it back would change
+  characters the edit does not touch.
 - Each file is written to a temporary file and renamed into place; a write
   that fails removes its temporary file. If a multi-file edit fails partway,
   the result names the files already changed and those that were not, and
@@ -239,7 +241,8 @@ for a shell again does not change it.
   refusal.
 - `selectWorkspace` moves the boundary only once the new path resolves to an
   existing folder; a change that fails leaves the tools in the folder the
-  person is still shown.
+  person is still shown. A starting folder given as an empty name is no
+  folder, never the one Zhiyin was started in.
 - `folderInstructions()` reads `AGENTS.md` at the folder's root only, up to
   16 KB, with a hash of the whole file that the person's approval is kept
   against.

@@ -129,6 +129,8 @@ export class DownloadedToolchains implements Toolchains {
   readonly #unpack: Unpack;
   readonly #ready: Readonly<Record<string, Ready>>;
   readonly #installing = new Map<string, Promise<void>>();
+  /** How many bytes of each download under way have arrived. */
+  readonly #received = new Map<string, number>();
   readonly #failures = new Map<string, string>();
   /**
    * What installs cut short by Zhiyin closing left, cleared once before this
@@ -153,7 +155,12 @@ export class DownloadedToolchains implements Toolchains {
 
   async state(id: string): Promise<ToolchainState> {
     const spec = this.#spec(id);
-    if (this.#installing.has(id)) return { status: "installing" };
+    if (this.#installing.has(id))
+      return {
+        status: "installing",
+        received: this.#received.get(id) ?? 0,
+        bytes: spec.bytes,
+      };
     if (await this.executable(id)) return { status: "ready" };
     const failure = this.#failures.get(id);
     if (failure) return { status: "failed", reason: failure };
@@ -195,11 +202,14 @@ export class DownloadedToolchains implements Toolchains {
         this.#failures.delete(id);
       })
       .catch((error: unknown) => {
-        this.#failures.set(id, describe(error));
+        // Stopped on purpose is not a failure: it is offered as before.
+        if (signal?.aborted) this.#failures.delete(id);
+        else this.#failures.set(id, describe(error));
         throw error;
       })
       .finally(() => {
         this.#installing.delete(id);
+        this.#received.delete(id);
       });
     this.#installing.set(id, installation);
     return installation;
@@ -264,6 +274,7 @@ export class DownloadedToolchains implements Toolchains {
     signal: AbortSignal,
   ): Promise<void> {
     const hash = createHash("sha256");
+    const progress = this.#received;
     let received = 0;
     // A write that fails, such as on a full disk, fails the download.
     await pipeline(
@@ -272,6 +283,7 @@ export class DownloadedToolchains implements Toolchains {
         for await (const chunk of chunks) {
           signal.throwIfAborted();
           received += chunk.byteLength;
+          progress.set(spec.id, received);
           if (received > spec.bytes)
             throw new Error(
               `The download of ${spec.name} is larger than expected.`,

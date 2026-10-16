@@ -506,9 +506,33 @@ export class ComposedRewind implements Rewind {
       durableIntent = true;
       const result = await this.#members.recovery.restore(pending.review);
       await this.#journal.filesRestored(undoId, result);
+      // A file the review could put back that did not go back, as when
+      // another program held it, is tried again at the next undo: the
+      // actions that changed it are not recorded as undone.
+      const retry = new Set(
+        pending.review.files
+          .filter(
+            (file) =>
+              file.status === "recoverable" &&
+              !result.files.some(
+                (done) =>
+                  done.path === file.path &&
+                  (done.status === "restored" || done.status === "removed"),
+              ),
+          )
+          .map((file) => file.path),
+      );
       const recorded = this.#members.conversation.applyUndo(
         task,
-        pending.plan,
+        {
+          ...pending.plan,
+          actions: pending.plan.actions.filter(
+            (action) =>
+              !action.changes?.some((change) =>
+                retry.has(change.path.replaceAll("\\", "/")),
+              ),
+          ),
+        },
         result.files,
         at,
       );
@@ -560,7 +584,17 @@ export class ComposedRewind implements Rewind {
     return this.#members.recovery.discard(actionId);
   }
 
-  forgetConversation(conversationId: string): Promise<void> {
-    return this.#members.recovery.forgetConversation(conversationId);
+  /**
+   * A deleted conversation's copies go, and so does a rewind or undo it left
+   * unfinished: there is no conversation left to finish it in.
+   */
+  async forgetConversation(conversationId: string): Promise<void> {
+    if (!this.#restoring.has(conversationId)) {
+      for (const operation of await this.#journal.pending())
+        if (operation.conversationId === conversationId)
+          await this.#journal.complete(operation.id);
+      this.#blocked.delete(conversationId);
+    }
+    await this.#members.recovery.forgetConversation(conversationId);
   }
 }

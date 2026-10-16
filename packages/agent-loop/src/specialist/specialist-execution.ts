@@ -369,7 +369,7 @@ export class SpecialistExecution {
       });
       for (;;) {
         // The same round a turn runs, gathered without being shown.
-        const { calls, text } = await this.#round.run(
+        const { calls, text, reasoning, replay } = await this.#round.run(
           options.taskId,
           controller,
           ledger,
@@ -419,12 +419,16 @@ export class SpecialistExecution {
           calls,
           () => `call-${this.#deps.newMessageId()}`,
         );
+        // The round goes back as a turn's does, with its reasoning and what
+        // the provider needs back: some refuse a later request without them.
         messages.push({
           role: "assistant",
           content: text,
           toolCalls: answerable.map(protocolCall),
+          ...(reasoning ? { reasoning } : {}),
+          ...(replay ? { replay } : {}),
         });
-        const round = { text, reasoning: "", messages, tools };
+        const round = { text, reasoning, messages, tools };
         const sizes = new RoundResults((kept) =>
           this.#deps.sessions.keep("output", options.taskId, { text: kept }),
         );

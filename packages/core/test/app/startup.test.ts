@@ -366,3 +366,90 @@ describe("AgentLoop damaged history", () => {
     expect(fixture.loop.snapshot().runtime.tasks).toBe("unavailable");
   });
 });
+
+/**
+ * A history that could not be read just now, as when another program holds
+ * its file, is not damaged: nothing is copied aside or offered in its place,
+ * and the next read that succeeds opens it as usual.
+ */
+describe("AgentLoop history that could not be read just now", () => {
+  function loopOverBusyHistory(firstFailure: "unavailable" | "corrupted") {
+    const preserved: string[] = [];
+    let failure: string | undefined = firstFailure;
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      sessions: {
+        ...deps.sessions,
+        loadWorkspace: async () => {
+          if (failure)
+            throw Object.assign(new Error("busy"), { code: failure });
+          return {
+            recentWorkspaces: [],
+            selectedTaskId: "keep-1",
+            tasks: [savedTask],
+          };
+        },
+        inspectDamage: async () => ({
+          kind: "partial" as const,
+          readable: 1,
+          damaged: 1,
+        }),
+        preserveDamaged: async () => {
+          const kept = `damaged-history/workspace-${preserved.length}.json`;
+          preserved.push(kept);
+          return kept;
+        },
+      },
+    });
+    return {
+      loop,
+      preserved,
+      readable: () => {
+        failure = undefined;
+      },
+    };
+  }
+
+  it("is not offered as damaged history, and nothing is copied aside", async () => {
+    const fixture = loopOverBusyHistory("unavailable");
+
+    await fixture.loop.initialize();
+
+    expect(fixture.preserved).toEqual([]);
+    expect(fixture.loop.snapshot().historyRecovery).toBeUndefined();
+    expect(fixture.loop.snapshot().runtime.tasks).toBe("unavailable");
+    expect(fixture.loop.snapshot().issues).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("could not be read"),
+      }),
+    );
+  });
+
+  it("opens as usual once it can be read", async () => {
+    const fixture = loopOverBusyHistory("unavailable");
+    await fixture.loop.initialize();
+
+    fixture.readable();
+    await fixture.loop.initialize();
+
+    expect(fixture.loop.snapshot().runtime.tasks).toBe("available");
+    expect(fixture.loop.snapshot().issues ?? []).not.toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining("Saved history"),
+      }),
+    );
+  });
+
+  it("withdraws a recovery offered earlier once the history opens", async () => {
+    const fixture = loopOverBusyHistory("corrupted");
+    await fixture.loop.initialize();
+    expect(fixture.loop.snapshot().historyRecovery).toBeDefined();
+
+    fixture.readable();
+    await fixture.loop.initialize();
+
+    expect(fixture.loop.snapshot().historyRecovery).toBeUndefined();
+    expect(fixture.loop.snapshot().runtime.tasks).toBe("available");
+  });
+});

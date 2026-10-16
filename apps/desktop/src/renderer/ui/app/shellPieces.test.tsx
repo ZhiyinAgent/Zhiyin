@@ -76,6 +76,31 @@ describe("WorkspacePicker", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it.each(["notes", "Choose another folder…"])(
+    "puts focus back on the picker once %s is chosen",
+    (item) => {
+      render(
+        <WorkspacePicker
+          current={current}
+          recent={recent}
+          onUseRecent={() => undefined}
+          onChoose={() => undefined}
+        />,
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Workspace folder/ }),
+      );
+      const chosen = screen.getByRole("menuitem", { name: item });
+      chosen.focus();
+      fireEvent.click(chosen);
+
+      expect(
+        screen.getByRole("button", { name: /^Workspace folder/ }),
+      ).toHaveFocus();
+    },
+  );
+
   it("closes when the person clicks away, or the window loses focus", () => {
     render(<WorkspacePicker recent={[]} onChoose={() => undefined} />);
     const trigger = screen.getByRole("button", { name: /^Workspace folder/ });

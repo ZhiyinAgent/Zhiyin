@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import type { UserInputResponse } from "@zhiyin/contract";
 import { ApprovalPrompt } from "../actions/index.js";
 import { Composer } from "../conversation/index.js";
+import { visibleText } from "../shared/index.js";
 import { UserInputPrompt } from "../user-input/index.js";
 import { WorkspacePicker } from "./WorkspacePicker.js";
 import {
@@ -69,12 +70,20 @@ export function ComposerDock({
           </button>
         </div>
       )}
+      {/* Always present, so a screen reader hears a request arrive even
+          where focus stays with the message being written. */}
+      <p className={styles["composer-dock__announcement"]} aria-live="polite">
+        {task?.phase.kind === "approval"
+          ? `Permission needed: ${visibleText(task.phase.prompt.action)}`
+          : ""}
+      </p>
       {task?.phase.kind === "approval" && (
         <div className={styles["composer-dock__decision"]}>
           <ApprovalPrompt
             key={task.phase.prompt.id}
             {...approvalPromptDetails(task.phase.prompt)}
             compact={compact}
+            takesFocus
             onDecision={async (decision, reason) => {
               const prompt =
                 task.phase.kind === "approval" ? task.phase.prompt : undefined;

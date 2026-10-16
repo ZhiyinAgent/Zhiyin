@@ -74,14 +74,18 @@ answers every other command:
 - **Kept items:** `kept` keeps a paste or an attached picture as a draft,
   finds a paste to open in the person's editor, and reads a stored picture.
 - **Rewind and undo:** refused while the conversation's turn is running, and
-  otherwise handed to the rewind group. None starts a model request.
+  otherwise handed to the rewind group. None starts a model request. One whose
+  conversation could not be saved stays on screen as not yet stored, and the
+  next save that succeeds stores it.
 - **Produced files and exports:** a person's direct request, not a model
   action, handed to the artifacts feature or the conversation export with a
   callback that asks where to save. A conversation not yet opened is read from
   disk first, so its export holds the whole record (ADR 0020).
 - **The space beside a conversation,** plugins, connections, the shell's
   availability, the person's own browsing, and `lookAtScene`, the person
-  turning, zooming or switching the 3D view.
+  turning, zooming or switching the 3D view. A program a connector needs is
+  shown about every second while it installs, so its progress moves, and
+  `cancelToolchainInstall` stops it; a stopped install ends without a failure.
 - **Turns:** `turns` forwards to the agent loop starting, stopping and
   condensing a turn, the person's answers to approvals and questions, and
   revoking a permission granted for the conversation.
@@ -210,7 +214,9 @@ answers every other command:
 - **Damaged history is kept before anything else happens,** and nothing is
   written over it until the person chooses. What can still be read is counted
   and offered. Starting fresh happens only when chosen, and the question stays
-  until the history store has cleared the damage.
+  until the history store has cleared the damage, or the history opens.
+- **History that could not be read just now is not damage.** The person is
+  told, and nothing is copied aside or offered in its place.
 - **History another version saved is not damage (ADR 0022).** History a newer
   version saved is refused whole: the window is told which version saved it,
   and nothing is copied aside or offered for a fresh start. A conversation a

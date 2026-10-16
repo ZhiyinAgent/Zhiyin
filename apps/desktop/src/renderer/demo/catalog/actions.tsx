@@ -212,7 +212,7 @@ export const actionsEntries: ComponentCatalogEntry[] = [
         <ApprovalPrompt
           title="Delete 2 items: 1 to the Recycle Bin, 1 permanently"
           target="2 items"
-          detail="To the Recycle Bin, where they can be restored: drafts/old-plan.md (4.1 KB). Deleted permanently; this cannot be restored from the Recycle Bin: exports/archive.zip (18.2 GB). Windows would not move exports/archive.zip to the Recycle Bin: it is too large for it, or on a drive without one."
+          detail="To the Recycle Bin, where it can be restored: drafts/old-plan.md (4.1 KB). Deleted permanently; this cannot be restored from the Recycle Bin: exports/archive.zip (18.2 GB). Windows would not move exports/archive.zip to the Recycle Bin: it is too large for it, or on a drive without one."
           changes={[
             { path: "drafts/old-plan.md", change: "recycled" },
             { path: "exports/archive.zip", change: "deleted" },

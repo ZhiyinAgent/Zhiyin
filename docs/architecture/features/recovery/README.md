@@ -51,7 +51,9 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
   file the actions created is removed. A deleted file is made again only while
   nothing has taken its place.
 - A later edit is never overwritten. A file that does not match what the
-  actions left is reported as a conflict and left alone.
+  actions left is reported as a conflict and left alone, and so is one edited
+  between two of the actions. A file already as it was before them is put
+  back as it is.
 - Restoring holds the file open so that no other program can write to it,
   checks its digest again on that handle, and only then swaps in the copy or
   deletes the file. A file another program has open for writing is left in

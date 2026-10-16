@@ -147,6 +147,7 @@ export function demoCommands(
     installToolchain: async () => {
       throw notInTheDemo("download programs");
     },
+    cancelToolchainInstall: async () => {},
     // Stands in for the folder a person would pick: the demo installs one.
     installPlugin: async () => {
       dispatch({ type: "pluginImported" });

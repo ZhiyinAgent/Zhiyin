@@ -711,6 +711,176 @@ describe("WorkspaceShell", () => {
     },
   );
 
+  it.each([
+    ["Usage", "Usage"],
+    ["Model", "Model"],
+    ["Custom instructions", "Custom instructions"],
+    ["Settings", "Settings"],
+  ])(
+    "moves focus to the %s page it opens from the app menu",
+    async (item, heading) => {
+      function Live() {
+        const [state, dispatch] = useReducer(
+          workspaceReducer,
+          createWorkspaceState({ connection: "ready" }),
+        );
+        return (
+          <WorkspaceShell
+            state={state}
+            dispatch={dispatch}
+            commands={stubCommands}
+          />
+        );
+      }
+      render(<Live />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+      const entry = screen.getByRole("menuitem", { name: item });
+      entry.focus();
+      fireEvent.click(entry);
+
+      expect(
+        await screen.findByRole("heading", { level: 1, name: heading }),
+      ).toHaveFocus();
+    },
+  );
+
+  it("keeps Tab inside the open navigation drawer, and gives focus back on Escape", () => {
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({ connection: "ready" })}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: "Open navigation" });
+    toggle.focus();
+    fireEvent.click(toggle);
+    const drawer = screen.getByRole("complementary", {
+      name: "Primary navigation",
+    });
+    const last = screen.getByRole("button", { name: "Open app menu" });
+    expect(drawer).toContainElement(last);
+
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(toggle).toHaveFocus();
+    fireEvent.keyDown(toggle, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+
+    fireEvent.keyDown(last, { key: "Escape" });
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAccessibleName("Open navigation");
+  });
+
+  describe("an approval that arrives during a turn", () => {
+    const working: WorkspaceTask = {
+      id: "save",
+      title: "Summary",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "working", steps: [] },
+    };
+    const asking: WorkspaceTask = {
+      ...working,
+      phase: {
+        kind: "approval",
+        steps: [],
+        prompt: {
+          id: "write",
+          action: "Save the summary",
+          reason: "Write summary.md in the workspace.",
+          target: "summary.md",
+          command: "write_file(…)",
+        },
+      },
+    };
+    const shell = (task: WorkspaceTask) => (
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId: "save",
+          tasks: [task],
+        })}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />
+    );
+
+    it("takes focus when nothing is being written, so the keyboard answers it", () => {
+      const { rerender } = render(shell(working));
+      screen.getByLabelText("Message Zhiyin").focus();
+
+      rerender(shell(asking));
+
+      expect(
+        screen.getByRole("heading", { name: "Save the summary" }),
+      ).toHaveFocus();
+    });
+
+    it("leaves focus with a message being written, and says it is waiting", () => {
+      const { rerender } = render(shell(working));
+      const composer = screen.getByLabelText("Message Zhiyin");
+      composer.focus();
+      fireEvent.change(composer, { target: { value: "Also add a chart" } });
+
+      rerender(shell(asking));
+
+      expect(composer).toHaveFocus();
+      expect(
+        screen.getByText("Permission needed: Save the summary"),
+      ).toBeInTheDocument();
+      expect(
+        screen
+          .getByText("Permission needed: Save the summary")
+          .closest("[aria-live]"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows an approval's reason the AI wrote as Zhiyin's account", () => {
+    const state = createWorkspaceState({
+      connection: "ready",
+      selectedTaskId: "save",
+      tasks: [
+        {
+          id: "save",
+          title: "Summary",
+          updatedLabel: "Now",
+          updatedAt: "2026-10-05T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: {
+            kind: "approval",
+            steps: [],
+            prompt: {
+              id: "write",
+              action: "Save the summary",
+              reason: "Save the summary the person asked for.",
+              reasonByModel: true,
+              target: "summary.md",
+              command: "write_file(…)",
+            },
+          },
+        },
+      ],
+    });
+    render(
+      <WorkspaceShell
+        state={state}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />,
+    );
+
+    expect(
+      screen.getByText("Save the summary the person asked for."),
+    ).toHaveTextContent(/^Zhiyin says/);
+  });
+
   it("shows reasoning only while it arrives, and passes the selected effort to the core", async () => {
     const task: WorkspaceTask = {
       id: "reasoning",
@@ -1221,6 +1391,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),
@@ -1949,6 +2120,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),
@@ -2728,6 +2900,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),

@@ -661,6 +661,22 @@
   border-color: var(--zy-line-strong);
 }
 
+/* A short window keeps room for the question and the suggestions: the art
+   shrinks, and where even that would not fit, it is left out. */
+@media (max-height: 600px) {
+  .welcome-orbit {
+    width: 76px;
+    height: 76px;
+    margin-bottom: 22px;
+  }
+}
+
+@media (max-height: 535px) {
+  .welcome-orbit {
+    display: none;
+  }
+}
+
 .new-view {
   animation: welcome-arrive 650ms ease-out both;
 }

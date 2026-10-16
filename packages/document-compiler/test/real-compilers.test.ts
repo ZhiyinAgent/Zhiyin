@@ -12,8 +12,10 @@
  * Tectonic downloads its TeX bundle on first use, so the first run is slow.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { documentCompiler } from "../src/index.js";
@@ -63,6 +65,26 @@ describe.runIf(typst)("the real Typst engine", () => {
     expect(failed.content[0]?.text).toContain("broken.typ:1:1");
     expect(failed.content[0]?.text).not.toContain(root);
   }, 300_000);
+
+  it("reads nothing from outside the workspace, however the document names it", async () => {
+    const parent = await workspace();
+    const root = join(parent, "work");
+    await mkdir(join(root, "docs"), { recursive: true });
+    await writeFile(join(parent, "secret.txt"), "the secret outside");
+    const absolute = join(parent, "secret.txt").replaceAll("\\", "/");
+    const compiler = compilerIn(root);
+
+    for (const named of ["../../secret.txt", absolute]) {
+      await writeFile(join(root, "docs", "leak.typ"), `#read("${named}")\n`);
+      const result = (await compiler.callTool("compile_document", {
+        path: "docs/leak.typ",
+      })) as { isError?: boolean; content: { text: string }[] };
+
+      expect(result.isError, named).toBe(true);
+      expect(JSON.stringify(result)).not.toContain("the secret outside");
+      expect(await readdir(join(root, "docs"))).toEqual(["leak.typ"]);
+    }
+  }, 300_000);
 });
 
 describe.runIf(tectonic)("the real LaTeX engine", () => {
@@ -81,5 +103,30 @@ describe.runIf(tectonic)("the real LaTeX engine", () => {
     expect(
       (await readFile(join(root, "paper.pdf"))).subarray(0, 5).toString(),
     ).toBe("%PDF-");
+  }, 600_000);
+
+  it("runs no program a document asks to run", async () => {
+    const root = await workspace();
+    const marker = join(dirname(root), `${randomUUID()}.txt`);
+    // Tectonic splits the command at spaces and honours no quotes, so the
+    // program is written without a space inside its argument.
+    const program = `node -e require('fs').writeFileSync('${marker.replaceAll("\\", "/")}','ran')`;
+    await writeFile(
+      join(root, "escape.tex"),
+      [
+        "\\documentclass{article}",
+        `\\immediate\\write18{${program}}`,
+        "\\begin{document}",
+        "Hello.",
+        "\\end{document}",
+        "",
+      ].join("\n"),
+    );
+
+    await compilerIn(root).callTool("compile_document", {
+      path: "escape.tex",
+    });
+
+    expect(existsSync(marker)).toBe(false);
   }, 600_000);
 });

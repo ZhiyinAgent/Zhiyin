@@ -200,7 +200,8 @@ export interface Capabilities {
     contents: AuthoredPluginContents,
   ): Promise<void>;
   /** Installs the program an application connector needs. */
-  installToolchain(componentId: string): Promise<void>;
+  /** Installs what a connector needs; the signal stops it. */
+  installToolchain(componentId: string, signal?: AbortSignal): Promise<void>;
 
   connections(): Promise<readonly McpServerState[]>;
   checkConnection(id: string): Promise<McpServerState>;
@@ -654,7 +655,10 @@ export class ComposedCapabilities implements Capabilities {
     return this.#members.plugins.saveContents(id, contents);
   }
 
-  async installToolchain(componentId: string): Promise<void> {
+  async installToolchain(
+    componentId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const connector = (await this.#members.plugins.list())
       .flatMap((view) => view.appConnectors)
       .find((item) => item.id === componentId);
@@ -663,8 +667,12 @@ export class ComposedCapabilities implements Capabilities {
       : [];
     if (!programs.length)
       throw new Error("This connector does not need anything installed.");
-    for (const program of programs)
-      await this.#members.toolchains.install(program);
+    for (const program of programs) {
+      signal?.throwIfAborted();
+      await (signal
+        ? this.#members.toolchains.install(program, signal)
+        : this.#members.toolchains.install(program));
+    }
     await this.#members.mcp.retryFailed();
   }
 
@@ -795,8 +803,18 @@ export class ComposedCapabilities implements Capabilities {
     );
     const failed = states.find((state) => state.status === "failed");
     if (failed) return failed;
-    if (states.some((state) => state.status === "installing"))
-      return { status: "installing" };
+    // What has arrived of everything still to come.
+    if (states.some((state) => state.status === "installing")) {
+      let received = 0;
+      let bytes = 0;
+      for (const state of states)
+        if (state.status === "installing") {
+          received += state.received ?? 0;
+          bytes += state.bytes ?? 0;
+        } else if (state.status === "missing")
+          for (const item of state.downloads) bytes += item.bytes;
+      return { status: "installing", received, bytes };
+    }
     const downloads = states.flatMap((state) =>
       state.status === "missing" ? state.downloads : [],
     );

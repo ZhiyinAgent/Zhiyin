@@ -5,8 +5,13 @@ const reachable =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
 
 /** Drawn, so focus can land on it; a test's page draws nothing and counts all. */
-const drawn = (element: HTMLElement) =>
+export const drawn = (element: HTMLElement) =>
   typeof element.checkVisibility !== "function" || element.checkVisibility();
+
+/** The controls inside an element the keyboard can reach, in order. */
+export function keyboardStops(container: Element): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>(reachable)].filter(drawn);
+}
 
 /**
  * Keeps the keyboard inside a modal dialog: focus moves into it when it
@@ -47,9 +52,7 @@ export function useModalFocus(
       }
       if (event.key !== "Tab") return;
       if (!own.contains(focused) && modals.at(-1) !== own) return;
-      const controls = [...own.querySelectorAll<HTMLElement>(reachable)].filter(
-        drawn,
-      );
+      const controls = keyboardStops(own);
       const at = controls.findIndex((control) => control === focused);
       const first = controls[0];
       const last = controls.at(-1);

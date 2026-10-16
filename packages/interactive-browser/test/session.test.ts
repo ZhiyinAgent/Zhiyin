@@ -11,6 +11,8 @@ type FakeBrowser = {
   readonly launcher: BrowserLauncher;
   readonly target: BrowserTarget;
   readonly launches: () => number;
+  /** Every address the browser itself was sent to. */
+  readonly visited: () => readonly string[];
   navigateTo(url: string, title?: string): Promise<void>;
   emitFrame(frame?: Partial<BrowserFrame>): void;
   lose(): void;
@@ -27,6 +29,7 @@ function fakeBrowser(
   let url = "about:blank";
   let title = "";
   let launches = 0;
+  const visited: string[] = [];
   let closed = false;
   let onFrame: ((frame: BrowserFrame) => void) | undefined;
   let navigated: (() => void) | undefined;
@@ -40,6 +43,7 @@ function fakeBrowser(
     url: () => url,
     title: async () => title,
     goto: async (next) => {
+      visited.push(next);
       url = next;
     },
     back: async () => {},
@@ -71,6 +75,7 @@ function fakeBrowser(
   return {
     target,
     launches: () => launches,
+    visited: () => visited,
     closed: () => closed,
     launcher: {
       available: async () =>
@@ -150,6 +155,31 @@ describe("BrowserSession", () => {
       await expect(session.navigate(url)).rejects.toThrow(/web/);
       await expect(session.open(url)).rejects.toThrow(/web/);
     }
+    expect(session.state().url).toBe("https://example.com/");
+  });
+
+  // What the person types in the panel reaches the browser through open and
+  // navigate, as the agent's addresses do.
+  it.each([
+    "file:///C:/Users/someone/notes.html",
+    "data:text/html,<script>alert(1)</script>",
+    "javascript:alert(1)",
+    "blob:https://example.com/0f3c",
+    "chrome://settings",
+    "edge://settings",
+    "about:config",
+    "view-source:https://example.com/",
+    "ftp://example.com/file",
+    "ws://example.com/socket",
+  ])("never sends %s to the browser, whoever asks", async (url) => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open("https://example.com/");
+
+    await expect(session.navigate(url)).rejects.toThrow();
+    await expect(session.open(url)).rejects.toThrow();
+
+    expect(fake.visited()).toEqual(["https://example.com/"]);
     expect(session.state().url).toBe("https://example.com/");
   });
 

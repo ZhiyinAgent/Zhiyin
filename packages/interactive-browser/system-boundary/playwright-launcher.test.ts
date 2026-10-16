@@ -166,6 +166,47 @@ function listeningPorts(pids: readonly number[]): string[] {
     .map((columns) => `${columns[1]} (pid ${columns[4]})`);
 }
 
+/** The folders this process's browsers keep their profiles in. */
+async function ownProfiles(): Promise<string[]> {
+  const prefix = `zhiyin-browser-${process.pid}-`;
+  return (await readdir(tmpdir())).filter((name) => name.startsWith(prefix));
+}
+
+it("starts no browser where it cannot be contained, and leaves no profile behind", async () => {
+  const before = await ownProfiles();
+  let started = 0;
+  const uncontained = playwrightBrowserLauncher({
+    open: () => {
+      throw new Error("Job objects are not available here.");
+    },
+  });
+  // The process can be created, but not placed in its Job Object.
+  const unplaced = playwrightBrowserLauncher({
+    open: () => {
+      const container = openProcessContainer();
+      return {
+        contain: (pid) => container.contain(pid),
+        close: () => container.close(),
+        launch: () => {
+          started += 1;
+          throw new Error("The process could not be placed in its job.");
+        },
+      };
+    },
+  });
+
+  expect(await uncontained.available()).toMatchObject({ available: false });
+  await expect(uncontained.launch({ width: 400, height: 300 })).rejects.toThrow(
+    "Job objects are not available here.",
+  );
+  await expect(unplaced.launch({ width: 400, height: 300 })).rejects.toThrow(
+    "could not be placed",
+  );
+
+  expect(started).toBe(1);
+  expect(await ownProfiles()).toEqual(before);
+});
+
 describe("the production browser", () => {
   it("names the browser it will use, or says why it has none", () => {
     if (availability.available) {
@@ -274,6 +315,23 @@ describe.runIf(availability.available)("a real browser session", () => {
     }
     expect(session.state().status).toBe("closed");
     expect(session.automation()).toBeUndefined();
+  }, 120_000);
+
+  it("keeps its profile in a folder of its own, removed when it closes", async () => {
+    const before = await ownProfiles();
+    let target: BrowserTarget | undefined;
+    try {
+      target = await launcher.launch({ width: 400, height: 300 });
+      const opened = (await ownProfiles()).filter(
+        (name) => !before.includes(name),
+      );
+      expect(opened).toHaveLength(1);
+      expect(await readdir(join(tmpdir(), opened[0]!))).toContain("profile");
+    } finally {
+      await target?.close();
+    }
+
+    expect(await ownProfiles()).toEqual(before);
   }, 120_000);
 
   it("reports a process that can be contained", async () => {

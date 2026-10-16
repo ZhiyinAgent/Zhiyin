@@ -38,6 +38,7 @@ export type WorkspaceCommands = Pick<
   | "overrideComponent"
   | "resetComponent"
   | "installToolchain"
+  | "cancelToolchainInstall"
   | ConnectionCommands
   | "shellAvailability"
   | "recheckShell"

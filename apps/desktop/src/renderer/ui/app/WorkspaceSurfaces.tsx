@@ -4,7 +4,7 @@
  * only which one is open and what it is handed.
  */
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import type { CoreApi } from "@zhiyin/contract";
 import { CapabilityLibrary } from "../capabilities/index.js";
 import { ModelSettings } from "../model/index.js";
@@ -40,6 +40,7 @@ type SurfaceCommands = Pick<
   | "overrideComponent"
   | "resetComponent"
   | "installToolchain"
+  | "cancelToolchainInstall"
   | ConnectionCommands
   | "shellAvailability"
   | "recheckShell"
@@ -66,8 +67,15 @@ type SurfaceCommands = Pick<
  * scrolls below it and never under them.
  */
 function Surface({ children }: { children: ReactNode }) {
+  const surface = useRef<HTMLDivElement>(null);
+  // What opened the page went with what it replaced, so focus starts at the
+  // page's heading; a dialog the page opened on keeps it.
+  useEffect(() => {
+    if (document.querySelector('[aria-modal="true"]')) return;
+    surface.current?.querySelector<HTMLElement>("h1")?.focus();
+  }, []);
   return (
-    <div className={styles["workspace-surface"]}>
+    <div className={styles["workspace-surface"]} ref={surface}>
       <div className={styles["top-bar"]} />
       {children}
     </div>
@@ -110,6 +118,7 @@ export function WorkspaceSurfaces({
             onOverrideComponent={commands.overrideComponent}
             onResetComponent={commands.resetComponent}
             onInstallToolchain={commands.installToolchain}
+            onCancelToolchainInstall={commands.cancelToolchainInstall}
             onTestConnection={commands.testMcpConnection}
             onSetConnectionToolEnabled={commands.setMcpServerToolEnabled}
             onSaveConnectionToken={commands.saveMcpServerToken}

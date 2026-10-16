@@ -49,6 +49,7 @@ export type CoreWorkspace = Pick<
   | "overrideComponent"
   | "resetComponent"
   | "installToolchain"
+  | "cancelToolchainInstall"
   | "installPlugin"
   | "updatePlugin"
   | "rollbackPlugin"
@@ -135,6 +136,8 @@ export type CoreDependencies = {
   readonly openPath: (path: string) => Promise<void>;
   /** Shows a file selected in its folder, without opening it. */
   readonly showInFolder: (path: string) => Promise<void>;
+  /** Windows' own window controls, which the page cannot draw over. */
+  readonly windowControls?: { readonly dim: (dimmed: boolean) => void };
   /** Where Zhiyin keeps its data: conversations, pictures, file copies. */
   readonly dataFolder: string;
   readonly version: string;
@@ -177,6 +180,7 @@ export class Core {
     const { turns, settings } = workspace;
     this.#commands = {
       frontendReady: () => this.#attach(),
+      dimWindowControls: async (dimmed) => deps.windowControls?.dim(dimmed),
       openDataFolder: () => openPath(deps.dataFolder),
       showInFolder: (path) => {
         // The window names the file, so it is held to what Zhiyin keeps, or
@@ -257,6 +261,7 @@ export class Core {
         workspace.overrideComponent(id, content),
       resetComponent: (id) => workspace.resetComponent(id),
       installToolchain: (id) => workspace.installToolchain(id),
+      cancelToolchainInstall: (id) => workspace.cancelToolchainInstall(id),
       installPlugin: () => workspace.installPlugin(chooseFolder),
       updatePlugin: (id) => workspace.updatePlugin(id, chooseFolder),
       rollbackPlugin: (id) => workspace.rollbackPlugin(id),

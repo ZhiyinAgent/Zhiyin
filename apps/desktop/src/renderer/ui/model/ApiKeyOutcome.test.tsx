@@ -54,6 +54,24 @@ describe("saving an OpenRouter key", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it("puts focus back in the key field once a key is refused, so another can be pasted", async () => {
+    open(async () => ({
+      status: "refused",
+      reason: "OpenRouter rejected the API key.",
+    }));
+    const field = screen.getByLabelText("Paste your key");
+    fireEvent.change(field, { target: { value: "sk-or-v1-bad" } });
+    const save = screen.getByRole("button", { name: /save/i });
+    save.focus();
+    fireEvent.click(save);
+
+    await screen.findByRole("alert");
+    expect(field).toHaveFocus();
+    expect(field).toHaveAccessibleDescription(
+      "OpenRouter rejected the API key.",
+    );
+  });
+
   it("says a key it could not check was kept, rather than that it was wrong", async () => {
     open(async () => ({
       status: "unverified",

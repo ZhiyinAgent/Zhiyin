@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   type UserInputResponse,
   type MessageAttachment,
@@ -14,7 +14,7 @@ import {
 } from "../conversation/index.js";
 import { ComposerDock } from "./ComposerDock.js";
 import { ConversationHeader } from "./ConversationHeader.js";
-import { Icon } from "../shared/index.js";
+import { drawn, Icon, keyboardStops } from "../shared/index.js";
 import { IssueNotices } from "./IssueNotices.js";
 import { useConversationDeletion } from "./useConversationDeletion.js";
 import { useAppShortcuts } from "./useAppShortcuts.js";
@@ -104,6 +104,7 @@ export function WorkspaceShell({
     act,
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const permissions = useConversationPermissions(
     state.tasks,
@@ -298,11 +299,17 @@ export function WorkspaceShell({
     <div
       className={`${styles["app-shell"]}${navigationOpen ? ` ${styles["app-shell--navigation-open"]}` : ""}`}
       onKeyDown={(event) => {
-        if (event.key === "Escape") setNavigationOpen(false);
+        if (event.key === "Escape" && navigationOpen) {
+          setNavigationOpen(false);
+          navigationToggle.current?.focus();
+        }
+        if (event.key === "Tab" && navigationOpen)
+          keepInDrawer(event, navigationToggle.current);
       }}
     >
       <button
         type="button"
+        ref={navigationToggle}
         className={styles["mobile-navigation"]}
         aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
         aria-expanded={navigationOpen}
@@ -546,4 +553,31 @@ export function WorkspaceShell({
       {toast}
     </div>
   );
+}
+
+/**
+ * While the navigation drawer covers the window, Tab and Shift+Tab go round
+ * its button and the drawer, as in a dialog. Where the window is wide enough
+ * the drawer is the sidebar and the button is not drawn, so nothing is kept.
+ */
+function keepInDrawer(
+  event: KeyboardEvent<HTMLElement>,
+  toggle: HTMLButtonElement | null,
+) {
+  const drawer = event.currentTarget.querySelector(
+    'aside[aria-label="Primary navigation"]',
+  );
+  if (!toggle || !drawer || !drawn(toggle)) return;
+  const stops = [toggle, ...keyboardStops(drawer)];
+  const at = stops.indexOf(document.activeElement as HTMLElement);
+  const next = event.shiftKey
+    ? at <= 0
+      ? stops.at(-1)
+      : undefined
+    : at === -1 || at === stops.length - 1
+      ? stops[0]
+      : undefined;
+  if (!next) return;
+  event.preventDefault();
+  next.focus();
 }

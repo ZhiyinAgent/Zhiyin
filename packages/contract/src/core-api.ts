@@ -329,6 +329,11 @@ export interface CoreApi extends DocumentCommands {
 
   /** Downloads and installs the program an application connector needs. */
   installToolchain(id: string): Promise<void>;
+  /** Stops an install under way; it ends without a failure. */
+  cancelToolchainInstall(id: string): Promise<void>;
+
+  /** Dims Windows' own window controls while a dialog covers the page. */
+  dimWindowControls(dimmed: boolean): Promise<void>;
 
   /** Asks for a local package directory and installs it, or is cancelled. */
   installPlugin(): Promise<PluginSourceOutcome>;

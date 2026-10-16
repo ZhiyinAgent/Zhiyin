@@ -70,10 +70,11 @@ crash interrupted, and takes the backup around each file change. It is a group
   turn, rewind or undo starts in it. The host is asked to open the
   conversation first, since after a restart it may not be loaded. One entry
   that cannot be finished blocks only its own conversation: the others still
-  finish.
+  finish. Deleting that conversation lets go of what it left unfinished.
 - An undo puts back only the turn's files, and never one changed since: such a
   file is left as it is and reported as a conflict. An undo goes through the
-  same journal as a rewind.
+  same journal as a rewind. A file that could be put back but was not, as when
+  another program held it, leaves the actions that changed it to undo again.
 - What a turn did to a file is read from the turn's own recorded changes, in
   the conversation's folder.
 - A file change is backed up before approval. When there is no folder, or the

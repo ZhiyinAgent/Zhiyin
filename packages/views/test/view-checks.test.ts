@@ -75,6 +75,7 @@ describe("PendingViewChecks", () => {
       await expect(answer).resolves.toEqual({
         ok: false,
         reason: "The view could not be checked in time.",
+        unchecked: true,
       });
     } finally {
       vi.useRealTimers();
@@ -92,6 +93,7 @@ describe("PendingViewChecks", () => {
       await expect(answer).resolves.toEqual({
         ok: false,
         reason: "The view could not be checked in time.",
+        unchecked: true,
       });
 
       // A late answer, and an invented one, are the same thing from here.
@@ -114,6 +116,7 @@ describe("PendingViewChecks", () => {
       await expect(answer).resolves.toEqual({
         ok: false,
         reason: "The view could not be checked in time.",
+        unchecked: true,
       });
   });
 
@@ -127,6 +130,7 @@ describe("PendingViewChecks", () => {
     await expect(checks.validate("diagram", "one")).resolves.toEqual({
       ok: false,
       reason: "The view could not be checked in time.",
+      unchecked: true,
     });
   });
 });

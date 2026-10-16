@@ -643,6 +643,9 @@ export class Workspace {
   installToolchain = (id: string): Promise<void> =>
     this.#pluginLifecycle.installToolchain(id);
 
+  cancelToolchainInstall = (id: string): Promise<void> =>
+    this.#pluginLifecycle.cancelToolchainInstall(id);
+
   installPlugin(
     chooseSource: () => Promise<string | undefined>,
   ): Promise<PluginSourceOutcome> {

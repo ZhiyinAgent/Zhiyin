@@ -538,3 +538,8 @@ button.conversation-costs__row:hover {
   font-size: 12px;
   letter-spacing: normal;
 }
+
+/* An amount nobody priced reads as words, not as a sum. */
+.spent__unpriced {
+  color: var(--zy-muted);
+}

@@ -68,9 +68,11 @@ shows live pages.
 ## Invariants
 
 - **Drawing happens in a contained process, never in the core.** Nothing is
-  sent to a process before it is in its Job Object. A page that takes longer
-  than ten seconds ends its process wherever it is stuck; a process past its
-  memory limit of 1 GB ends alone; one that crashes is replaced. Whatever
+  sent to a process before it is in its Job Object. Requests go to it one at a
+  time, so its ten seconds count a page's own work, not the wait behind
+  others. A page that takes longer ends its process wherever it is stuck; a
+  process past its memory limit of 1 GB ends alone; one that crashes is
+  replaced. Whatever
   ended it, the waiting requests fail, and the next request goes to a new
   process that is given the document again. A process that cannot be
   contained is ended and draws nothing. One that could not be started fails

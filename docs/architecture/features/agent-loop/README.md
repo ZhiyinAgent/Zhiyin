@@ -105,8 +105,9 @@ time, so one that refused says what it needs in that same answer. One whose
 tools cannot then be gathered is undone, and its answer says why. In a turn,
 every other tool is offered with a `purpose` argument, listed among what a call
 has to give. The loop takes it off before the tool sees its input and shows it
-as the action's description and the approval's reason. A call that leaves it
-out still runs, and is named in the background.
+as the action's description and the approval's reason, marked as written by a
+model. A call that leaves it out still runs, and is named in the background;
+that name is marked the same way once it arrives.
 
 - `TurnOwnership`, the lifecycle tree of root turns and the work they delegate,
   and `WorkLedger`, what one stretch of work has spent, renewed when the person
@@ -301,7 +302,9 @@ out still runs, and is named in the background.
   before then is unseen. After it, the shown text is withdrawn openly and
   exactly one answer remains. A specialist's round is the same round as a
   turn's, gathered without being shown: an answer of its own that drops midway
-  is started again too, and its waiting is not said in the conversation. The
+  is started again too, and its waiting is not said in the conversation. Its
+  rounds go back with their reasoning and replay record, as a turn's do, for
+  the providers that refuse a later request without them. The
   background work and condensing keep nothing of an attempt a restart replaced
   either.
 - When the model has sent nothing for fifteen seconds, the conversation says
@@ -356,6 +359,8 @@ out still runs, and is named in the background.
   The repair works from the tool's own input; a `purpose` it adds is taken off
   before the tool sees the call. Once the tool succeeds, the failed attempts
   are removed from the request.
+- A view the window could not check in time is never sent to repair: nobody
+  judged it wrong.
 - Input that stops before it ends is never repaired. The model is told to send
   less only when what arrived was long; a short call that stopped early was not
   cut for its length, and it is told to send the whole call again. A failed

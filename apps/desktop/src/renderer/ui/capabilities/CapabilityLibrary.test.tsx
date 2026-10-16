@@ -11,6 +11,7 @@ import type {
   McpServerState,
   PluginComponentState,
   PluginState,
+  ToolchainState,
 } from "@zhiyin/contract";
 import { CapabilityLibrary } from "./CapabilityLibrary.js";
 
@@ -29,6 +30,7 @@ const handlers = {
   onOverrideComponent: async () => undefined,
   onResetComponent: async () => undefined,
   onInstallToolchain: async () => undefined,
+  onCancelToolchainInstall: async () => undefined,
   onTestConnection: async () => ({ ok: false as const, reason: "" }),
   onSetConnectionToolEnabled: async () => undefined,
   onSaveConnectionToken: async () => undefined,
@@ -738,7 +740,7 @@ describe("CapabilityLibrary", () => {
     );
   });
 
-  it("shows an installation in progress and a failed one's reason", () => {
+  it("shows how far an installation has come, and a failed one's reason", () => {
     render(
       <CapabilityLibrary
         plugins={[
@@ -747,7 +749,11 @@ describe("CapabilityLibrary", () => {
             components: [
               {
                 ...publishing.components[0]!,
-                toolchain: { status: "installing" },
+                toolchain: {
+                  status: "installing",
+                  received: 30_000_000,
+                  bytes: 120_000_000,
+                },
               },
               {
                 ...publishing.components[0]!,
@@ -768,9 +774,10 @@ describe("CapabilityLibrary", () => {
     );
 
     const installing = rowOf("Document compiler");
+    expect(within(installing).getByText("Installing… 25%")).toBeVisible();
     expect(
-      within(installing).getByRole("button", { name: "Installing…" }),
-    ).toBeDisabled();
+      within(installing).getByRole("button", { name: "Cancel" }),
+    ).toBeEnabled();
     const failed = rowOf("Other compiler");
     expect(within(failed).getByText("Setup failed")).toBeVisible();
     expect(
@@ -779,6 +786,77 @@ describe("CapabilityLibrary", () => {
     expect(
       within(failed).getByRole("button", { name: "Try again" }),
     ).toBeVisible();
+  });
+
+  it("stops an installation when the person cancels it", async () => {
+    const onCancelToolchainInstall = vi.fn(async () => undefined);
+    render(
+      <CapabilityLibrary
+        plugins={[
+          {
+            ...publishing,
+            components: [
+              {
+                ...publishing.components[0]!,
+                toolchain: { status: "installing" },
+              },
+            ],
+          },
+        ]}
+        {...handlers}
+        onCancelToolchainInstall={onCancelToolchainInstall}
+      />,
+    );
+
+    fireEvent.click(
+      within(rowOf("Document compiler")).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(onCancelToolchainInstall).toHaveBeenCalledWith(
+        "publishing/compiler",
+      ),
+    );
+  });
+
+  it("keeps focus in the row as an installation starts and ends", () => {
+    const shown = (toolchain: ToolchainState) => (
+      <CapabilityLibrary
+        plugins={[
+          {
+            ...publishing,
+            components: [
+              {
+                ...publishing.components[0]!,
+                ...(toolchain.status === "ready"
+                  ? { status: "ready" as const }
+                  : { status: "setup-required" as const }),
+                toolchain,
+              },
+            ],
+          },
+        ]}
+        {...handlers}
+      />
+    );
+    const { rerender } = render(shown({ status: "missing", downloads: [] }));
+    within(rowOf("Document compiler"))
+      .getByRole("button", { name: "Set up" })
+      .focus();
+
+    rerender(shown({ status: "installing" }));
+    expect(
+      within(rowOf("Document compiler")).getByRole("button", {
+        name: "Cancel",
+      }),
+    ).toHaveFocus();
+
+    rerender(shown({ status: "ready" }));
+    expect(rowOf("Document compiler")).toContainElement(
+      document.activeElement as HTMLElement,
+    );
   });
 
   it("offers to check again on an application connector whose prerequisite is missing", async () => {

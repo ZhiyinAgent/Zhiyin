@@ -19,7 +19,7 @@
  * it; anything a newer version saved is refused and never written over.
  */
 
-import { cp, mkdir, rename, rm } from "node:fs/promises";
+import { cp, mkdir, rename, rm, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { ConversationSummary, WorkspaceTask } from "@zhiyin/contract";
@@ -185,6 +185,24 @@ function settingsOf(
     recentWorkspaces: workspace.recentWorkspaces,
   };
 }
+
+/**
+ * Every setting, by name: recovery carries each one over that is sound on its
+ * own. Kept as a record so a setting added to the type cannot be left out.
+ */
+const everySetting: Record<keyof Omit<SavedSettings, "selectedTaskId">, true> =
+  {
+    preferences: true,
+    contextBudget: true,
+    personalInstructions: true,
+    notifications: true,
+    appearance: true,
+    spellingChoice: true,
+    folderInstructionChoices: true,
+    workspace: true,
+    recentWorkspaces: true,
+  };
+const settingNames = Object.keys(everySetting) as (keyof typeof everySetting)[];
 
 /**
  * A folder name for a conversation. An id that is safe as a name is used as
@@ -687,7 +705,13 @@ export class HistoryStore {
     });
     if (!commit()) return;
     try {
-      await Promise.all(writes.map((write) => write()));
+      // Every write ends before the save does, failed or not: one still under
+      // way when the next save begins would have that save write its edits
+      // again.
+      const failed = (
+        await Promise.allSettled(writes.map((write) => write()))
+      ).find((result) => result.status === "rejected");
+      if (failed) throw failed.reason;
       if (settings !== this.#settings) {
         await this.#files.create(this.#settingsFile, settings);
         this.#settings = settings;
@@ -721,6 +745,17 @@ export class HistoryStore {
   /** Whether a conversation's folder is still on disk. */
   holds(id: string): boolean {
     return this.#onDisk.has(id);
+  }
+
+  /** The same, asked of the disk, before the history is read. */
+  async hasFolder(id: string): Promise<boolean> {
+    return stat(this.#folderOf(id)).then(
+      () => true,
+      (error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+        throw error;
+      },
+    );
   }
 
   /**
@@ -855,7 +890,7 @@ export class HistoryStore {
     // Each setting that is sound on its own survives, whatever else in the
     // settings was damaged: losing them would make recovery a fresh install.
     const settings = Object.fromEntries(
-      (["preferences", "workspace", "recentWorkspaces"] as const)
+      settingNames
         .filter(
           (key) =>
             previous?.[key] !== undefined &&

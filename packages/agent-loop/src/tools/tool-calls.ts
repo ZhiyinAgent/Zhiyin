@@ -219,7 +219,9 @@ export class ToolCalls {
     const facts = factsLabel(inspection.action, inspection.target);
     let presentation: PresentedAction =
       inspection.presentation ??
-      (said.purpose ? { ...facts, description: said.purpose } : facts);
+      (said.purpose
+        ? { ...facts, description: said.purpose, byModel: true }
+        : facts);
     const labelled =
       inspection.presentation || said.purpose
         ? undefined
@@ -600,9 +602,11 @@ export class ToolCalls {
     let { args, inspection } = given;
     let checked = await this.#deps.views.validate(view.kind, view.source);
     controller.signal.throwIfAborted();
+    // Only a view the window judged wrong is repaired: one it did not answer
+    // about in time was never judged.
     for (
       let attempt = 0;
-      !checked.ok && attempt < maximumRepairAttempts;
+      !checked.ok && !checked.unchecked && attempt < maximumRepairAttempts;
       attempt += 1
     ) {
       const repair = await this.#repair.repair(taskId, call, {

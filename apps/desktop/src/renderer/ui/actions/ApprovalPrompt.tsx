@@ -18,12 +18,19 @@ type ApprovalPromptProps = {
   title: string;
   target: string;
   description?: string;
+  /** The description was written by the AI, so it is shown as its claim. */
+  descriptionByModel?: boolean;
   invocation?: ToolInvocation;
   changes?: readonly FileChange[];
   recovery?: ApprovalRequest["recovery"];
   conversationRule?: ApprovalRequest["conversationRule"];
   /** Tighter spacing, for a conversation sharing the window with the browser. */
   compact?: boolean;
+  /**
+   * The request has just arrived and is answered from the keyboard: focus
+   * moves to it, unless a person is writing or a dialog is open.
+   */
+  takesFocus?: boolean;
   onDecision: (
     decision: ApprovalDecision,
     reason?: string,
@@ -54,13 +61,26 @@ export function ApprovalPrompt({
   title,
   target,
   description,
+  descriptionByModel = false,
   invocation,
   changes,
   recovery,
   conversationRule,
   compact = false,
+  takesFocus = false,
   onDecision,
 }: ApprovalPromptProps) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!takesFocus) return;
+    const active = document.activeElement;
+    const writing =
+      (active instanceof HTMLTextAreaElement ||
+        active instanceof HTMLInputElement) &&
+      active.value.trim() !== "";
+    if (writing || document.querySelector('[aria-modal="true"]')) return;
+    heading.current?.focus();
+  }, [takesFocus]);
   const [reviewing, setReviewing] = useState<string>();
   const [denying, setDenying] = useState(false);
   const [pendingDecision, setPendingDecision] =
@@ -75,6 +95,15 @@ export function ApprovalPrompt({
     if (confirmingScope) scopeConfirm.current?.focus();
   }, [confirmingScope]);
   const [claimTipAt, setClaimTipAt] = useState<{ x: number; y: number }>();
+  // What the AI wrote about the action, under one attribution.
+  const claimed = [
+    ...new Set([
+      ...(descriptionByModel && description ? [description] : []),
+      ...(claim ? [claim] : []),
+    ]),
+  ]
+    .map(visibleText)
+    .join(" ");
 
   async function decide(decision: ApprovalDecision) {
     if (pendingDecision) return;
@@ -103,7 +132,9 @@ export function ApprovalPrompt({
           <span className={styles.approval__kind} aria-hidden="true">
             <Icon name={kind} />
           </span>
-          <h3>{visibleText(title)}</h3>
+          <h3 ref={heading} tabIndex={-1}>
+            {visibleText(title)}
+          </h3>
         </header>
         <div className={styles.approval__summary}>
           {effect && effect !== title && (
@@ -116,14 +147,14 @@ export function ApprovalPrompt({
                 (item) =>
                   item.change === "recycled" || item.change === "deleted",
               )) && <p className={styles.approval__detail}>{detail}</p>}
-          {claim && (
+          {claimed && (
             <ApprovalClaim
-              claim={visibleText(claim)}
+              claim={claimed}
               tipAt={claimTipAt}
               onTip={setClaimTipAt}
             />
           )}
-          {description && description !== claim && (
+          {description && !descriptionByModel && description !== claim && (
             <p className={styles.approval__reason}>
               {visibleText(description)}
             </p>

@@ -1,0 +1,90 @@
+name: Packaging
+
+# The full gate builds the installer and checks what only the packaged app
+# shows: its fuses, its dictionaries, the documents drawn from its archive, and
+# the executable opened on a saved conversation. It runs when what goes into
+# the package changes, and whenever it is asked for, rather than first on a
+# release tag.
+on:
+  pull_request:
+    paths: &packaging
+      - ".github/workflows/packaging.yml"
+      - "apps/desktop/electron-builder.yml"
+      - "apps/desktop/electron.vite.config.ts"
+      - "apps/desktop/package.json"
+      - "apps/desktop/build/**"
+      - "apps/desktop/third-party-licenses/**"
+      - "apps/desktop/installed/packaged-app.test.ts"
+      - "apps/desktop/installed/documents.test.ts"
+      - "packages/plugins/built-in/**"
+      - "packages/blender-studio/src/session/**"
+      - "scripts/check-packaged.mjs"
+      - "scripts/dictionaries.mjs"
+      - "scripts/gate.ps1"
+      - "pnpm-lock.yaml"
+      - "LICENSE"
+      - "NOTICE"
+      - "THIRD_PARTY_LICENSES.md"
+  push:
+    branches:
+      - main
+    paths: *packaging
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packaging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full:
+    name: Full gate, with the packaged app
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Enable the pinned pnpm version
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+
+      # As in CI: the runner's system disk is busy for its first minutes.
+      - name: Keep temporary files on the runner's work disk
+        shell: powershell
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 't'
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          "TEMP=$temp" >> $env:GITHUB_ENV
+          "TMP=$temp" >> $env:GITHUB_ENV
+
+      - name: Install dependencies
+        shell: powershell
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Electron runtime after the clean install
+        shell: powershell
+        run: pnpm --filter desktop install:electron
+
+      - name: Keep the downloaded programs between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\zt\archives
+          key: test-tools-${{ hashFiles('packages/toolchains/src/toolchains.ts') }}
+
+      - name: Run the full repository gate
+        shell: powershell
+        env:
+          ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1 -Full

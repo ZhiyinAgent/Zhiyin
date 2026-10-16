@@ -236,6 +236,74 @@ describe("AgentLoop view order", () => {
   });
 });
 
+describe("a view the window could not check in time", () => {
+  /**
+   * A turn drawing one diagram, its view checks answered as given, and how
+   * many requests went to the model that repairs calls and names conversations.
+   */
+  async function turnWith(
+    outcome:
+      | { readonly ok: true }
+      | {
+          readonly ok: false;
+          readonly reason: string;
+          readonly unchecked?: true;
+        },
+  ) {
+    const base = stubDependencies(() => {});
+    let repairs = 0;
+    const loop = loopFrom({
+      ...base,
+      views: { validate: async () => outcome },
+      guidanceModel: {
+        send: async function* () {
+          repairs += 1;
+          yield { kind: "done" as const };
+        },
+      },
+      tools: {
+        list: () => [
+          { name: "render_diagram", description: "Draw", inputSchema: {} },
+        ],
+        inspect: async () => ({
+          ok: true as const,
+          action: "Draw a diagram",
+          target: "Flow",
+          command: "render_diagram(…)",
+          requiresApproval: false as const,
+          view: {
+            kind: "diagram" as const,
+            title: "Flow",
+            source: "flowchart LR\nDraft --> Review",
+          },
+        }),
+        execute: async () => ({ ok: true as const, value: null }),
+      },
+      model: { ...base.model, send: modelRequestingDiagram() },
+    });
+    const taskId = await loop.createTask();
+    await loop.start(taskId, "Draw the flow");
+    return { repairs };
+  }
+
+  it("is not sent to be repaired, as a view judged wrong is", async () => {
+    const shown = await turnWith({ ok: true });
+    const judged = await turnWith({
+      ok: false,
+      reason: "Parse error on line 2",
+    });
+    const unjudged = await turnWith({
+      ok: false,
+      reason: "The view could not be checked in time.",
+      unchecked: true,
+    });
+
+    // Naming the conversation asks that model too, in every one of them.
+    expect(judged.repairs).toBeGreaterThan(shown.repairs);
+    expect(unjudged.repairs).toBe(shown.repairs);
+  });
+});
+
 describe("AgentLoop views", () => {
   it("returns an unvalidated view to the model without showing a broken view", async () => {
     const base = stubDependencies(() => {});

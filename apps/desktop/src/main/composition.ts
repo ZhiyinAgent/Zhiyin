@@ -123,6 +123,8 @@ export type Surroundings = {
   readonly notifier?: Notifier;
   /** Paints the window light, dark, or as Windows is set. */
   readonly appearance?: { readonly apply: (appearance: Appearance) => void };
+  /** Windows' own window controls, dimmed under a dialog. */
+  readonly windowControls?: CoreDependencies["windowControls"];
   /** The spellchecker, where its dictionaries come from and are read. */
   readonly spelling?: {
     readonly engine: SpellcheckEngine;
@@ -194,6 +196,7 @@ export function buildCore({
   recycle,
   notifier,
   appearance,
+  windowControls,
   spelling,
   credentialEntry,
   connectionsNeverClose,
@@ -536,6 +539,7 @@ export function buildCore({
     openExternal,
     openPath,
     showInFolder,
+    ...(windowControls ? { windowControls } : {}),
     version,
   });
 }

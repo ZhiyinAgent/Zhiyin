@@ -5,7 +5,14 @@
  * their summaries and ordered by when each conversation last changed.
  */
 
-import { open, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { emptyConversationLists } from "@zhiyin/contract";
@@ -176,6 +183,22 @@ describe("the history on disk", () => {
       tasks: history.tasks.filter((item) => item.id !== "c"),
     } as never);
 
+    expect(
+      (await readdir(join(historyFolder(root), "conversations"))).sort(),
+    ).toEqual(["c-a", "c-b"]);
+  });
+
+  it("finishes at the next launch a deletion a crash cut short", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    // Where a crash between the two steps of a deletion leaves it: the folder
+    // set aside under its deleting name, not yet removed.
+    await rename(
+      conversationFolder(root, "c"),
+      `${conversationFolder(root, "c")}.deleting`,
+    );
+
+    expect((await listed(root))?.map(([id]) => id)).toEqual(["b", "a"]);
     expect(
       (await readdir(join(historyFolder(root), "conversations"))).sort(),
     ).toEqual(["c-a", "c-b"]);

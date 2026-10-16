@@ -179,6 +179,19 @@ export async function writable(
   };
 }
 
+/**
+ * An open scene file as a workspace has it, or nothing when it is not in that
+ * workspace, as when the conversation's folder changed since it was opened.
+ */
+export async function sceneIn(
+  root: string,
+  absolute: string,
+): Promise<string | undefined> {
+  const realRoot = await realpath(root).catch(() => undefined);
+  if (!realRoot || !staysInside(realRoot, absolute)) return undefined;
+  return relative(realRoot, absolute).split(sep).join("/");
+}
+
 /** Makes the folder a written file goes in, inside the workspace. */
 export const folderFor = (absolute: string) =>
   mkdir(dirname(absolute), { recursive: true });

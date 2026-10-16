@@ -233,13 +233,46 @@ describe("installing a pinned program", () => {
     });
 
     const first = toolchains.install("typst");
-    expect(await toolchains.state("typst")).toEqual({ status: "installing" });
+    expect(await toolchains.state("typst")).toMatchObject({
+      status: "installing",
+    });
     await Promise.all([first, toolchains.install("typst")]);
 
     expect(download.calls).toBe(1);
   });
 
-  it("leaves nothing usable behind when installation is stopped", async () => {
+  it("says how much of the download has arrived while it installs", async () => {
+    let release = () => {};
+    const halfway = new Promise<void>((resolve) => (release = resolve));
+    let arrived = () => {};
+    const half = new Promise<void>((resolve) => (arrived = resolve));
+    const toolchains = new DownloadedToolchains({
+      directory: await temporaryRoot(),
+      specs: [specFor(program)],
+      download: async () =>
+        (async function* () {
+          yield program.subarray(0, 100);
+          arrived();
+          await halfway;
+          yield program.subarray(100);
+        })(),
+    });
+
+    const running = toolchains.install("typst");
+    await half;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await toolchains.state("typst")).toEqual({
+      status: "installing",
+      received: 100,
+      bytes: program.length,
+    });
+    release();
+    await running;
+
+    expect(await toolchains.state("typst")).toEqual({ status: "ready" });
+  });
+
+  it("leaves nothing usable behind when installation is stopped, and offers it again", async () => {
     const directory = await temporaryRoot();
     const toolchains = new DownloadedToolchains({
       directory,
@@ -252,9 +285,9 @@ describe("installing a pinned program", () => {
     controller.abort();
 
     await expect(running).rejects.toThrow();
-    expect(await toolchains.state("typst")).toEqual({
-      status: "failed",
-      reason: "The installation was stopped.",
+    // Stopped on purpose, so nothing failed: it is offered as before.
+    expect(await toolchains.state("typst")).toMatchObject({
+      status: "missing",
     });
     expect(await readdir(join(directory, "toolchains", ".staging"))).toEqual(
       [],

@@ -407,4 +407,28 @@ describe("text copied from a numbered read", () => {
       "1→mix\n2→cool\n",
     );
   });
+
+  it("refuses a file that is not UTF-8 rather than rewrite the characters it does not touch", async () => {
+    const root = await workspace();
+    // "café" in Windows-1252: the é is one byte, 0xE9, which UTF-8 cannot read.
+    const legacy = Buffer.from("caf\xe9\nStatus: draft\n", "latin1");
+    await writeFile(join(root, "menu.txt"), legacy);
+    const tools = new WorkspaceTools(root);
+    const args = {
+      edits: [
+        {
+          path: "menu.txt",
+          replacements: [{ find: "draft", replace: "final" }],
+        },
+      ],
+    };
+
+    const inspection = await tools.inspect("multi_edit", args);
+    const execution = await tools.execute("multi_edit", args);
+
+    expect(inspection).toMatchObject({ ok: false });
+    expect(inspection.ok || inspection.reason).toContain("not UTF-8 text");
+    expect(execution).toMatchObject({ ok: false });
+    expect(await readFile(join(root, "menu.txt"))).toEqual(legacy);
+  });
 });

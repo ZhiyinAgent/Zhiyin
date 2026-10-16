@@ -256,7 +256,9 @@ export class WorkspaceTools implements ToolRegistry, WorkspaceContext {
   readonly #jobs = new CommandJobs();
 
   constructor(workspaceRoot?: string, options: WorkspaceToolsOptions = {}) {
-    this.#available = workspaceRoot !== undefined;
+    // An empty name is no folder: resolved, it would be wherever Zhiyin was
+    // started.
+    this.#available = Boolean(workspaceRoot);
     const root = resolve(workspaceRoot ?? ".");
     this.#root = root;
     this.#commandsWithheld =

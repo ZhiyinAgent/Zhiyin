@@ -1,8 +1,10 @@
-import { readFile, utimes, writeFile } from "node:fs/promises";
+import { readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { emptyConversationLists } from "@zhiyin/contract";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { FileSessions } from "../src/index.js";
+import { conversationFolder } from "./planted-history.js";
 
 async function temporaryRoot(): Promise<string> {
   return folders.make("zhiyin-kept-");
@@ -300,5 +302,59 @@ describe("when a file was last read", () => {
     expect(
       await new FileSessions(root).lastRead("task-1", "C:/work/notes.md"),
     ).toEqual(read);
+  });
+});
+
+describe("what a deleted conversation kept", () => {
+  const withConversation = (...ids: string[]) => ({
+    recentWorkspaces: [],
+    selectedTaskId: ids[0] ?? null,
+    tasks: ids.map((id) => ({
+      id,
+      title: id,
+      titleSource: "generated" as const,
+      updatedAt: "2026-09-23T10:00:00.000Z",
+      updatedLabel: "Now",
+      messages: [],
+      ...emptyConversationLists,
+      phase: { kind: "draft" as const },
+    })),
+  });
+
+  it("is cleared at the next launch when Zhiyin closed before clearing it", async () => {
+    const root = await temporaryRoot();
+    const sessions = new FileSessions(root);
+    await sessions.claim();
+    await sessions.saveWorkspace(withConversation("task-1"));
+    const paste = await kept(sessions, "pastedText", "task-1", "paste");
+    await sessions.forgetConversation("task-1");
+    // The save that deleted the conversation's folder ran; Zhiyin closed
+    // before what the conversation kept was cleared.
+    await rm(conversationFolder(root, "task-1"), { recursive: true });
+    await sessions.release();
+
+    const next = new FileSessions(root);
+    await next.claim();
+
+    expect((await next.locate("pastedText", "task-1", paste)).status).toBe(
+      "missing",
+    );
+  });
+
+  it("comes back with its conversation when the deletion was never saved", async () => {
+    const root = await temporaryRoot();
+    const sessions = new FileSessions(root);
+    await sessions.claim();
+    await sessions.saveWorkspace(withConversation("task-1"));
+    const paste = await kept(sessions, "pastedText", "task-1", "paste");
+    await sessions.forgetConversation("task-1");
+    await sessions.release();
+
+    const next = new FileSessions(root);
+    await next.claim();
+
+    expect((await next.locate("pastedText", "task-1", paste)).status).toBe(
+      "ready",
+    );
   });
 });

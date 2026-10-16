@@ -93,6 +93,8 @@ function appIcon() {
 }
 
 let activeCore: ReturnType<typeof buildCore> | undefined;
+/** Whether a dialog covers the page, which dims the window controls too. */
+let controlsDimmed = false;
 
 function createWindow(): BrowserWindow {
   const icon = appIcon();
@@ -138,9 +140,9 @@ function createWindow(): BrowserWindow {
   // The page follows the theme by itself; the controls and the ground under
   // the page are told.
   const repaint = () => {
-    const theme = titleBarOverlay(nativeTheme.shouldUseDarkColors);
-    window.setTitleBarOverlay(theme);
-    window.setBackgroundColor(theme.color);
+    const dark = nativeTheme.shouldUseDarkColors;
+    window.setTitleBarOverlay(titleBarOverlay(dark, controlsDimmed));
+    window.setBackgroundColor(titleBarOverlay(dark).color);
   };
   nativeTheme.on("updated", repaint);
   window.once("closed", () => nativeTheme.off("updated", repaint));
@@ -297,6 +299,15 @@ void app.whenReady().then(async () => {
     appearance: {
       apply: (appearance) => {
         nativeTheme.themeSource = appearance;
+      },
+    },
+    windowControls: {
+      dim: (dimmed) => {
+        controlsDimmed = dimmed;
+        if (window.isDestroyed()) return;
+        window.setTitleBarOverlay(
+          titleBarOverlay(nativeTheme.shouldUseDarkColors, dimmed),
+        );
       },
     },
     spelling: {

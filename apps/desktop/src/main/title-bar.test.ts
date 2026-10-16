@@ -57,6 +57,35 @@ describe("the title bar the window controls sit on", () => {
    * and the rule stops dead where the controls begin. One pixel short of the
    * bar is the only value that is neither.
    */
+  /** A colour seen through the scrim a dialog lays over the page. */
+  function underScrim(hex: string, scheme: "dark" | "light"): string {
+    const [red, green, blue, alpha] = /rgba\(([^)]+)\)/
+      .exec(token("zy-scrim", scheme))![1]!
+      .split(",")
+      .map(Number) as [number, number, number, number];
+    const over = [red, green, blue];
+    return `#${[1, 3, 5]
+      .map((at, index) => {
+        const under = Number.parseInt(hex.slice(at, at + 2), 16);
+        return Math.round(under * (1 - alpha) + over[index]! * alpha)
+          .toString(16)
+          .padStart(2, "0");
+      })
+      .join("")}`;
+  }
+
+  it.each(["dark", "light"] as const)(
+    "is dimmed under a dialog as the page is, in the %s theme",
+    (scheme) => {
+      const dimmed = titleBarOverlay(scheme === "dark", true);
+
+      expect(dimmed.color).toBe(underScrim(token("zy-canvas", scheme), scheme));
+      expect(dimmed.symbolColor).toBe(
+        underScrim(token("zy-text-soft", scheme), scheme),
+      );
+    },
+  );
+
   it("stops one pixel short of the bar, so its rule survives and its buttons stay on the line", () => {
     const bar = Number.parseInt(token("zy-title-bar-height"), 10);
 

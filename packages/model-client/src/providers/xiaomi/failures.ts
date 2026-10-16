@@ -48,12 +48,21 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
         "unauthorized",
         "Xiaomi MiMo refused access: its service is not available in this region, or the API key was restricted by its risk control. A new key can be added on the Model page.",
       );
-    // Xiaomi's one documented cause: no image input on that model or endpoint.
+    // Not found. Xiaomi's one documented cause is a picture sent to a model
+    // or endpoint that takes none; without a picture, it is the model.
     case 404:
-      return new ModelClientError(
-        "attachmentRejected",
-        "Xiaomi MiMo says the chosen model or endpoint does not take pictures.",
-      );
+      return failure.withPictures
+        ? new ModelClientError(
+            "attachmentRejected",
+            "Xiaomi MiMo says the chosen model or endpoint does not take pictures.",
+          )
+        : new ModelClientError(
+            "modelUnavailable",
+            sentence
+              ? `Xiaomi MiMo could not find the chosen model (“${sentence}”). Choose another model on the Model page.`
+              : "Xiaomi MiMo could not find the chosen model. Choose another model on the Model page.",
+            { retryable: false },
+          );
     // The sentence is not passed on: it may quote what was filtered.
     case 421:
       return new ModelClientError(

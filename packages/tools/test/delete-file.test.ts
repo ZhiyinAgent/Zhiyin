@@ -90,6 +90,22 @@ describe("delete_file", () => {
     expect(recycled).toEqual(["notes.md"]);
   });
 
+  it.each([
+    [["notes.md"], "To the Recycle Bin, where it can be restored: notes.md"],
+    [
+      ["notes.md", "huge.iso"],
+      "To the Recycle Bin, where they can be restored: notes.md",
+    ],
+  ])("says before approval that %j can be restored", async (paths, said) => {
+    const root = await workspace();
+    const { bin } = recycleBin(root);
+    const tools = new WorkspaceTools(root, { recycleBin: bin });
+
+    const inspection = await tools.inspect("delete_file", { paths });
+
+    expect(inspection.ok && inspection.detail).toContain(said);
+  });
+
   it("deletes permanently only when asked to, and says it cannot be restored", async () => {
     const root = await workspace();
     const { bin, recycled } = recycleBin(root);

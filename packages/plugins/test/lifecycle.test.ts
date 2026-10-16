@@ -126,6 +126,64 @@ describe("portable plugin directories", () => {
     });
   });
 
+  it("reads files an editor saved with a byte-order mark", async () => {
+    const source = await writePackage(await temporaryRoot("bom"), {
+      mcp: true,
+    });
+    for (const file of [
+      "plugin.json",
+      "mcp.json",
+      join("skills", "research", "SKILL.md"),
+    ]) {
+      const path = join(source, file);
+      await writeFile(path, `\uFEFF${await readFile(path, "utf8")}`, "utf8");
+    }
+
+    const plugin = await loadPluginDirectory(source, personal);
+
+    expect(plugin).toMatchObject({
+      manifest: { name: "research-helper" },
+      skills: [{ name: "research" }],
+      mcpServers: [{ id: "research-helper/search" }],
+    });
+  });
+
+  it.each([
+    [">", "Find and compare primary sources, then report where they disagree."],
+    [
+      ">-",
+      "Find and compare primary sources, then report where they disagree.",
+    ],
+    [
+      "|",
+      "Find and compare primary sources,\nthen report where they disagree.",
+    ],
+  ])(
+    "reads a skill description written as a YAML block (%s)",
+    async (indicator, description) => {
+      const source = await writePackage(await temporaryRoot("block"));
+      await writeFile(
+        join(source, "skills", "research", "SKILL.md"),
+        [
+          "---",
+          "name: research",
+          `description: ${indicator}`,
+          "  Find and compare primary sources,",
+          "  then report where they disagree.",
+          "---",
+          "",
+          "Open the primary sources and report disagreements.",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const plugin = await loadPluginDirectory(source, personal);
+
+      expect(plugin.skills).toMatchObject([{ description }]);
+    },
+  );
+
   it("refuses a package of more files and folders than a plugin needs, without reading on", async () => {
     const source = await writePackage(await temporaryRoot("crowded"));
     const references = join(source, "references");
@@ -266,6 +324,29 @@ describe("portable plugin directories", () => {
 });
 
 describe("durable plugin installation", () => {
+  it("cleans up an install that failed part way, so it can be tried again at once", async () => {
+    const root = await temporaryRoot("half-failed");
+    const source = await writePackage(await temporaryRoot("half-sources"));
+    const store = new FilePluginStore(root);
+    await store.list();
+    // The list of installed plugins cannot be written, once.
+    const blocker = join(root, "state.json.tmp");
+    await mkdir(blocker, { recursive: true });
+
+    await expect(store.install(source, personal)).rejects.toMatchObject({
+      code: "unavailable",
+    });
+    await rm(blocker, { recursive: true });
+
+    await store.install(source, personal);
+    expect((await store.list()).installed).toMatchObject([
+      {
+        activeVersion: "1.0.0",
+        package: { manifest: { name: "research-helper" } },
+      },
+    ]);
+  });
+
   it("refuses a second package with an identity already installed", async () => {
     const root = await temporaryRoot("collisions");
     const sources = await temporaryRoot("collision-sources");

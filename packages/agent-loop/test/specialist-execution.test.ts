@@ -976,6 +976,31 @@ describe("specialist child execution", () => {
     ]);
   });
 
+  it("sends a specialist's own reasoning back with its next request, as some providers require", async () => {
+    let second: ModelRequest | undefined;
+    const loop = delegatingLoop({
+      specialist: (round, _tools, _messages, request) => {
+        if (round === 1)
+          return [
+            { kind: "reasoningDelta", text: "I should read x first." },
+            readsAFile(round),
+          ];
+        second = request;
+        return [finishes("Read x: it says seen.")];
+      },
+    });
+
+    await settled(loop);
+
+    expect(second?.messages).toContainEqual(
+      expect.objectContaining({
+        role: "assistant",
+        reasoning: "I should read x first.",
+        toolCalls: [expect.objectContaining({ name: "read_file" })],
+      }),
+    );
+  });
+
   it("takes a specialist's report once its budget is spent, even with another call beside it", async () => {
     const loop = delegatingLoop({
       specialistWorkLimits: {

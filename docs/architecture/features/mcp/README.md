@@ -97,10 +97,17 @@ says about itself is shown as its claim.
   seconds, on a check, or when switched off and on. A refused credential and
   an invalid endpoint are never retried on their own.
 - A connection lost during a call is dialled again on the next look; the lost
-  call is never repeated, and its answer says it may have taken effect.
+  call is never repeated, and its answer says it may have taken effect. A
+  server that answers a call with an error, or with an answer that does not
+  match the tool's declared output, has failed that call only: its connection
+  stays open.
+- A server may not ask anything of Zhiyin: a request for a model completion
+  (sampling) or for an answer from the person (elicitation) is refused, and
+  neither is offered when connecting. The call it came during still ends.
 - A server that announces a changed tool list has its tools replaced, and with
   them their approval identity. Switching a connector off closes it and
-  withdraws its tools at once.
+  withdraws its tools at once: a call to one is refused, and the connector is
+  not reached again until it is switched back on.
 - A connector nothing declares any more is forgotten with its credential and
   tool choices, so reinstalling its package starts clean. When the
   declarations cannot be read, nothing changes, and a connector whose package

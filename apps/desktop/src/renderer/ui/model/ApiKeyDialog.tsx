@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type { ApiKeySaveOutcome, ProviderSettings } from "@zhiyin/contract";
 import { Dialog } from "../shared/index.js";
 import styles from "./model.module.css";
@@ -34,6 +34,8 @@ export function ApiKeyDialog({
   onOpenExternalUrl?: (url: string) => Promise<void>;
 }) {
   const inputId = useId();
+  const failureId = useId();
+  const field = useRef<HTMLInputElement>(null);
   const [apiKey, setApiKey] = useState("");
   const [replacing, setReplacing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,10 @@ export function ApiKeyDialog({
         // not make, and "not accepted" fits a wrong key, a spent account and a
         // revoked one equally badly.
         setFailure(outcome.reason);
+        // Back where another key is pasted: Save was disabled while it was
+        // checked, which took focus away.
+        field.current?.focus();
+        field.current?.select();
         return;
       }
       setApiKey("");
@@ -213,7 +219,9 @@ export function ApiKeyDialog({
           </label>
           <input
             id={inputId}
+            ref={field}
             type="password"
+            aria-describedby={failure ? failureId : undefined}
             autoComplete="off"
             spellCheck={false}
             value={apiKey}
@@ -225,6 +233,7 @@ export function ApiKeyDialog({
 
       {failure && (
         <p
+          id={failureId}
           className={`${styles["model-key-note"]} ${styles["model-key-note--failed"]}`}
           role="alert"
         >

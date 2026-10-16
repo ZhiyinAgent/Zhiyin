@@ -475,6 +475,81 @@ describe.runIf(blender)("a real Blender", () => {
     expect(after.said).toBe(before.said);
   });
 
+  /**
+   * The same reads, named the other ways a file can name a file: by a whole
+   * path, through a folder link inside the workspace that leads out of it,
+   * and through a material file in the workspace whose picture is not.
+   */
+  it("refuses a model that reaches outside by a whole path, a folder link, or its material file's picture", async () => {
+    const outer = join(root, "outer");
+    await mkdir(outer, { recursive: true });
+    const triangle = Buffer.from(
+      new Float32Array([0, 0, 0, 0.1, 0, 0, 0, 0.1, 0]).buffer,
+    );
+    await writeFile(join(outer, "far.bin"), triangle);
+    await writeFile(join(outer, "far.mtl"), "newmtl Red\nKd 1 0 0\n");
+    await writeFile(
+      join(outer, "far.png"),
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64",
+      ),
+    );
+    await symlink(outer, join(workspace, "linked"), "junction");
+    const whole = (name: string) => join(outer, name).replaceAll("\\", "/");
+    const obj = (library: string) =>
+      `mtllib ${library}\nv 0 0 0\nv 0.1 0 0\nv 0 0.1 0\nusemtl Red\nf 1 2 3\n`;
+    await writeFile(
+      join(workspace, "whole.gltf"),
+      JSON.stringify({
+        asset: { version: "2.0" },
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        nodes: [{ mesh: 0, name: "Tri" }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+        buffers: [{ byteLength: 36, uri: whole("far.bin") }],
+        bufferViews: [{ buffer: 0, byteLength: 36 }],
+        accessors: [
+          {
+            bufferView: 0,
+            componentType: 5126,
+            count: 3,
+            type: "VEC3",
+            min: [0, 0, 0],
+            max: [0.1, 0.1, 0],
+          },
+        ],
+      }),
+    );
+    await writeFile(join(workspace, "whole.obj"), obj(whole("far.mtl")));
+    await writeFile(join(workspace, "linked.obj"), obj("linked/far.mtl"));
+    await writeFile(
+      join(workspace, "pictured.mtl"),
+      "newmtl Red\nKd 1 0 0\nmap_Kd ../outer/far.png\n",
+    );
+    await writeFile(join(workspace, "pictured.obj"), obj("pictured.mtl"));
+    const before = await call("blender_describe_scene", {});
+
+    const answers: Record<string, Awaited<ReturnType<typeof call>>> = {};
+    for (const path of [
+      "whole.gltf",
+      "whole.obj",
+      "linked.obj",
+      "pictured.obj",
+    ])
+      answers[path] = await call("blender_add_objects", {
+        objects: [{ name: "Reaching", kind: "model", path }],
+      });
+    const after = await call("blender_describe_scene", {});
+
+    for (const [path, answer] of Object.entries(answers)) {
+      expect(answer.isError, path).toBe(true);
+      expect(answer.said, path).toMatch(/outside the workspace/);
+    }
+    expect(after.said).toBe(before.said);
+    await unlink(join(workspace, "linked"));
+  });
+
   it("brings in a USD text file whose parts are in the workspace, and refuses binary USD it cannot check", async () => {
     await writeFile(
       join(workspace, "part.usda"),

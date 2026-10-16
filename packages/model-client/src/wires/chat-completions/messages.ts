@@ -135,12 +135,16 @@ function finiteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-export function usageFrom(chunk: UsageChunk): ModelUsage | undefined {
+/** `requestId` stands where the chunk names no request. */
+export function usageFrom(
+  chunk: UsageChunk,
+  requestId: string,
+): ModelUsage | undefined {
   if (!chunk.usage) return undefined;
   const details = chunk.usage.prompt_tokens_details;
   const reasoning = chunk.usage.completion_tokens_details?.reasoning_tokens;
   return {
-    requestId: typeof chunk.id === "string" ? chunk.id : "unknown",
+    requestId: typeof chunk.id === "string" ? chunk.id : requestId,
     model: typeof chunk.model === "string" ? chunk.model : "unknown",
     inputTokens: finiteNumber(chunk.usage.prompt_tokens),
     outputTokens: finiteNumber(chunk.usage.completion_tokens),

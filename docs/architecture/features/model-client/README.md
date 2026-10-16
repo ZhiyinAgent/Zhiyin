@@ -57,6 +57,8 @@ which is described below, and by `OpenRouterModelClient` for OpenRouter alone:
   before the provider counted it, into a usage report for the chosen model:
   the caller's tokens, a request id of its own, and the price list's estimate
   of the cost.
+- A request the provider names no id for is given one of its own, so two of
+  them are counted as two.
 - `settings()` returns the chosen model, the upstreams routing is restricted
   to, the context window and longest reply a request may have, the reasoning
   controls the model offers, whether it accepts pictures, the endpoint, and
@@ -274,7 +276,9 @@ ignores all four.
   codes), and the status otherwise. Whatever the lab's words, a conversation
   too long for the model is `contextExceeded`, an account that cannot pay is
   `outOfCredits`, a refused key is `unauthorized`, and a busy model or rate
-  limit is retried.
+  limit is retried. A code a lab names its failure by is matched as that code,
+  never as a number that happens to be in its sentence, and a 404 Xiaomi gives
+  a request without a picture is the model not found, not the picture.
 - **Each failure points where the person can act.** An unrecognised model id
   (400 "is not a valid model ID") and a retired one (404 "No endpoints found")
   both name the stored model and point to the Model page. A rate limit is reported

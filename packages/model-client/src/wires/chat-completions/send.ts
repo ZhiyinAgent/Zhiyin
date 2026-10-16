@@ -13,6 +13,7 @@ import {
   endedEarly,
   eventIn,
   streamedEvents,
+  unnamedRequest,
   type StreamingDialect,
 } from "../streamed-request.js";
 import { usageFrom } from "./messages.js";
@@ -133,6 +134,7 @@ export async function* sendChatCompletions(
   let finishReason: string | undefined;
   let sawUsage = false;
   let requestId: string | undefined;
+  const unnamed = unnamedRequest();
   let responseModel: string | undefined;
   let provider: string | undefined;
   let sawUsableOutput = false;
@@ -191,7 +193,7 @@ export async function* sendChatCompletions(
     }
     if (typeof choice?.finish_reason === "string")
       finishReason = choice.finish_reason;
-    const usage = usageFrom(chunk);
+    const usage = usageFrom(chunk, requestId ?? unnamed);
     if (usage) {
       sawUsage = true;
       yield {

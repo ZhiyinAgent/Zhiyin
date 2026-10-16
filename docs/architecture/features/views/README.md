@@ -43,7 +43,7 @@ learns that a renderer exists.
   after 10 seconds, or at once when the renderer is gone or cannot be asked.
 - Not checked is never reported as checked and wrong. Every unanswered
   question resolves to the same outcome, "The view could not be checked in
-  time.", so a repair is never asked to fix an invented complaint.
+  time.", marked unchecked, so a repair is never asked to fix it.
 - A late or unknown answer is ignored. A reply that lost the race against the
   timeout and a reply to a question never asked look the same here.
 - The drawing library's own error message reaches the caller unchanged, for

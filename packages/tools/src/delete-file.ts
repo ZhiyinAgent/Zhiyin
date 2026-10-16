@@ -267,7 +267,7 @@ function detailOf(planned: readonly Planned[]): string {
   const deleted = planned.filter((item) => item.mode === "permanent");
   if (recycled.length)
     lines.push(
-      `To the Recycle Bin, where they can be restored: ${recycled.map(described).join("; ")}.`,
+      `To the Recycle Bin, where ${recycled.length === 1 ? "it" : "they"} can be restored: ${recycled.map(described).join("; ")}.`,
     );
   if (deleted.length)
     lines.push(

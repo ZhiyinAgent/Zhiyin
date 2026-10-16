@@ -16,10 +16,23 @@ const parallelLimits = { testTimeout: 30_000, hookTimeout: 30_000 };
  */
 const liveTests = ["packages/**/live*.test.ts", "packages/**/*.live.test.ts"];
 
+/** The installed app's live tests, run by `pnpm test:live:installed`. */
+const installedLiveTests = ["apps/desktop/installed/**/*.live.test.ts"];
+
+/** The installed app's tests start Electron, one file at a time. */
+const installedLimits = {
+  environment: "node",
+  testTimeout: 60_000,
+  hookTimeout: 60_000,
+  fileParallelism: false,
+} as const;
+
 // One test runner for the whole workspace. Projects keep the renderer's DOM
 // environment from being paid for by the packages, which need no DOM at all.
 export default defineConfig({
   test: {
+    // Installs the programs some tests need, where ZHIYIN_TEST_TOOLS asks.
+    globalSetup: ["./scripts/test-tools.mjs"],
     projects: [
       {
         test: {
@@ -61,10 +74,15 @@ export default defineConfig({
         test: {
           name: "installed",
           include: ["apps/desktop/installed/**/*.test.ts"],
-          environment: "node",
-          testTimeout: 60_000,
-          hookTimeout: 60_000,
-          fileParallelism: false,
+          exclude: [...configDefaults.exclude, ...installedLiveTests],
+          ...installedLimits,
+        },
+      },
+      {
+        test: {
+          name: "installed-live",
+          include: installedLiveTests,
+          ...installedLimits,
         },
       },
       {

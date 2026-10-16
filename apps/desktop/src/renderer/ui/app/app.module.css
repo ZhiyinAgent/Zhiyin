@@ -1134,8 +1134,10 @@
   content-visibility: visible;
 }
 
+/* Centred while it fits; where it does not, it starts at the top rather than
+   overflowing above it, where nothing can scroll to. */
 .thread-scroll--new {
-  justify-content: center;
+  justify-content: safe center;
 }
 
 .composer-dock {
@@ -1148,6 +1150,19 @@
   padding: 12px clamp(24px, 4vw, 50px) 28px;
   border-top: 0;
   background: linear-gradient(to bottom, transparent, var(--zy-canvas) 24px);
+}
+
+/* Heard, not seen: the decision itself is on screen. */
+.composer-dock__announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* A pending decision shrinks to the dock and scrolls inside itself, so the

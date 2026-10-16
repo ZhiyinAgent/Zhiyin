@@ -46,10 +46,14 @@ The workspace is laid out as:
 - **A sidebar:** New task, Plugins, the recent conversations (each with a menu
   to rename, review permissions, export or delete), and a preferences menu
   leading to Usage, Model, Custom instructions and Settings. At 720 pixels wide
-  or less it becomes a drawer behind a floating button.
+  or less it becomes a drawer behind a floating button. While the drawer is
+  open, Tab and Shift+Tab go round the button and the drawer, and Escape
+  closes it with focus back on the button. Opening a page puts focus on its
+  heading.
 - **A top bar** across every view, painted by the app under Windows' own window
   controls. Over a conversation it is the header: the folder, the title,
-  commands still running, the Conversation/Workspace switch, and Files.
+  commands still running, the Conversation/Workspace switch, and Files. While
+  a dialog covers the page, the window controls are dimmed as the page is.
 - **The conversation**, with the plan above it (ADR 0013) and the composer
   below. Pending approvals and most questions sit above the composer.
 - **The space beside the conversation**, holding the agent's browser, a
@@ -108,7 +112,9 @@ described in the [component library](../../component-library.md).
   opened it; a dialog keeps focus inside itself, Tab and Shift+Tab going round
   its own controls in the order it shows them, from a body that scrolls too. A
   control drawn as an icon alone is named on hover and
-  keyboard focus, and one that cannot be used yet says what it is waiting for.
+  keyboard focus, and one that cannot be used yet says what it is waiting for;
+  a control whose name changes while it is named, such as one that opens and
+  then closes something, is named anew.
   What floats closes on a press outside it, top layer first; menus also close
   when the window loses focus, dialogs stay open.
 - **The smallest window is 720 × 480**, and every page works there. Nothing is
@@ -193,12 +199,16 @@ described in the [component library](../../component-library.md).
 
 - An approval reads in the order the decision is made: what the action is, what
   it can do (the app's own account, never the model's), what Zhiyin says it is
-  for (attributed as a claim), then the exact command, the inputs, or the files
+  for (everything a model wrote about it, under one attribution as a claim),
+  then the exact command, the inputs, or the files
   it changes. A file change is reviewed as a difference, with line numbers and
   changed words marked. When no file change can be shown as a difference, such
   as a binary scene's, the inputs are shown with the files. Inputs a built-in
   tool wrote in words read as text, not code. A long approval scrolls inside
   itself, so its buttons stay in view at the smallest window.
+- A new approval takes focus, so the keyboard answers it, unless a message is
+  being written or a dialog is open; either way a screen reader hears that
+  permission is needed.
 - What an approval, a change under review or a call's inputs show from the
   model or a connector writes out a character that draws nothing or changes the
   direction of the text as its code, such as `[U+202E]`, so it reads as what
@@ -271,11 +281,17 @@ described in the [component library](../../component-library.md).
 - The plugins page is the one place capabilities are managed (ADR 0016). Each
   plugin shows what it is for and what it can reach before its skills,
   specialists and connectors, each with one switch. A connector is reached by
-  signing in or with an access token (ADR 0021).
+  signing in or with an access token (ADR 0021). A program a connector needs
+  shows how far its install has come and can be cancelled from the button that
+  started it; focus stays in the connector's row as the install starts and
+  ends.
 - The model page lists every provider by name, and one that cannot be used yet
   stays listed, unchosen, with the reason. The provider, its platform where
   the lab runs two, the model and, on OpenRouter, the upstreams chosen to serve
-  it are saved as one change. Only models that can use tools are listed. Each
+  it are saved as one change. The provider and model lists are one Tab stop
+  each, on the chosen entry; the arrow keys, Home and End move among the
+  entries that can be chosen, and Enter or Space chooses, since choosing a
+  provider loads its models. Only models that can use tools are listed. Each
   provider and platform keeps its own API key, which is write-only: once saved
   it is never shown again. The chosen provider's platform and whether its key
   is saved, and where from, are shown above its models, with its platform's
@@ -286,7 +302,9 @@ described in the [component library](../../component-library.md).
   where the lab has them, and its context window.
 - The usage page names each conversation that cost something by its title,
   whether or not it has been opened since Zhiyin started, and opens it from
-  there. Only a conversation that no longer exists is called deleted.
+  there. Only a conversation that no longer exists is called deleted. A total,
+  model or conversation none of whose requests was priced says "No price",
+  never $0.00.
 - Settings holds the appearance, spelling (ADR 0023), notifications, the data
   folder (ADR 0019) and conversations from an earlier version waiting for an
   update (ADR 0022). Each row appears only when the core offers it, and a change
@@ -295,8 +313,8 @@ described in the [component library](../../component-library.md).
 ### Security and boundaries
 
 - The window runs sandboxed with no Node and cannot navigate, open another
-  window, change the base its links resolve against, or be granted any
-  permission a page can ask for. Besides its own assets, it draws pictures
+  window, change the base its links resolve against, run a script but its
+  own, or be granted any permission a page can ask for. Besides its own assets, it draws pictures
   only from `data:` addresses Zhiyin built from what it read itself; web and
   document pages reach it that way too.
 - Each folder under `ui` is a module used only through its `index.ts`. Of the

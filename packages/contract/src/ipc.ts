@@ -49,6 +49,8 @@ export const CHANNEL = {
   overrideComponent: "zhiyin:override-component",
   resetComponent: "zhiyin:reset-component",
   installToolchain: "zhiyin:install-toolchain",
+  cancelToolchainInstall: "zhiyin:cancel-toolchain-install",
+  dimWindowControls: "zhiyin:dim-window-controls",
   installPlugin: "zhiyin:install-plugin",
   updatePlugin: "zhiyin:update-plugin",
   rollbackPlugin: "zhiyin:rollback-plugin",

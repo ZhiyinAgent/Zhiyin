@@ -177,6 +177,14 @@ export async function loadStartup(
           newerHistory = { writtenBy: String(writtenBy) };
           return undefined;
         }
+        // Not damage either: the files could not be read just now, as when
+        // another program holds one. Nothing is copied aside or offered.
+        if (code === "unavailable") {
+          say(
+            "Saved history could not be read just now, so it was left as it is. It is read again the next time Zhiyin starts.",
+          );
+          return undefined;
+        }
         historyRecovery ??= await offerHistoryRecovery(deps.sessions);
         if (!historyRecovery)
           say(
@@ -198,6 +206,8 @@ export async function loadStartup(
     })),
   ]);
 
+  // A history that opens needs no recovery, whatever was offered before.
+  if (historyAvailable) historyRecovery = undefined;
   if (restored?.setAside)
     issues.push({
       message: `${restored.setAside.count === 1 ? "One saved conversation was" : `${restored.setAside.count} saved conversations were`} damaged beyond reading and left out of the list.`,

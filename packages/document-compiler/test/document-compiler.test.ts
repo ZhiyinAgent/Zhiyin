@@ -1,4 +1,4 @@
-import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
+import { mkdir, realpath, symlink, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
@@ -31,6 +31,7 @@ function compilerWriting(
       exitCode: number | null;
       stdout?: string;
       stderr?: string;
+      ending?: "timeout" | "stopped" | "outputLimit";
     };
     /** Written when the run "succeeds", the way a compiler writes its PDF. */
     readonly writes?: string;
@@ -46,6 +47,7 @@ function compilerWriting(
       exitCode: result.exitCode,
       stdout: result.stdout ?? "",
       stderr: result.stderr ?? "",
+      ...(result.ending ? { ending: result.ending } : {}),
     };
   };
   return {
@@ -178,6 +180,47 @@ describe("compiling a document", () => {
       content: [{ text: expect.stringContaining("wrote no paper.pdf") }],
     });
   });
+
+  it("does not take a PDF left from before for one it wrote", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await writeFile(join(root, "paper.pdf"), "%PDF-1.7\n", "utf8");
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    await utimes(join(root, "paper.pdf"), hourAgo, hourAgo);
+    const { compiler } = compilerWriting(root);
+
+    expect(
+      await compiler.callTool("compile_document", { path: "paper.typ" }),
+    ).toMatchObject({
+      isError: true,
+      content: [{ text: expect.stringContaining("wrote no paper.pdf") }],
+    });
+  });
+
+  it.each([
+    [
+      "timeout",
+      "took longer than 3 minutes, the most one compilation may take",
+    ],
+    ["stopped", "was stopped before it finished"],
+    ["outputLimit", "printed more than Zhiyin keeps"],
+  ] as const)(
+    "says why a compilation that ended early ended (%s)",
+    async (ending, said) => {
+      const root = await workspace();
+      await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+      const { compiler } = compilerWriting(root, {
+        result: { exitCode: null, ending },
+      });
+
+      expect(
+        await compiler.callTool("compile_document", { path: "paper.typ" }),
+      ).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining(said) }],
+      });
+    },
+  );
 
   it("declares the PDF it wrote as produced: created the first time, updated after", async () => {
     const root = await workspace();

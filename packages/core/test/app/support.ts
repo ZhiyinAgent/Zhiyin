@@ -18,7 +18,7 @@ import {
 } from "@zhiyin/capabilities";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery } from "@zhiyin/recovery";
-import { ComposedRewind } from "@zhiyin/rewind";
+import { ComposedRewind, type RewindJournal } from "@zhiyin/rewind";
 import { AgentLoop, type AgentLoopDependencies } from "@zhiyin/agent-loop";
 import { stubDependencies as turnStubs } from "@zhiyin/agent-loop/testing";
 import type { PluginView, Plugins } from "@zhiyin/plugins";
@@ -80,6 +80,8 @@ export type LoopTestDependencies = Omit<
   CapabilityMembers & {
     readonly rewind: RewindPlanner;
     readonly recovery: Recovery;
+    /** Where interrupted rewinds are kept; in memory unless a test says. */
+    readonly journal?: RewindJournal;
   };
 
 export function loopFrom({
@@ -90,6 +92,7 @@ export function loopFrom({
   connectionToolchains,
   rewind,
   recovery,
+  journal,
   ...dependencies
 }: LoopTestDependencies): TestApp {
   const shared = {
@@ -103,7 +106,11 @@ export function loopFrom({
       browsers: dependencies.browsers,
       ...(dependencies.scenes ? { scenes: dependencies.scenes } : {}),
     }),
-    rewind: new ComposedRewind({ conversation: rewind, recovery }),
+    rewind: new ComposedRewind({
+      conversation: rewind,
+      recovery,
+      ...(journal ? { journal } : {}),
+    }),
   };
   return appFrom(
     new Workspace(shared, (host) => new AgentLoop({ ...shared, host })),

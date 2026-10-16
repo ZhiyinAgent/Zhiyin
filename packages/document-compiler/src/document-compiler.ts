@@ -204,6 +204,15 @@ function argumentsFor(request: Request): readonly string[] {
       ];
 }
 
+/** A time limit as a person reads it: "3 minutes", "45 seconds". */
+function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds % 60 !== 0 || seconds < 60)
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = seconds / 60;
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
 function shortened(value: string, maximum = 8_000): string {
   const trimmed = value.trim();
   return trimmed.length > maximum
@@ -341,11 +350,9 @@ export function documentCompiler(
             : "Tectonic is not installed.",
           true,
         );
-      const existed = await stat(request.output).then(
-        () => true,
-        () => false,
-      );
-      const { exitCode, stdout, stderr } = await run({
+      const before = await stat(request.output).catch(() => undefined);
+      const existed = before !== undefined;
+      const { exitCode, stdout, stderr, ending } = await run({
         executable,
         arguments: argumentsFor(request),
         cwd: request.root,
@@ -359,15 +366,31 @@ export function documentCompiler(
         return textResult(
           shortened(
             [
-              exitCode === null
-                ? "The compiler did not finish."
-                : `The compiler reported errors (exit code ${exitCode}).`,
+              ending === "timeout"
+                ? `The compiler took longer than ${duration(timeoutMs)}, the most one compilation may take, so it was stopped.`
+                : ending === "stopped"
+                  ? "The compilation was stopped before it finished."
+                  : ending === "outputLimit"
+                    ? "The compiler printed more than Zhiyin keeps, so it was stopped."
+                    : exitCode === null
+                      ? "The compiler did not finish."
+                      : `The compiler reported errors (exit code ${exitCode}).`,
               ...(diagnostics.length ? diagnostics : [output]),
             ].join("\n"),
           ),
           true,
         );
-      const written = await stat(request.output).catch(() => undefined);
+      const found = await stat(request.output).catch(() => undefined);
+      // A PDF left from before is not one this run wrote.
+      const written =
+        found &&
+        !(
+          before &&
+          found.mtimeMs === before.mtimeMs &&
+          found.size === before.size
+        )
+          ? found
+          : undefined;
       if (!written)
         return textResult(
           `The compiler reported success but wrote no ${request.relativeOutput}.`,

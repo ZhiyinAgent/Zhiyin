@@ -51,8 +51,11 @@ land, and can turn a compiler's output into errors a model can act on.
 - A failure reports the compiler's own diagnostics, not a bare exit code: each
   error or warning with its file, line and column relative to the workspace,
   the marked source line, and any hint.
-- Success means a file exists. A compiler that reports success but wrote
-  nothing is reported as a failure.
+- Success means this compile wrote the PDF. A compiler that reports success
+  but wrote nothing is reported as a failure, and so is one that left a PDF
+  from before as it was.
+- A compile that ends early says why: it took longer than its time limit,
+  which it names, it was stopped, or it printed more than is kept.
 - The PDF is declared as a change before the compile runs, as created or
   updated, so a PDF it overwrites is backed up and can be restored. After a
   successful compile it is declared as produced and appears among the work's
@@ -67,4 +70,5 @@ land, and can turn a compiler's output into errors a model can act on.
 
 The runner is replaceable, so arguments, containment and reporting are tested
 without a compiler. A system-boundary test runs the real engines when
-`ZHIYIN_TYPST` and `ZHIYIN_TECTONIC` point to them, and is skipped otherwise.
+`ZHIYIN_TYPST` and `ZHIYIN_TECTONIC` point to them, and is skipped otherwise;
+CI's gate installs both, so there it runs.

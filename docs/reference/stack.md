@@ -421,8 +421,11 @@ the key in a header, streamed tool calls in OpenAI's delta form, and usage on
 the last chunk. None reports a cost, so any cost Zhiyin shows for them is
 estimated. All of them cache a repeated request start on their own except
 Anthropic and Qwen's explicit mode, which cache only what is marked. Most
-want earlier assistant turns sent back with their reasoning: DeepSeek and
-Xiaomi refuse a tool conversation without it (400), Anthropic refuses one
+want earlier assistant turns sent back with their reasoning: DeepSeek refuses
+a tool conversation without it (400). Xiaomi's guide says to send it back, but
+`mimo-v2.6-flash` and `mimo-v2.6-pro` with thinking on accepted tool turns
+without it, both later in the same turn and after a new message (live,
+2026-10-16). Anthropic refuses one
 whose latest thinking blocks were dropped or changed, and Moonshot's K3,
 MiniMax, Mistral and OpenAI ask for it. Anthropic's blocks are signed and
 OpenAI's encrypted, so they go back as received. `tool_choice` other than

@@ -4,7 +4,8 @@
  * checked 2026-10-09), so the type decides and the status stands in where the
  * type is missing. An empty balance has no type of its own there; the native
  * API names it code 1008, "insufficient balance", which is what is looked for
- * in MiniMax's sentence.
+ * in MiniMax's sentence: the words, or the code standing as one, not any
+ * number 1008 the sentence happens to hold.
  */
 
 import {
@@ -28,7 +29,8 @@ const statusOfType: Readonly<Record<string, number>> = {
   overloaded_error: 529,
 };
 
-const cannotPay = /insufficient balance|\b1008\b/i;
+const cannotPay =
+  /insufficient balance|^\s*\(?1008\)?\b|\(1008\)\s*\.?$|\bcode\W{0,3}1008\b/i;
 
 export function classifyFailure(failure: FailureReport): ModelClientError {
   const error = failure.error as

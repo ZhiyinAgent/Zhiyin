@@ -466,7 +466,36 @@ export class FileRecovery implements Recovery {
         first.before === "absent" ? "absent" : first.beforeDigest;
       const current = absolute ? await currentDigest(absolute) : "other";
       const action = first.before === "absent" ? "remove" : "restore";
-      if (!absolute || !expected || !restored || current !== expected) {
+      // Each change must start from what the one before it left: a file
+      // edited in between holds work that is not the turn's to discard.
+      const chained = versions.every((version, index) => {
+        if (index === 0) return true;
+        const previous = versions[index - 1]!;
+        const left =
+          previous.after === "absent" ? "absent" : previous.afterDigest;
+        const found =
+          version.before === "absent" ? "absent" : version.beforeDigest;
+        return left !== undefined && left === found;
+      });
+      if (!chained) {
+        files.push({
+          path,
+          action,
+          status: "conflict",
+          reason:
+            "The file was changed between two of the changes being undone, so it was left as it is.",
+        });
+        continue;
+      }
+      // Already as it was before the changes, as after an undo that put it
+      // back while another file could not be: putting it back is a no-op.
+      const alreadyBack = current === restored;
+      if (
+        !absolute ||
+        !expected ||
+        !restored ||
+        (current !== expected && !alreadyBack)
+      ) {
         files.push({
           path,
           action,

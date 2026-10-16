@@ -33,6 +33,8 @@ export type AssembledToolCall = {
 export type PresentedAction = {
   readonly title: string;
   readonly description: string;
+  /** The description is a model's account, not the code's. */
+  readonly byModel?: true;
 };
 
 /**

@@ -193,6 +193,7 @@ export class TurnWaits {
             action: presentation.title,
             target: inspection.target,
             reason: presentation.description,
+            ...(presentation.byModel ? { reasonByModel: true } : {}),
             command: inspection.command,
             effect: inspection.action,
             ...(call
@@ -400,7 +401,9 @@ export class TurnWaits {
         prompt: {
           ...task.phase.prompt,
           action: label.title,
+          // A label is always a model's.
           reason: label.description,
+          reasonByModel: true,
         },
       },
     });

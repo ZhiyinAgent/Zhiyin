@@ -182,6 +182,32 @@ describe("FileSessions damaged history", () => {
     );
   });
 
+  it("keeps every kind of setting that survived, not only some", async () => {
+    const root = await temporaryRoot();
+    const sound = {
+      preferences: { onboarded: true, interests: ["writing"] },
+      contextBudget: "low",
+      personalInstructions: "Answer briefly.",
+      notifications: "off",
+      appearance: "dark",
+      spellingChoice: { enabled: true, languages: ["fr"] },
+      folderInstructionChoices: [
+        { root: "C:\\Projects\\notes", hash: "abc123", use: true },
+      ],
+      recentWorkspaces: [{ path: "C:\\Projects\\notes", name: "notes" }],
+    };
+    await plantHistory(root, {
+      ...base,
+      ...sound,
+      // A folder that is not one: the settings are damaged.
+      workspace: { path: 42 },
+    });
+
+    await new FileSessions(root).recoverReadable();
+
+    expect(await new FileSessions(root).loadIndex()).toMatchObject(sound);
+  });
+
   it("chooses a selected conversation that survived the recovery", async () => {
     const root = await temporaryRoot();
     await write(root, {

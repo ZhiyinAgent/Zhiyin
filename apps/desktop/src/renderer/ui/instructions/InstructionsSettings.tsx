@@ -19,8 +19,10 @@ export function InstructionsSettings({
     >
       <header className={styles["instructions-page__head"]}>
         <div>
-          <p className="instrument-label">Workspace / Preferences</p>
-          <h1>Custom instructions</h1>
+          <p className="instrument-label">
+            Your preferences / Custom instructions
+          </p>
+          <h1 tabIndex={-1}>Custom instructions</h1>
           <p>
             Set the preferences Zhiyin should remember when it works with you.
           </p>

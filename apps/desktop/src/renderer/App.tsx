@@ -5,6 +5,7 @@ import {
   WorkspaceShell,
   actionFor,
   createWorkspaceState,
+  useDimmedWindowControls,
   workspaceReducer,
 } from "./ui/app/index.js";
 import { HoverTips } from "./ui/shared/index.js";
@@ -27,6 +28,7 @@ export function App({
     undefined,
     createWorkspaceState,
   );
+  useDimmedWindowControls((dimmed) => core.dimWindowControls(dimmed));
 
   useEffect(() => {
     let mounted = true;

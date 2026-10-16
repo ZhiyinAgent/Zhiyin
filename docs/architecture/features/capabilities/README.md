@@ -68,9 +68,10 @@ activating it.
 - Plugin changes go to the plugins member: `setPluginEnabled`,
   `setComponentEnabled`, `overrideComponent`, `resetComponent`,
   `installPlugin`, `updatePlugin`, `rollbackPlugin`, `removePlugin`,
-  `createPlugin`, `savePluginContents`. `installToolchain(componentId)`
+  `createPlugin`, `savePluginContents`. `installToolchain(componentId, signal?)`
   installs every program an application connector needs, then has the
-  connections looked at again.
+  connections looked at again; the signal stops it. While it runs, the
+  connector's state says how much of everything still to come has arrived.
 - Connection changes go to the MCP member: `connections`, `checkConnection`,
   `retryConnections`, `setConnectionToolEnabled`, `testConnection`,
   `saveConnectionToken`, `clearConnectionToken`, `signInToConnection`.
@@ -143,7 +144,8 @@ activating it.
   result.
 - **What a conversation was offered is forgotten with the conversation.**
 - **Plugin readiness is derived, never stored.** A connector that needs a key
-  or a sign-in needs setup and says which; one nothing has reached yet is
+  or a sign-in needs setup and says which, as does one nothing has reached yet
+  that needs a key nobody has saved; any other one nothing has reached yet is
   unchecked, not ready; an application connector whose program is missing
   needs setup; one this build does not include is unavailable. Looking at
   plugin states reaches no connector.
@@ -155,5 +157,8 @@ activating it.
 
 Every member is a stand-in that records what reached it: this group owns which
 member a request reaches and in what form, not what the member then does. The
+rules on which connections a conversation reaches are also checked with the
+connection feature itself as the member, only the far end of each connection
+stood in for, since that feature is where they are enforced. The
 agent loop's tests construct the loop through this group with their own
 stand-in members, so the loop is exercised through the real joining.

@@ -361,6 +361,7 @@ export function validateCommand(
     case CHANNEL.componentContent:
     case CHANNEL.resetComponent:
     case CHANNEL.installToolchain:
+    case CHANNEL.cancelToolchainInstall:
     case CHANNEL.closeDocument:
       valid = args.length === 1 && text(args[0]);
       break;
@@ -496,6 +497,7 @@ export function validateCommand(
         args[0].length <= 64_000;
       break;
     case CHANNEL.setNotifications:
+    case CHANNEL.dimWindowControls:
       valid = args.length === 1 && typeof args[0] === "boolean";
       break;
     case CHANNEL.setAppearance:

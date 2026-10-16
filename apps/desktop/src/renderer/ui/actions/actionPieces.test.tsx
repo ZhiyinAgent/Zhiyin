@@ -371,6 +371,61 @@ describe("ApprovalPrompt", () => {
     expect(screen.getByText("Clean up a draft.")).toBeVisible();
   });
 
+  it("attributes a reason the AI wrote to Zhiyin, as it does a claim", () => {
+    render(
+      <ApprovalPrompt
+        title="Save the summary"
+        target="summary.md"
+        description="Save the summary the person asked for."
+        descriptionByModel
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("Save the summary the person asked for."),
+    ).toHaveTextContent(/^Zhiyin says/);
+    expect(
+      screen.getByRole("button", { name: "About this AI explanation" }),
+    ).toBeVisible();
+  });
+
+  it("gives a reason and a claim the AI wrote one attribution", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="command -v python3"
+        description="See what is installed."
+        descriptionByModel
+        claim="Check whether Python 3 is installed."
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByText("Zhiyin says")).toHaveLength(1);
+    expect(
+      screen.getByText(
+        "See what is installed. Check whether Python 3 is installed.",
+      ),
+    ).toHaveTextContent(/^Zhiyin says/);
+  });
+
+  it("leaves a reason Zhiyin's code wrote unattributed", () => {
+    render(
+      <ApprovalPrompt
+        title="Write a workspace file"
+        target="summary.md"
+        description="Write summary.md in the workspace."
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("Write summary.md in the workspace."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Zhiyin says/)).toBeNull();
+  });
+
   it("shows a long command whole rather than clipping what is consented to", () => {
     const command = `python3 -c "import pandas, numpy; print('pandas', pandas.__version__, '| numpy', numpy.__version__)" && echo done && ls -la && git status --short && git log --oneline -20`;
     render(

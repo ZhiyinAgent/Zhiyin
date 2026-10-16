@@ -64,9 +64,15 @@ export function SpentAmounts({
   spent,
   stacked = false,
 }: {
-  spent: Parameters<typeof spentIn>[0];
+  spent: Parameters<typeof spentIn>[0] & {
+    readonly requests?: number;
+    readonly pricedRequests?: number;
+  };
   stacked?: boolean;
 }) {
+  // Requests nothing priced cost an unknown amount, not nothing.
+  if (spent.requests && spent.pricedRequests === 0)
+    return <span className={styles["spent__unpriced"]}>No price</span>;
   return (
     <>
       {spentIn(spent).map((each, index) => (

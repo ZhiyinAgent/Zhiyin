@@ -100,7 +100,7 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 
 - Vitest runs everything. Package tests run in Node; only the renderer pays for
   a DOM.
-- There are six projects. `pnpm test` runs `packages`, `desktop`,
+- There are seven projects. `pnpm test` runs `packages`, `desktop`,
   `repository` (checks over the repository as a whole, such as the lint rules)
   and `system-boundary`. `installed` starts the built app in Electron through
   Playwright, with its own data folder, so it runs after the build as its own
@@ -109,10 +109,18 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
   closed, history that will not open, a page drawn in the drawing process. It
   runs in every gate, not only before a release. `live` holds the tests that
   call a provider's real API (files named `live*.test.ts` or `*.live.test.ts`)
-  and runs only through `pnpm test:live`, so no other run spends credit.
+  and runs only through `pnpm test:live`, so no other run spends credit;
+  `installed-live` holds the installed app's own (`*.live.test.ts` there) and
+  runs only through `pnpm test:live:installed`, after a build.
 - A test that needs a tool, a browser or a key the machine lacks skips itself.
   After `pnpm test` and `pnpm test:installed`, the run names every file with
-  tests that did not run, and how many.
+  tests that did not run, how many, and what they need. A file may skip only
+  where the reporter's list expects it to: a skip in any other file, or one
+  where what the file needs is present, fails the run.
+- With `ZHIYIN_TEST_TOOLS` naming a short folder (Blender's own paths add up to
+  142 characters), the run first installs Typst, Tectonic, uv and Blender
+  there from their pinned downloads, verified as the app verifies them, so the
+  tests that need them run. CI sets it, so there those tests may not skip.
 - `system-boundary` tests drive real browsers, Windows processes and file
   replacement. They run one file at a time, after the parallel projects, so
   shared machine resources do not skew them. Each scope has its own test

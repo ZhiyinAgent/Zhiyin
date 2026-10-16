@@ -8,6 +8,7 @@ import type {
   ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
+import { ProtocolError } from "@modelcontextprotocol/client";
 import type { BuiltInMcpServer, McpConnection } from "./connection-types.js";
 import { actionTitle, routedName } from "./action-title.js";
 import { asArguments } from "./call-arguments.js";
@@ -693,6 +694,14 @@ export class ManagedMcpServers implements McpServers {
               ? error.message
               : "The built-in connection could not complete this action.",
         });
+      // The server answered, with an error or with an answer that does not
+      // match the tool's declared output: the call failed, and the
+      // connection is as sound as it was.
+      if (ProtocolError.isInstance(error))
+        return {
+          ok: false,
+          reason: `The MCP server answered the call with an error: ${error.message.trim().slice(0, 1_000) || `code ${error.code}`}`,
+        };
       const refused = error instanceof McpUnauthorizedError;
       await this.#disconnect(route.connectionKey);
       const refusal =

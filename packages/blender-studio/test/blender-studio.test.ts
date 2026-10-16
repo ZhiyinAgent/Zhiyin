@@ -1178,3 +1178,65 @@ describe("where Blender may write", () => {
     expect(asked).toEqual([workspace, workspace, workspace]);
   });
 });
+
+describe("a conversation whose folder changes while its scene is open", () => {
+  async function sessionWithFolder() {
+    const { scenes, blender, workspace, installed } = await setUp();
+    const other = join(workspace, "..", "other");
+    await mkdir(other);
+    const folder = { root: workspace };
+    const tools = sceneAutomation(scenes.scene("first"), {
+      workspaceRoot: () => folder.root,
+      blender: installed,
+      directory: scenes.directory("first"),
+      openToBlender: async () => undefined,
+    });
+    await call(tools, "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+    return { tools, blender, workspace, other, folder };
+  }
+
+  it("changes nothing in a scene left in the folder before, and says no scene is open", async () => {
+    const { tools, blender, workspace, other, folder } =
+      await sessionWithFolder();
+
+    folder.root = other;
+    const inspected = await tools.inspect("blender_add_objects", {
+      objects: [can],
+    });
+    const sent = blender.ops().length;
+    const called = await call(tools, "blender_add_objects", {
+      objects: [can],
+    });
+
+    expect(inspected).toMatchObject({ ok: false });
+    expect(inspected.ok ? "" : inspected.reason).toMatch(/No scene is open/);
+    expect(called.isError).toBe(true);
+    expect(blender.ops()).toHaveLength(sent);
+
+    folder.root = workspace;
+    expect(
+      await tools.inspect("blender_add_objects", { objects: [can] }),
+    ).toMatchObject({
+      ok: true,
+      target: "scene.blend",
+      changes: [expect.objectContaining({ path: "scene.blend" })],
+    });
+  });
+
+  it("names the scene as the folder it is now in has it", async () => {
+    const { tools, workspace, folder } = await sessionWithFolder();
+
+    folder.root = join(workspace, "..");
+
+    expect(
+      await tools.inspect("blender_add_objects", { objects: [can] }),
+    ).toMatchObject({
+      ok: true,
+      target: "workspace/scene.blend",
+      changes: [expect.objectContaining({ path: "workspace/scene.blend" })],
+    });
+  });
+});

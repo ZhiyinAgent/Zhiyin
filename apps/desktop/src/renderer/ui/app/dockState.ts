@@ -34,6 +34,7 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
     title: prompt.action,
     target: prompt.target,
     ...(prompt.reason ? { description: prompt.reason } : {}),
+    ...(prompt.reasonByModel ? { descriptionByModel: true } : {}),
     ...(prompt.effect ? { effect: prompt.effect } : {}),
     ...(prompt.detail ? { detail: prompt.detail } : {}),
     ...(prompt.claim ? { claim: prompt.claim } : {}),

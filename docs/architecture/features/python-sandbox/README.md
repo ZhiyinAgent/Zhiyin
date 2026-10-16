@@ -80,4 +80,5 @@ and every call needs the person's approval.
 The runner is replaceable, so argument building and isolation are tested
 without `uv`. A system-boundary test builds a real environment when
 `ZHIYIN_UV` points to `uv`, in a workspace holding a project whose dependency
-does not exist; the isolation claim fails there if it is wrong.
+does not exist; the isolation claim fails there if it is wrong. CI's gate
+installs `uv`, so there it runs.

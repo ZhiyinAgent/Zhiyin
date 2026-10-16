@@ -5,10 +5,10 @@
  * reasoning for a while in the installed app, and measures what a person sees:
  * how long the thread that draws the window is held.
  *
- * Skipped without a credential, and never given one by default: it costs money
- * and needs a network, so the gate does not run it. Run it deliberately:
+ * It costs money and needs a network, so it is a live test the gate never
+ * runs. Run it deliberately, after a build, with the key in `.env.local`:
  *
- *   $env:ZHIYIN_OPENROUTER_API_KEY = "..."; npx vitest run --project installed long-trace
+ *   pnpm test:live:installed long-trace
  */
 
 import { writeFile } from "node:fs/promises";

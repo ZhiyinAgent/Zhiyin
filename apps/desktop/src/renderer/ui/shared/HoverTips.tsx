@@ -85,6 +85,18 @@ export function HoverTips() {
     };
   }, []);
 
+  // A control that changes what it does, such as one that opens and then
+  // closes something, is named as it now is.
+  useEffect(() => {
+    if (!tip) return;
+    const watcher = new MutationObserver(() => setTip(tipFor(tip.anchor)));
+    watcher.observe(tip.anchor, {
+      attributes: true,
+      attributeFilter: ["aria-label", "data-tip", "title"],
+    });
+    return () => watcher.disconnect();
+  }, [tip]);
+
   useLayoutEffect(() => {
     if (!tip || !panel.current) return;
     const anchor = tip.anchor.getBoundingClientRect();

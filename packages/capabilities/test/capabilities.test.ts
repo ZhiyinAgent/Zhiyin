@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type {
   CommandFileChanges,
   McpServerState,
@@ -6,7 +9,11 @@ import type {
   ToolchainState,
   ToolSpec,
 } from "@zhiyin/contract";
-import type { McpServers } from "@zhiyin/mcp";
+import {
+  InMemoryMcpCredentials,
+  ManagedMcpServers,
+  type McpServers,
+} from "@zhiyin/mcp";
 import type { DamagedPlugin, PluginView, Plugins } from "@zhiyin/plugins";
 import {
   ComposedCapabilities,
@@ -1308,7 +1315,10 @@ describe("what a person has set up", () => {
     const { capabilities } = membersRecording({
       connections: [
         connection("browser", { builtIn: true }),
-        connection("deep-research/tavily", { status: "unchecked" }),
+        connection("deep-research/tavily", {
+          status: "unchecked",
+          credential: { status: "saved" },
+        }),
       ],
     });
 
@@ -1319,6 +1329,24 @@ describe("what a person has set up", () => {
         (component) => component.id === "deep-research/tavily",
       ),
     ).toMatchObject({ status: "unchecked" });
+  });
+
+  it("presents an unchecked connector that needs a key nobody has saved as needing setup", async () => {
+    const { capabilities } = membersRecording({
+      connections: [
+        connection("browser", { builtIn: true }),
+        connection("deep-research/tavily", { status: "unchecked" }),
+      ],
+    });
+
+    const [, researchState] = await capabilities.pluginStates();
+
+    expect(
+      researchState?.components.find(
+        (component) => component.id === "deep-research/tavily",
+      ),
+    ).toMatchObject({ status: "setup-required" });
+    expect(researchState?.status).not.toBe("ready");
   });
 
   it("tells the window what key a connector needs and where its package says it is made", async () => {
@@ -1460,6 +1488,69 @@ describe("what a person has set up", () => {
       status: "setup-required",
       toolchain: { status: "missing" },
     });
+  });
+
+  it("says how much of a connector's programs has arrived while they install", async () => {
+    const { capabilities } = membersRecording({
+      connections: [connection("browser", { builtIn: true })],
+      overrides: {
+        connectionToolchains: { browser: ["one", "two"] },
+        toolchains: {
+          state: async (program) =>
+            program === "one"
+              ? { status: "installing", received: 30, bytes: 100 }
+              : {
+                  status: "missing",
+                  downloads: [
+                    {
+                      name: "Two",
+                      version: "1",
+                      bytes: 50,
+                      source: "example.test",
+                    },
+                  ],
+                },
+          install: async () => {},
+          executable: async () => undefined,
+        },
+      },
+    });
+
+    const [engineering] = await capabilities.pluginStates();
+
+    expect(
+      engineering?.components.find(
+        (component) => component.id === "software-engineering/browser",
+      )?.toolchain,
+    ).toEqual({ status: "installing", received: 30, bytes: 150 });
+  });
+
+  it("stops installing a connector's programs when asked to", async () => {
+    const controller = new AbortController();
+    const stopping: [string, AbortSignal | undefined][] = [];
+    const { capabilities } = membersRecording({
+      overrides: {
+        connectionToolchains: { browser: ["one", "two"] },
+        toolchains: {
+          state: async () => ({ status: "ready" }),
+          // Stopped while the first program downloads.
+          install: async (program, signal) => {
+            stopping.push([program, signal]);
+            controller.abort();
+            signal?.throwIfAborted();
+          },
+          executable: async () => undefined,
+        },
+      },
+    });
+
+    await expect(
+      capabilities.installToolchain(
+        "software-engineering/browser",
+        controller.signal,
+      ),
+    ).rejects.toThrow();
+    expect(stopping).toEqual([["one", controller.signal]]);
   });
 
   it("installs every program an application connector needs, then looks at connections again", async () => {
@@ -1844,5 +1935,135 @@ describe("git as a built-in connection", () => {
       command: "git_status",
     });
     expect(inspected).toEqual(["git_status"]);
+  });
+});
+
+/**
+ * The rules above are checked against a stand-in for the connection feature,
+ * which shows what this group asks of it. Here the connection feature itself
+ * keeps them, with only the far end of each connection stood in for, so a
+ * rule this group states holds where the calls are actually made.
+ */
+describe("connections, kept by the connection feature itself", () => {
+  const folders: string[] = [];
+  afterEach(async () => {
+    for (const folder of folders.splice(0))
+      await rm(folder, { recursive: true, force: true, maxRetries: 5 });
+  });
+
+  async function composed(views: readonly PluginView[]) {
+    const folder = await mkdtemp(join(tmpdir(), "zhiyin-capabilities-"));
+    folders.push(folder);
+    const asked: unknown[][] = [];
+    const plugins = pluginsHolding(views, asked);
+    const dialled: string[] = [];
+    const called: string[] = [];
+    const mcp = new ManagedMcpServers(
+      folder,
+      async (definition) => {
+        dialled.push(definition.id);
+        return {
+          listTools: async () => [
+            { name: "search", inputSchema: { type: "object" } },
+          ],
+          callTool: async (name) => {
+            called.push(`${definition.id} ${name}`);
+            return { content: [{ type: "text", text: "Found." }] };
+          },
+          close: async () => {},
+        };
+      },
+      new InMemoryMcpCredentials(),
+      { declared: () => declaredConnectionsOf(plugins) },
+    );
+    const { capabilities } = membersRecording({ overrides: { mcp, plugins } });
+    return { capabilities, plugins, dialled, called, mcp };
+  }
+
+  const github = "mcp__software-engineering__github__search";
+  const tavily = "mcp__deep-research__tavily__search";
+
+  async function offered(
+    capabilities: ComposedCapabilities,
+    activatedPlugins: readonly string[],
+  ) {
+    const gathering = await capabilities.toolsFor("conversation-1", {
+      skills: false,
+      activatedPlugins,
+    });
+    if (!gathering.ok) throw new Error(gathering.reason);
+    return gathering.value.tools.map((tool) => tool.name);
+  }
+
+  it("lets a conversation reach only the connectors of the plugins it activated", async () => {
+    const { capabilities, dialled, called, mcp } = await composed([
+      engineering(),
+      research(),
+    ]);
+    try {
+      const names = await offered(capabilities, ["software-engineering"]);
+
+      expect(names).toContain(github);
+      expect(names).not.toContain(tavily);
+      expect(
+        await capabilities.inspect("conversation-1", "mcp", tavily, {}),
+      ).toMatchObject({ ok: false });
+      expect(
+        await capabilities.execute("conversation-1", "mcp", tavily, {}),
+      ).toMatchObject({ ok: false });
+      expect(
+        await capabilities.execute("conversation-1", "mcp", github, {}),
+      ).toMatchObject({ ok: true });
+      expect(called).toEqual(["software-engineering/github search"]);
+      expect(dialled).not.toContain("deep-research/tavily");
+    } finally {
+      await mcp.shutdownAll();
+    }
+  });
+
+  it("offers a connector switched off to no one, even in a conversation that activated its plugin", async () => {
+    const { capabilities, plugins, called, mcp } = await composed([
+      engineering(),
+    ]);
+    try {
+      expect(await offered(capabilities, ["software-engineering"])).toContain(
+        github,
+      );
+
+      await plugins.setComponentEnabled("software-engineering/github", false);
+
+      expect(
+        await offered(capabilities, ["software-engineering"]),
+      ).not.toContain(github);
+      expect(
+        await capabilities.execute("conversation-1", "mcp", github, {}),
+      ).toMatchObject({ ok: false });
+      expect(called).toEqual([]);
+    } finally {
+      await mcp.shutdownAll();
+    }
+  });
+
+  it("withdraws every connector of a plugin switched off after its conversation activated it", async () => {
+    const { capabilities, plugins, called, mcp } = await composed([
+      engineering(),
+    ]);
+    try {
+      expect(await offered(capabilities, ["software-engineering"])).toContain(
+        github,
+      );
+
+      await plugins.setEnabled("software-engineering", false);
+
+      expect(
+        await offered(capabilities, ["software-engineering"]),
+      ).not.toContain(github);
+      expect(
+        await capabilities.execute("conversation-1", "mcp", github, {}),
+      ).toMatchObject({ ok: false });
+      expect(called).toEqual([]);
+    } finally {
+      await mcp.shutdownAll();
+    }
   });
 });

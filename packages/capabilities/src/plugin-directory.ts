@@ -362,11 +362,16 @@ export type AppConnectionFacts = ReadonlyMap<string, AppConnectionFact>;
 function connectionStatus(
   state: McpServerState | undefined,
   enabled: boolean,
+  needsKey: boolean,
 ): PluginComponentStatus {
   if (!enabled) return "off";
   if (!state) return "unavailable";
   if (state.status === "connected") return "ready";
-  if (state.status === "unchecked") return "unchecked";
+  // A connector that needs a key nobody has saved cannot work once reached.
+  if (state.status === "unchecked")
+    return needsKey && state.credential.status !== "saved"
+      ? "setup-required"
+      : "unchecked";
   if (state.status === "unauthorized") return "setup-required";
   if (state.status === "disconnected")
     return state.credential.status === "saved" ? "failed" : "setup-required";
@@ -469,7 +474,11 @@ export function pluginStatesFrom(
           name: server.name,
           description: server.description,
           enabled: server.enabled,
-          status: connectionStatus(current, server.enabled),
+          status: connectionStatus(
+            current,
+            server.enabled,
+            server.setup !== undefined,
+          ),
           editing: view.editing === "authored" ? "authored" : "none",
           access: server.access,
           dataDestination: server.dataDestination,
