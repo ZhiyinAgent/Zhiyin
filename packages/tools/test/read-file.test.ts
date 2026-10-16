@@ -165,6 +165,89 @@ describe("reading a file", () => {
     expect(binary.reason).toMatch(/not a text file/i);
   });
 
+  it("reads text that is not UTF-8 as Windows-1252, and says so with the first line that is not", async () => {
+    const root = await workspace();
+    // "café" and "naïve" as Windows-1252 writes them: é is E9, ï is EF.
+    await writeFile(
+      join(root, "legacy.txt"),
+      Buffer.concat([
+        Buffer.from("plain\n", "latin1"),
+        Buffer.from("café\nnaïve\n", "latin1"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "legacy.txt" }),
+    );
+
+    expect(text).toContain("1→plain");
+    expect(text).toContain("2→café");
+    expect(text).toContain("3→naïve");
+    expect(text).not.toContain("�");
+    expect(text).toMatch(/not UTF-8/);
+    expect(text).toMatch(/line 2/);
+    expect(text).toMatch(/Windows-1252/);
+    expect(text).toMatch(/multi_edit/);
+  });
+
+  it("finds text that is not UTF-8 however far into the file it starts", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "long.txt"),
+      Buffer.concat([
+        Buffer.from(`${numberedLines(3_000)}\n`, "utf8"),
+        Buffer.from("café\n", "latin1"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(await tools.execute("read_file", { path: "long.txt" }));
+
+    expect(text).toMatch(/line 3,001/);
+    expect(text).toContain("1→line 1: the quick brown fox");
+  });
+
+  it.each([
+    ["little-endian", "utf16le" as const, [0xff, 0xfe]],
+    ["big-endian", "utf16be" as const, [0xfe, 0xff]],
+  ])(
+    "reads UTF-16 text (%s, with its byte-order mark) as text, and names it",
+    async (_order, encoding, mark) => {
+      const root = await workspace();
+      const little = Buffer.from("Hello\r\nWörld\r\n", "utf16le");
+      const bytes = encoding === "utf16le" ? little : little.swap16();
+      await writeFile(
+        join(root, "out.txt"),
+        Buffer.concat([Buffer.from(mark), bytes]),
+      );
+      const tools = new WorkspaceTools(root);
+
+      const text = textOf(
+        await tools.execute("read_file", { path: "out.txt" }),
+      );
+
+      expect(text).toContain("1→Hello");
+      expect(text).toContain("2→Wörld");
+      expect(text).toMatch(/UTF-16/);
+    },
+  );
+
+  it("still refuses a binary file that happens to begin like UTF-16", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "data.bin"),
+      Buffer.from([0xff, 0xfe, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("read_file", { path: "data.bin" });
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("A binary is not text");
+    expect(result.reason).toMatch(/not a text file/i);
+  });
+
   it("reads a text file that merely contains unusual characters", async () => {
     const root = await workspace();
     await writeFile(join(root, "notes.md"), "Grüße — ok\ttabbed\r\n", "utf8");

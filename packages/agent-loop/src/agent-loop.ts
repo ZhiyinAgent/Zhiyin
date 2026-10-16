@@ -17,6 +17,7 @@ import { CommandEndings } from "./tools/command-endings.js";
 import { TurnRecords } from "./turn/turn-records.js";
 import { TurnWaits } from "./turn/turn-waits.js";
 import { TurnOwnership } from "./turn/turn-ownership.js";
+import { turnWriteGuard } from "./turn/turn-write-guard.js";
 import { TurnLoop } from "./turn/turn-loop.js";
 import { ContextGuard } from "./context/context-guard.js";
 import { condenseBetweenTurns } from "./plan/request-plan.js";
@@ -47,7 +48,12 @@ export class AgentLoop {
 
   constructor(deps: AgentLoopDependencies) {
     this.#deps = deps;
-    this.#records = new TurnRecords(deps, (task) => this.#storeGuard(task));
+    this.#records = new TurnRecords(
+      deps,
+      turnWriteGuard(this.#activeTurns, (id) =>
+        this.#deps.host.find(id) ? this.#records.task(id) : undefined,
+      ),
+    );
     this.#auxiliary = new AuxiliaryWork(deps, { records: this.#records });
     this.#waits = new TurnWaits(deps, { records: this.#records });
     this.#toolCalls = new ToolCalls(deps, {
@@ -306,10 +312,13 @@ export class AgentLoop {
               this.#deps.recordDefect?.({ taskId, error });
             return undefined;
           });
-      const naming = started.shouldGenerateInitialTitle ? name() : undefined;
-      await this.#turnLoop.run(taskId, controller, ledger);
-      this.#wakeIfQueued(taskId);
-      if ((await naming) === "gaveWay") await name();
+      // The turn's work, naming beside it included, is the turn's own.
+      await this.#activeTurns.within(controller, async () => {
+        const naming = started.shouldGenerateInitialTitle ? name() : undefined;
+        await this.#turnLoop.run(taskId, controller, ledger);
+        this.#wakeIfQueued(taskId);
+        if ((await naming) === "gaveWay") await name();
+      });
     };
   }
 
@@ -336,7 +345,7 @@ export class AgentLoop {
     if (this.#activeTurns.running(taskId)) return;
 
     const controller = this.#activeTurns.start(taskId);
-    const condensing = (async () => {
+    const condensing = this.#activeTurns.within(controller, async () => {
       try {
         await this.#deps.host.enterFolderOf(taskId);
         await condenseBetweenTurns(
@@ -349,7 +358,7 @@ export class AgentLoop {
       } finally {
         this.#activeTurns.finish(taskId, controller);
       }
-    })();
+    });
     this.#condensing.set(
       taskId,
       condensing.catch(() => {}).finally(() => this.#condensing.delete(taskId)),
@@ -379,10 +388,12 @@ export class AgentLoop {
       this.#activeTurns.finish(taskId, controller);
       throw error;
     }
-    await this.#turnLoop.run(taskId, controller, ledger, {
-      initialDelegatedChildren:
-        this.#records.task(taskId).specialistRuns.length,
-    });
+    await this.#activeTurns.within(controller, () =>
+      this.#turnLoop.run(taskId, controller, ledger, {
+        initialDelegatedChildren:
+          this.#records.task(taskId).specialistRuns.length,
+      }),
+    );
     this.#wakeIfQueued(taskId);
   }
 
@@ -513,14 +524,17 @@ export class AgentLoop {
 
   async cancel(taskId: string): Promise<void> {
     this.#activeTurns.cancel(taskId);
-    try {
-      await this.#records.interrupt(taskId);
-      await this.#records.releaseGuidance(taskId);
-    } finally {
-      // Ended even when the stop could not be saved: a command left running
-      // would go on working for a turn that is over.
-      await this.#deps.capabilities.stopConversation(taskId);
-    }
+    // The stop is written on no turn's behalf, wherever it was asked from.
+    await this.#activeTurns.outside(async () => {
+      try {
+        await this.#records.interrupt(taskId);
+        await this.#records.releaseGuidance(taskId);
+      } finally {
+        // Ended even when the stop could not be saved: a command left running
+        // would go on working for a turn that is over.
+        await this.#deps.capabilities.stopConversation(taskId);
+      }
+    });
   }
 
   /** Whether a turn is running in this conversation, including a specialist
@@ -533,25 +547,6 @@ export class AgentLoop {
   /** Whether any turn is running, not counting the one named. */
   anyRunning(exceptTaskId?: string): boolean {
     return this.#activeTurns.anyRunning(exceptTaskId);
-  }
-
-  /**
-   * Captures the exact turn that authored a durable write. While nothing runs
-   * in the conversation, as after Stop, no write starts work in it: a late
-   * write from the stopped turn would put back what the stop ended.
-   */
-  #storeGuard(task: WorkspaceTask): () => boolean {
-    const before = this.#deps.host.find(task.id)
-      ? this.#records.task(task.id)
-      : undefined;
-    const starts = before !== undefined && startsWork(before, task);
-    const idle = () => starts && !this.#activeTurns.runningUnder(task.id);
-    if (idle()) return () => false;
-    if (task.phase.kind === "interrupted") return () => !idle();
-    const controller = this.#activeTurns.controller(task.id);
-    if (!controller) return () => !idle();
-    return () =>
-      this.#activeTurns.owns(task.id, controller) && !controller.signal.aborted;
   }
 
   async shutdown(): Promise<void> {
@@ -580,40 +575,6 @@ export class AgentLoop {
 }
 
 /** One request keeps 8 pictures, so one message may carry no more. */
-/** The phases a turn shows only while it runs. */
-const livePhases: ReadonlySet<WorkspaceTask["phase"]["kind"]> = new Set([
-  "working",
-  "approval",
-  "input",
-  "browser",
-]);
-
-/**
- * Whether `after` starts work `before` did not have: a phase only a running
- * turn shows, or an action or specialist that was not already running.
- */
-function startsWork(before: WorkspaceTask, after: WorkspaceTask): boolean {
-  if (
-    livePhases.has(after.phase.kind) &&
-    JSON.stringify(after.phase) !== JSON.stringify(before.phase)
-  )
-    return true;
-  const running = (items: readonly { id: string; status: string }[]) =>
-    new Set(
-      items.filter((item) => item.status === "running").map((item) => item.id),
-    );
-  const actions = running(before.actions);
-  const runs = running(before.specialistRuns);
-  return (
-    after.actions.some(
-      (action) => action.status === "running" && !actions.has(action.id),
-    ) ||
-    after.specialistRuns.some(
-      (run) => run.status === "running" && !runs.has(run.id),
-    )
-  );
-}
-
 function refuseTooManyPictures(
   attachments: readonly { readonly kind: string }[],
 ): void {

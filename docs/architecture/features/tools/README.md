@@ -109,6 +109,10 @@ for a shell again does not change it.
   `read_files` and the searches never leave the folder.
 - What a file is depends on its bytes, not its extension. `read_file` refuses
   anything that is not text, saying what it is and which tool reads it.
+- Text is read as UTF-8, or as UTF-16 where a byte-order mark says so, which
+  the read names. Text that is not UTF-8 is never shown as characters it does
+  not hold: it is shown as Windows-1252, and the read says it is not UTF-8,
+  which line first is not, and that the encoding is a guess.
 - Text is read a page at a time, each line numbered. A page stops at 2,000
   lines or about 8,000 tokens and names the next line to ask for; a line over
   2,000 characters is shortened and says so. The file is streamed, so its size

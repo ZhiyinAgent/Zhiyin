@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 type OwnedTurn = {
   readonly controller: AbortController;
   readonly parentId?: string;
@@ -6,6 +8,30 @@ type OwnedTurn = {
 /** The lifecycle tree for root turns and any work they delegate. */
 export class TurnOwnership {
   readonly #turns = new Map<string, OwnedTurn>();
+  /**
+   * The turn whose work is running, carried through every await and callback
+   * that work starts, so a write it makes is known to be its own however it
+   * was reached.
+   */
+  readonly #authors = new AsyncLocalStorage<AbortController | undefined>();
+
+  /** Runs a turn's work as that turn's: what it writes is the turn's. */
+  within<T>(controller: AbortController, work: () => T): T {
+    return this.#authors.run(controller, work);
+  }
+
+  /**
+   * Runs work on no turn's behalf, as the stop of a turn and the end a
+   * stopped specialist records are: they settle a turn rather than continue it.
+   */
+  outside<T>(work: () => T): T {
+    return this.#authors.run(undefined, work);
+  }
+
+  /** The turn whose work is running here, if any. */
+  author(): AbortController | undefined {
+    return this.#authors.getStore();
+  }
 
   start(id: string, parentId?: string): AbortController {
     if (this.#turns.has(id)) throw new Error("The turn is already running.");

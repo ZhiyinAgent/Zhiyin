@@ -10,6 +10,7 @@
 
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
+import { Readable } from "node:stream";
 import { estimatedTokens } from "@zhiyin/contract";
 
 /** The most lines one read returns when the model does not say. */
@@ -33,6 +34,40 @@ export type Page = {
   readonly cutLines: boolean;
 };
 
+/** How a page's bytes are turned into characters. */
+export type PageEncoding = "utf-8" | "utf-16le" | "utf-16be" | "windows-1252";
+
+/** Bytes a page read as UTF-8 that are not UTF-8. */
+export class NotUtf8Error extends Error {
+  constructor() {
+    super("The file is not UTF-8 text.");
+    this.name = "NotUtf8Error";
+  }
+}
+
+/**
+ * The file's characters, decoded as it goes. UTF-8 is decoded strictly, so
+ * bytes that are not UTF-8 are never shown as characters the file does not
+ * hold; a byte-order mark is not a character of the text.
+ */
+async function* characters(
+  path: string,
+  encoding: PageEncoding,
+  signal: AbortSignal | undefined,
+): AsyncGenerator<string> {
+  const decoder = new TextDecoder(encoding, { fatal: encoding === "utf-8" });
+  const decode = (chunk?: Uint8Array) => {
+    try {
+      return chunk ? decoder.decode(chunk, { stream: true }) : decoder.decode();
+    } catch {
+      throw new NotUtf8Error();
+    }
+  };
+  for await (const chunk of createReadStream(path, signal ? { signal } : {}))
+    yield decode(chunk as Buffer);
+  yield decode();
+}
+
 function cut(line: string): string {
   return line.length > lineCharacters
     ? `${line.slice(0, lineCharacters)} … ${(line.length - lineCharacters).toLocaleString("en-US")} more characters on this line`
@@ -45,12 +80,15 @@ export async function readPage(
     startLine,
     lineCount,
     signal,
+    encoding = "utf-8",
     notice = "",
     tokens = pageTokens,
   }: {
     readonly startLine: number;
     readonly lineCount: number;
     readonly signal?: AbortSignal | undefined;
+    /** UTF-8 when not said. */
+    readonly encoding?: PageEncoding;
     /** Said before the page; its size comes out of the page's. */
     readonly notice?: string | undefined;
     readonly tokens?: number | undefined;
@@ -64,10 +102,7 @@ export async function readPage(
   let total = 0;
   let cutLines = false;
   const lines = createInterface({
-    input: createReadStream(path, {
-      encoding: "utf8",
-      ...(signal ? { signal } : {}),
-    }),
+    input: Readable.from(characters(path, encoding, signal)),
     crlfDelay: Infinity,
   });
   for await (const line of lines) {

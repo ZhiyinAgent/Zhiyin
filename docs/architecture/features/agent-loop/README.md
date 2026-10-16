@@ -128,10 +128,15 @@ that name is marked the same way once it arrives.
   browser and its 3D scene, stays open with its connections (ADR 0029). The
   commands end even when the stop cannot be saved. Other conversations keep
   working.
-- Stopping gives the conversation back at once. A write begun while a turn
-  owns the conversation is committed only if that turn still owns it, so a
-  stopped turn's late answer cannot overwrite the turn that replaced it or
-  reach a deleted conversation. While nothing runs in the conversation, no
+- Stopping gives the conversation back at once. Every write is its author's:
+  the turn whose work made it, known however the write was reached. Once that
+  turn is stopped, nothing it writes lands, whoever holds the conversation by
+  then; the stop itself, and the end a stopped specialist records, are written
+  on no turn's behalf. A write begun while a turn owns the conversation is
+  committed only if that turn still owns it, so a stopped turn's late answer
+  cannot overwrite the turn that replaced it or reach a deleted conversation.
+  Work a turn left running after it finished on its own, such as naming an
+  action, still lands. While nothing runs in the conversation, no
   write starts work in it: none puts it back to working or to a question, or
   records an action or specialist as running. Nothing resumes a stopped turn: a specialist it stopped is
   reported to the next turn the person starts, after a restart too.

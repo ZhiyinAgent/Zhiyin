@@ -1,5 +1,6 @@
 /**
- * Reads one UTF-8 text file.
+ * Reads one text file: UTF-8, UTF-16 with its byte-order mark, or, for text
+ * that is not UTF-8, Windows-1252, said as such.
  *
  * A file inside the selected folder is ordinary work and runs without
  * interrupting anyone. A file outside it is a different action: the folder is
@@ -14,6 +15,7 @@
  * a read of something else.
  */
 
+import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import type {
@@ -22,9 +24,13 @@ import type {
   ToolSpec,
 } from "@zhiyin/contract";
 import { detailsOf, facts, textDetail } from "./action-detail.js";
-import { fileKind } from "./file-content.js";
+import {
+  fileKind,
+  firstLineNotUtf8,
+  type TextEncoding,
+} from "./file-content.js";
 import { keptAddress, type ConversationItems } from "./conversation-items.js";
-import { pageLines, readPage } from "./text-pages.js";
+import { NotUtf8Error, pageLines, readPage } from "./text-pages.js";
 import type { Page } from "./text-pages.js";
 import { fileDigest } from "./file-read-state.js";
 import {
@@ -195,24 +201,48 @@ async function pagedResult(
   input: ReadArguments,
   signal: AbortSignal | undefined,
   {
-    notice,
+    notice = "",
     size,
     onPage,
     tokens,
+    encoding = "utf-8",
   }: {
     readonly notice?: string;
     readonly size?: number;
     readonly onPage?: (page: Page) => Promise<void>;
     readonly tokens?: number | undefined;
+    readonly encoding?: TextEncoding;
   } = {},
 ): Promise<ToolInvocationResult> {
   const start = input.startLine ?? 1;
-  const page = await readPage(path, {
-    startLine: start,
-    lineCount: input.lineCount ?? pageLines,
-    signal,
-    notice,
-    tokens,
+  const read = (
+    encoding: TextEncoding | "windows-1252",
+    said: string,
+  ): Promise<Page> =>
+    readPage(path, {
+      startLine: start,
+      lineCount: input.lineCount ?? pageLines,
+      signal,
+      encoding,
+      notice: `${notice}${said}`,
+      tokens,
+    });
+  const page = await read(
+    encoding,
+    encoding === "utf-8"
+      ? ""
+      : `${target} is UTF-16 text; multi_edit changes only UTF-8 files.\n`,
+  ).catch(async (error: unknown) => {
+    if (!(error instanceof NotUtf8Error)) throw error;
+    // Most text on Windows that is not UTF-8 is Windows-1252: shown as that,
+    // and said to be a guess, rather than as characters the file does not hold.
+    const line = await firstLineNotUtf8(
+      createReadStream(path, signal ? { signal } : {}),
+    );
+    return read(
+      "windows-1252",
+      `${target} is not UTF-8: line ${(line ?? 1).toLocaleString("en-US")} is the first that is not. It is shown as Windows-1252, which may not be its encoding, and multi_edit changes only UTF-8 files.\n`,
+    );
   });
   if (start > 1 && start > page.totalLines)
     return {
@@ -323,6 +353,7 @@ export async function runReadTextFile(
         : undefined;
     return pagedResult(inspected.target, realTarget, input, signal, {
       notice: await changedNotice(realTarget, file, context),
+      ...(kind.encoding ? { encoding: kind.encoding } : {}),
       size: file.size,
       tokens: context.tokens,
       onPage: async (page) => {
