@@ -838,8 +838,8 @@ async function compilingApp(root: string) {
   const compiler = documentCompiler({
     workspaceRoot: () => root,
     programs: async () => ({ typst: "C:/programs/typst.exe" }),
-    run: async () => {
-      await writeFile(join(root, "paper.pdf"), "%PDF-1.7\nrecompiled\n");
+    run: async ({ arguments: args }) => {
+      await writeFile(args.at(-1)!, "%PDF-1.7\nrecompiled\n");
       return { exitCode: 0, stdout: "", stderr: "" };
     },
   });

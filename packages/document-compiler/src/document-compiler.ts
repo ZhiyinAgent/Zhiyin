@@ -1,4 +1,4 @@
-import { realpath, stat } from "node:fs/promises";
+import { mkdtemp, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -186,12 +186,14 @@ function writtenRequest(
   };
 }
 
-function argumentsFor(request: Request): readonly string[] {
+/** The command that writes the PDF at `into`, which is named as the output is. */
+function argumentsFor(request: Request, into: string): readonly string[] {
   const root = request.root;
   // Typst is told the project root, so a document can only read from the
-  // workspace. Tectonic is run untrusted, which disables shell escape.
+  // workspace. Tectonic is run untrusted, which disables shell escape, and
+  // names its PDF after the source, as the output is named.
   return request.engine === "typst"
-    ? ["compile", "--root", root, request.source, request.output]
+    ? ["compile", "--root", root, request.source, into]
     : [
         "--untrusted",
         "--chatter",
@@ -199,9 +201,29 @@ function argumentsFor(request: Request): readonly string[] {
         "--outfmt",
         "pdf",
         "--outdir",
-        request.output.slice(0, request.output.lastIndexOf(sep)) || root,
+        dirname(into),
         request.source,
       ];
+}
+
+/**
+ * The folder beside the output a compilation writes into, so the PDF is
+ * moved over the one in the workspace only once it is complete.
+ */
+const stagingPrefix = ".zhiyin-compiling-";
+/** A staging folder this old was left by a run that never finished. */
+const abandonedAfterMs = 60 * 60_000;
+
+/** Removes staging folders that runs which never finished left in `folder`. */
+async function clearAbandoned(folder: string): Promise<void> {
+  const entries = await readdir(folder).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.startsWith(stagingPrefix)) continue;
+    const path = join(folder, entry);
+    const status = await stat(path).catch(() => undefined);
+    if (status?.isDirectory() && Date.now() - status.mtimeMs > abandonedAfterMs)
+      await rm(path, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 /** A time limit as a person reads it: "3 minutes", "45 seconds". */
@@ -350,66 +372,87 @@ export function documentCompiler(
             : "Tectonic is not installed.",
           true,
         );
-      const before = await stat(request.output).catch(() => undefined);
-      const existed = before !== undefined;
-      const { exitCode, stdout, stderr, ending } = await run({
-        executable,
-        arguments: argumentsFor(request),
-        cwd: request.root,
-        timeoutMs,
-        ...(signal ? { signal } : {}),
-        ...(options.containment ? { containment: options.containment } : {}),
-      });
-      const output = `${stdout}\n${stderr}`;
-      const diagnostics = diagnosticsFrom(output, request.root);
-      if (exitCode !== 0)
+      const existed = await stat(request.output).then(
+        () => true,
+        () => false,
+      );
+      // Written aside and moved over the PDF once complete: what the
+      // compiler wrote is exactly what is found there, and a compilation
+      // that fails leaves the PDF from before as it was.
+      const folder = dirname(request.output);
+      await clearAbandoned(folder);
+      let staging: string;
+      try {
+        staging = await mkdtemp(join(folder, stagingPrefix));
+      } catch (error) {
         return textResult(
+          `Zhiyin could not prepare to write ${request.relativeOutput}: ${error instanceof Error ? error.message : String(error)}`,
+          true,
+        );
+      }
+      try {
+        const staged = join(staging, basename(request.output));
+        const { exitCode, stdout, stderr, ending } = await run({
+          executable,
+          arguments: argumentsFor(request, staged),
+          cwd: request.root,
+          timeoutMs,
+          ...(signal ? { signal } : {}),
+          ...(options.containment ? { containment: options.containment } : {}),
+        });
+        const output = `${stdout}\n${stderr}`;
+        const diagnostics = diagnosticsFrom(output, request.root);
+        if (exitCode !== 0)
+          return textResult(
+            shortened(
+              [
+                ending === "timeout"
+                  ? `The compiler took longer than ${duration(timeoutMs)}, the most one compilation may take, so it was stopped.`
+                  : ending === "stopped"
+                    ? "The compilation was stopped before it finished."
+                    : ending === "outputLimit"
+                      ? "The compiler printed more than Zhiyin keeps, so it was stopped."
+                      : exitCode === null
+                        ? "The compiler did not finish."
+                        : `The compiler reported errors (exit code ${exitCode}).`,
+                ...(diagnostics.length ? diagnostics : [output]),
+              ].join("\n"),
+            ),
+            true,
+          );
+        const written = await stat(staged).catch(() => undefined);
+        if (!written?.isFile())
+          return textResult(
+            `The compiler reported success but wrote no ${request.relativeOutput}.`,
+            true,
+          );
+        try {
+          await rename(staged, request.output);
+        } catch {
+          return textResult(
+            `The compiler wrote ${request.relativeOutput}, but the one in the workspace could not be replaced. Another program, such as a PDF viewer, may have it open: close it, then compile again.`,
+            true,
+          );
+        }
+        const result = textResult(
           shortened(
             [
-              ending === "timeout"
-                ? `The compiler took longer than ${duration(timeoutMs)}, the most one compilation may take, so it was stopped.`
-                : ending === "stopped"
-                  ? "The compilation was stopped before it finished."
-                  : ending === "outputLimit"
-                    ? "The compiler printed more than Zhiyin keeps, so it was stopped."
-                    : exitCode === null
-                      ? "The compiler did not finish."
-                      : `The compiler reported errors (exit code ${exitCode}).`,
-              ...(diagnostics.length ? diagnostics : [output]),
+              `Wrote ${request.relativeOutput} (${Math.max(1, Math.round(written.size / 1024))} KB).`,
+              ...diagnostics,
             ].join("\n"),
           ),
-          true,
         );
-      const found = await stat(request.output).catch(() => undefined);
-      // A PDF left from before is not one this run wrote.
-      const written =
-        found &&
-        !(
-          before &&
-          found.mtimeMs === before.mtimeMs &&
-          found.size === before.size
-        )
-          ? found
-          : undefined;
-      if (!written)
-        return textResult(
-          `The compiler reported success but wrote no ${request.relativeOutput}.`,
-          true,
+        wrote.set(result, {
+          path: request.relativeOutput.split(sep).join("/"),
+          change: existed ? "updated" : "created",
+          bytes: written.size,
+        });
+        return result;
+      } finally {
+        await rm(staging, { recursive: true, force: true }).catch(
+          () => undefined,
         );
-      const result = textResult(
-        shortened(
-          [
-            `Wrote ${request.relativeOutput} (${Math.max(1, Math.round(written.size / 1024))} KB).`,
-            ...diagnostics,
-          ].join("\n"),
-        ),
-      );
-      wrote.set(result, {
-        path: request.relativeOutput.split(sep).join("/"),
-        change: existed ? "updated" : "created",
-        bytes: written.size,
-      });
-      return result;
+      }
     },
     produced(_name, _args, value) {
       const file =

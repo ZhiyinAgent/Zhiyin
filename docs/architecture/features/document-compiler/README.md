@@ -51,9 +51,14 @@ land, and can turn a compiler's output into errors a model can act on.
 - A failure reports the compiler's own diagnostics, not a bare exit code: each
   error or warning with its file, line and column relative to the workspace,
   the marked source line, and any hint.
-- Success means this compile wrote the PDF. A compiler that reports success
-  but wrote nothing is reported as a failure, and so is one that left a PDF
-  from before as it was.
+- Success means this compile wrote the PDF. The compiler writes it beside
+  the output, under the same name in a folder of its own, and it is moved
+  over the output only once the compile has succeeded: a compiler that
+  reports success but wrote nothing is reported as a failure, however
+  quickly one compile follows another, and a compile that fails leaves the
+  PDF from before as it was. When the output cannot be replaced, as when
+  another program holds it open, the answer says so. A folder left by a
+  compile that never finished is removed by a later one an hour on.
 - A compile that ends early says why: it took longer than its time limit,
   which it names, it was stopped, or it printed more than is kept.
 - The PDF is declared as a change before the compile runs, as created or

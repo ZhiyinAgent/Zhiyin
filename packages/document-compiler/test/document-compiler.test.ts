@@ -1,5 +1,13 @@
-import { mkdir, realpath, symlink, utimes, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
@@ -16,12 +24,29 @@ const folders = new TemporaryFolders();
 
 afterEach(() => folders.removeAll());
 
+/** What a compiler writes, nine bytes of it. */
+const pdf = "%PDF-1.7\n";
+
 const installed: CompilerPrograms = {
   typst: "C:/programs/typst.exe",
   tectonic: "C:/programs/tectonic.exe",
 };
 
 type Call = { executable: string; arguments: readonly string[]; cwd: string };
+
+/**
+ * Where a compiler writes its PDF: Typst at its last argument, Tectonic in
+ * its output folder, named after the source.
+ */
+function pdfNamedBy(args: readonly string[]): string {
+  const outdir = args.indexOf("--outdir");
+  if (outdir < 0) return args.at(-1)!;
+  const source = basename(args.at(-1)!);
+  return join(
+    args[outdir + 1]!,
+    `${source.slice(0, source.lastIndexOf("."))}.pdf`,
+  );
+}
 
 function compilerWriting(
   root: string,
@@ -33,16 +58,24 @@ function compilerWriting(
       stderr?: string;
       ending?: "timeout" | "stopped" | "outputLimit";
     };
-    /** Written when the run "succeeds", the way a compiler writes its PDF. */
+    /**
+     * The PDF the run writes where its command says, the way a compiler
+     * does: these bytes when it succeeds, and also when it fails partway
+     * with `writesOnFailure`.
+     */
     readonly writes?: string;
+    readonly writesOnFailure?: boolean;
   } = {},
 ) {
   const calls: Call[] = [];
   const run: RunProgram = async ({ executable, arguments: args, cwd }) => {
     calls.push({ executable, arguments: args, cwd });
     const result = options.result ?? { exitCode: 0 };
-    if (result.exitCode === 0 && options.writes)
-      await writeFile(join(root, options.writes), "%PDF-1.7\n", "utf8");
+    if (
+      options.writes !== undefined &&
+      (result.exitCode === 0 || options.writesOnFailure)
+    )
+      await writeFile(pdfNamedBy(args), options.writes, "utf8");
     return {
       exitCode: result.exitCode,
       stdout: result.stdout ?? "",
@@ -64,7 +97,7 @@ describe("compiling a document", () => {
   it("compiles Typst inside the workspace and reports the file it wrote", async () => {
     const root = await workspace();
     await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
-    const { compiler, calls } = compilerWriting(root, { writes: "paper.pdf" });
+    const { compiler, calls } = compilerWriting(root, { writes: pdf });
 
     const result = await compiler.callTool("compile_document", {
       path: "paper.typ",
@@ -78,11 +111,17 @@ describe("compiling a document", () => {
           "--root",
           root,
           join(root, "paper.typ"),
-          join(root, "paper.pdf"),
+          expect.any(String),
         ],
         cwd: root,
       },
     ]);
+    // Written beside it under the same name, and moved over it once whole.
+    const into = calls[0]!.arguments.at(-1)!;
+    expect(basename(into)).toBe("paper.pdf");
+    expect(dirname(dirname(into))).toBe(root);
+    expect(await readFile(join(root, "paper.pdf"), "utf8")).toBe(pdf);
+    expect(await readdir(root)).toEqual(["paper.pdf", "paper.typ"]);
     expect(result).toMatchObject({
       content: [
         { type: "text", text: expect.stringContaining("Wrote paper.pdf") },
@@ -100,7 +139,7 @@ describe("compiling a document", () => {
       "utf8",
     );
     const { compiler, calls } = compilerWriting(root, {
-      writes: join("out", "paper.pdf"),
+      writes: pdf,
     });
 
     await compiler.callTool("compile_document", {
@@ -110,7 +149,75 @@ describe("compiling a document", () => {
 
     expect(calls[0]?.executable).toBe("C:/programs/tectonic.exe");
     expect(calls[0]?.arguments).toContain("--untrusted");
-    expect(calls[0]?.arguments).toContain(join(root, "out"));
+    expect(await readFile(join(root, "out", "paper.pdf"), "utf8")).toBe(pdf);
+    expect(await readdir(join(root, "out"))).toEqual(["paper.pdf"]);
+  });
+
+  it("keeps the PDF from before as it was when a compilation fails partway", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await writeFile(join(root, "paper.pdf"), "%PDF-1.7 earlier\n", "utf8");
+    const { compiler } = compilerWriting(root, {
+      writes: "%PDF-1.7 half",
+      writesOnFailure: true,
+      result: { exitCode: 1, stderr: "error: unknown variable" },
+    });
+
+    const failed = await compiler.callTool("compile_document", {
+      path: "paper.typ",
+    });
+
+    expect(failed).toMatchObject({ isError: true });
+    expect(await readFile(join(root, "paper.pdf"), "utf8")).toBe(
+      "%PDF-1.7 earlier\n",
+    );
+    expect(await readdir(root)).toEqual(["paper.pdf", "paper.typ"]);
+  });
+
+  it("says so when the PDF in the workspace cannot be replaced, and leaves nothing beside it", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    // Nothing can be moved over it, as over a PDF another program holds.
+    await mkdir(join(root, "paper.pdf"));
+    await writeFile(join(root, "paper.pdf", "inside.txt"), "kept\n", "utf8");
+    const { compiler } = compilerWriting(root, { writes: pdf });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.typ",
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          text: expect.stringContaining(
+            "could not be replaced. Another program, such as a PDF viewer, may have it open",
+          ),
+        },
+      ],
+    });
+    expect(await readdir(root)).toEqual(["paper.pdf", "paper.typ"]);
+  });
+
+  it("clears what a compilation that never finished left beside the PDF, an hour on", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    const left = join(root, ".zhiyin-compiling-old");
+    const recent = join(root, ".zhiyin-compiling-recent");
+    await mkdir(left);
+    await mkdir(recent);
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await utimes(left, twoHoursAgo, twoHoursAgo);
+    const { compiler } = compilerWriting(root, { writes: pdf });
+
+    await compiler.callTool("compile_document", { path: "paper.typ" });
+
+    // One a compilation still running may be using is left alone.
+    expect(await readdir(root)).toEqual([
+      ".zhiyin-compiling-recent",
+      "paper.pdf",
+      "paper.typ",
+    ]);
   });
 
   it("reports the compiler's own errors rather than a bare exit code", async () => {
@@ -225,7 +332,7 @@ describe("compiling a document", () => {
   it("declares the PDF it wrote as produced: created the first time, updated after", async () => {
     const root = await workspace();
     await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
-    const { compiler } = compilerWriting(root, { writes: "paper.pdf" });
+    const { compiler } = compilerWriting(root, { writes: pdf });
 
     const first = await compiler.callTool("compile_document", {
       path: "paper.typ",
