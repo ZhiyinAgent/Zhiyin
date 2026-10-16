@@ -334,6 +334,29 @@ describe("AgentLoop renewable work budget", () => {
     });
   });
 
+  it("keeps a pause report whose model also asked for a tool, however long its save takes", async () => {
+    const { loop, pause } = await pausedByCost({ savesSlowly: true });
+
+    await pause();
+
+    expect(loop.snapshot().tasks[0]?.phase).toMatchObject({
+      kind: "completed",
+      outcome: { title: "Work paused", summary: "The inventory is half done." },
+    });
+  });
+
+  it("ends the turn as failed when its pause report cannot be saved", async () => {
+    const { loop, pause } = await pausedByCost({
+      refusesSave: (task) =>
+        task.phase.kind === "completed" &&
+        task.phase.outcome.title === "Work paused",
+    });
+
+    await expect(pause()).resolves.toBeUndefined();
+
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("failed");
+  });
+
   it("reports a pause in the words that followed it, without what was said before", async () => {
     const execute = vi.fn(async () => ({ ok: true as const, value: "seen" }));
     const base = stubDependencies(() => {});
@@ -473,3 +496,69 @@ describe("AgentLoop renewable work budget", () => {
     expect(resumed).not.toContain("OLD-FIRST-MARKER");
   });
 });
+
+/**
+ * A turn past its cost limit at its first request, which the person pauses.
+ * The model's report says where things stand and asks for a tool anyway.
+ */
+async function pausedByCost(
+  options: Pick<LoopTestDependencies, "savesSlowly" | "refusesSave">,
+) {
+  const base = stubDependencies(() => {});
+  let request = 0;
+  const loop = loopFrom({
+    ...base,
+    ...options,
+    workLimits: { maximumElapsedMs: 60_000, maximumProviderCostUsd: 0.1 },
+    tools: workTool(async () => ({ ok: true as const, value: "seen" })),
+    permissions: {
+      decide: async () => ({ outcome: "allow" as const, reason: "Read" }),
+    },
+    model: {
+      ...base.model,
+      send: async function* () {
+        request += 1;
+        if (request === 1)
+          yield {
+            kind: "usage" as const,
+            usage: {
+              requestId: "request-1",
+              model: "test",
+              inputTokens: 90,
+              outputTokens: 30,
+              totalTokens: 120,
+              costUsd: 0.12,
+            },
+          };
+        else
+          yield {
+            kind: "textDelta" as const,
+            text: "The inventory is half done.",
+          };
+        yield {
+          kind: "toolCallDelta" as const,
+          index: 0,
+          callId: `call-${request}`,
+          name: "inspect_progress",
+          argumentsDelta: "{}",
+        };
+        yield { kind: "done" as const };
+      },
+    },
+    newUserInputId: () => "limit-1",
+  });
+  const taskId = await loop.createTask();
+  const running = loop.start(taskId, "Inspect everything");
+  await until(() => loop.snapshot().tasks[0]?.phase.kind === "input");
+  return {
+    loop,
+    taskId,
+    /** Answers the limit's question with a pause, then waits for the turn. */
+    async pause(): Promise<void> {
+      await loop.resolveUserInput(taskId, "limit-1", {
+        answers: [{ questionId: "work-budget", answerIds: ["pause"] }],
+      });
+      await running;
+    },
+  };
+}

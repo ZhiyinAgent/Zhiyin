@@ -296,7 +296,9 @@ that name is marked the same way once it arrives.
   limited, because every request is counted whole. Continue starts the time and cost again and
   doubles the rounds; Pause runs nothing more and asks for one tool-free
   progress report, which alone is the turn's answer, without what was said
-  before the pause.
+  before the pause. The report is saved before the turn lets go of the
+  conversation, whatever else the model asked for, and one that cannot be
+  saved ends the turn as failed.
 - The plan holds at most eight items, an update is corrected rather than
   refused, and each turn the person starts begins with an empty plan. A turn
   about to finish with items open is reminded of them once. After four rounds

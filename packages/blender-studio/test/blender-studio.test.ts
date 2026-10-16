@@ -891,6 +891,27 @@ describe("a conversation's session", () => {
     expect(ops[ops.lastIndexOf("add") - 1]).toBe("open");
   });
 
+  it("starts a conversation's Blender again from its scene file on the next command once it was closed", async () => {
+    const { tools, blender, scenes } = await setUp((request) => ({
+      ok: true,
+      text: `did ${request.op}`,
+    }));
+    await call(tools(), "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+
+    await scenes.close("first");
+    const after = await call(tools(), "blender_add_objects", {
+      objects: [can],
+    });
+
+    expect(after.isError).toBeUndefined();
+    expect(blender.launches).toHaveLength(2);
+    const ops = blender.ops();
+    expect(ops[ops.lastIndexOf("add") - 1]).toBe("open");
+  });
+
   it("answers a change before drawing its preview, so a preview that hangs takes nothing back", async () => {
     const { tools, scenes } = await setUp(
       (request) =>
@@ -945,9 +966,12 @@ describe("a conversation's session", () => {
   });
 
   it("says a render stopped while writing may have left an incomplete file", async () => {
+    const controller = new AbortController();
     const { tools } = await setUp(async (request) => {
       if (request.op === "render") {
         await writeFile(String(request.args["output"]), "half a picture");
+        // Stopped once part of the picture is on disk.
+        controller.abort();
         return "silent";
       }
       return { ok: true, text: `did ${request.op}` };
@@ -957,8 +981,6 @@ describe("a conversation's session", () => {
       create: true,
     });
 
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
     const stopped = await call(
       tools(),
       "blender_render",

@@ -211,11 +211,13 @@ export class TurnLoop {
 
         await this.#keepRound(taskId, answered, incomplete);
         if (text.trim()) turn.said.push(text);
-        if (turn.reportOnly && calls.length > 0)
-          return this.#records.finishPausedReport(
+        if (turn.reportOnly && calls.length > 0) {
+          await this.#records.finishPausedReport(
             taskId,
             turn.said.join("\n\n"),
           );
+          return;
+        }
         if (calls.length === 0) {
           const ending = await this.#afterLastWords(turn, answered, incomplete);
           if (ending === "ended") return;

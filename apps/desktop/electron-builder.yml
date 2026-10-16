@@ -45,11 +45,14 @@ extraResources:
 # It also runs
 # only its own code: the app is loaded from its archive alone, and the archive
 # is checked against the hash built into the executable, so code put in the
-# install folder in its place does not run under Zhiyin's name.
+# install folder in its place does not run under Zhiyin's name. Its window is
+# served from an address of its own, never from file:, so a page loaded from
+# file: is given nothing beyond what a browser gives one.
 electronFuses:
   runAsNode: false
   enableNodeCliInspectArguments: false
   enableNodeOptionsEnvironmentVariable: false
+  grantFileProtocolExtraPrivileges: false
   onlyLoadAppFromAsar: true
   enableEmbeddedAsarIntegrityValidation: true
 win:

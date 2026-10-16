@@ -82,10 +82,12 @@ activating it.
   (`runningCommands`, `commandOutput`, `stopCommandForPerson`,
   `onCommandEnded`, `onCommandsChanged`, `onJobChanges`) pass through to the
   tools member, for the core and the agent loop (ADR 0007).
-- `stopConversation`, `forgetConversation` and `shutdown` are the one place a
-  conversation's browser, Blender, connections and running commands are let
-  go of. A stop ends only the running commands and jobs; the rest stays open
-  for the next turn (ADR 0029).
+- `stopConversation`, `restConversation`, `forgetConversation` and
+  `shutdown` are the one place a conversation's browser, Blender, connections
+  and running commands are let go of. A stop ends only the running commands
+  and jobs; the rest stays open for the next turn (ADR 0029). A rest, for a
+  conversation left alone, closes only its browser and Blender, which open
+  again on their next use.
 - `declaredConnectionsOf(plugins)` turns package declarations into what the
   MCP feature connects, with each connector's request rate and read-only
   tools. The composition root wires it, because the MCP feature is

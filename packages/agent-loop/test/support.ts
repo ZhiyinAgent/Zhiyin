@@ -62,6 +62,11 @@ export class TestHost implements TurnHost {
    * Off, a write lands at once, and two writers can never overlap.
    */
   savesSlowly = false;
+  /**
+   * A save the disk refuses, as the core's does: the write still shows, and
+   * the save throws.
+   */
+  refusesSave: ((task: WorkspaceTask) => boolean) | undefined;
   /** What the turn asked the app around it to do, in order. */
   readonly enteredFolders: string[] = [];
   readonly watchedBrowsers: string[] = [];
@@ -184,6 +189,7 @@ export class TestHost implements TurnHost {
     // As the app does: a write whose author lost the conversation while it
     // was being saved is dropped.
     if (!options.commit()) return;
+    const refused = options.persist && this.refusesSave?.(task) === true;
     const updated = {
       ...settledWhenTurnEnded(task),
       updatedAt: this.#now().toISOString(),
@@ -195,6 +201,7 @@ export class TestHost implements TurnHost {
     const current = this.find(task.id);
     if (current && options.announce())
       this.#emit({ kind: "taskChanged", data: current });
+    if (refused) throw new Error("The disk is full.");
   }
 
   historyAvailable(): boolean {
@@ -324,6 +331,8 @@ export type LoopTestDependencies = TurnStubs & {
   readonly defaultContextBudget?: ContextBudgetChoice;
   /** See `TestHost.savesSlowly`. */
   readonly savesSlowly?: boolean;
+  /** See `TestHost.refusesSave`. */
+  readonly refusesSave?: (task: WorkspaceTask) => boolean;
 };
 
 /** A message's words as the model reads them, pictures left out. */
@@ -416,6 +425,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     modelWindow,
     defaultContextBudget,
     savesSlowly,
+    refusesSave,
     ...rest
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
@@ -424,6 +434,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   if (modelWindow) host.window = modelWindow;
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   host.savesSlowly = savesSlowly === true;
+  host.refusesSave = refusesSave;
   const capabilities = new ComposedCapabilities({
     tools,
     mcp,

@@ -4,8 +4,17 @@
  * and its page cannot be pointed somewhere else.
  */
 import { execFileSync } from "node:child_process";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { closeEverything, launch } from "./launch.js";
+import { closeEverything, launch, temporaryDataDirectory } from "./launch.js";
+
+/** A one-pixel PNG. */
+const pixel = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 afterEach(closeEverything);
 
@@ -99,6 +108,47 @@ describe("the running app's window", () => {
     expect(outcome.refused).toEqual(
       expect.arrayContaining(["inline", "https://example.com/planted.js"]),
     );
+  });
+
+  it("loads its own files, and no picture from this computer or a network share", async () => {
+    const folder = await temporaryDataDirectory();
+    const picture = join(folder, "picture.png");
+    await writeFile(picture, pixel);
+    const onThisComputer = pathToFileURL(picture).toString();
+    // The same file through this computer's administrative share, named as a
+    // picture on another computer's share is: a host other than localhost
+    // makes the address a network path.
+    const onAShare = `file://127.0.0.1/${picture.replace(/^([A-Za-z]):/, "$1$").replaceAll("\\", "/")}`;
+    const { window } = await launch();
+
+    const outcome = await window.evaluate(
+      async ([local, share]) => {
+        const shown = (address: string) =>
+          new Promise<string>((resolve) => {
+            const image = document.createElement("img");
+            image.onload = () => resolve("loaded");
+            image.onerror = () => resolve("refused");
+            image.src = address;
+            document.body.append(image);
+          });
+        const script = document.querySelector<HTMLScriptElement>(
+          'script[type="module"]',
+        );
+        const own = script ? (await fetch(script.src)).ok : false;
+        return {
+          own,
+          local: await shown(local!),
+          share: await shown(share!),
+        };
+      },
+      [onThisComputer, onAShare],
+    );
+
+    expect(outcome).toEqual({
+      own: true,
+      local: "refused",
+      share: "refused",
+    });
   });
 
   it("stays on its own page when told to go to another", async () => {

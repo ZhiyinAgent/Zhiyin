@@ -38,6 +38,8 @@ const mustBeOff = {
     "attaching a debugger with --inspect",
   [FuseV1Options.EnableNodeOptionsEnvironmentVariable]:
     "loading code named by NODE_OPTIONS",
+  [FuseV1Options.GrantFileProtocolExtraPrivileges]:
+    "giving a page loaded from file: more than a browser gives it",
 };
 const mustBeOn = {
   [FuseV1Options.OnlyLoadAppFromAsar]: "loading the app from its archive only",

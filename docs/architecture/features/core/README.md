@@ -166,6 +166,11 @@ answers every other command:
   have arrived. A damaged one is reported and stays closed while every other
   opens; selecting it shows its report in its place. One whose last save was
   cut off by a crash opens without it, and the person is told.
+- **A conversation left alone lets go of its browser and Blender.** Fifteen
+  minutes after anything last changed in a conversation, or after the person
+  left it for another, its browser and Blender close. The conversation on
+  screen and one whose turn runs are never left alone. The conversation keeps
+  everything else, and both open again on their next use.
 - **Quitting always finishes.** Turns, then browsers, Blender and connections, are
   given until one deadline five seconds after quitting starts. Whatever has not
   closed is named and left. The data folder is given up either way, once the

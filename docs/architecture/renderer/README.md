@@ -315,7 +315,10 @@ described in the [component library](../../component-library.md).
 
 - The window runs sandboxed with no Node and cannot navigate, open another
   window, change the base its links resolve against, run a script but its
-  own, or be granted any permission a page can ask for. Besides its own assets, it draws pictures
+  own, or be granted any permission a page can ask for. The installed window
+  is served from an address of its own, which holds its built files and
+  nothing else, so a file elsewhere on the computer or on a network share is
+  not its own and does not load. Besides its own assets, it draws pictures
   only from `data:` addresses Zhiyin built from what it read itself; web and
   document pages reach it that way too.
 - Each folder under `ui` is a module used only through its `index.ts`. Of the

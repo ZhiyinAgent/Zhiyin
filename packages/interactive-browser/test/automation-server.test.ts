@@ -236,6 +236,32 @@ describe("browser automation", () => {
     expect(browser.open).toHaveBeenCalledOnce();
   });
 
+  it("opens the browser again on the next tool once it was closed", async () => {
+    const server = fakeAutomationServer();
+    const closedListeners: ((state: BrowserSessionState) => void)[] = [];
+    const browser = Object.assign(fakeBrowser(), {
+      onState: (listener: (state: BrowserSessionState) => void) => {
+        closedListeners.push(listener);
+        return () => {};
+      },
+    });
+    const automation = browserAutomation(browser, {
+      createConnection: server.createConnection,
+    });
+    await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+
+    for (const listener of closedListeners)
+      listener({ status: "closed", url: "", title: "", loading: false });
+    const again = await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+
+    expect(again).not.toMatchObject({ isError: true });
+    expect(browser.open).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses a tool with the reason the browser gave, rather than acting", async () => {
     const server = fakeAutomationServer();
     const browser = fakeBrowser(null);

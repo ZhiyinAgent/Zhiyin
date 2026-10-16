@@ -75,6 +75,8 @@ crash interrupted, and takes the backup around each file change. It is a group
   file is left as it is and reported as a conflict. An undo goes through the
   same journal as a rewind. A file that could be put back but was not, as when
   another program held it, leaves the actions that changed it to undo again.
+  An undo a restart finishes is recorded from what its restore found, as one
+  finished at once is, so such a file can still be undone after the restart.
 - What a turn did to a file is read from the turn's own recorded changes, in
   the conversation's folder.
 - A file change is backed up before approval. When there is no folder, or the

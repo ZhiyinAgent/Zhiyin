@@ -66,8 +66,8 @@ export type CapabilityMembers = {
   readonly connectionToolchains: ConnectionToolchains;
   /**
    * The browsers conversations drive. This group never opens one — it reaches
-   * them only to let go of what a conversation holds, so stopping, deleting and
-   * shutting down each have one place to ask.
+   * them only to let go of what a conversation holds, so stopping, leaving a
+   * conversation alone, deleting and shutting down each have one place to ask.
    */
   readonly browsers: ConversationBrowsers;
   /** Each conversation's Blender, let go of the same way as its browser. */
@@ -157,6 +157,12 @@ export interface Capabilities {
    * show, so the next turn carries on from them.
    */
   stopConversation(conversationId: string): Promise<void>;
+  /**
+   * Closes the browser and Blender of a conversation left alone, which hold
+   * the most memory. The conversation keeps everything else, and both open
+   * again on their next use.
+   */
+  restConversation(conversationId: string): Promise<void>;
   /**
    * Lets go of everything a conversation held, for one that is gone. Nothing is
    * kept for it, because nothing will ask for it again.
@@ -549,6 +555,14 @@ export class ComposedCapabilities implements Capabilities {
 
   async stopConversation(conversationId: string): Promise<void> {
     await this.#members.tools.stopCommands?.(conversationId);
+  }
+
+  async restConversation(conversationId: string): Promise<void> {
+    const { browsers, scenes } = this.#members;
+    await Promise.all([
+      browsers.close(conversationId),
+      scenes?.close(conversationId),
+    ]);
   }
 
   async forgetConversation(conversationId: string): Promise<void> {

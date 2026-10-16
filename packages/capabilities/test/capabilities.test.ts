@@ -1198,6 +1198,27 @@ describe("a call handed back", () => {
     ]);
   });
 
+  it("closes a conversation left alone's browser and Blender, and keeps everything else it holds", async () => {
+    const { capabilities, asked } = membersRecording({
+      overrides: {
+        scenes: {
+          close: async (...args: unknown[]) => {
+            asked.push(["scenes.close", ...args]);
+          },
+          forget: async () => {},
+          closeAll: async () => {},
+        },
+      },
+    });
+
+    await capabilities.restConversation("conversation-1");
+
+    expect(asked).toEqual([
+      ["browsers.close", "conversation-1"],
+      ["scenes.close", "conversation-1"],
+    ]);
+  });
+
   it("closes every browser and every connection at shutdown", async () => {
     const { capabilities, asked } = membersRecording();
 

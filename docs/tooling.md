@@ -206,7 +206,8 @@ theme check, knip, `pnpm audit`, Prettier, the typecheck, the test suite, the
 build and the installed-app suite, which is not run when the build failed:
 there would be no app to start. `-Full` adds packaging; a check that the
 packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE` and
-`--inspect` (ADR 0001), load the app only from its archive and check the
+`--inspect` (ADR 0001), give a page loaded from `file:` nothing beyond what a
+browser gives one, load the app only from its archive and check the
 archive against the hash in the executable; the packaged executable itself,
 started on a saved conversation and read from outside through UI Automation
 (`ZHIYIN_PACKAGED_APP` names it), which must show that conversation and must

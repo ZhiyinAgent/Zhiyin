@@ -13,12 +13,14 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  net,
+  protocol,
   screen,
   session,
   Notification,
   shell,
 } from "electron";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { COMMAND_CHANNELS } from "@zhiyin/contract";
@@ -35,6 +37,7 @@ import { fromOwnWindow } from "./ipc-policy.js";
 import { appUserModelId, developmentAppDetails } from "./app-identity.js";
 import { iconCandidates } from "./icon.js";
 import { titleBarOverlay } from "./title-bar.js";
+import { appFileOf, appPage, appScheme } from "./app-files.js";
 import { electronSpellchecker, showTextMenus } from "./electron-spelling.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -76,6 +79,16 @@ if (refusal) {
  * roles on, and the app's own shortcuts are held by the window.
  */
 Menu.setApplicationMenu(null);
+
+// The window's own address, said before the app is ready as Electron asks. A
+// standard, secure scheme gives the page an origin of its own, so its security
+// policy's 'self' names its own files and not every file on the computer.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: appScheme,
+    privileges: { standard: true, secure: true, supportFetchAPI: true },
+  },
+]);
 
 app.setAppUserModelId(appUserModelId(app.isPackaged));
 
@@ -172,9 +185,7 @@ function createWindow(): BrowserWindow {
       if (query) url.search = new URLSearchParams(query).toString();
       void window.loadURL(url.toString());
     } else {
-      void window.loadFile(join(here, "../renderer/index.html"), {
-        ...(query ? { query } : {}),
-      });
+      void window.loadURL(appPage(query));
     }
   };
   watchForCrashes(
@@ -229,6 +240,13 @@ void app.whenReady().then(async () => {
       testing.dictionaryServer,
     );
   const spellchecker = electronSpellchecker(session.defaultSession);
+  const renderer = join(here, "../renderer");
+  protocol.handle(appScheme, (request) => {
+    const file = appFileOf(renderer, request.url);
+    return file
+      ? net.fetch(pathToFileURL(file).toString())
+      : new Response(null, { status: 404 });
+  });
   const window = createWindow();
   showTextMenus(window);
 
