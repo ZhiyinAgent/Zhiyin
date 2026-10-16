@@ -300,6 +300,55 @@ withGit("gitAutomation against a real repository", () => {
     );
   });
 
+  const submodulesUnseen =
+    "Changes inside submodules' own files are not shown.";
+
+  it("says that changes inside a submodule's own files are not shown, from any folder of the repository", async () => {
+    const sub = await folders.make("zhiyin-git-submodule-");
+    await execGitInit(git as string, sub);
+    await writeFile(join(sub, "sub.txt"), "a\n", "utf8");
+    await gitOutput(sub, ["add", "sub.txt"]);
+    await gitOutput(sub, ["commit", "-m", "Sub"]);
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "docs", "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["docs/note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    await gitOutput(root, [
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      sub.replaceAll("\\", "/"),
+      "sub",
+    ]);
+    await gitOutput(root, ["commit", "-m", "Add submodule"]);
+    await writeFile(join(root, "sub", "sub.txt"), "edited\n", "utf8");
+    await writeFile(join(root, "docs", "note.txt"), "changed\n", "utf8");
+
+    const status = await run("git_status", {});
+    const diff = await run("git_diff", {});
+    const inDocs = (await gitAutomation({
+      workspaceRoot: () => join(root, "docs"),
+    }).callTool("git_status", {})) as { content: readonly { text: string }[] };
+
+    expect(status.text).toContain("docs/note.txt");
+    expect(status.text).toContain(submodulesUnseen);
+    expect(diff.text).toContain("changed");
+    expect(diff.text).toContain(submodulesUnseen);
+    expect(inDocs.content[0]?.text).toContain(submodulesUnseen);
+  });
+
+  it("says nothing of submodules in a repository without any", async () => {
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+
+    const status = await run("git_status", {});
+    const diff = await run("git_diff", {});
+
+    expect(status.text).toContain("note.txt");
+    expect(status.text).not.toContain("submodule");
+    expect(diff.text).not.toContain("submodule");
+  });
+
   /**
    * The same rule, for what a repository brings that its settings do not
    * name outright: a hook git runs when a read refreshes the index, a filter

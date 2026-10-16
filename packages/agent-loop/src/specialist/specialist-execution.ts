@@ -12,7 +12,11 @@ import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures, withdrawCalls } from "../tools/quiet-failures.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 import type { ToolCalls } from "../tools/tool-calls.js";
-import { ModelRound } from "../turn/model-round.js";
+import {
+  ModelRound,
+  ThoughtTooLong,
+  withLeastReasoning,
+} from "../turn/model-round.js";
 import type { TurnOwnership } from "../turn/turn-ownership.js";
 import type { TurnRecords } from "../turn/turn-records.js";
 import { readToolInput } from "../tools/tool-input.js";
@@ -28,8 +32,12 @@ import {
   WorkLedger,
 } from "../turn/work-limits.js";
 import { RoundResults } from "../context/result-size.js";
-import { toolOutput } from "../turn/notices.js";
-import { isOwnDefect } from "../turn/turn-recovery.js";
+import { harnessNotice, toolOutput } from "../turn/notices.js";
+import {
+  decideNow,
+  isOwnDefect,
+  stoppedTwiceForReasoning,
+} from "../turn/turn-recovery.js";
 import { refusal, skippedAfterDecline } from "../tools/refusals.js";
 
 /**
@@ -368,15 +376,39 @@ export class SpecialistExecution {
           startedAt: this.#deps.now().toISOString(),
           actionIds: [],
         });
+        /** The last request was stopped for reasoning at length. */
+        let overthought = false;
         for (;;) {
-          // The same round a turn runs, gathered without being shown.
-          const { calls, text, reasoning, replay } = await this.#round.run(
-            options.taskId,
-            controller,
-            ledger,
-            { messages, tools },
-            () => !controller.signal.aborted,
-          );
+          // The same round a turn runs, gathered without being shown, and
+          // asked again as a turn's is when it reasons at length.
+          const request = { messages, tools };
+          const answered = await this.#round
+            .run(
+              options.taskId,
+              controller,
+              ledger,
+              overthought
+                ? withLeastReasoning(request, this.#deps.host.leastReasoning())
+                : request,
+              () => !controller.signal.aborted,
+            )
+            .catch((error: unknown) => {
+              if (
+                !(error instanceof ThoughtTooLong) ||
+                controller.signal.aborted
+              )
+                throw error;
+              if (overthought) throw new VisibleError(stoppedTwiceForReasoning);
+              overthought = true;
+              messages.push({
+                role: "user",
+                content: harnessNotice("thinking", decideNow),
+              });
+              return undefined;
+            });
+          if (!answered) continue;
+          overthought = false;
+          const { calls, text, reasoning, replay } = answered;
           controller.signal.throwIfAborted();
           const finish = calls.find(
             (call) => call.name === finishSpecialistTool.name,

@@ -126,10 +126,11 @@ answers every other command:
   waits for the turn it starts: a message typed while that turn runs is taken
   and added to it. One that cannot be put in the conversation is refused to the
   window. How the turn goes is told by the conversation.
-- **Asking for the answer now reaches the request that is reasoning.** Whether
-  the next request can go without reasoning is read from the chosen model's
-  own reasoning controls: optional there, it is turned off; required, it is
-  left as the conversation has it. The window is told whether anything was
+- **Asking for the answer now reaches the request that is reasoning.** The
+  least reasoning the next request can ask for is read from the chosen
+  model's own reasoning controls: optional there, it is none; required, it is
+  the lowest effort the model lists; with no effort listed, or controls
+  unknown, nothing lower is asked. The window is told whether anything was
   stopped.
 - **A message that waits for a turn's next step can be sent now or taken
   back.** The window names the conversation, and for taking back the message;

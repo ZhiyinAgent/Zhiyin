@@ -112,6 +112,17 @@ export type RoundRequest = {
   readonly reasoning?: NonNullable<ModelRequest["reasoning"]>;
 };
 
+/**
+ * The request asked with the least reasoning the model can be asked for, as
+ * after its reasoning was stopped; as it was where it can be asked for no less.
+ */
+export function withLeastReasoning<Request extends RoundRequest>(
+  request: Request,
+  least: RoundRequest["reasoning"] | undefined,
+): Request {
+  return least ? { ...request, reasoning: least } : request;
+}
+
 export type RoundResult = {
   /** Assembled tool calls, in the order the model gave them. */
   readonly calls: AssembledToolCall[];
@@ -357,6 +368,17 @@ export class ModelRound {
           continue;
         }
         await this.#receive(taskId, event, attempt, reveal, ledger);
+        // Shown or not, a request is held to one length of reasoning before
+        // it has answered or called anything.
+        if (
+          event.kind === "reasoningDelta" &&
+          !attempt.text &&
+          attempt.calls.size === 0 &&
+          attempt.reasoningBytes / reasoningBytesPerToken > longestThought
+        ) {
+          thought.abort();
+          throw new ThoughtTooLong();
+        }
         if (!this.#shown) continue;
         if (event.kind === "textDelta" || event.kind === "toolCallDelta") {
           // A call's composing note has already taken the thinking note's place.
@@ -376,10 +398,6 @@ export class ModelRound {
         if (!thinking) {
           thinking = true;
           await this.#note(taskId, thinkingNote);
-        }
-        if (attempt.reasoningBytes / reasoningBytesPerToken > longestThought) {
-          thought.abort();
-          throw new ThoughtTooLong();
         }
       }
       // A stream that ends quietly once stopped was stopped all the same.

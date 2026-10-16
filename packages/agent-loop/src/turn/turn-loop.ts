@@ -28,6 +28,7 @@ import {
   ModelRound,
   SentNow,
   ThoughtTooLong,
+  withLeastReasoning,
   type RoundResult,
 } from "./model-round.js";
 import { RoundResults, resultLimits } from "../context/result-size.js";
@@ -96,11 +97,14 @@ type Turn = {
   refused: boolean;
   /** One fresh round may resume from completed tools after retry exhaustion. */
   connectionRecoveries: number;
-  /** This step's request was stopped for reasoning at length, and asked again. */
+  /**
+   * This step's request was stopped for reasoning at length, and is asked
+   * again with the least reasoning the model can be asked for.
+   */
   overthought: boolean;
   /**
    * The person asked for the answer now: the turn's remaining requests go
-   * without reasoning, where the model can be asked that.
+   * with the least reasoning the model can be asked for.
    */
   answerNow: boolean;
 };
@@ -355,8 +359,8 @@ export class TurnLoop {
       this.#lastRequestLength,
     );
     const request =
-      turn.answerNow && this.#deps.host.reasoningOptional()
-        ? { ...planned, reasoning: { enabled: false } as const }
+      turn.answerNow || turn.overthought
+        ? withLeastReasoning(planned, this.#deps.host.leastReasoning())
         : planned;
     const shown = this.#records.task(taskId).messages.length;
     const answered = await this.#round
@@ -383,8 +387,8 @@ export class TurnLoop {
    * What a failed round is recovered from: a connection lost for good, resumed
    * once from the tools that completed, a request refused as too long,
    * condensed once per step, one stopped for reasoning at length, asked once
-   * per step to decide, and one the person stopped, to have the answer now
-   * or to have what they added read now.
+   * per step to decide with less reasoning, and one the person stopped, to
+   * have the answer now or to have what they added read now.
    * Everything else is thrown on, and so is whatever ended a turn that was
    * stopped.
    */

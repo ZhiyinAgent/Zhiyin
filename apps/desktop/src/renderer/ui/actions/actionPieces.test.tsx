@@ -656,6 +656,43 @@ describe("ApprovalPrompt", () => {
     expect(onDecision).not.toHaveBeenCalled();
   });
 
+  it("keeps the reader's place in the review when the request behind it is drawn again, and gives focus back on close", () => {
+    const onDecision = vi.fn();
+    const changes = [
+      { path: "a.md", change: "updated", before: "a\n", after: "b\n" },
+      { path: "b.md", change: "created", after: "c\n" },
+    ] as const;
+    // A new element each time, as the conversation draws it again.
+    const prompt = () => (
+      <ApprovalPrompt
+        title="Edit workspace files"
+        target="a.md, b.md"
+        changes={changes}
+        onDecision={onDecision}
+      />
+    );
+    const { rerender } = render(prompt());
+    const opener = screen.getByRole("button", {
+      name: "Review this change to b.md",
+    });
+
+    // Focused as a click focuses it, for focus to have somewhere to return.
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog");
+    // The reader has moved from where the dialog put them to a file's tab.
+    const placed = document.activeElement;
+    const reached = within(dialog).getAllByRole("tab")[0]!;
+    reached.focus();
+    expect(reached).not.toBe(placed);
+    rerender(prompt());
+
+    expect(document.activeElement).toBe(reached);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
   /**
    * A change too large to carry must not look like a change with nothing in
    * it. The person is told they are approving something they have not seen.
@@ -748,6 +785,25 @@ describe("ApprovalPrompt", () => {
     );
 
     expect(screen.queryByRole("button", { name: /Review/ })).toBeNull();
+  });
+
+  it("draws nothing where the files would be when its list of changes is empty", () => {
+    const { container } = render(
+      <ApprovalPrompt
+        title="Edit a workspace file"
+        target="notes"
+        invocation={{
+          name: "multi_edit",
+          arguments: [{ name: "path", value: "notes" }],
+        }}
+        changes={[]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    // Nothing in this request is a number, so any digit drawn is a stray one.
+    expect(container.textContent).not.toMatch(/\d/);
+    expect(screen.queryByRole("list", { name: "What will change" })).toBeNull();
   });
 
   it("offers guidance only after Deny, while allowing a denial without text", () => {

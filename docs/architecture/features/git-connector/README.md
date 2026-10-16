@@ -73,6 +73,10 @@ there is no second implementation of git's storage format to audit.
   inside. A folder can arrive with its `.git`
   from anywhere. Staging, committing and stashing run as git runs them for
   the person, hooks and filters included, after approval.
+- In a repository with submodules, the status and the diff of unstaged or
+  staged changes say that changes
+  inside submodules' own files are not shown, from whichever of its folders
+  the workspace is.
 - Each git call runs through the process-ownership mechanism, with a
   30-second limit.
 

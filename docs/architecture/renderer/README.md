@@ -110,8 +110,9 @@ described in the [component library](../../component-library.md).
 - **The keyboard reaches everything.** The focus ring shows for keyboard focus.
   Escape closes what is open, one dialog at a time, and returns focus to what
   opened it; a dialog keeps focus inside itself, Tab and Shift+Tab going round
-  its own controls in the order it shows them, from a body that scrolls too. A
-  control drawn as an icon alone is named on hover and
+  its own controls in the order it shows them, from a body that scrolls too,
+  and focus stays where the person moved it while what is behind the dialog
+  is drawn again. A control drawn as an icon alone is named on hover and
   keyboard focus, and one that cannot be used yet says what it is waiting for;
   a control whose name changes while it is named, such as one that opens and
   then closes something, is named anew.

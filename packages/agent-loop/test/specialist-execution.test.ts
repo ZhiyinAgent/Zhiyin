@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
+  ReasoningSelection,
   TaskAction,
   ToolCallInspection,
   WorkspaceTask,
@@ -10,6 +11,7 @@ import {
   completeHandoffMessage,
   handoffMessage,
 } from "../src/specialist/specialist-execution.js";
+import { notices } from "./plan-fixture.js";
 import {
   loopAndHost,
   loopFrom,
@@ -807,11 +809,19 @@ describe("specialist child execution", () => {
     }) => void;
     /** Saving a conversation in this state fails, as on a full disk. */
     readonly refusesSaving?: (task: WorkspaceTask) => boolean;
+    readonly longestThoughtTokens?: number;
+    readonly leastReasoning?: ReasoningSelection;
   }) {
     const base = stubDependencies(() => {});
     let specialistRound = 0;
     const { host } = loopAndHost({
       ...base,
+      ...(options.longestThoughtTokens
+        ? { longestThoughtTokens: options.longestThoughtTokens }
+        : {}),
+      ...(options.leastReasoning
+        ? { leastReasoning: options.leastReasoning }
+        : {}),
       ...(options.recordDefect ? { recordDefect: options.recordDefect } : {}),
       ...(options.workLimits ? { workLimits: options.workLimits } : {}),
       ...(options.specialistWorkLimits
@@ -1156,6 +1166,63 @@ describe("specialist child execution", () => {
     // Only the way out is on offer once the budget is spent.
     expect(offered.at(-1)).toEqual(["finish_specialist"]);
     expect(wrapUp).toContain("work budget is used up");
+  });
+
+  /** Reasoning the loop counts as about 200 tokens, past a limit of 100. */
+  const reasonsAtLength: ModelEvent = {
+    kind: "reasoningDelta",
+    text: "x".repeat(200 * 4.5),
+  };
+
+  it("stops a specialist that reasons at length without acting, and asks it once to decide with the least reasoning", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = delegatingLoop({
+      longestThoughtTokens: 100,
+      leastReasoning: { enabled: false },
+      specialist: (round, _tools, _messages, request) => {
+        requests.push(request);
+        return round === 1 ? [reasonsAtLength] : [finishes("Decided.")];
+      },
+    });
+
+    const run = await settled(loop);
+
+    expect(run).toMatchObject({
+      status: "completed",
+      handoff: { summary: "Decided." },
+    });
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.reasoning).toBeUndefined();
+    expect(requests[1]?.reasoning).toEqual({ enabled: false });
+    const told = notices(requests[1], "thinking");
+    expect(told).toHaveLength(1);
+    expect(told[0]?.content).toContain(
+      "call a tool, give your answer, or ask the person one question",
+    );
+  });
+
+  it("settles a specialist stopped twice in a row for reasoning at length as failed, saying why", async () => {
+    const requests: ModelRequest[] = [];
+    const loop = delegatingLoop({
+      longestThoughtTokens: 100,
+      leastReasoning: { enabled: true, effort: "low" },
+      specialist: (_round, _tools, _messages, request) => {
+        requests.push(request);
+        return [reasonsAtLength];
+      },
+    });
+
+    const run = await settled(loop);
+
+    expect(requests.map((request) => request.reasoning)).toEqual([
+      undefined,
+      { enabled: true, effort: "low" },
+    ]);
+    expect(run).toMatchObject({
+      status: "failed",
+      reason:
+        "The model kept reasoning without answering or acting, and was stopped twice.",
+    });
   });
 
   it("stops a specialist that will not report once its budget is spent", async () => {

@@ -14,6 +14,7 @@ import {
   type AppEvent,
   type ContextBudgetChoice,
   type ModelWindow,
+  type ReasoningSelection,
   type WorkspaceSnapshot,
   type WorkspaceTask,
 } from "@zhiyin/contract";
@@ -55,7 +56,7 @@ export class TestHost implements TurnHost {
   history = true;
   capabilities = true;
   images = false;
-  reasoningOff = false;
+  least: ReasoningSelection | undefined;
   /**
    * Commit a write only after a save that takes a moment, as the core does.
    * Off, a write lands at once, and two writers can never overlap.
@@ -208,8 +209,8 @@ export class TestHost implements TurnHost {
     return this.images;
   }
 
-  reasoningOptional(): boolean {
-    return this.reasoningOff;
+  leastReasoning(): ReasoningSelection | undefined {
+    return this.least;
   }
 
   /** The model's size as the app reads it from the catalogue; unknown here. */
@@ -313,8 +314,11 @@ export type LoopTestDependencies = TurnStubs & {
    * In production the core answers this from the provider's settings.
    */
   readonly acceptsImages?: boolean;
-  /** Whether the model can be asked to answer without reasoning. */
-  readonly reasoningOptional?: boolean;
+  /**
+   * The least reasoning the model can be asked for: none, or its lowest
+   * effort. Absent, it can be asked for no less than was chosen.
+   */
+  readonly leastReasoning?: ReasoningSelection;
   /** The model's size as the catalogue lists it; unknown when absent. */
   readonly modelWindow?: ModelWindow & { readonly model: string };
   readonly defaultContextBudget?: ContextBudgetChoice;
@@ -408,7 +412,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     emit,
     newTaskId,
     acceptsImages,
-    reasoningOptional,
+    leastReasoning,
     modelWindow,
     defaultContextBudget,
     savesSlowly,
@@ -416,7 +420,7 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
   host.images = acceptsImages === true;
-  host.reasoningOff = reasoningOptional === true;
+  host.least = leastReasoning;
   if (modelWindow) host.window = modelWindow;
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   host.savesSlowly = savesSlowly === true;

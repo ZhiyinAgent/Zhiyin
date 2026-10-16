@@ -322,18 +322,24 @@ that name is marked the same way once it arrives.
   has been measured to take so that no model is stopped short of that, is
   stopped and asked once, in a
   `thinking` notice, to act on what it knows: call a tool, answer, or ask one
-  question. What it reasoned leaves no empty answer behind, and a message the
+  question. That request goes with the least reasoning the model can be asked
+  for: none where it answers without reasoning, otherwise its lowest effort,
+  and the conversation's setting where it can be asked for no less. The
+  request after one that answered or acted has the conversation's setting
+  again. What it reasoned leaves no empty answer behind, and a message the
   person added meanwhile goes with the new request. Stopped twice in a row,
   the turn ends and says why. Reasoning that continues once an answer or a
-  call has begun is never cut. A specialist's own rounds are not held to this
-  limit.
+  call has begun is never cut. A specialist's own rounds are held to the same
+  limit and asked again the same way; stopped twice in a row, the specialist
+  settles as failed with that reason, which the conversation is told in its
+  handoff.
 - A person can ask for the answer while the turn's request has only reasoned.
   That request is stopped, what it reasoned leaves no empty answer behind, and
   the model is asked again with an `answerNow` notice telling it to answer
-  from what it knows or take the next step directly. Where the chosen model
-  can answer without reasoning, that request and the rest of the turn go
-  without it; where it cannot, they keep the conversation's setting. The next
-  turn has the conversation's setting again. Once an answer or a call has
+  from what it knows or take the next step directly. That request and the
+  rest of the turn go with the least reasoning the model can be asked for, as
+  after reasoning at length. The next turn has the conversation's setting
+  again. Once an answer or a call has
   begun, or when no request is reasoning, asking changes nothing and says so.
   A person's Stop meanwhile ends the turn as it always does.
 - A message added while a turn works waits for the turn's next request, and
