@@ -70,4 +70,7 @@ jobs:
         shell: powershell
         env:
           ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
+          # The runner has no graphics driver: the test Blender draws EEVEE
+          # with Mesa's software OpenGL instead.
+          ZHIYIN_TEST_SOFTWARE_OPENGL: "1"
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1
