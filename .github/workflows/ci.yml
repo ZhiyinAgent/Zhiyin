@@ -56,10 +56,12 @@ jobs:
         shell: powershell
         run: pnpm --filter desktop install:electron
 
-      # The gate installs the programs some tests need (Typst, Tectonic, uv
-      # and Blender) into ZHIYIN_TEST_TOOLS, each verified against its pinned
-      # digest, so those tests run here. Only the downloads are kept between
-      # runs, and only until a pin changes.
+      # The gate installs the programs some tests need (Typst, Tectonic and
+      # uv) into ZHIYIN_TEST_TOOLS, each verified against its pinned digest,
+      # so those tests run here, and keeps Blender's archive for the test that
+      # installs it. A Blender running scenes needs a graphics card, which
+      # this machine lacks. Only the downloads are kept between runs, and only
+      # until a pin changes.
       - name: Keep the downloaded programs between runs
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -70,7 +72,4 @@ jobs:
         shell: powershell
         env:
           ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
-          # The runner has no graphics driver: the test Blender draws EEVEE
-          # with Mesa's software OpenGL instead.
-          ZHIYIN_TEST_SOFTWARE_OPENGL: "1"
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1

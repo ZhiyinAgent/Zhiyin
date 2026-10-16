@@ -40,9 +40,14 @@ describe("the tests that did not run", () => {
   });
 
   it("fail the run in CI, which installs the programs they need", () => {
-    expect(unexpectedSkips([[realBlender, 87]], { CI: "true" })).toEqual([
-      expect.stringContaining(realBlender),
+    const realUv = "packages/python-sandbox/test/real-uv.test.ts";
+    expect(unexpectedSkips([[realUv, 3]], { CI: "true" })).toEqual([
+      expect.stringContaining(realUv),
     ]);
+  });
+
+  it("are expected in CI for a Blender that runs scenes, which needs the graphics card CI lacks", () => {
+    expect(unexpectedSkips([[realBlender, 87]], { CI: "true" })).toEqual([]);
   });
 
   it("fail the run in a file that is never expected to skip", () => {

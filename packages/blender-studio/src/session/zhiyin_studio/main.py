@@ -380,6 +380,10 @@ def serve(arguments):
     if "--warm" in arguments:
         # The first EEVEE picture, and the first quick one, compile their
         # shaders; doing it now keeps the first preview as quick as the rest.
+        # Said first: a Blender that ends while drawing them cannot draw on
+        # this PC's graphics card, which the 3D tools need.
+        answers.write(json.dumps({"warming": True}) + "\n")
+        answers.flush()
         warm = arguments[arguments.index("--warm") + 1]
         try:
             output.preview({"width": 64, "height": 64}, warm, session.device)

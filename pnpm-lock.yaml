@@ -20,15 +20,9 @@ importers:
       '@types/node':
         specifier: 26.4.1
         version: 26.4.1
-      '@zhiyin/blender-studio':
-        specifier: workspace:*
-        version: link:packages/blender-studio
       '@zhiyin/model-client':
         specifier: workspace:*
         version: link:packages/model-client
-      '@zhiyin/process-ownership':
-        specifier: workspace:*
-        version: link:packages/process-ownership
       '@zhiyin/toolchains':
         specifier: workspace:*
         version: link:packages/toolchains

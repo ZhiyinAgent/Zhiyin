@@ -69,8 +69,6 @@ jobs:
         shell: powershell
         env:
           ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
-          # No graphics driver here either: EEVEE draws with software OpenGL.
-          ZHIYIN_TEST_SOFTWARE_OPENGL: "1"
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1 -Full
 
       - name: Prepare installer, checksum, and release notes

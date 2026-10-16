@@ -15,7 +15,11 @@ import {
   writable,
   type Refusal,
 } from "./paths.js";
-import type { SceneCommand, SceneSession } from "./scene-session.js";
+import {
+  cannotDraw,
+  type SceneCommand,
+  type SceneSession,
+} from "./scene-session.js";
 import { studioTools } from "./tools.js";
 import {
   addRows,
@@ -427,6 +431,7 @@ export function sceneAutomation(
     /** Asked again every look, so installing Blender is noticed without a restart. */
     async listTools() {
       if (!(await options.blender())) throw new Error(notInstalled);
+      if (!session.draws) throw new Error(cannotDraw);
       return studioTools;
     },
 
@@ -439,6 +444,7 @@ export function sceneAutomation(
         };
       if (!(await options.blender()))
         return { ok: false, reason: notInstalled };
+      if (!session.draws) return { ok: false, reason: cannotDraw };
       const prepared = await prepare(name, args, root, session);
       if ("reason" in prepared)
         return {

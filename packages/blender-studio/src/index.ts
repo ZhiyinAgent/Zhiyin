@@ -8,7 +8,7 @@ export {
   describeSceneTools,
 } from "./conversation-scenes.js";
 export type { ConversationScenesOptions } from "./conversation-scenes.js";
-export { SceneSession } from "./scene-session.js";
+export { BlenderDrawing, SceneSession } from "./scene-session.js";
 export type {
   SceneCommand,
   SceneOutcome,

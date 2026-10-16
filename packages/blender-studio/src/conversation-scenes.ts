@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { SceneSession } from "./scene-session.js";
+import { BlenderDrawing, SceneSession } from "./scene-session.js";
 import type { LaunchSession } from "./session-process.js";
 import { studioTools, type StudioTool } from "./tools.js";
 
@@ -15,11 +15,14 @@ export type ConversationScenesOptions = {
   readonly script: string;
   readonly startTimeoutMs?: number;
   readonly previewTimeoutMs?: number;
+  /** Whether Blender draws on this PC's graphics card, learned for every conversation at once. */
+  readonly drawing?: BlenderDrawing;
 };
 
 /** Every conversation's scene, each with its own Blender. */
 export class ConversationScenes {
   readonly #options: ConversationScenesOptions;
+  readonly #drawing: BlenderDrawing;
   readonly #scenes = new Map<string, SceneSession>();
   readonly #listeners = new Set<
     (conversationId: string, scene: SceneSession) => void
@@ -27,6 +30,7 @@ export class ConversationScenes {
 
   constructor(options: ConversationScenesOptions) {
     this.#options = options;
+    this.#drawing = options.drawing ?? new BlenderDrawing();
   }
 
   /** This conversation's own folder in the app's data. */
@@ -45,6 +49,7 @@ export class ConversationScenes {
       directory: this.directory(conversationId),
       launch: this.#options.launch,
       script: this.#options.script,
+      drawing: this.#drawing,
       ...(this.#options.startTimeoutMs
         ? { startTimeoutMs: this.#options.startTimeoutMs }
         : {}),

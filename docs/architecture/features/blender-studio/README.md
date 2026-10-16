@@ -445,6 +445,13 @@ for its launch; nothing listens on a port.
   conversation's work and a render can be shown in the document viewer.
 - **No Blender, no tools.** With Blender not installed the connection offers
   nothing, and it offers every tool once Blender is installed.
+- **No drawing, no tools.** A Blender that ends while it draws its warm-up
+  picture, as one does on a PC without a working graphics driver, means the
+  3D tools cannot show or render a scene there. That start fails saying so,
+  and for the rest of the app's run no Blender is started: every call to a
+  3D tool is refused with the same reason, and a conversation that has not
+  listed the tools yet is not offered them, also saying why. A Blender that
+  ends before it begins drawing only failed to start, and the tools stay.
 
 ## Testing notes
 
@@ -452,7 +459,8 @@ The session's launch is replaceable, so lifecycles, refusals, time limits and
 approvals are tested against a stand-in session. The script inside Blender,
 the pipes and the previews are tested against a real Blender when
 `ZHIYIN_BLENDER` names its executable; without it those tests are skipped and
-say so. CI's gate installs Blender for them, so there they run.
+say so. They need a graphics card, so they do not run in CI, whose machine
+has none; they run on a PC that has one.
 
 The compile step is tested for what it asks of Blender's Python. Blender
 installed from its real archive, compiled and started once, is tested when
@@ -460,7 +468,10 @@ installed from its real archive, compiled and started once, is tested when
 except in CI, which keeps the archive for it.
 
 When EEVEE cannot render, previews fall back to Cycles on the processor. No
-test covers that path: it needs a PC whose graphics EEVEE cannot use.
+test covers that path: it needs a PC whose graphics EEVEE cannot use. That a
+Blender on a PC without a working graphics driver ends while it draws its
+warm-up picture is not tested either; the stand-in session ends there, and
+the tests of what follows run on it.
 
 Blender at low integrity is tested with NVIDIA graphics, in a workspace on a
 drive that keeps permissions. Other makers' graphics, a drive without

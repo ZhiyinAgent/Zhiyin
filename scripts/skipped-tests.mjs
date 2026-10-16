@@ -18,14 +18,15 @@ function codePage() {
 /**
  * Every file allowed to skip tests, what it needs, and where it may go
  * without. CI installs the programs (`ZHIYIN_TEST_TOOLS`), so a test that
- * needs one runs there.
+ * needs one runs there; a Blender that runs scenes needs a graphics card too,
+ * which CI's machine lacks.
  */
 const expected = new Map([
   [
     "packages/blender-studio/system-boundary/real-blender.test.ts",
     {
-      needs: "Blender (ZHIYIN_BLENDER)",
-      without: (env) => !env.ZHIYIN_BLENDER && !env.CI,
+      needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",
+      without: (env) => !env.ZHIYIN_BLENDER,
     },
   ],
   [

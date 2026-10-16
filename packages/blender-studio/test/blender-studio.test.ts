@@ -43,6 +43,7 @@ async function setUp(
   options: {
     installed?: boolean;
     ready?: boolean;
+    cannotDraw?: boolean;
     previewTimeoutMs?: number;
   } = {},
 ) {
@@ -52,10 +53,10 @@ async function setUp(
   const workspace = join(root, "workspace");
   const data = join(root, "data");
   await mkdir(workspace, { recursive: true });
-  const blender = standInBlender(
-    behaviour,
-    options.ready === false ? { ready: false } : {},
-  );
+  const blender = standInBlender(behaviour, {
+    ...(options.ready === false ? { ready: false } : {}),
+    ...(options.cannotDraw ? { cannotDraw: true } : {}),
+  });
   const installed = async () =>
     options.installed === false ? undefined : "C:/Blender/blender.exe";
   const scenes = new ConversationScenes({
@@ -1040,6 +1041,50 @@ describe("a conversation's session", () => {
       status: "failed",
       reason: "Blender did not start.",
     });
+  });
+
+  it("says the 3D tools cannot work when Blender ends while drawing its warm-up picture, and offers them in no conversation after", async () => {
+    const { tools, scenes, blender } = await setUp(undefined, {
+      cannotDraw: true,
+    });
+    const why = "Blender cannot draw on this PC's graphics card";
+
+    const opened = await call(tools(), "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+
+    expect(opened.isError).toBe(true);
+    expect(said(opened)).toContain(why);
+    expect(scenes.scene("first").state()).toMatchObject({
+      status: "failed",
+      reason: expect.stringContaining(why),
+    });
+    await expect(tools("second").listTools()).rejects.toThrow(why);
+    await expect(
+      tools("second").inspect("blender_open_scene", {
+        path: "other.blend",
+        create: true,
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      reason: expect.stringContaining(why),
+    });
+    expect(blender.launches).toHaveLength(1);
+  });
+
+  it("says only that Blender did not start, and keeps offering the tools, when it ends before drawing anything", async () => {
+    const { tools, blender } = await setUp(undefined, { ready: false });
+
+    const result = await call(tools(), "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+
+    expect(said(result)).toMatch(/Blender did not start/);
+    expect(said(result)).not.toContain("graphics card");
+    await expect(tools().listTools()).resolves.not.toHaveLength(0);
+    expect(blender.launches).toHaveLength(1);
   });
 
   it("passes on Blender's refusal as one the model can act on, and keeps going", async () => {

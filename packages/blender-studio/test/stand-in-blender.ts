@@ -49,11 +49,13 @@ export const pictureBytes = Buffer.from("not really a jpeg");
 
 /**
  * A Blender stand-in speaking the session's protocol. By default it does what
- * it is asked, and draws a preview when asked for one.
+ * it is asked, and draws a preview when asked for one. It says it is drawing
+ * its warm-up picture first; one that `cannotDraw` ends there, as Blender
+ * does on a PC without a working graphics driver.
  */
 export function standInBlender(
   behaviour?: Behaviour,
-  options: { ready?: boolean } = {},
+  options: { ready?: boolean; cannotDraw?: boolean } = {},
 ) {
   const launches: SessionLaunchOptions[] = [];
   const requests: Request[] = [];
@@ -81,7 +83,9 @@ export function standInBlender(
       waiting?.(undefined);
       finish();
     };
-    if (options.ready !== false) push(JSON.stringify({ ready: true }));
+    if (options.ready !== false) push(JSON.stringify({ warming: true }));
+    if (options.cannotDraw) end();
+    else if (options.ready !== false) push(JSON.stringify({ ready: true }));
     const process: SessionProcess = {
       send(line) {
         const request = JSON.parse(line) as Request;
