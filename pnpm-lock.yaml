@@ -262,6 +262,9 @@ importers:
       '@zhiyin/temporary-folders':
         specifier: workspace:*
         version: link:../temporary-folders
+      '@zhiyin/test-waits':
+        specifier: workspace:*
+        version: link:../test-waits
       '@zhiyin/tools':
         specifier: workspace:*
         version: link:../tools
@@ -409,6 +412,9 @@ importers:
       '@zhiyin/temporary-folders':
         specifier: workspace:*
         version: link:../temporary-folders
+      '@zhiyin/test-waits':
+        specifier: workspace:*
+        version: link:../test-waits
       '@zhiyin/toolchains':
         specifier: workspace:*
         version: link:../toolchains
@@ -621,6 +627,8 @@ importers:
         version: link:../temporary-folders
 
   packages/temporary-folders: {}
+
+  packages/test-waits: {}
 
   packages/toolchains:
     dependencies:

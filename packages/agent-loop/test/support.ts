@@ -25,23 +25,30 @@ import {
 import type { PluginView } from "@zhiyin/plugins";
 import { ComposedRewind } from "@zhiyin/rewind";
 import type { ModelClient, ModelMessage } from "@zhiyin/model-client";
+import { watched } from "@zhiyin/test-waits";
 import { AgentLoop, type TurnHost } from "../src/index.js";
 import { settledWhenTurnEnded } from "../src/turn/settling.js";
 import { type TurnStubs } from "./stubs.js";
 
 export { pluginsOffering, stubDependencies } from "./stubs.js";
 
+export { until } from "@zhiyin/test-waits";
+
 /**
- * Waits for what a test is about to check, by the clock: how many turns of
- * the loop a save or a model's answer takes depends on the machine.
+ * Each of a turn's dependencies, watched: a turn changes nothing but by
+ * calling one of them or hearing back from one, so each such moment wakes
+ * the waits of the test.
  */
-export async function until(predicate: () => boolean): Promise<void> {
-  const deadline = performance.now() + 4_000;
-  while (!predicate()) {
-    if (performance.now() > deadline)
-      throw new Error("Condition was not reached.");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+function watchedEach<T extends object>(dependencies: T): T {
+  return Object.fromEntries(
+    Object.entries(dependencies).map(([name, value]) => [
+      name,
+      typeof value === "function" ||
+      (typeof value === "object" && value !== null && !Array.isArray(value))
+        ? watched(value as object)
+        : value,
+    ]),
+  ) as T;
 }
 
 export function currentApprovalId(loop: TurnTestApp, taskId: string): string {
@@ -440,20 +447,21 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   host.savesSlowly = savesSlowly === true;
   host.refusesSave = refusesSave;
-  const capabilities = new ComposedCapabilities({
-    tools,
-    mcp,
-    plugins,
-    toolchains,
-    connectionToolchains,
-    browsers: rest.browsers as CapabilityMembers["browsers"],
-  });
+  const capabilities = new ComposedCapabilities(
+    watchedEach({
+      tools,
+      mcp,
+      plugins,
+      toolchains,
+      connectionToolchains,
+      browsers: rest.browsers as CapabilityMembers["browsers"],
+    }),
+  );
   const loop = new AgentLoop({
-    ...rest,
-    model: withOneChannel(rest.model),
+    ...watchedEach({ ...rest, model: withOneChannel(rest.model) }),
     capabilities,
-    rewind: new ComposedRewind({ conversation: rewind, recovery }),
-    host,
+    rewind: new ComposedRewind(watchedEach({ conversation: rewind, recovery })),
+    host: watched(host),
   });
   // Wired as the application wires it.
   capabilities.onCommandEnded((taskId, notice, wakes) =>

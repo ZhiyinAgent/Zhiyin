@@ -2,15 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ToolCallInspection } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import type { LoopTestDependencies, TestApp as AgentLoop } from "./support.js";
-import { stubDependencies, loopFrom } from "./support.js";
-
-async function until(predicate: () => boolean, attempts = 500): Promise<void> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("Condition was not reached.");
-}
+import { stubDependencies, loopFrom, until } from "./support.js";
 
 function workTool(execute: LoopTestDependencies["tools"]["execute"]) {
   return {
