@@ -202,6 +202,20 @@ start that can keep none takes 1.5 s against 0.7 s. Its bundled `python.exe`
 does not start by itself ("Failed to import encodings module"), so
 `sys.executable -m pip` fails from a script at any integrity. ADR 0028.
 
+**Blender 5.2.2 and USD.** _Verified 2026-10-17 by running it, and against
+OpenUSD's `release` branch (`sdf/crateFile.cpp`, `tf/fastCompression.cpp`,
+`usd/clipsAPI.h`)._ Its `pxr` Python package has the modules' Python files
+but none of their compiled parts (`from pxr import Usd` fails with `No module
+named 'pxr.Tf._tf'`); USD itself is `usd_ms.dll`. Binary USD (`PXR-USDC`,
+layout 0.15.0 the newest) keeps every string it holds, asset paths and
+reference, payload and sublayer paths included, in its `TOKENS` section,
+packed from layout 0.4.0 on as a one-byte count of LZ4 blocks, 0 meaning one
+block. A clip's `templateAssetPath` is a plain string, not an asset path. A
+relative path not starting with `./` or `../` is also looked for in the
+folders `PXR_AR_DEFAULT_SEARCH_PATH` names. Importing a `.usdz` with
+Blender's default texture mode packs its pictures into the scene with paths
+in Blender's temporary folder; `IMPORT_NONE` leaves them out.
+
 **Windows' `tar.exe`.** _Verified 2026-09-17, version re-checked 2026-10-07._
 bsdtar 3.7.7 extracts zip archives and by default refuses entries with absolute
 paths or `..`, so installing a toolchain needs no zip library.

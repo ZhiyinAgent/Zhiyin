@@ -58,8 +58,7 @@ MODEL_IMPORTERS = {
     ".stl": lambda path: bpy.ops.wm.stl_import(filepath=path, global_scale=0.001),
     ".ply": lambda path: bpy.ops.wm.ply_import(filepath=path),
     ".fbx": lambda path: bpy.ops.import_scene.fbx(filepath=path),
-    ".usd": lambda path: bpy.ops.wm.usd_import(filepath=path),
-    ".usda": lambda path: bpy.ops.wm.usd_import(filepath=path),
+    **{extension: lambda path: bpy.ops.wm.usd_import(filepath=path) for extension in (".usd", ".usda", ".usdc", ".usdz")},
 }
 
 
@@ -429,6 +428,7 @@ def model_file(path, name, workspace):
     if workspace:
         reads_outside(path, named_outside(path, workspace))
     before = set(bpy.data.objects)
+    pictures_before = set(bpy.data.images)
     read_before = files_read()
     with reading_inside(workspace) if workspace else contextlib.nullcontext([]) as refused:
         try:
@@ -438,6 +438,14 @@ def model_file(path, name, workspace):
             reads_outside(path, refused)
             raise
     reads_outside(path, refused)
+    # A USD package's pictures are packed into the scene from Blender's own
+    # temporary folder; each is named as coming from the package.
+    temporary = os.path.realpath(bpy.app.tempdir)
+    for picture in set(bpy.data.images) - pictures_before:
+        unpacked = os.path.realpath(bpy.path.abspath(picture.filepath))
+        if picture.packed_file and not outside([unpacked], temporary):
+            named = f"{path}[{os.path.basename(unpacked)}]"
+            picture.filepath_raw = bpy.path.relpath(named) if bpy.data.filepath else named
     imported = [o for o in bpy.data.objects if o not in before]
     need(imported, f"{os.path.basename(path)} holds nothing Blender could import.")
     reads_outside(path, outside(files_read() - read_before, workspace) if workspace else [])

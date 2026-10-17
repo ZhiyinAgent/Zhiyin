@@ -100,9 +100,9 @@ for its launch; nothing listens on a port.
   Python, taking nothing from the person's, compiles Blender's scripts and
   library, and the compiled files name their sources where they are installed.
 - **Blender starts on its own settings.** It ignores the person's Blender
-  startup file, preferences and add-ons, and Blender's own variables in
-  Zhiyin's environment, keeps its own settings in Zhiyin's data, and never runs
-  a script saved in a scene file.
+  startup file, preferences and add-ons, and Blender's and USD's own variables
+  in Zhiyin's environment, keeps its own settings in Zhiyin's data, and never
+  runs a script saved in a scene file.
 - **Nothing changes before a scene is open.** The scene file is a
   workspace-relative `.blend` that stays inside the workspace, and creating
   one never replaces an existing file. A scene opened in a folder the
@@ -118,9 +118,12 @@ for its launch; nothing listens on a port.
 - **A model file reads nothing from outside the workspace.** A model whose
   pictures, geometry, materials or parts lie outside is refused and leaves the
   scene as it was; what an importer would read itself is refused before it is
-  read. USD is read as text only (`.usd` and `.usda`): what a binary USD file
-  reads cannot be checked, so it is refused. A scene file that uses files kept
-  elsewhere opens, and the answer names them.
+  read. USD comes as text, binary or a package (`.usd`, `.usda`, `.usdc` and
+  `.usdz`): text is checked by the paths it writes as files and its clip
+  patterns, binary USD by every string it holds, and a package by each scene
+  in it, whose pictures are kept in the scene named as the package holds
+  them. Binary USD that cannot be read that way is refused. A scene file that
+  uses files kept elsewhere opens, and the answer names them.
 - **An export writes the one file it names.** No materials, pictures or data
   are written beside it, and objects it names are exported even when hidden.
 - **A change is saved, answered, then previewed.** After every command that
@@ -157,7 +160,8 @@ for its launch; nothing listens on a port.
   Cycles on the graphics card, as the render will be. EEVEE also lets a sky's
   light through walls and ceilings, so a full preview through a camera that
   has something of the scene straight above it, as in a room, is drawn by
-  Cycles too, and shows the room as a render does. A full preview drawn by
+  Cycles too, at half size on a PC with no graphics card Cycles can use, and
+  shows the room as a render does. A full preview drawn by
   Cycles takes about a second of drawing at most, so a scene that is slow to
   draw never holds up turning for long, and the scene's own settings stay as
   they were.
@@ -300,7 +304,9 @@ for its launch; nothing listens on a port.
 - **An EEVEE picture is said to be a draft.** The answer to an EEVEE render
   says it is a quick look at layout and framing, and that light, colours and
   the picture to hand over are Cycles's; a Cycles render says nothing of the
-  kind.
+  kind. An EEVEE render through a camera with something of the scene straight
+  above it, as in a room, is drawn by Cycles at a few samples, so its light
+  and colours are the room's, and its answer says so.
 - **A plan is one picture that leaves the scene as it was.** A render asked
   for as a plan shows the whole scene from straight above, with +y up the
   picture, lit by a white background alone in the neutral tone, with the
@@ -473,8 +479,10 @@ installed from its real archive, compiled and started once, is tested when
 except in CI, which keeps the archive for it.
 
 When EEVEE cannot render, previews fall back to Cycles on the processor. No
-test covers that path: it needs a PC whose graphics EEVEE cannot use. That a
-Blender on a PC without a working graphics driver ends while it draws its
+test covers that path: it needs a PC whose graphics EEVEE cannot use. Nor
+does one cover a room's preview or draft on a PC with no graphics card Cycles
+can use, which Cycles draws on the processor: the tests run on a PC with one.
+That a Blender on a PC without a working graphics driver ends while it draws its
 warm-up picture is not tested either; the stand-in session ends there, and
 the tests of what follows run on it.
 

@@ -10,12 +10,15 @@ read from them first.
 """
 
 import contextlib
+import io
 import os
 import re
 import sys
+import zipfile
 
 import bpy
 
+from . import usd_crate
 from .common import Refused, outside
 
 # Which folders a file may be opened in while a model file is read, or None
@@ -69,15 +72,66 @@ def _obj_names(path, _workspace):
 # How USD text writes a file it names, for any use: another scene, a part,
 # a texture, a clip. `@@@` quotes a path that holds an `@`.
 USD_ASSET = re.compile(r"@@@(.*?)@@@|@([^@\r\n]*)@")
-USD_LAYERS = (".usd", ".usda", ".usdc", ".usdz")
-UNCHECKABLE = (
-    "{name} is binary USD, and the files it reads cannot be checked here. "
-    "Export it as .usda, .glb or .obj and add that instead."
+# The one file USD text names by a plain string: the pattern of a clip's
+# scenes, in either way clips are written.
+USD_TEMPLATE = re.compile(
+    r"[tT]emplateAssetPath\s*=\s*"
+    r"(?:\"\"\"(.*?)\"\"\"|'''(.*?)'''|\"((?:[^\"\\\r\n]|\\.)*)\"|'((?:[^'\\\r\n]|\\.)*)')",
+    re.S,
 )
+USD_LAYERS = (".usd", ".usda", ".usdc", ".usdz")
+# A path put together as the scene opens says nothing until then.
+EXPRESSION = "{name} names a file by an expression, which cannot be checked here."
+
+
+def _layers(content, folder, name):
+    """
+    The USD scenes a file holds, each with the folder its paths are read
+    from: the file itself, or each scene a package holds.
+    """
+    if not content.startswith(b"PK\x03\x04"):
+        yield content, folder, name
+        return
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as package:
+            for entry in package.infolist():
+                if not entry.filename.lower().endswith(USD_LAYERS):
+                    continue
+                # USD reads a package's files only as they are stored, unpacked.
+                if entry.compress_type != zipfile.ZIP_STORED:
+                    raise Refused(f"{name} holds {entry.filename} compressed, which USD cannot read.")
+                inner = os.path.join(folder, os.path.dirname(entry.filename))
+                yield from _layers(package.read(entry), inner, f"{name}[{entry.filename}]")
+    except zipfile.BadZipFile as error:
+        raise Refused(f"{name} is a USD package that cannot be read here ({error}).") from error
+
+
+def _named_by(content, name):
+    """
+    What one USD scene names, as written: in USD text, its asset paths and
+    clip patterns; in binary USD, every string it holds, any of which may be
+    one.
+    """
+    if usd_crate.is_crate(content):
+        held = usd_crate.strings(content, name)
+        if any(len(text) > 1 and text.startswith("`") and text.endswith("`") for text in held):
+            raise Refused(EXPRESSION.format(name=name))
+        return held
+    if not content.startswith(b"#usda"):
+        raise Refused(f"{name} is not USD that can be read here.")
+    text = content.decode("utf-8", errors="replace")
+    named = []
+    for quoted, plain in USD_ASSET.findall(text):
+        asset = quoted or plain
+        if "`" in asset:
+            raise Refused(EXPRESSION.format(name=name))
+        named.append(asset)
+    named.extend("".join(written) for written in USD_TEMPLATE.findall(text))
+    return named
 
 
 def _usd_names(path, workspace):
-    """Every file a USD text file names, however deep. Binary USD cannot be read here, so it is refused."""
+    """Every file a USD file names, in any of its forms, however deep."""
     names = []
     waiting = [os.path.realpath(path)]
     seen = set()
@@ -88,24 +142,23 @@ def _usd_names(path, workspace):
         seen.add(layer)
         with open(layer, "rb") as file:
             content = file.read()
-        if not content.startswith(b"#usda"):
-            raise Refused(UNCHECKABLE.format(name=os.path.basename(layer)))
-        folder = os.path.dirname(layer)
-        for quoted, plain in USD_ASSET.findall(content.decode("utf-8", errors="replace")):
-            asset = (quoted or plain).strip()
-            if not asset:
-                continue
-            # A path put together as the scene opens says nothing until then.
-            if "`" in asset:
-                raise Refused(f"{os.path.basename(layer)} names a file by an expression, which cannot be checked here.")
-            named = os.path.realpath(os.path.join(folder, asset.split("[", 1)[0]))
-            names.append(named)
-            if not outside([named], workspace) and named.lower().endswith(USD_LAYERS) and os.path.isfile(named):
-                waiting.append(named)
+        for scene, folder, name in _layers(content, os.path.dirname(layer), os.path.basename(layer)):
+            for written in _named_by(scene, name):
+                asset = written.strip()
+                if not asset:
+                    continue
+                try:
+                    named = os.path.realpath(os.path.join(folder, asset.split("[", 1)[0]))
+                except (OSError, ValueError):
+                    # A path the system cannot open is not one USD can read.
+                    continue
+                names.append(named)
+                if not outside([named], workspace) and named.lower().endswith(USD_LAYERS) and os.path.isfile(named):
+                    waiting.append(named)
     return names
 
 
-NAMED = {".obj": _obj_names, ".usd": _usd_names, ".usda": _usd_names}
+NAMED = {".obj": _obj_names, **{extension: _usd_names for extension in USD_LAYERS}}
 
 
 def named_outside(path, workspace):

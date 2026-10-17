@@ -27,6 +27,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
+import { crc32 } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ScenePreview } from "@zhiyin/contract";
 import {
@@ -48,6 +49,36 @@ type Result = {
   isError?: boolean;
   content: { type: string; text?: string; data?: string }[];
 };
+
+/** A zip holding one file, stored as USD packages store theirs. */
+function storedZip(name: string, data: Buffer): Buffer {
+  const file = Buffer.from(name);
+  const crc = crc32(data);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt16LE(20, 4);
+  local.writeUInt16LE(0x21, 12);
+  local.writeUInt32LE(crc, 14);
+  local.writeUInt32LE(data.length, 18);
+  local.writeUInt32LE(data.length, 22);
+  local.writeUInt16LE(file.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt16LE(20, 4);
+  central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(0x21, 14);
+  central.writeUInt32LE(crc, 16);
+  central.writeUInt32LE(data.length, 20);
+  central.writeUInt32LE(data.length, 24);
+  central.writeUInt16LE(file.length, 28);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(central.length + file.length, 12);
+  end.writeUInt32LE(local.length + file.length + data.length, 16);
+  return Buffer.concat([local, file, data, central, file, end]);
+}
 
 describe.runIf(blender)("a real Blender", () => {
   let root: string;
@@ -413,9 +444,10 @@ describe.runIf(blender)("a real Blender", () => {
 
   /**
    * A model file can name other files for its importer to read: a glTF its
-   * geometry, an OBJ its materials, a USD file other scenes. Those reads leave
-   * no picture behind to find afterwards, so they are refused as they would
-   * happen, before the importer reads outside the folder.
+   * geometry, an OBJ its materials, a USD file other scenes and the clips it
+   * plays. Those reads leave no picture behind to find afterwards, so they
+   * are refused as they would happen, before the importer reads outside the
+   * folder.
    */
   it("refuses a model whose geometry, materials or parts are read from outside the workspace", async () => {
     const triangle = Buffer.from(
@@ -457,10 +489,24 @@ describe.runIf(blender)("a real Blender", () => {
       join(workspace, "parts.usda"),
       '#usda 1.0\ndef Xform "Root" (\n  references = @../outside.usda@</Tri>\n) {\n}\n',
     );
+    // Clips name their scenes by a pattern written as a plain string.
+    await writeFile(
+      join(root, "outside.1.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points.timeSamples = { 1: [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)] }\n}\n',
+    );
+    await writeFile(
+      join(workspace, "clips.usda"),
+      '#usda 1.0\ndef Mesh "Tri" (\n  clips = {\n    dictionary default = {\n      string templateAssetPath = "../outside.#.usda"\n      double templateStartTime = 1\n      double templateEndTime = 1\n      double templateStride = 1\n      string primPath = "/Tri"\n    }\n  }\n) {\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
     const before = await call("blender_describe_scene", {});
 
     const refused = [];
-    for (const path of ["geometry.gltf", "materials.obj", "parts.usda"])
+    for (const path of [
+      "geometry.gltf",
+      "materials.obj",
+      "parts.usda",
+      "clips.usda",
+    ])
       refused.push(
         await call("blender_add_objects", {
           objects: [{ name: "Reaching", kind: "model", path }],
@@ -550,7 +596,7 @@ describe.runIf(blender)("a real Blender", () => {
     await unlink(join(workspace, "linked"));
   });
 
-  it("brings in a USD text file whose parts are in the workspace, and refuses binary USD it cannot check", async () => {
+  it("brings in a USD text file whose parts are in the workspace", async () => {
     await writeFile(
       join(workspace, "part.usda"),
       '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
@@ -559,21 +605,84 @@ describe.runIf(blender)("a real Blender", () => {
       join(workspace, "assembly.usda"),
       '#usda 1.0\ndef Xform "Root" (\n  references = @./part.usda@</Tri>\n) {\n}\n',
     );
-    await writeFile(join(workspace, "binary.usd"), "PXR-USDC\0\0\0\0");
 
     const contained = await call("blender_add_objects", {
       objects: [{ name: "Assembly", kind: "model", path: "assembly.usda" }],
-    });
-    const binary = await call("blender_add_objects", {
-      objects: [{ name: "Binary", kind: "model", path: "binary.usd" }],
     });
     await call("blender_edit_objects", {
       edits: [{ object: "Assembly", delete: true }],
     });
 
     expect(contained.isError).toBeUndefined();
-    expect(binary.isError).toBe(true);
-    expect(binary.said).toMatch(/binary USD/);
+  });
+
+  it("brings in binary USD and a USD package whose parts are in the workspace", async () => {
+    await mkdir(join(workspace, "usd"), { recursive: true });
+    await call("blender_export", {
+      output: "usd/plate.usdc",
+      objects: ["Plate"],
+    });
+    await call("blender_export", {
+      output: "usd/plate.usdz",
+      objects: ["Plate"],
+    });
+
+    const binary = await call("blender_add_objects", {
+      objects: [{ name: "Binary", kind: "model", path: "usd/plate.usdc" }],
+    });
+    const packaged = await call("blender_add_objects", {
+      objects: [{ name: "Packaged", kind: "model", path: "usd/plate.usdz" }],
+    });
+    const described = await call("blender_describe_scene", {});
+    await call("blender_edit_objects", {
+      edits: [
+        { object: "Binary", delete: true },
+        { object: "Packaged", delete: true },
+      ],
+    });
+
+    expect(binary.isError, binary.said).toBeUndefined();
+    expect(packaged.isError, packaged.said).toBeUndefined();
+    // Its picture is kept in the scene, named as the package holds it.
+    expect(described.said).toContain("picture plate.usdz[plate.png]");
+  });
+
+  /**
+   * Binary USD keeps every string it holds in one table, so every one is
+   * checked as a path it might read; a package's own scenes are checked the
+   * same way.
+   */
+  it("refuses binary USD and a USD package that name a file outside the workspace, and binary USD it cannot read", async () => {
+    // The plate's picture, named from usd/ as ../renders/plate.png, lies
+    // outside the workspace for a copy one folder up.
+    const binary = await readFile(join(workspace, "usd", "plate.usdc"));
+    await mkdir(join(root, "renders"), { recursive: true });
+    await copyFile(
+      join(workspace, "renders", "plate.png"),
+      join(root, "renders", "plate.png"),
+    );
+    await writeFile(join(workspace, "moved.usdc"), binary);
+    await writeFile(
+      join(workspace, "moved.usdz"),
+      storedZip("plate.usdc", binary),
+    );
+    await writeFile(join(workspace, "damaged.usd"), "PXR-USDC\0\0\0\0");
+    const before = await call("blender_describe_scene", {});
+
+    const answers: Record<string, Awaited<ReturnType<typeof call>>> = {};
+    for (const path of ["moved.usdc", "moved.usdz", "damaged.usd"])
+      answers[path] = await call("blender_add_objects", {
+        objects: [{ name: "Reaching", kind: "model", path }],
+      });
+    const after = await call("blender_describe_scene", {});
+
+    for (const path of ["moved.usdc", "moved.usdz"]) {
+      expect(answers[path]?.isError, path).toBe(true);
+      expect(answers[path]?.said, path).toMatch(/outside the workspace/);
+    }
+    expect(answers["damaged.usd"]?.isError).toBe(true);
+    expect(answers["damaged.usd"]?.said).toMatch(/cannot be read/);
+    expect(after.said).toBe(before.said);
   });
 
   it("leaves the scene as it was when a render is refused", async () => {
@@ -686,6 +795,32 @@ describe.runIf(blender)("a real Blender", () => {
     }
 
     await expect(stat(marker)).rejects.toThrow();
+  });
+
+  it("ignores USD's own variables in Zhiyin's environment, which could have a model read files outside the workspace", async () => {
+    await writeFile(
+      join(root, "searched.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
+    // A path that does not start with ./ is also looked for in USD's search
+    // folders, which a variable can name.
+    await writeFile(
+      join(workspace, "searching.usda"),
+      '#usda 1.0\ndef "Root" (\n  references = @searched.usda@</Tri>\n) {\n}\n',
+    );
+    process.env["PXR_AR_DEFAULT_SEARCH_PATH"] = root;
+    let added;
+    try {
+      await scenes.close("live");
+      added = await call("blender_add_objects", {
+        objects: [{ name: "Searched", kind: "model", path: "searching.usda" }],
+      });
+    } finally {
+      delete process.env["PXR_AR_DEFAULT_SEARCH_PATH"];
+    }
+
+    expect(added.isError).toBe(true);
+    expect(added.said).toMatch(/nothing Blender could import/);
   });
 
   it("runs Blender below normal priority, so a long render leaves the desktop responsive", async () => {
@@ -3851,6 +3986,44 @@ describe.runIf(blender)("a real Blender", () => {
     wall("render").forEach((channel, at) =>
       expect(Math.abs(wall("preview")[at]! - channel)).toBeLessThan(0.1),
     );
+  });
+
+  it("draws a render asked of EEVEE from inside a room as Cycles lights the room, and says so", async () => {
+    const drafted = await call("blender_render", {
+      output: "renders/room-draft.png",
+      engine: "eevee",
+    });
+    // The wall in the middle of the picture, and the floor near its foot.
+    const read = await call("blender_run_script", {
+      code: [
+        "import bpy",
+        "for name, path in (('draft', '//renders/room-draft.png'), ('render', '//renders/room.png')):",
+        "    image = bpy.data.images.load(bpy.path.abspath(path))",
+        "    w, h = image.size",
+        "    p = image.pixels[:]",
+        "    for part, row in (('wall', h // 2), ('floor', h // 10)):",
+        "        patch = [(y * w + x) * 4 for x in range(w // 2 - 6, w // 2 + 6) for y in range(row - 6, row + 6)]",
+        "        print(name, part, *[round(sum(p[i + c] for i in patch) / len(patch), 4) for c in range(3)])",
+        "    bpy.data.images.remove(image)",
+      ].join("\n"),
+    });
+    const seen = (name: string) =>
+      (new RegExp(`${name} (.+)`).exec(read.said)?.[1] ?? "")
+        .split(" ")
+        .map(Number) as [number, number, number];
+
+    expect(drafted.said).toMatch(/with Cycles on /);
+    expect(drafted.said).toMatch(
+      /Asked of EEVEE from inside a room, this draft is drawn with Cycles/,
+    );
+    // Within a twentieth of the way from black to white of the render.
+    for (const part of ["wall", "floor"])
+      seen(`render ${part}`).forEach((channel, at) =>
+        expect(
+          Math.abs(seen(`draft ${part}`)[at]! - channel),
+          part,
+        ).toBeLessThan(0.05),
+      );
   });
 
   it("shows level ground under a daylight sky, which is itself near black below its horizon", async () => {

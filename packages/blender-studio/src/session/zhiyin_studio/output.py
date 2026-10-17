@@ -118,6 +118,14 @@ DRAFT = (
     "EEVEE is a quick look at layout and framing: it lets a sky's light through walls and ceilings and shows glass roughly, "
     "so light and colours are judged, and the picture to hand over is made, with Cycles."
 )
+# Samples for a draft asked of EEVEE from inside a room, which Cycles draws
+# instead: within a few levels of its colours at 128.
+DRAFT_SAMPLES = 16
+# Said with that draft.
+ROOM_DRAFT = (
+    f"Asked of EEVEE from inside a room, this draft is drawn with Cycles at {DRAFT_SAMPLES} samples: EEVEE lets a sky's light "
+    "through walls and ceilings. The picture to hand over is made with Cycles at its full samples."
+)
 
 
 # How much of a plan's picture is left empty round the scene.
@@ -432,14 +440,20 @@ def render(args, scene_file, device):
             need(16 <= width <= 16384 and 16 <= height <= 16384, "resolution must be between 16 and 16384 pixels each way.")
             s.render.resolution_x, s.render.resolution_y = int(width), int(height)
         s.render.resolution_percentage = 100
-        if engine == "cycles":
+        aside.hide([part for obj in left_out for part in (obj, *obj.children_recursive)])
+        # From inside a room EEVEE lets a sky's light through the walls and
+        # the ceiling; the draft is drawn as the room is lit, and says so.
+        drafted = engine == "eevee" and not plan and under_a_roof(s.camera)
+        if drafted:
+            engine = "cycles"
+            device.use_cycles(DRAFT_SAMPLES)
+        elif engine == "cycles":
             device.use_cycles(whole(args.get("samples"), "samples", maximum=16384, default=128))
         else:
             s.render.engine = "BLENDER_EEVEE"
             s.eevee.taa_render_samples = whole(args.get("samples"), "samples", maximum=16384, default=64)
             lifelike_eevee(s)
         s.render.film_transparent = background == "transparent"
-        aside.hide([part for obj in left_out for part in (obj, *obj.children_recursive)])
         if plan:
             made, level, above, through = plan_from_above(aside, cut)
         # A see-through background leaves the backdrop out of the picture; it still
@@ -492,7 +506,7 @@ def render(args, scene_file, device):
         + (f", without {listed(left)}" if left else "")
         + "."
         + cut_text(level, above, through)
-        + (PLAN_KEEPS if plan else "" if engine == "cycles" else f" {DRAFT}")
+        + (PLAN_KEEPS if plan else f" {ROOM_DRAFT}" if drafted else "" if engine == "cycles" else f" {DRAFT}")
         + (
             f" {listed(over)} {'lies' if one else 'lie'} over the rest and {'hides' if one else 'hide'} it from above: "
             f"name {'it' if one else 'them'} in without to leave {'it' if one else 'them'} out of the plan."
@@ -881,14 +895,15 @@ def preview(view, path, device):
         partial = path + ".part.jpg"
         if view.get("quick") is True:
             quick_picture(s, partial)
-        elif device.name and (see_through() or (used == "camera" and under_a_roof(s.camera))):
+        elif (device.name and see_through()) or (used == "camera" and under_a_roof(s.camera)):
             # EEVEE draws light through one layer of glass at most, so a
             # liquid in a bottle vanishes, and it lets a sky's light through
             # walls, so a room shows paler and bluer than it is lit; Cycles
             # draws both as the render will. Light through glass takes many
-            # bounces, so that picture is drawn at half size; a room without
-            # any is quick enough at full size.
-            s.render.resolution_percentage = 50 if see_through() else 100
+            # bounces, so that picture is drawn at half size, and a room on
+            # the processor too; a room on a graphics card is quick enough at
+            # full size.
+            s.render.resolution_percentage = 50 if see_through() or not device.name else 100
             device.use_cycles(16)
             s.cycles.time_limit = PREVIEW_DRAWING
             deep_bounces()
