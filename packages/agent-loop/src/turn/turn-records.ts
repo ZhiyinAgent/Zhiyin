@@ -55,6 +55,8 @@ export class TurnRecords {
    * the other.
    */
   readonly #unsaved = new Map<string, WorkspaceTask>();
+  /** Each task's writes still being saved. */
+  readonly #saving = new Map<string, Set<Promise<void>>>();
 
   constructor(
     deps: AgentLoopDependencies,
@@ -659,23 +661,61 @@ export class TurnRecords {
    * keeping but not worth serialising the whole task for, and the next change
    * of any other kind announces the accumulated text along with itself.
    */
+  /** Writes the task; false when the write was refused, as it began or ended. */
   async replaceTask(
     task: WorkspaceTask,
     persist = true,
     emit = true,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const commit = this.#storeGuard(task);
-    if (!commit()) return;
+    if (!commit()) return false;
     this.#unsaved.set(task.id, task);
+    const saving = this.#deps.host.store(task, {
+      persist,
+      commit,
+      announce: () => emit && commit(),
+    });
+    const held = this.#saving.get(task.id) ?? new Set<Promise<void>>();
+    held.add(saving);
+    this.#saving.set(task.id, held);
     try {
-      await this.#deps.host.store(task, {
-        persist,
-        commit,
-        announce: () => emit && commit(),
-      });
+      await saving;
     } finally {
+      held.delete(saving);
+      if (!held.size && this.#saving.get(task.id) === held)
+        this.#saving.delete(task.id);
       if (this.#unsaved.get(task.id) === task) this.#unsaved.delete(task.id);
     }
+    return commit();
+  }
+
+  /**
+   * A change made on no turn's behalf, such as the end of a job or of a
+   * specialist, to the conversation as it stands; `change` says undefined
+   * when there is nothing to change. A stop that lands while it is saved
+   * refuses the write, which holds the conversation from before the stop, so
+   * the change is made again on what the stop left. A write begun before it
+   * from the conversation as saved, as the stop's is, can land after it and
+   * over it, so once such writes have landed the change is made again if it
+   * was lost. `change` says undefined once what it sets is there, so making
+   * it again changes nothing more.
+   */
+  async changeOutsideTurns(
+    taskId: string,
+    change: (task: WorkspaceTask) => WorkspaceTask | undefined,
+  ): Promise<boolean> {
+    // A stop ends its turn, so a second write meets no stopped turn; a third
+    // covers another turn started and stopped meanwhile.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!this.#deps.host.find(taskId)) return false;
+      const changed = change(this.task(taskId));
+      if (!changed) return attempt > 0;
+      if (!(await this.replaceTask(changed))) continue;
+      const earlier = [...(this.#saving.get(taskId) ?? [])];
+      if (!earlier.length) return true;
+      await Promise.allSettled(earlier);
+    }
+    return false;
   }
 
   /**

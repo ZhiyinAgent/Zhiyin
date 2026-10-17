@@ -34,4 +34,9 @@ export type SpecialistRun = {
   readonly reason?: string;
   /** False until the parent has a durable notice of this result. */
   readonly handoffDelivered?: boolean;
+  /**
+   * Settled when or before the person stopped its turn: told to the next
+   * turn they start, and never waking the conversation, after a restart too.
+   */
+  readonly quiet?: true;
 };

@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import type { UserInputResponse } from "@zhiyin/contract";
 import { ApprovalPrompt } from "../actions/index.js";
 import { Composer } from "../conversation/index.js";
+import { visibleText } from "../shared/index.js";
 import { UserInputPrompt } from "../user-input/index.js";
 import { WorkspacePicker } from "./WorkspacePicker.js";
 import {
@@ -20,6 +21,7 @@ type ComposerProps = ComponentProps<typeof Composer>;
  * there is one, and the composer with the folder it works in.
  */
 export function ComposerDock({
+  composerKey,
   state,
   task,
   commands,
@@ -33,6 +35,8 @@ export function ComposerDock({
   onUserInput,
   onReturnToConversation,
 }: {
+  /** Which composer this is: a new key starts an empty one. */
+  composerKey: string;
   state: WorkspaceState;
   task: WorkspaceTask | null;
   commands: WorkspaceCommands;
@@ -66,12 +70,20 @@ export function ComposerDock({
           </button>
         </div>
       )}
+      {/* Always present, so a screen reader hears a request arrive even
+          where focus stays with the message being written. */}
+      <p className={styles["composer-dock__announcement"]} aria-live="polite">
+        {task?.phase.kind === "approval"
+          ? `Permission needed: ${visibleText(task.phase.prompt.action)}`
+          : ""}
+      </p>
       {task?.phase.kind === "approval" && (
         <div className={styles["composer-dock__decision"]}>
           <ApprovalPrompt
             key={task.phase.prompt.id}
             {...approvalPromptDetails(task.phase.prompt)}
             compact={compact}
+            takesFocus
             onDecision={async (decision, reason) => {
               const prompt =
                 task.phase.kind === "approval" ? task.phase.prompt : undefined;
@@ -103,7 +115,7 @@ export function ComposerDock({
       )}
       <div className={styles["workspace-composer"]} hidden={hidden}>
         <Composer
-          key={task?.id ?? "new"}
+          key={composerKey}
           {...(state.provider.reasoning
             ? { reasoningCapabilities: state.provider.reasoning }
             : {})}

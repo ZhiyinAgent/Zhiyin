@@ -16,6 +16,11 @@ export const TITLE_BAR = {
   dark: { color: "#1b1c1e", symbolColor: "#cfd1d4" },
   /** The same two in the light theme. */
   light: { color: "#f4f4f2", symbolColor: "#3a3c40" },
+  /** `--zy-scrim`, laid over the page under a dialog, in each theme. */
+  scrim: {
+    dark: { red: 0, green: 0, blue: 0, alpha: 0.62 },
+    light: { red: 20, green: 22, blue: 26, alpha: 0.38 },
+  },
   /**
    * The height of the bar less the rule along its bottom edge.
    *
@@ -29,10 +34,37 @@ export const TITLE_BAR = {
   height: 43,
 } as const;
 
-/** What Windows is told to draw the window controls on, for one theme. */
-export function titleBarOverlay(dark: boolean) {
+/**
+ * What Windows is told to draw the window controls on, for one theme. Under a
+ * dialog the controls are seen through its scrim, as the page is, so they do
+ * not stand out as the one thing still lit.
+ */
+export function titleBarOverlay(dark: boolean, dimmed = false) {
+  const colours = dark ? TITLE_BAR.dark : TITLE_BAR.light;
+  const scrim = dark ? TITLE_BAR.scrim.dark : TITLE_BAR.scrim.light;
   return {
-    ...(dark ? TITLE_BAR.dark : TITLE_BAR.light),
+    color: dimmed ? underScrim(colours.color, scrim) : colours.color,
+    symbolColor: dimmed
+      ? underScrim(colours.symbolColor, scrim)
+      : colours.symbolColor,
     height: TITLE_BAR.height,
   };
+}
+
+function underScrim(
+  hex: string,
+  scrim: (typeof TITLE_BAR.scrim)["dark" | "light"],
+): string {
+  const over = [scrim.red, scrim.green, scrim.blue];
+  return `#${over
+    .map((top, index) => {
+      const under = Number.parseInt(
+        hex.slice(1 + index * 2, 3 + index * 2),
+        16,
+      );
+      return Math.round(under * (1 - scrim.alpha) + top * scrim.alpha)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
 }

@@ -50,6 +50,8 @@ export async function deliverBackgroundWork(
     readonly pendingHandoffs: PendingHandoffs;
     readonly commandEndings: CommandEndings;
     readonly sessions: Sessions;
+    /** The turn's stop: what it could not tell waits for the next turn. */
+    readonly signal?: AbortSignal;
   },
 ): Promise<void> {
   const runs = specialistRunsText(from.records.task(taskId).specialistRuns);
@@ -64,9 +66,25 @@ export async function deliverBackgroundWork(
     from.records,
     from.sessions,
     history,
+    from.signal,
   );
-  for (const ending of from.commandEndings.drain(taskId))
+  const endings = from.commandEndings.drain(taskId);
+  for (const [at, ending] of endings.entries()) {
     await history.notice("job", ending);
+    // A stop while it was told may have kept it out: it and the rest are
+    // told at the next turn the person starts, each once.
+    if (from.signal?.aborted) {
+      const content = harnessNotice("job", ending);
+      const told = from.records
+        .task(taskId)
+        .modelHistory.some(
+          (entry) => entry.kind === "notice" && entry.content === content,
+        );
+      for (const untold of endings.slice(told ? at + 1 : at))
+        from.commandEndings.push(taskId, untold, false);
+      from.signal.throwIfAborted();
+    }
+  }
   const task = from.records.task(taskId);
   const untold = task.undos.filter((undo) => !undo.told);
   if (!untold.length) return;

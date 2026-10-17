@@ -8,14 +8,28 @@
 import { describe, expect, it } from "vitest";
 import { drain, refusing, xiaomiClient } from "./support.js";
 
+/** A message with a picture in it, as an attached one is sent. */
+const withPicture = [
+  {
+    role: "user" as const,
+    content: [
+      { kind: "text" as const, text: "What is this?" },
+      { kind: "image" as const, mediaType: "image/png", data: "iVBORw0KGgo=" },
+    ],
+  },
+];
+
 async function failure(
   status: number,
   message?: string,
   headers?: Record<string, string>,
+  messages: Parameters<typeof drain>[1]["messages"] = [
+    { role: "user", content: "Hello" },
+  ],
 ) {
   try {
     await drain(xiaomiClient({ fetcher: refusing(status, message, headers) }), {
-      messages: [{ role: "user", content: "Hello" }],
+      messages,
     });
   } catch (error) {
     return error as Record<string, unknown>;
@@ -80,11 +94,21 @@ describe("a Xiaomi MiMo failure", () => {
   });
 
   it("says a picture could not be used when Xiaomi answers that the model takes none", async () => {
-    expect(await failure(404)).toMatchObject({
-      code: "attachmentRejected",
+    expect(await failure(404, undefined, undefined, withPicture)).toMatchObject(
+      {
+        code: "attachmentRejected",
+        retryable: false,
+        message:
+          "Xiaomi MiMo says the chosen model or endpoint does not take pictures.",
+      },
+    );
+  });
+
+  it("says the model or endpoint was not found when a request without a picture is answered 404", async () => {
+    expect(await failure(404, "Model not found: mimo-v9")).toMatchObject({
+      code: "modelUnavailable",
       retryable: false,
-      message:
-        "Xiaomi MiMo says the chosen model or endpoint does not take pictures.",
+      message: expect.stringContaining("Model not found: mimo-v9"),
     });
   });
 

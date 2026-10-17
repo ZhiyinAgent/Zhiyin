@@ -54,6 +54,7 @@ function fakeBrowser(): InteractiveBrowser & {
     state: () => ({ status: "closed", url: "", title: "", loading: false }),
     open: async () => {},
     close: vi.fn(async () => {}),
+    takeStoppedDownloads: () => [],
     navigate: async () => {},
     back: async () => {},
     forward: async () => {},

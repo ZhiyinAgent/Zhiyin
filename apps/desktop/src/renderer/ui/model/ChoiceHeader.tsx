@@ -27,8 +27,8 @@ export function ChoiceHeader({
   return (
     <header className={styles["model-settings__head"]}>
       <div>
-        <p className="instrument-label">Workspace / Settings</p>
-        <h1>Model</h1>
+        <p className="instrument-label">Your preferences / Model</p>
+        <h1 tabIndex={-1}>Model</h1>
       </div>
       <div className={styles["model-settings__actions"]}>
         {failure && (

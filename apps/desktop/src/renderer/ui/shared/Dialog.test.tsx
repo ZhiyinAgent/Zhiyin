@@ -61,6 +61,41 @@ describe("Dialog", () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  /**
+   * Chromium lets the keyboard reach a body that scrolls, as it does at the
+   * smallest window, though it is no control. Tab from there goes on to what
+   * follows it, not back to the top.
+   */
+  it("moves on from a focused part of the body that is no control, in the order the dialog shows", () => {
+    render(
+      <Dialog
+        title="Install Python"
+        onClose={() => undefined}
+        footer={
+          <>
+            <button type="button">Install</button>
+            <button type="button">Not now</button>
+          </>
+        }
+      >
+        <p tabIndex={-1}>What will be installed</p>
+      </Dialog>,
+    );
+    const body = screen.getByText("What will be installed");
+
+    body.focus();
+    fireEvent.keyDown(body, { key: "Tab" });
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Install" }),
+    );
+
+    body.focus();
+    fireEvent.keyDown(body, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Close" }),
+    );
+  });
+
   it("closes only the dialog on top with Escape when one opens over another", () => {
     const outer = vi.fn();
     const inner = vi.fn();

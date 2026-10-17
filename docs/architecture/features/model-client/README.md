@@ -57,6 +57,8 @@ which is described below, and by `OpenRouterModelClient` for OpenRouter alone:
   before the provider counted it, into a usage report for the chosen model:
   the caller's tokens, a request id of its own, and the price list's estimate
   of the cost.
+- A request the provider names no id for is given one of its own, so two of
+  them are counted as two.
 - `settings()` returns the chosen model, the upstreams routing is restricted
   to, the context window and longest reply a request may have, the reasoning
   controls the model offers, whether it accepts pictures, the endpoint, and
@@ -96,11 +98,11 @@ and the limit where the provider stated them. The codes are `noModel`,
 `unexplainedError`, `networkFailure` and `malformedResponse`.
 
 The composition root builds `ModelProviders` with `FileModelChoice` (the
-stored choice). For a test run or the benchmark, `ZHIYIN_MODEL` fixes the
-model instead, on the provider and region named by `ZHIYIN_PROVIDER` and
-`ZHIYIN_REGION` (OpenRouter when unnamed). Outside an installed app,
-`ZHIYIN_MODEL_ENDPOINT` sends every request to another host; an installed app
-ignores it.
+stored choice). Outside an installed app, for a test run or the benchmark,
+`ZHIYIN_MODEL` fixes the model instead, on the provider and region named by
+`ZHIYIN_PROVIDER` and `ZHIYIN_REGION` (OpenRouter when unnamed), and
+`ZHIYIN_MODEL_ENDPOINT` sends every request to another host. An installed app
+ignores all four.
 - `ProviderCredentials`, one platform's key as the person saved it.
 - `fetchOpenRouterCatalog` and `fetchOpenRouterModelProviders`, OpenRouter's
   model catalogue and the upstreams one model may be routed to.
@@ -274,13 +276,17 @@ ignores it.
   codes), and the status otherwise. Whatever the lab's words, a conversation
   too long for the model is `contextExceeded`, an account that cannot pay is
   `outOfCredits`, a refused key is `unauthorized`, and a busy model or rate
-  limit is retried.
+  limit is retried. A code a lab names its failure by is matched as that code,
+  never as a number that happens to be in its sentence, and a 404 Xiaomi gives
+  a request without a picture is the model not found, not the picture.
 - **Each failure points where the person can act.** An unrecognised model id
   (400 "is not a valid model ID") and a retired one (404 "No endpoints found")
   both name the stored model and point to the Model page. A rate limit is reported
   as every allowed upstream being out of capacity, and an empty routing result
   as no allowed upstream serving the model, not as the account being throttled
-  or the model being down.
+  or the model being down. Kimi's limits on requests open at once and per
+  minute are told as the account's own, with the open-request count where Kimi
+  gives it, and say a top-up raises them.
 - **An upstream error that explains nothing is said to be one, and sent
   again.** OpenRouter's bare "Provider returned error", untyped or `unmapped`,
   before the stream or inside it, is an `unexplainedError`: it names the

@@ -109,6 +109,22 @@ describe("a command from the window", () => {
     ]);
   });
 
+  it("dims the window's own controls while a dialog covers the page", async () => {
+    const dimmed: boolean[] = [];
+    const { core } = recordingCore(
+      {},
+      { windowControls: { dim: (value) => void dimmed.push(value) } },
+    );
+
+    await core.receive(CHANNEL.dimWindowControls, [true]);
+    await core.receive(CHANNEL.dimWindowControls, [false]);
+    await expect(
+      core.receive(CHANNEL.dimWindowControls, ["yes"]),
+    ).rejects.toThrow("This request is invalid.");
+
+    expect(dimmed).toEqual([true, false]);
+  });
+
   it("turns a plugin on or off", async () => {
     const seen: unknown[] = [];
     const { core } = recordingCore({

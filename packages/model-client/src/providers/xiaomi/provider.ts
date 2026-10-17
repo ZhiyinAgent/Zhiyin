@@ -4,8 +4,9 @@
  * person chooses says whether the account is billed in yuan (mainland China)
  * or US dollars (overseas), and so which price list estimates its costs.
  * Thinking is on unless turned off, and earlier turns go back with their
- * `reasoning_content`, without which Xiaomi refuses a conversation that holds
- * tool calls (API reference and deep-thinking guide, checked 2026-10-09).
+ * `reasoning_content`, as Xiaomi's deep-thinking guide asks (checked
+ * 2026-10-09). A tool conversation sent without it was still accepted when
+ * tried live (2026-10-16).
  */
 
 import type { ModelChoiceValue } from "../../choice.js";

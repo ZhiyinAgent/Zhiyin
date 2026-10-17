@@ -49,6 +49,18 @@ describe("labels on hover and focus", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("Open navigation");
   });
 
+  it("follows its control's name when the control changes what it does", async () => {
+    page();
+    const button = screen.getByRole("button", { name: "Open navigation" });
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    fireEvent.focusIn(button);
+
+    button.setAttribute("aria-label", "Close navigation");
+    await act(async () => {});
+
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Close navigation");
+  });
+
   it("says nothing over a control that already shows its words", () => {
     page();
 

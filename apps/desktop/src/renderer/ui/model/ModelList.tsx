@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import type { ModelCatalog, ModelCatalogEntry } from "@zhiyin/contract";
-import { LoadingSkeleton } from "../shared/index.js";
+import {
+  LoadingSkeleton,
+  moveAmongChoices,
+  tabStopOf,
+} from "../shared/index.js";
 import { fuzzyMatch, fuzzySegments } from "./fuzzy.js";
 import { perMillion, tokenCount } from "./format.js";
 import styles from "./model.module.css";
@@ -176,6 +180,10 @@ export function ModelList({
         : [],
     [catalog, query, activeFilters, order],
   );
+  const stop = tabStopOf(
+    visible.map((row) => row.model),
+    (model) => model.id === selected,
+  );
 
   return (
     <section
@@ -265,6 +273,7 @@ export function ModelList({
           className={styles["model-list"]}
           role="radiogroup"
           aria-label="Models"
+          onKeyDown={moveAmongChoices}
         >
           {visible.map(({ model, nameHits, idHits }) => (
             <button
@@ -273,6 +282,7 @@ export function ModelList({
               type="button"
               role="radio"
               aria-checked={selected === model.id}
+              tabIndex={model === stop ? 0 : -1}
               /*
                 Named explicitly. The emphasis around matched characters splits
                 the name into separate inline elements, and a name computed from

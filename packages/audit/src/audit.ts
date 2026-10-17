@@ -65,6 +65,8 @@ export class FileAuditLog implements AuditLog {
   readonly #file: string;
   #writes: Promise<unknown> = Promise.resolve();
   #sinceTrim = 0;
+  /** Whether this run has looked at what earlier runs left. */
+  #checked = false;
 
   constructor(directory: string) {
     this.#directory = directory;
@@ -79,14 +81,27 @@ export class FileAuditLog implements AuditLog {
 
   async #append(entry: AuditEntry): Promise<void> {
     await mkdir(this.#directory, { recursive: true });
-    await appendFile(this.#file, `${JSON.stringify(entry)}\n`, "utf8");
+    // The first record of a run checks what earlier runs left: a last line
+    // cut short by a crash is ended, so it costs only itself, and a log past
+    // its limit is trimmed, however few entries each run adds.
+    const first = !this.#checked;
+    this.#checked = true;
+    const source = first
+      ? await readFile(this.#file, "utf8").catch(() => "")
+      : "";
+    const opening = source && !source.endsWith("\n") ? "\n" : "";
+    await appendFile(
+      this.#file,
+      `${opening}${JSON.stringify(entry)}\n`,
+      "utf8",
+    );
     this.#sinceTrim += 1;
     // Checked occasionally rather than on every write: reading the whole file
     // back to count lines on each append would make the common case expensive.
     if (this.#sinceTrim >= 500) {
       this.#sinceTrim = 0;
       await this.#trim();
-    }
+    } else if (first) await this.#trim();
   }
 
   /** Keeps the newest entries and drops the oldest (ADR 0019). */

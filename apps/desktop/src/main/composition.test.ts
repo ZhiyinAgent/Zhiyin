@@ -3,7 +3,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   CHANNEL,
   emptyConversationLists,
@@ -70,12 +78,20 @@ const environment = [
   "ZHIYIN_REGION",
 ] as const;
 
+/**
+ * Goes on once the check holds. What the composition does crosses real
+ * processes and files, so it is looked at again every 10 ms; a check that
+ * never holds ends at the test's own timeout, which names the test. Looking
+ * stops once the test has ended, so what follows, such as shutting the core
+ * down, still runs.
+ */
 async function eventually(check: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (check()) return;
+  let ended = false;
+  onTestFinished(() => {
+    ended = true;
+  });
+  while (!ended && !check())
     await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error("The condition was never met.");
 }
 
 describe("the application's composition", () => {
@@ -453,6 +469,75 @@ describe("the application's composition", () => {
       }
 
       expect(completions().every((url) => url.startsWith(host))).toBe(true);
+    },
+  );
+
+  it.each([
+    [
+      "an installed app lets the person choose, and answers with their choice",
+      true,
+      { choosing: "chosen", model: "z-ai/glm-5.3-flash" },
+    ],
+    [
+      "a development run answers with the model it names, which stays fixed",
+      false,
+      { choosing: "refused", model: "deepseek/deepseek-v4.1-flash" },
+    ],
+  ])(
+    "takes a fixed model from the environment only outside an installed app: %s",
+    { timeout: 60_000 },
+    async (_case, packaged, expected) => {
+      process.env["ZHIYIN_MODEL"] = "deepseek/deepseek-v4.1-flash";
+      const models: unknown[] = [];
+      const answering = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        (input: string | URL | Request, init?: RequestInit) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (
+            url.endsWith("/chat/completions") &&
+            typeof init?.body === "string"
+          )
+            models.push((JSON.parse(init.body) as { model?: unknown }).model);
+          return answering(input, init);
+        },
+      );
+      const core = buildCore({
+        dataDirectory,
+        builtInPluginsDirectory: fileURLToPath(
+          new URL("../../../../packages/plugins/built-in", import.meta.url),
+        ),
+        workspaceDirectory,
+        version: "test",
+        packaged,
+        send: () => undefined,
+        chooseFolder: async () => undefined,
+        chooseSaveLocation: async () => undefined,
+        openExternal: async () => {},
+        openPath: async () => {},
+        showInFolder: async () => {},
+        startDrawing: async () => {
+          throw new Error("Nothing is drawn in this test.");
+        },
+      });
+      core.start();
+      let choosing: string | undefined;
+      try {
+        await core.receive(CHANNEL.frontendReady, []);
+        choosing = await core
+          .receive(CHANNEL.selectModel, ["z-ai/glm-5.3-flash", []])
+          .then(
+            () => "chosen",
+            () => "refused",
+          );
+        const taskId = (await core.receive(CHANNEL.createTask, [])) as string;
+        await core.receive(CHANNEL.sendMessage, [taskId, "Hello"]);
+        await eventually(() => models.length > 0);
+      } finally {
+        await core.shutdown();
+      }
+
+      expect({ choosing, model: models[0] }).toEqual(expected);
     },
   );
 });

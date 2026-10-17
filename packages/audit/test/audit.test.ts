@@ -110,6 +110,47 @@ describe("FileAuditLog", () => {
     ]);
   });
 
+  it("loses only a line cut short by a crash, not the entry written after it", async () => {
+    const home = await directory();
+    await new FileAuditLog(home).record(entry());
+    // Zhiyin closed part way through writing the next line.
+    await appendFile(
+      join(home, "corrections.log"),
+      '{"at":"2026-09-05T10:00:01.000Z","taskId":"ta',
+      "utf8",
+    );
+
+    await new FileAuditLog(home).record(
+      entry({ at: "2026-09-05T10:00:02.000Z" }),
+    );
+
+    const kept = await new FileAuditLog(home).read();
+    expect(kept.map((item) => item.at)).toEqual([
+      "2026-09-05T10:00:00.000Z",
+      "2026-09-05T10:00:02.000Z",
+    ]);
+  });
+
+  it("keeps to its limit across restarts, however few each run records", async () => {
+    const home = await directory();
+    const at = (index: number) =>
+      new Date(Date.UTC(2026, 8, 5) + index * 1000).toISOString();
+    await writeFile(
+      join(home, "corrections.log"),
+      Array.from(
+        { length: 5_010 },
+        (_, index) => `${JSON.stringify(entry({ at: at(index) }))}\n`,
+      ).join(""),
+      "utf8",
+    );
+
+    await new FileAuditLog(home).record(entry({ at: at(5_010) }));
+
+    const kept = await new FileAuditLog(home).read();
+    expect(kept).toHaveLength(5_000);
+    expect(kept.at(-1)?.at).toBe(at(5_010));
+  });
+
   it("reports nothing rather than failing when there is no log yet", async () => {
     await expect(new FileAuditLog(await directory()).read()).resolves.toEqual(
       [],

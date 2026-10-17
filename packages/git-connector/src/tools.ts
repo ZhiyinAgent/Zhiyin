@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
 import type {
   ActionDetail,
   ToolCallInspection,
@@ -98,6 +99,36 @@ function argumentsInspection(reason: string): ToolCallInspection {
   return { ok: false, correctable: true, reason };
 }
 
+/**
+ * Status and diff look inside no submodule (`--ignore-submodules=dirty`), so
+ * a repository that has any says what is left out of their answer.
+ */
+async function sayingSubmodulesUnseen(
+  result: GitToolResult,
+  git: string,
+  root: string,
+  signal: AbortSignal | undefined,
+  containment: GitContainment | undefined,
+): Promise<GitToolResult> {
+  if (result.isError) return result;
+  const top = await readGit(
+    git,
+    root,
+    ["rev-parse", "--show-toplevel"],
+    signal,
+    containment,
+  );
+  if (
+    top.exitCode !== 0 ||
+    top.ending ||
+    !existsSync(join(top.stdout.trim(), ".gitmodules"))
+  )
+    return result;
+  return textResult(
+    `${result.content.map((part) => part.text).join("\n")}\nChanges inside submodules' own files are not shown.`,
+  );
+}
+
 const statusTool: GitToolDefinition = {
   spec: {
     name: "git_status",
@@ -120,13 +151,19 @@ const statusTool: GitToolDefinition = {
     };
   },
   async execute(git, root, _args, signal, containment) {
-    return invoke(
+    return sayingSubmodulesUnseen(
+      await invoke(
+        git,
+        root,
+        ["status", "--porcelain=v1", "-b", "--ignore-submodules=dirty"],
+        signal,
+        containment,
+        true,
+      ),
       git,
       root,
-      ["status", "--porcelain=v1", "-b"],
       signal,
       containment,
-      true,
     );
   },
 };
@@ -166,18 +203,25 @@ const diffTool: GitToolDefinition = {
       typeof args === "object" &&
       args !== null &&
       (args as Record<string, unknown>)["staged"] === true;
-    return invoke(
+    return sayingSubmodulesUnseen(
+      await invoke(
+        git,
+        root,
+        [
+          "diff",
+          "--no-ext-diff",
+          "--no-textconv",
+          "--ignore-submodules=dirty",
+          ...(staged ? ["--staged"] : []),
+        ],
+        signal,
+        containment,
+        true,
+      ),
       git,
       root,
-      [
-        "diff",
-        "--no-ext-diff",
-        "--no-textconv",
-        ...(staged ? ["--staged"] : []),
-      ],
       signal,
       containment,
-      true,
     );
   },
 };

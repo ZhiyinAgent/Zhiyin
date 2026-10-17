@@ -64,15 +64,19 @@ crash interrupted, and takes the backup around each file change. It is a group
   touching files, the group writes the intended result to a journal in the
   app's data folder, records the file results before saving the conversation,
   and clears the entry once saved. At startup, `resume` finishes a pending
-  entry. If the saved conversation matches neither its state before the
+  entry. The intended result counts as saved whatever time the save recorded
+  on it. If the saved conversation matches neither its state before the
   operation nor the intended result, that conversation stays blocked: no
   turn, rewind or undo starts in it. The host is asked to open the
   conversation first, since after a restart it may not be loaded. One entry
   that cannot be finished blocks only its own conversation: the others still
-  finish.
+  finish. Deleting that conversation lets go of what it left unfinished.
 - An undo puts back only the turn's files, and never one changed since: such a
   file is left as it is and reported as a conflict. An undo goes through the
-  same journal as a rewind.
+  same journal as a rewind. A file that could be put back but was not, as when
+  another program held it, leaves the actions that changed it to undo again.
+  An undo a restart finishes is recorded from what its restore found, as one
+  finished at once is, so such a file can still be undone after the restart.
 - What a turn did to a file is read from the turn's own recorded changes, in
   the conversation's folder.
 - A file change is backed up before approval. When there is no folder, or the

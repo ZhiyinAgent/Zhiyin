@@ -46,4 +46,5 @@ the rule is made there too.
 
 Links are real junctions in temporary folders. The check covers the moment it
 runs; a file swapped for a link between the check and a later read is outside
-what it settles.
+what it settles. A hard link is a file's second name, as real as its first,
+so a file is placed by the name it is reached through.

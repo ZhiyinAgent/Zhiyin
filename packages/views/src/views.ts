@@ -14,12 +14,13 @@ export interface ViewValidator {
 /**
  * Said for every question that goes unanswered, however it went unanswered:
  * timed out, surface gone, surface unreachable. All three mean the same thing
- * to a caller — nobody judged this — and distinguishing them would invite a
- * repair to treat "not judged" as "judged and wrong".
+ * to a caller — nobody judged this — and each is marked unchecked, so a
+ * repair never treats "not judged" as "judged and wrong".
  */
 const unchecked: ViewCheckOutcome = {
   ok: false,
   reason: "The view could not be checked in time.",
+  unchecked: true,
 };
 
 const defaultTimeoutMs = 10_000;

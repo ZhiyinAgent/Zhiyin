@@ -68,9 +68,10 @@ activating it.
 - Plugin changes go to the plugins member: `setPluginEnabled`,
   `setComponentEnabled`, `overrideComponent`, `resetComponent`,
   `installPlugin`, `updatePlugin`, `rollbackPlugin`, `removePlugin`,
-  `createPlugin`, `savePluginContents`. `installToolchain(componentId)`
+  `createPlugin`, `savePluginContents`. `installToolchain(componentId, signal?)`
   installs every program an application connector needs, then has the
-  connections looked at again.
+  connections looked at again; the signal stops it. While it runs, the
+  connector's state says how much of everything still to come has arrived.
 - Connection changes go to the MCP member: `connections`, `checkConnection`,
   `retryConnections`, `setConnectionToolEnabled`, `testConnection`,
   `saveConnectionToken`, `clearConnectionToken`, `signInToConnection`.
@@ -81,14 +82,19 @@ activating it.
   (`runningCommands`, `commandOutput`, `stopCommandForPerson`,
   `onCommandEnded`, `onCommandsChanged`, `onJobChanges`) pass through to the
   tools member, for the core and the agent loop (ADR 0007).
-- `stopConversation`, `forgetConversation` and `shutdown` are the one place a
-  conversation's browser, Blender, connections and running commands are let
-  go of. A stop ends only the running commands and jobs; the rest stays open
-  for the next turn (ADR 0029).
+- `stopConversation`, `restConversation`, `forgetConversation` and
+  `shutdown` are the one place a conversation's browser, Blender, connections
+  and running commands are let go of. A stop ends only the running commands
+  and jobs; the rest stays open for the next turn (ADR 0029). A rest, for a
+  conversation left alone, closes only its browser and Blender, which open
+  again on their next use.
 - `declaredConnectionsOf(plugins)` turns package declarations into what the
   MCP feature connects, with each connector's request rate and read-only
   tools. The composition root wires it, because the MCP feature is
   constructed before this group.
+- `unreadablePackagesOf(plugins)` names the installed packages that cannot
+  be read, so their connectors keep their saved credentials meanwhile; it is
+  wired the same way.
 - `browserConnection`, `sceneConnection`, `gitConnection`,
   `documentsConnection` and `pythonConnection` turn a feature's
   `OfferedConnection` into a built-in connection the MCP feature serves. The browser and the 3D
@@ -140,8 +146,11 @@ activating it.
   result.
 - **What a conversation was offered is forgotten with the conversation.**
 - **Plugin readiness is derived, never stored.** A connector that needs a key
-  or a sign-in needs setup and says which; one nothing has reached yet is
-  unchecked, not ready; an application connector whose program is missing
+  or a sign-in needs setup and says which, as does one nothing has reached yet
+  that needs a key nobody has saved or signed in for; one whose key cannot be
+  read for want of secure storage has failed; any other one nothing has
+  reached yet is unchecked, not ready; an application connector whose program
+  is missing
   needs setup; one this build does not include is unavailable. Looking at
   plugin states reaches no connector.
 - **Every declared connector reaches the MCP feature**, switched off when its
@@ -152,5 +161,8 @@ activating it.
 
 Every member is a stand-in that records what reached it: this group owns which
 member a request reaches and in what form, not what the member then does. The
+rules on which connections a conversation reaches are also checked with the
+connection feature itself as the member, only the far end of each connection
+stood in for, since that feature is where they are enforced. The
 agent loop's tests construct the loop through this group with their own
 stand-in members, so the loop is exercised through the real joining.

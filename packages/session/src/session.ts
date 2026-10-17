@@ -227,6 +227,9 @@ export class FileSessions implements Sessions {
     await mkdir(this.#directory, { recursive: true });
     await this.#ownership.claim();
     await this.#kept.clearDrafts();
+    await this.#kept
+      .finishForgetting((id) => this.#history.hasFolder(id))
+      .catch(() => undefined);
   }
 
   /** Gives the folder up so the next launch does not have to wait out a lock. */
@@ -240,6 +243,7 @@ export class FileSessions implements Sessions {
     from: "tool" | "connector" = "tool",
   ): Promise<string> {
     const kind = from === "tool" ? "toolPictures" : "connectorPictures";
+    await this.#ownership.require();
     try {
       const kept = await this.#kept.keep(kind, conversationId, {
         text: JSON.stringify(image),
@@ -283,11 +287,12 @@ export class FileSessions implements Sessions {
     };
   }
 
-  keep(
+  async keep(
     kind: "output" | "pastedText",
     conversationId: string | undefined,
     source: KeptSource,
   ): Promise<KeptItem> {
+    await this.#ownership.require();
     return this.#kept.keep(kind, conversationId, source);
   }
 
@@ -300,6 +305,7 @@ export class FileSessions implements Sessions {
   }
 
   async keepPicture(picture: PictureToKeep): Promise<KeptItem> {
+    await this.#ownership.require();
     try {
       return await this.#kept.keepPicture(picture);
     } catch (error) {
@@ -320,10 +326,11 @@ export class FileSessions implements Sessions {
     );
   }
 
-  claimDrafts(
+  async claimDrafts(
     conversationId: string,
     ids: readonly string[],
   ): Promise<readonly MessageAttachment[]> {
+    await this.#ownership.require();
     return this.#kept.claimDrafts(conversationId, ids);
   }
 
@@ -334,9 +341,11 @@ export class FileSessions implements Sessions {
    */
   forgetConversation(conversationId: string): Promise<void> {
     return this.#queued(async () => {
-      if (this.#history.holds(conversationId))
+      await this.#ownership.require();
+      if (this.#history.holds(conversationId)) {
         this.#forgetLater.add(conversationId);
-      else await this.#kept.forget(conversationId);
+        await this.#kept.willForget(conversationId);
+      } else await this.#kept.forget(conversationId);
     });
   }
 
@@ -347,11 +356,12 @@ export class FileSessions implements Sessions {
     return this.#kept.lastRead(conversationId, path);
   }
 
-  noteRead(
+  async noteRead(
     conversationId: string,
     path: string,
     read: FileRead,
   ): Promise<void> {
+    await this.#ownership.require();
     return this.#kept.noteRead(conversationId, path, read);
   }
 

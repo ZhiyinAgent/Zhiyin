@@ -44,7 +44,8 @@ says about itself is shown as its claim.
 - The declaration source lists every declared connector as
   `{ id, name, url, enabled, requestsPerMinute?, readOnlyTools? }`. This
   feature stores no definition of its own: it remembers only the endpoint a
-  saved credential belongs to and which tools a person switched off.
+  saved credential belongs to and which tools a person switched off. A second
+  source names the packages that cannot be read right now.
 - A `BuiltInMcpServer` has an `id`, a `name` and `open()`, and may be scoped
   per conversation, describe its own calls and results, and declare the files
   a call produced.
@@ -72,8 +73,10 @@ says about itself is shown as its claim.
 - `routedName`, a connector tool's routed name, one that fits every supported
   model API.
 - `McpRateRefusedError`, a server that answered 429 before acting, so sending
-  again repeats nothing, and `McpUnauthorizedError`, a server that rejected the
-  credential: the remedy is a new token, not a retry.
+  again repeats nothing, `McpUnauthorizedError`, a server that rejected the
+  credential: the remedy is a new token, not a retry, and
+  `McpUndeclaredAnswerError`, a call the server ran and answered unlike the
+  output its tool declares.
 - `InMemoryMcpCredentials`, tokens kept for the life of the process, for tests
   and headless use.
 - The types these take and return: `SignInOptions`, `McpConnectionFactory`,
@@ -96,13 +99,22 @@ says about itself is shown as its claim.
   seconds, on a check, or when switched off and on. A refused credential and
   an invalid endpoint are never retried on their own.
 - A connection lost during a call is dialled again on the next look; the lost
-  call is never repeated, and its answer says it may have taken effect.
+  call is never repeated, and its answer says it may have taken effect. A
+  server that answers a call with an error, or with an answer that does not
+  match the tool's declared output, has failed that call only: its connection
+  stays open. An answer unlike the declared output is not used, and the call
+  is said to have run, so it may have taken effect.
+- A server may not ask anything of Zhiyin: a request for a model completion
+  (sampling) or for an answer from the person (elicitation) is refused, and
+  neither is offered when connecting. The call it came during still ends.
 - A server that announces a changed tool list has its tools replaced, and with
   them their approval identity. Switching a connector off closes it and
-  withdraws its tools at once.
+  withdraws its tools at once: a call to one is refused, and the connector is
+  not reached again until it is switched back on.
 - A connector nothing declares any more is forgotten with its credential and
   tool choices, so reinstalling its package starts clean. When the
-  declarations cannot be read, nothing changes.
+  declarations cannot be read, nothing changes, and a connector whose package
+  cannot be read keeps its credential and choices until the package opens.
 - When the saved connection settings cannot be read, which tools a person
   switched off is unknown, so no declared connector is reached: each is
   closed and shown failed with the reason, and nothing is forgotten or
@@ -114,6 +126,10 @@ says about itself is shown as its claim.
   endpoint is displayed and kept as the connection's identity.
 - A tool description longer than 4,000 characters is cut there, so no server
   can fill the model's window with its own words.
+- A tool whose input schema is larger than 64 KB is never offered to the
+  model, whatever its switch says, since a schema is sent whole with every
+  request and means something only whole. Its summary says so, and the
+  server's other tools are offered as before.
 
 ### Built-in connections
 
@@ -149,7 +165,12 @@ says about itself is shown as its claim.
 - A sign-in is kept only once the service has issued tokens; cancelling or
   declining keeps nothing. It is refreshed a minute before it ends and after a
   refusal, one refresh at a time; a refused refresh forgets it and withdraws
-  the tools. A saved key is sent in preference to a sign-in.
+  the tools. A refresh that returns after the person signed out, signed in
+  again or saved a key changes nothing, even while what it returned is being
+  written: a connector's credential is written one change at a time, in the
+  order the changes were made. Such a refresh, refused or not, answers with
+  the credential the person left. A saved key is sent in preference to a
+  sign-in.
 - When secure storage cannot be reached, the state says so rather than
   reporting that no credential exists, and saving fails. Storage that comes
   back is asked again on the next look.

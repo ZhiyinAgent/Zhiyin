@@ -60,8 +60,9 @@ export async function recoverConnectionFailure(options: {
 
 /**
  * A request stopped for reasoning at length without answering or acting is
- * asked again, once, told to decide; what it reasoned leaves no empty answer
- * in the conversation. Stopped a second time in a row, the turn ends.
+ * asked again, once, told to decide, and with the least reasoning the model
+ * can be asked for; what it reasoned leaves no empty answer in the
+ * conversation. Stopped a second time in a row, the turn ends.
  */
 export async function recoverLongThought(options: {
   readonly taskId: string;
@@ -74,7 +75,7 @@ export async function recoverLongThought(options: {
   const { taskId, records, history } = options;
   if (options.again)
     throw new TurnFailure(
-      "The model kept reasoning without answering or acting, and was stopped twice. Try again, or choose less reasoning or another model.",
+      `${stoppedTwiceForReasoning} Try again, or choose less reasoning or another model.`,
       ["tryAgain", "chooseModel"],
     );
   await withdrawRound(records, taskId, options.messagesBeforeRound);
@@ -83,11 +84,19 @@ export async function recoverLongThought(options: {
     "The model reasoned at length without acting. Asking it to decide",
     records.visibleSteps(taskId),
   );
-  await history.notice(
-    "thinking",
-    "Your last request was stopped: you reasoned at length without answering, calling a tool or asking anything, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, give your answer, or ask the person one question.",
-  );
+  await history.notice("thinking", decideNow);
 }
+
+/**
+ * What a turn's model whose request was stopped for reasoning at length is
+ * told when it is asked again.
+ */
+const decideNow =
+  "Your last request was stopped: you reasoned at length without answering, calling a tool or asking anything, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, give your answer, or ask the person one question.";
+
+/** Why work ends whose model was stopped so twice in a row. */
+export const stoppedTwiceForReasoning =
+  "The model kept reasoning without answering or acting, and was stopped twice.";
 
 /**
  * A request the person stopped to have the answer now is asked again, told to

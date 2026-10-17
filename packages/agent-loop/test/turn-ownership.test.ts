@@ -12,7 +12,13 @@
 import { describe, expect, it } from "vitest";
 import type { ModelEvent } from "@zhiyin/model-client";
 import { VisibleError, type ToolInvocationResult } from "@zhiyin/contract";
-import { loopAndHost, loopFrom, stubDependencies, until } from "./support.js";
+import {
+  loopAndHost,
+  loopFrom,
+  queuedWorkRun,
+  stubDependencies,
+  until,
+} from "./support.js";
 
 /** A promise a test opens and closes by hand. */
 function gate() {
@@ -231,6 +237,137 @@ describe("AgentLoop turn ownership", () => {
     const actions =
       loop.snapshot().tasks.find((task) => task.id === other)?.actions ?? [];
     expect(actions.map((action) => action.status)).toEqual(["completed"]);
+  });
+
+  it("drops a write the stopped turn began, still being saved when the next turn has the conversation", async () => {
+    const saving = gate();
+    let rounds = 0;
+    const deps = stubDependencies(() => {});
+    const { host } = loopAndHost({
+      ...deps,
+      model: {
+        ...deps.model,
+        send: async function* (): AsyncGenerator<ModelEvent> {
+          rounds += 1;
+          yield {
+            kind: "textDelta",
+            text:
+              rounds === 1
+                ? "Answer from the stopped turn."
+                : "Answer from the second turn.",
+          };
+          yield { kind: "done" };
+        },
+      },
+    });
+    const loop = host.app;
+    // The stopped turn's answer is still on its way to the disk.
+    let holding = false;
+    const store = host.store.bind(host);
+    host.store = async (task, options) => {
+      if (
+        !holding &&
+        task.messages.some((message) =>
+          message.text.includes("the stopped turn"),
+        )
+      ) {
+        holding = true;
+        await saving.opened;
+      }
+      await store(task, options);
+    };
+    const taskId = await loop.createTask();
+
+    const first = loop.start(taskId, "First question").catch(() => undefined);
+    await until(() => holding);
+    await loop.cancel(taskId);
+    await loop.start(taskId, "Second question");
+    saving.release();
+    await first;
+
+    const task = loop.snapshot().tasks[0]!;
+    const said = task.messages
+      .filter((message) => message.role === "assistant")
+      .map((message) => message.text)
+      .join(" ");
+    expect(said).toContain("Answer from the second turn.");
+    expect(said).not.toContain("Answer from the stopped turn.");
+    expect(task.phase.kind).toBe("completed");
+  });
+
+  it("keeps a stopped turn's late tool result out of the turn that replaced it", async () => {
+    const toolHeld = gate();
+    const secondHeld = gate();
+    let rounds = 0;
+    let toolRunning = false;
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      permissions: {
+        decide: async () => ({ outcome: "allow" as const, reason: "Allowed." }),
+      },
+      tools: {
+        list: () => [
+          {
+            name: "read_report",
+            description: "Read the report.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect: async () => ({
+          ok: true as const,
+          action: "Read a workspace file",
+          target: "report.md",
+          command: "read_report({})",
+        }),
+        // The stopped turn's tool answers only once the next turn is running.
+        execute: async () => {
+          toolRunning = true;
+          await toolHeld.opened;
+          return { ok: true as const, value: "The stopped turn's result." };
+        },
+      },
+      model: {
+        ...deps.model,
+        send: async function* (): AsyncGenerator<ModelEvent> {
+          rounds += 1;
+          if (rounds === 1)
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "call-1",
+              name: "read_report",
+              argumentsDelta: "{}",
+            };
+          else {
+            await secondHeld.opened;
+            yield { kind: "textDelta", text: "Answer from the second turn." };
+          }
+          yield { kind: "done" };
+        },
+      },
+    });
+    const taskId = await loop.createTask();
+
+    const first = loop.start(taskId, "First question").catch(() => undefined);
+    await until(() => toolRunning);
+    await loop.cancel(taskId);
+    const second = loop.start(taskId, "Second question");
+    await until(() => rounds === 2);
+    toolHeld.release();
+    await first;
+    await queuedWorkRun();
+    secondHeld.release();
+    await second;
+
+    const task = loop.snapshot().tasks[0]!;
+    expect(JSON.stringify(task.modelHistory)).not.toContain(
+      "The stopped turn's result.",
+    );
+    expect(task.actions.map((action) => action.status)).not.toContain(
+      "completed",
+    );
+    expect(task.phase.kind).toBe("completed");
   });
 
   it("does not run an action that was approved but not yet dispatched when the turn is stopped", async () => {

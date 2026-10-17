@@ -109,6 +109,12 @@ for a shell again does not change it.
   `read_files` and the searches never leave the folder.
 - What a file is depends on its bytes, not its extension. `read_file` refuses
   anything that is not text, saying what it is and which tool reads it.
+- Text is read as UTF-8, or as UTF-16 where a byte-order mark says so, which
+  the read names. In a file that is not all UTF-8, each line that is UTF-8
+  is shown as UTF-8, of whatever length, and each line that is not is shown
+  in the PC's own code page, the one Windows reads such text in, or as
+  Windows-1252 where that code page is UTF-8; the read says which line first
+  is not UTF-8, names the encoding used, and says it is a guess.
 - Text is read a page at a time, each line numbered. A page stops at 2,000
   lines or about 8,000 tokens and names the next line to ask for; a line over
   2,000 characters is shortened and says so. The file is streamed, so its size
@@ -142,7 +148,9 @@ for a shell again does not change it.
 - Matching tolerates line endings, a byte-order mark, trailing whitespace, a
   block's indentation and line numbers copied from a read, and nothing about
   the words; an exact match always wins. A file keeps its line endings and
-  byte-order mark through an edit; a new file is written exactly as given.
+  byte-order mark through an edit; a new file is written exactly as given. A
+  file that is not UTF-8 is not edited, since writing it back would change
+  characters the edit does not touch.
 - Each file is written to a temporary file and renamed into place; a write
   that fails removes its temporary file. If a multi-file edit fails partway,
   the result names the files already changed and those that were not, and
@@ -158,7 +166,8 @@ for a shell again does not change it.
 - Execution deletes permanently only what the approved inspection showed as
   permanent; a Recycle Bin refusal after approval deletes nothing. Targets
   stay inside the folder with links resolved, and a target that changed after
-  it was shown changes the approval identity.
+  it was shown changes the approval identity. The folder itself is never a
+  target, however its name is spelled.
 
 ### Commands (ADR 0007)
 
@@ -175,7 +184,9 @@ for a shell again does not change it.
   before it runs, pointing the model to `delete_file`. The command is split
   into the simple commands bash would run, including substituted and nested
   ones, and code handed to a shell or Python with `-c`, alone or among other
-  options. This recognises deletions; it does not prove there are none. A
+  options, or to `cmd` with `/c` or Git Bash's `//c`. A git subcommand is
+  found after git's own options, such as `-C` and `-c`. This recognises
+  deletions; it does not prove there are none. A
   program that deletes on its own, or a command whose program name is only
   put together as it runs, still goes through the shell approval.
 - Output is bounded inline to about 5,000 tokens of standard output and 1,500
@@ -236,7 +247,8 @@ for a shell again does not change it.
   refusal.
 - `selectWorkspace` moves the boundary only once the new path resolves to an
   existing folder; a change that fails leaves the tools in the folder the
-  person is still shown.
+  person is still shown. A starting folder given as an empty name is no
+  folder, never the one Zhiyin was started in.
 - `folderInstructions()` reads `AGENTS.md` at the folder's root only, up to
   16 KB, with a hash of the whole file that the person's approval is kept
   against.

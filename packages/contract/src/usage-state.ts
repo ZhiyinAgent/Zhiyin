@@ -27,6 +27,8 @@ export type UsageRange = Estimated & {
   readonly models: readonly (Estimated & {
     readonly model: string;
     readonly requests: number;
+    /** Requests a cost was reported or estimated for. */
+    readonly pricedRequests: number;
     readonly inputTokens: number;
     readonly outputTokens: number;
     readonly costUsd: number;

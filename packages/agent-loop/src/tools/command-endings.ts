@@ -23,6 +23,16 @@ export class CommandEndings {
     return this.#byTask.get(taskId)?.some((held) => held.wakes) ?? false;
   }
 
+  /** What is held for this task now waits for the next turn, waking none. */
+  quiet(taskId: string): void {
+    const held = this.#byTask.get(taskId);
+    if (held)
+      this.#byTask.set(
+        taskId,
+        held.map(({ notice }) => ({ notice, wakes: false })),
+      );
+  }
+
   /** Everything held for this task, removed in the same call. */
   drain(taskId: string): readonly string[] {
     const held = this.#byTask.get(taskId) ?? [];

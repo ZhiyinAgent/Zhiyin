@@ -18,7 +18,7 @@ import {
 } from "@zhiyin/capabilities";
 import type { RewindPlanner } from "@zhiyin/conversation-rewind";
 import type { Recovery } from "@zhiyin/recovery";
-import { ComposedRewind } from "@zhiyin/rewind";
+import { ComposedRewind, type RewindJournal } from "@zhiyin/rewind";
 import { AgentLoop, type AgentLoopDependencies } from "@zhiyin/agent-loop";
 import { stubDependencies as turnStubs } from "@zhiyin/agent-loop/testing";
 import type { PluginView, Plugins } from "@zhiyin/plugins";
@@ -28,18 +28,25 @@ import {
   type WorkspaceDependencies,
 } from "../../src/workspace.js";
 import type { ModelEvent } from "@zhiyin/model-client";
+import { watched } from "@zhiyin/test-waits";
+
+export { until } from "@zhiyin/test-waits";
 
 /**
- * Waits for what a test is about to check, by the clock: how many turns of
- * the loop a save or a model's answer takes depends on the machine.
+ * Each dependency, watched: the app changes nothing but by calling one of
+ * them or hearing back from one, its announcements to the window included,
+ * so each such moment wakes the waits of the test.
  */
-export async function until(predicate: () => boolean): Promise<void> {
-  const deadline = performance.now() + 4_000;
-  while (!predicate()) {
-    if (performance.now() > deadline)
-      throw new Error("Condition was not reached.");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+function watchedEach<T extends object>(dependencies: T): T {
+  return Object.fromEntries(
+    Object.entries(dependencies).map(([name, value]) => [
+      name,
+      typeof value === "function" ||
+      (typeof value === "object" && value !== null && !Array.isArray(value))
+        ? watched(value as object)
+        : value,
+    ]),
+  ) as T;
 }
 
 /** A model that makes each call in turn, one a request, then answers. */
@@ -80,6 +87,8 @@ export type LoopTestDependencies = Omit<
   CapabilityMembers & {
     readonly rewind: RewindPlanner;
     readonly recovery: Recovery;
+    /** Where interrupted rewinds are kept; in memory unless a test says. */
+    readonly journal?: RewindJournal;
   };
 
 export function loopFrom({
@@ -90,20 +99,29 @@ export function loopFrom({
   connectionToolchains,
   rewind,
   recovery,
+  journal,
   ...dependencies
 }: LoopTestDependencies): TestApp {
   const shared = {
-    ...dependencies,
-    capabilities: new ComposedCapabilities({
-      tools,
-      mcp,
-      plugins,
-      toolchains,
-      connectionToolchains,
-      browsers: dependencies.browsers,
-      ...(dependencies.scenes ? { scenes: dependencies.scenes } : {}),
-    }),
-    rewind: new ComposedRewind({ conversation: rewind, recovery }),
+    ...watchedEach(dependencies),
+    capabilities: new ComposedCapabilities(
+      watchedEach({
+        tools,
+        mcp,
+        plugins,
+        toolchains,
+        connectionToolchains,
+        browsers: dependencies.browsers,
+        ...(dependencies.scenes ? { scenes: dependencies.scenes } : {}),
+      }),
+    ),
+    rewind: new ComposedRewind(
+      watchedEach({
+        conversation: rewind,
+        recovery,
+        ...(journal ? { journal } : {}),
+      }),
+    ),
   };
   return appFrom(
     new Workspace(shared, (host) => new AgentLoop({ ...shared, host })),

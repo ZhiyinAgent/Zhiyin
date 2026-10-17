@@ -39,6 +39,7 @@ export function CapabilityLibrary({
   onOverrideComponent,
   onResetComponent,
   onInstallToolchain,
+  onCancelToolchainInstall,
   onTestConnection,
   onSetConnectionToolEnabled,
   onSaveConnectionToken,
@@ -67,6 +68,7 @@ export function CapabilityLibrary({
   onToggleComponent: (id: string, enabled: boolean) => Promise<void>;
   onLoadComponentContent: (id: string) => Promise<ComponentContent | undefined>;
   onInstallToolchain: (id: string) => Promise<void>;
+  onCancelToolchainInstall: (id: string) => Promise<void>;
   /** Re-checks every connection now, trying failed ones again. */
   onRefreshConnections: () => Promise<void>;
   /** The current reading, fetched once on open — never cached beyond that. */
@@ -248,6 +250,12 @@ export function CapabilityLibrary({
               onOpen: (component) => void openComponent(component),
               onInstall: (component) =>
                 setOpened({ mode: "install", component }),
+              onCancelInstall: (component) =>
+                attempt(
+                  undefined,
+                  () => onCancelToolchainInstall(component.id),
+                  "The installation could not be stopped.",
+                ),
               // An application connector's prerequisite is outside the app,
               // so all of them are looked at again; a configured one is
               // reached on its own.

@@ -51,7 +51,9 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
   file the actions created is removed. A deleted file is made again only while
   nothing has taken its place.
 - A later edit is never overwritten. A file that does not match what the
-  actions left is reported as a conflict and left alone.
+  actions left is reported as a conflict and left alone, and so is one edited
+  between two of the actions. A file already as it was before them is put
+  back as it is.
 - Restoring holds the file open so that no other program can write to it,
   checks its digest again on that handle, and only then swaps in the copy or
   deletes the file. A file another program has open for writing is left in
@@ -77,7 +79,8 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
   as done, so a restore interrupted halfway finishes on the next try.
 - What is kept stays bounded. An action past the age limit loses everything
   kept for it, a file it created included; one whose copies were all evicted
-  loses its folder; and a folder a capture left unfinished is removed.
+  loses its folder; and a folder a capture left unfinished is removed. A
+  cleanup never touches the copies of an action still being prepared.
 - Deleting a conversation removes everything kept for its actions, and nothing
   kept for another's (ADR 0030).
 
@@ -85,7 +88,10 @@ Copies live in the app's data folder, within these limits: 10 MiB per file,
 
 Tests use real temporary folders and raw bytes; text stand-ins cannot show
 byte preservation, containment or conflict handling. The Windows file-handle
-behavior is tested in the serial system-boundary suite.
+behavior is tested in the serial system-boundary suite. A capture writes its
+copies before its manifest, and an option only tests set holds it between the
+two, so a cleanup can be run in that moment; it can delay the manifest, never
+leave it out.
 
 Coordinating restores with saving the conversation after a crash belongs to
 the rewind group and its journal (ADR 0009).

@@ -3,8 +3,9 @@
  * that decide whose code can run as Zhiyin.
  *
  * With `ELECTRON_RUN_AS_NODE` honoured, the executable runs any script it is
- * given as a plain Node.js runtime; with the inspect options honoured, a
- * debugger can attach to the main process and run code there. Either runs that
+ * given as a plain Node.js runtime; with `NODE_OPTIONS` honoured, it loads any
+ * module that variable names; with the inspect options honoured, a debugger
+ * can attach to the main process and run code there. Each runs that
  * code under Zhiyin's executable and, once it is signed, its signature. And
  * unless the app is loaded from its archive alone, and the archive is checked
  * against the hash built into the executable, code put in the install folder
@@ -35,6 +36,10 @@ const mustBeOff = {
   [FuseV1Options.RunAsNode]: "running as Node.js with ELECTRON_RUN_AS_NODE",
   [FuseV1Options.EnableNodeCliInspectArguments]:
     "attaching a debugger with --inspect",
+  [FuseV1Options.EnableNodeOptionsEnvironmentVariable]:
+    "loading code named by NODE_OPTIONS",
+  [FuseV1Options.GrantFileProtocolExtraPrivileges]:
+    "giving a page loaded from file: more than a browser gives it",
 };
 const mustBeOn = {
   [FuseV1Options.OnlyLoadAppFromAsar]: "loading the app from its archive only",

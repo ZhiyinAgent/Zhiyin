@@ -45,7 +45,7 @@ export function ApprovalEvidence({
         binary scene, says only that it changes. What the call will do is
         then the only account of the change, so it is shown with the files.
       */}
-      {changes?.length &&
+      {!!changes?.length &&
         changes.every((change) => change.omitted !== undefined) &&
         invocation &&
         !invocation.via &&

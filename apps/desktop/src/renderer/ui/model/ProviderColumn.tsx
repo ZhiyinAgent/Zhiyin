@@ -1,5 +1,9 @@
 import type { ProviderSummary, ProviderTarget } from "@zhiyin/contract";
-import { LoadingSkeleton } from "../shared/index.js";
+import {
+  LoadingSkeleton,
+  moveAmongChoices,
+  tabStopOf,
+} from "../shared/index.js";
 import styles from "./model.module.css";
 
 /**
@@ -38,9 +42,16 @@ export function ProviderColumn({
           className={styles["provider-list"]}
           role="radiogroup"
           aria-label="Provider"
+          onKeyDown={moveAmongChoices}
         >
-          {providers.map((provider) => {
+          {providers.map((provider, _index, all) => {
             const chosen = target?.provider === provider.id;
+            const stop =
+              tabStopOf(
+                all,
+                (item) => target?.provider === item.id,
+                (item) => !item.unavailable,
+              ) === provider;
             const first = provider.accounts[0]?.region;
             return (
               <button
@@ -48,6 +59,7 @@ export function ProviderColumn({
                 type="button"
                 role="radio"
                 aria-checked={chosen}
+                tabIndex={stop ? 0 : -1}
                 aria-disabled={provider.unavailable ? true : undefined}
                 data-tip={provider.unavailable}
                 className={`${styles["provider-option"]} ${styles["provider-name"]}`}

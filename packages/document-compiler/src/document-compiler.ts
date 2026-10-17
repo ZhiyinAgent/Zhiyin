@@ -1,5 +1,15 @@
-import { stat } from "node:fs/promises";
-import { basename, extname, relative, resolve, sep } from "node:path";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdtemp, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
+import {
+  basename,
+  dirname,
+  extname,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import type {
   ConnectionTool,
   ProducedFile,
@@ -11,6 +21,12 @@ import {
   type RunProcess as RunProgram,
 } from "@zhiyin/process-ownership";
 import { staysBelow } from "@zhiyin/workspace-containment";
+import {
+  tectonicReadOutside,
+  typstReadOutside,
+  type ReadOutside,
+} from "./compilation-reads.js";
+import { latexPackages } from "./latex-packages.js";
 
 /** The engines this connector can run, and where each comes from. */
 export type CompilerPrograms = {
@@ -25,6 +41,11 @@ export type DocumentCompilerOptions = {
   readonly workspaceRoot: () => string | undefined;
   /** Where each engine is, asked again every time so an install is noticed. */
   readonly programs: () => Promise<CompilerPrograms>;
+  /**
+   * Where Tectonic keeps the TeX packages it downloads. It runs at low
+   * integrity, so this folder is opened to it, as the one it writes in is.
+   */
+  readonly tectonicCache: string;
   readonly containment?: ProgramContainment;
   readonly run?: RunProgram;
   /** How long one compilation may take. LaTeX fetches packages on first use. */
@@ -66,6 +87,8 @@ function engineFor(path: string): Engine | undefined {
 }
 
 type Request = {
+  /** The workspace folder, with links resolved. */
+  readonly root: string;
   readonly engine: Engine;
   readonly source: string;
   readonly output: string;
@@ -73,11 +96,71 @@ type Request = {
   readonly relativeOutput: string;
 };
 
-/** What a call asks for, or why it cannot be asked for at all. */
-function requestFrom(
+/**
+ * Where a path really is, every link followed in the part of it that exists:
+ * a PDF not written yet is placed by the folder it would be written in.
+ */
+async function realPlace(path: string): Promise<string | undefined> {
+  const rest: string[] = [];
+  for (let existing = path; ;) {
+    try {
+      return join(await realpath(existing), ...rest);
+    } catch (error) {
+      const parent = dirname(existing);
+      if (
+        (error as { code?: unknown }).code !== "ENOENT" ||
+        parent === existing
+      )
+        return undefined;
+      rest.unshift(basename(existing));
+      existing = parent;
+    }
+  }
+}
+
+const outsideFolder = "Documents are compiled inside the workspace folder.";
+
+/**
+ * What a call asks for, or why it cannot be asked for at all: checked by the
+ * paths as written, then again where they really lead, so a link inside the
+ * folder does not carry a read or a write out of it.
+ */
+async function requestFrom(
   root: string,
   args: unknown,
-): Request | { readonly reason: string } {
+): Promise<Request | { readonly reason: string }> {
+  const written = writtenRequest(root, args);
+  if ("reason" in written) return written;
+  const [realRoot, source, output] = await Promise.all([
+    realpath(root).catch(() => undefined),
+    realPlace(written.source),
+    realPlace(written.output),
+  ]);
+  if (!realRoot) return { reason: "The workspace folder could not be read." };
+  if (
+    !source ||
+    !output ||
+    !staysBelow(realRoot, source) ||
+    !staysBelow(realRoot, output)
+  )
+    return { reason: outsideFolder };
+  // The file replaced is the one the output really is.
+  if (!output.toLowerCase().endsWith(".pdf"))
+    return { reason: "The compiled document is a PDF." };
+  return {
+    ...written,
+    root: realRoot,
+    source,
+    output,
+    relativeSource: relative(realRoot, source),
+    relativeOutput: relative(realRoot, output),
+  };
+}
+
+function writtenRequest(
+  root: string,
+  args: unknown,
+): Omit<Request, "root"> | { readonly reason: string } {
   const record = (args ?? {}) as Record<string, unknown>;
   const path = record["path"];
   const output = record["output"];
@@ -98,7 +181,7 @@ function requestFrom(
       : `${path.slice(0, path.lastIndexOf("."))}.pdf`,
   );
   if (!staysBelow(root, source) || !staysBelow(root, target))
-    return { reason: "Documents are compiled inside the workspace folder." };
+    return { reason: outsideFolder };
   if (!target.toLowerCase().endsWith(".pdf"))
     return { reason: "The compiled document is a PDF." };
   // Tectonic is given a folder and names the PDF after the source.
@@ -119,21 +202,97 @@ function requestFrom(
   };
 }
 
-function argumentsFor(request: Request, root: string): readonly string[] {
-  // Typst is told the project root, so a document can only read from the
-  // workspace. Tectonic is run untrusted, which disables shell escape.
+/** The command that writes the PDF at `into`, which is named as the output is. */
+function argumentsFor(request: Request, into: string): readonly string[] {
+  const root = request.root;
+  // Typst is told the project root, so a document names files in the
+  // workspace only, and lists the files it read, which a link can carry out
+  // of it. Tectonic is run untrusted, which disables shell escape, names its
+  // PDF after the source, as the output is named, and lists the files it read
+  // from disk. It goes on past a document's errors, so that list is written
+  // even when the document fails.
   return request.engine === "typst"
-    ? ["compile", "--root", root, request.source, request.output]
+    ? [
+        "compile",
+        "--root",
+        root,
+        "--deps",
+        readsListIn(request.engine, into),
+        request.source,
+        into,
+      ]
     : [
+        "-Z",
+        "continue-on-errors",
         "--untrusted",
         "--chatter",
         "minimal",
         "--outfmt",
         "pdf",
         "--outdir",
-        request.output.slice(0, request.output.lastIndexOf(sep)) || root,
+        dirname(into),
+        "--makefile-rules",
+        readsListIn(request.engine, into),
         request.source,
       ];
+}
+
+/** Where a compiler lists the files it read: beside the staged PDF. */
+function readsListIn(engine: Engine, into: string): string {
+  return join(dirname(into), engine === "typst" ? "reads.json" : "reads.mk");
+}
+
+/** The first file a compilation read outside the workspace, if any. */
+function readOutside(
+  request: Request,
+  into: string,
+): Promise<ReadOutside | "unknown" | undefined> {
+  const list = readsListIn(request.engine, into);
+  return request.engine === "typst"
+    ? typstReadOutside(list, request.root)
+    : tectonicReadOutside(list, {
+        root: request.root,
+        pdf: into,
+        outdir: dirname(into),
+        sourceFolder: dirname(request.source),
+      });
+}
+
+/**
+ * Whether Tectonic, gone on past a document's errors, met any: it then
+ * reports success, says each error, and warns that it ignored them.
+ */
+function tectonicErrors(output: string): boolean {
+  return /^error:|errors were issued by the TeX engine/m.test(output);
+}
+
+/**
+ * The folder beside the output a compilation writes into, so the PDF is
+ * moved over the one in the workspace only once it is complete.
+ */
+const stagingPrefix = ".zhiyin-compiling-";
+/** A staging folder this old was left by a run that never finished. */
+const abandonedAfterMs = 60 * 60_000;
+
+/** Removes staging folders that runs which never finished left in `folder`. */
+async function clearAbandoned(folder: string): Promise<void> {
+  const entries = await readdir(folder).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.startsWith(stagingPrefix)) continue;
+    const path = join(folder, entry);
+    const status = await stat(path).catch(() => undefined);
+    if (status?.isDirectory() && Date.now() - status.mtimeMs > abandonedAfterMs)
+      await rm(path, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/** A time limit as a person reads it: "3 minutes", "45 seconds". */
+function duration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds % 60 !== 0 || seconds < 60)
+    return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = seconds / 60;
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
 function shortened(value: string, maximum = 8_000): string {
@@ -182,6 +341,16 @@ export function documentCompiler(
   options: DocumentCompilerOptions,
 ): WritingConnection {
   const run = options.run ?? runProgram;
+  // Tectonic runs at low integrity, so it writes nowhere the person's own
+  // programs do: only in a folder of this compile's own, outside the
+  // workspace, which holds its copy of the package cache, its temporary files
+  // and its PDF. A workspace on a drive that keeps no integrity labels
+  // compiles too.
+  const packages = latexPackages({
+    cache: options.tectonicCache,
+    run,
+    ...(options.containment ? { containment: options.containment } : {}),
+  });
   const timeoutMs = options.timeoutMs ?? 180_000;
   // Which file each successful result wrote, kept beside the result rather
   // than inside it, so nothing the model reads changes.
@@ -208,7 +377,7 @@ export function documentCompiler(
       const root = options.workspaceRoot();
       if (!root)
         return { ok: false, reason: "Choose a folder before compiling." };
-      const request = requestFrom(root, args);
+      const request = await requestFrom(root, args);
       if ("reason" in request) return { ok: false, reason: request.reason };
       const programs = await options.programs();
       if (!programs[request.engine])
@@ -257,7 +426,7 @@ export function documentCompiler(
         return textResult(`Unknown tool “${name}”.`, true);
       const root = options.workspaceRoot();
       if (!root) return textResult("Choose a folder before compiling.", true);
-      const request = requestFrom(root, args);
+      const request = await requestFrom(root, args);
       if ("reason" in request) return textResult(request.reason, true);
       let programs: CompilerPrograms;
       try {
@@ -277,48 +446,148 @@ export function documentCompiler(
         () => true,
         () => false,
       );
-      const { exitCode, stdout, stderr } = await run({
-        executable,
-        arguments: argumentsFor(request, root),
-        cwd: root,
-        timeoutMs,
-        ...(signal ? { signal } : {}),
-        ...(options.containment ? { containment: options.containment } : {}),
-      });
-      const output = `${stdout}\n${stderr}`;
-      const diagnostics = diagnosticsFrom(output, root);
-      if (exitCode !== 0)
+      // Written aside and moved over the PDF once complete: what the
+      // compiler wrote is exactly what is found there, and a compilation
+      // that fails leaves the PDF from before as it was.
+      const folder = dirname(request.output);
+      await clearAbandoned(folder);
+      let staging: string;
+      try {
+        staging = await mkdtemp(join(folder, stagingPrefix));
+      } catch (error) {
         return textResult(
+          `Zhiyin could not prepare to write ${request.relativeOutput}: ${error instanceof Error ? error.message : String(error)}`,
+          true,
+        );
+      }
+      /** Where Tectonic writes, opened to low integrity, outside the workspace. */
+      let lowFolder: string | undefined;
+      try {
+        // Tectonic names the PDF after the source it really reads, which a
+        // link can name otherwise, and writes it in a folder of its own.
+        const tectonic = request.engine === "tectonic";
+        const kept = join(
+          staging,
+          tectonic
+            ? `${basename(request.source, extname(request.source))}.pdf`
+            : basename(request.output),
+        );
+        let low;
+        try {
+          low = tectonic ? await packages.prepare() : undefined;
+          lowFolder = low?.folder;
+        } catch (error) {
+          return textResult(
+            `Zhiyin could not prepare the folders LaTeX writes in: ${error instanceof Error ? error.message : String(error)}`,
+            true,
+          );
+        }
+        const staged = low ? join(low.folder, basename(kept)) : kept;
+        const environment = low?.environment;
+        const { exitCode, stdout, stderr, ending, failure } = await run({
+          executable,
+          arguments: argumentsFor(request, staged),
+          cwd: request.root,
+          timeoutMs,
+          ...(signal ? { signal } : {}),
+          ...(options.containment ? { containment: options.containment } : {}),
+          ...(environment ? { environment, integrity: "low" as const } : {}),
+        });
+        if (failure === "containment")
+          return textResult(
+            "Zhiyin could not start the compiler inside the limits it runs within, so it did not run.",
+            true,
+          );
+        // What a document read outside the workspace is neither kept nor
+        // shown, since an error can quote it.
+        const outside = await readOutside(request, staged);
+        if (outside !== undefined && outside !== "unknown")
+          return textResult(
+            outside.throughLink
+              ? `The document reads ${outside.path}, which a link carries outside the workspace folder, so nothing the compiler made or said is kept or shown.`
+              : `The document reads ${outside.path}, outside the workspace folder, so nothing the compiler made or said is kept or shown.`,
+            true,
+          );
+        const unknown = outside === "unknown";
+        const output = unknown
+          ? tectonic
+            ? "Its output is not shown, because Zhiyin could not tell which files LaTeX read. LaTeX stops before saying when a document names a file that is not there, writes one where it may not, has no pages, or reaches a hundred errors."
+            : "Its output is not shown, because Zhiyin could not tell which files it read."
+          : `${stdout}\n${stderr}`;
+        const diagnostics = unknown
+          ? []
+          : diagnosticsFrom(output, request.root);
+        const failed = exitCode !== 0 || (tectonic && tectonicErrors(output));
+        if (unknown && !failed)
+          return textResult(
+            `The compiler did not say which files it read, so ${request.relativeOutput} is not kept.`,
+            true,
+          );
+        if (failed)
+          return textResult(
+            shortened(
+              [
+                ending === "timeout"
+                  ? `The compiler took longer than ${duration(timeoutMs)}, the most one compilation may take, so it was stopped.`
+                  : ending === "stopped"
+                    ? "The compilation was stopped before it finished."
+                    : ending === "outputLimit"
+                      ? "The compiler printed more than Zhiyin keeps, so it was stopped."
+                      : exitCode === null
+                        ? "The compiler did not finish."
+                        : exitCode === 0
+                          ? "The compiler reported errors."
+                          : `The compiler reported errors (exit code ${exitCode}).`,
+                ...(diagnostics.length ? diagnostics : [output]),
+              ].join("\n"),
+            ),
+            true,
+          );
+        const written = await stat(staged).catch(() => undefined);
+        if (!written?.isFile())
+          return textResult(
+            `The compiler reported success but wrote no ${request.relativeOutput}.`,
+            true,
+          );
+        // A file a low-integrity program wrote stays open to low integrity,
+        // so the PDF kept is a copy, made at the person's own level.
+        if (staged !== kept)
+          await pipeline(createReadStream(staged), createWriteStream(kept));
+        try {
+          await rename(kept, request.output);
+        } catch {
+          return textResult(
+            `The compiler wrote ${request.relativeOutput}, but the one in the workspace could not be replaced. Another program, such as a PDF viewer, may have it open: close it, then compile again.`,
+            true,
+          );
+        }
+        const result = textResult(
           shortened(
             [
-              exitCode === null
-                ? "The compiler did not finish."
-                : `The compiler reported errors (exit code ${exitCode}).`,
-              ...(diagnostics.length ? diagnostics : [output]),
+              `Wrote ${request.relativeOutput} (${Math.max(1, Math.round(written.size / 1024))} KB).`,
+              ...diagnostics,
             ].join("\n"),
           ),
-          true,
         );
-      const written = await stat(request.output).catch(() => undefined);
-      if (!written)
-        return textResult(
-          `The compiler reported success but wrote no ${request.relativeOutput}.`,
-          true,
+        wrote.set(result, {
+          path: request.relativeOutput.split(sep).join("/"),
+          change: existed ? "updated" : "created",
+          bytes: written.size,
+        });
+        return result;
+      } finally {
+        await rm(staging, { recursive: true, force: true }).catch(
+          () => undefined,
         );
-      const result = textResult(
-        shortened(
-          [
-            `Wrote ${request.relativeOutput} (${Math.max(1, Math.round(written.size / 1024))} KB).`,
-            ...diagnostics,
-          ].join("\n"),
-        ),
-      );
-      wrote.set(result, {
-        path: request.relativeOutput.split(sep).join("/"),
-        change: existed ? "updated" : "created",
-        bytes: written.size,
-      });
-      return result;
+        if (lowFolder) {
+          await packages
+            .adopt(lowFolder, executable, signal)
+            .catch(() => undefined);
+          await rm(lowFolder, { recursive: true, force: true }).catch(
+            () => undefined,
+          );
+        }
+      }
     },
     produced(_name, _args, value) {
       const file =

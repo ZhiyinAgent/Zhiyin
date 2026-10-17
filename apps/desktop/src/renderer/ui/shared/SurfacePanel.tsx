@@ -53,7 +53,7 @@ export function SurfacePanel({
       >
         <div>
           {eyebrow}
-          <h1>{title}</h1>
+          <h1 tabIndex={-1}>{title}</h1>
           {description && (
             <p className={styles["surface-panel__description"]}>
               {description}

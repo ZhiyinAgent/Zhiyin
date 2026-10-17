@@ -267,6 +267,55 @@ describe("applying a rewind", () => {
     await expect(stored.pending()).resolves.toEqual([]);
   });
 
+  it("clears a journal left behind after saving, when saving records the time as the app does", async () => {
+    const directory = await folders.make("zhiyin-rewind-journal-");
+    const stored = new FileRewindJournal(directory);
+    let refuseComplete = true;
+    const journal: RewindJournal = {
+      pending: () => stored.pending(),
+      begin: (operation) => stored.begin(operation),
+      filesRestored: (id, result) => stored.filesRestored(id, result),
+      complete: async (id) => {
+        if (refuseComplete) throw new Error("process stopped after save");
+        await stored.complete(id);
+      },
+    };
+    const { recovery } = recoveryRecording();
+    let current = conversation("conversation-1", "C:/work");
+    let clock = 0;
+    const host: RewindHost = {
+      task: () => current,
+      save: async (task) => {
+        clock += 1;
+        current = {
+          ...task,
+          updatedAt: `2026-10-15T10:00:0${clock}.000Z`,
+          updatedLabel: "Now",
+        };
+      },
+    };
+    const first = new ComposedRewind({
+      conversation: planner(),
+      recovery,
+      journal,
+    });
+    await first.preview("conversation-1", "u1", host);
+    await expect(
+      first.commit("conversation-1", "rewind-1", "restore", host),
+    ).rejects.toThrow("process stopped after save");
+
+    refuseComplete = false;
+    const resumed = new ComposedRewind({
+      conversation: planner(),
+      recovery,
+      journal,
+    });
+    await resumed.resume(host);
+
+    await expect(stored.pending()).resolves.toEqual([]);
+    expect(resumed.restoring("conversation-1")).toBe(false);
+  });
+
   it("finishes every other conversation's rewind after restart when one cannot be finished", async () => {
     const stuck = conversation("conversation-1", "C:/work");
     const other = conversation("conversation-2", "C:/work");
@@ -321,6 +370,45 @@ describe("applying a rewind", () => {
     // The one left unfinished is held, so it cannot be used half rewound.
     expect(rewind.restoring(stuck.id)).toBe(true);
     expect(rewind.restoring(other.id)).toBe(false);
+  });
+
+  it("lets go of an unfinished rewind when its conversation is deleted, so the next start does not report it again", async () => {
+    const directory = await folders.make("zhiyin-rewind-deleted-");
+    const stuck = conversation("conversation-1", "C:/work");
+    await new FileRewindJournal(directory).begin({
+      version: 1,
+      id: "rewind-1",
+      conversationId: stuck.id,
+      // Saved from a conversation that has changed since.
+      source: JSON.stringify({ ...stuck, title: "Before" }),
+      task: { ...stuck, messages: [] },
+      review: {
+        id: "review",
+        workspaceRoot: "C:/work",
+        files: [],
+        targets: [],
+      } as RecoveryReview,
+    });
+    const host = {
+      task: () => stuck,
+      save: async () => {},
+    };
+    const rewind = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording().recovery,
+      journal: new FileRewindJournal(directory),
+    });
+    await expect(rewind.resume(host)).rejects.toThrow("no longer matches");
+
+    await rewind.forgetConversation(stuck.id);
+
+    expect(rewind.restoring(stuck.id)).toBe(false);
+    const next = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording().recovery,
+      journal: new FileRewindJournal(directory),
+    });
+    await expect(next.resume(host)).resolves.toBeUndefined();
   });
 
   it("restores files only when asked to, and saves the rewound conversation", async () => {

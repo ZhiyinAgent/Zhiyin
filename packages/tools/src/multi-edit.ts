@@ -52,6 +52,8 @@ const maximumFiles = 20;
 const maximumReplacements = 50;
 const maximumQuoted = 60;
 const maximumNamedTargets = 3;
+/** Refuses bytes that are not UTF-8, and keeps a byte-order mark as read. */
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 export const multiEditSpec: ToolSpec = {
   name: "multi_edit",
@@ -447,13 +449,24 @@ async function planMultiEdit(
       );
     }
 
-    let raw: string;
+    let bytes: Buffer;
     try {
-      raw = await readFile(absolute, "utf8");
+      bytes = await readFile(absolute);
     } catch {
       return correctable(
         `${edit.path} could not be read before editing. Check that it is a text file.`,
       );
+    }
+    // Text that is not UTF-8 would be written back as UTF-8, changing every
+    // character it holds outside ASCII, the untouched ones included.
+    let raw: string;
+    try {
+      raw = utf8.decode(bytes);
+    } catch {
+      return {
+        ok: false,
+        reason: `${edit.path} is not UTF-8 text, so an edit would change characters it does not touch. No file was changed.`,
+      };
     }
     const decoded = decodeText(raw);
     const spans = replacementSpans(edit, decoded.text);

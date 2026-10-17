@@ -11,6 +11,8 @@ type FakeBrowser = {
   readonly launcher: BrowserLauncher;
   readonly target: BrowserTarget;
   readonly launches: () => number;
+  /** Every address the browser itself was sent to. */
+  readonly visited: () => readonly string[];
   navigateTo(url: string, title?: string): Promise<void>;
   emitFrame(frame?: Partial<BrowserFrame>): void;
   lose(): void;
@@ -27,6 +29,7 @@ function fakeBrowser(
   let url = "about:blank";
   let title = "";
   let launches = 0;
+  const visited: string[] = [];
   let closed = false;
   let onFrame: ((frame: BrowserFrame) => void) | undefined;
   let navigated: (() => void) | undefined;
@@ -37,9 +40,11 @@ function fakeBrowser(
     pid: "pid" in overrides ? overrides.pid : 4242,
     browserName: "Microsoft Edge",
     automation: () => context,
+    takeStoppedDownloads: () => [],
     url: () => url,
     title: async () => title,
     goto: async (next) => {
+      visited.push(next);
       url = next;
     },
     back: async () => {},
@@ -71,6 +76,7 @@ function fakeBrowser(
   return {
     target,
     launches: () => launches,
+    visited: () => visited,
     closed: () => closed,
     launcher: {
       available: async () =>
@@ -139,6 +145,54 @@ describe("BrowserSession", () => {
       url: "https://example.com/",
       loading: false,
     });
+  });
+
+  it("opens only web pages, whoever asks", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open("https://example.com/");
+
+    for (const url of ["view-source:https://example.com/", "edge://settings"]) {
+      await expect(session.navigate(url)).rejects.toThrow(/web/);
+      await expect(session.open(url)).rejects.toThrow(/web/);
+    }
+    expect(session.state().url).toBe("https://example.com/");
+  });
+
+  // What the person types in the panel reaches the browser through open and
+  // navigate, as the agent's addresses do.
+  it.each([
+    "file:///C:/Users/someone/notes.html",
+    "data:text/html,<script>alert(1)</script>",
+    "javascript:alert(1)",
+    "blob:https://example.com/0f3c",
+    "chrome://settings",
+    "edge://settings",
+    "about:config",
+    "view-source:https://example.com/",
+    "ftp://example.com/file",
+    "ws://example.com/socket",
+  ])("never sends %s to the browser, whoever asks", async (url) => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open("https://example.com/");
+
+    await expect(session.navigate(url)).rejects.toThrow();
+    await expect(session.open(url)).rejects.toThrow();
+
+    expect(fake.visited()).toEqual(["https://example.com/"]);
+    expect(session.state().url).toBe("https://example.com/");
+  });
+
+  it("reads an address typed without its scheme as a web address", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+
+    await session.open("example.com/docs");
+    expect(session.state().url).toBe("https://example.com/docs");
+
+    await session.navigate("localhost:5173");
+    expect(session.state().url).toBe("http://localhost:5173/");
   });
 
   it("reports a browser that will not start instead of pretending", async () => {
@@ -287,6 +341,120 @@ describe("BrowserSession", () => {
     );
     expect(session.automation()).toBeUndefined();
     expect(session.lastFrame()).toBeUndefined();
+  });
+
+  it("keeps a browser opened while what was left of a lost one was ended", async () => {
+    const first = fakeBrowser();
+    const second = fakeBrowser();
+    let ended = () => {};
+    let ending = false;
+    const lostTarget: BrowserTarget = {
+      ...first.target,
+      // What is left of the lost browser takes a while to end.
+      close: () => {
+        ending = true;
+        return new Promise<void>((resolve) => (ended = resolve));
+      },
+    };
+    let launches = 0;
+    const session = new BrowserSession({
+      launcher: {
+        ...first.launcher,
+        launch: async () => (++launches === 1 ? lostTarget : second.target),
+      },
+    });
+    await session.open();
+
+    first.lose();
+    await vi.waitFor(() => expect(ending).toBe(true));
+    await session.open("https://example.com/");
+    ended();
+    // Everything the end of the lost browser set off has run.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(session.state()).toMatchObject({
+      status: "open",
+      url: "https://example.com/",
+    });
+    expect(session.automation()).toBe(second.target.automation());
+  });
+
+  it("leaves the browser open now when an earlier one says late that it was lost", async () => {
+    const first = fakeBrowser();
+    const second = fakeBrowser();
+    let launches = 0;
+    const session = new BrowserSession({
+      launcher: {
+        ...first.launcher,
+        launch: async () => (++launches === 1 ? first.target : second.target),
+      },
+    });
+    await session.open();
+    await session.close();
+    await session.open("https://example.com/");
+
+    first.lose();
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(session.state()).toMatchObject({
+      status: "open",
+      url: "https://example.com/",
+    });
+    expect(second.closed()).toBe(false);
+  });
+
+  it("ends what is left of a browser whose page went away on its own", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({ launcher: fake.launcher });
+    await session.open();
+
+    fake.lose();
+
+    await vi.waitFor(() => expect(fake.closed()).toBe(true));
+  });
+
+  it("reports a browser lost while it was being opened, and ends what is left of it", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({
+      launcher: {
+        ...fake.launcher,
+        launch: async () => ({
+          ...fake.target,
+          // Lost before its first frame.
+          startFrames: async (listener) => {
+            await fake.target.startFrames(listener);
+            fake.lose();
+          },
+        }),
+      },
+    });
+
+    await session.open();
+
+    await vi.waitFor(() => expect(fake.closed()).toBe(true));
+    expect(session.state()).toMatchObject({
+      status: "failed",
+      reason: "The browser closed unexpectedly.",
+    });
+  });
+
+  it("says the browser is lost before it closes the preview, and ends the browser when the preview cannot close", async () => {
+    const fake = fakeBrowser();
+    const session = new BrowserSession({
+      launcher: fake.launcher,
+      workspaceRoot: () => "C:/workspace",
+    });
+    await session.open();
+    let seen: string | undefined;
+    vi.spyOn(session.preview!, "close").mockImplementation(async () => {
+      seen = session.state().status;
+      throw new Error("The preview server would not stop.");
+    });
+
+    fake.lose();
+
+    await vi.waitFor(() => expect(fake.closed()).toBe(true));
+    expect(seen).toBe("failed");
   });
 
   it("refuses to act on a browser that is not open", async () => {

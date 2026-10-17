@@ -7,6 +7,7 @@
  */
 
 import type { ModelEvent, ModelUsage } from "../../model-client.js";
+import { unnamedRequest } from "../streamed-request.js";
 import {
   turnFingerprint,
   type RecordedBlock,
@@ -80,6 +81,8 @@ export class AnswerReader {
   #words = "";
   #calls = 0;
   #counts: Counts | undefined;
+  /** Stands for the id when the provider names none. */
+  readonly #unnamed = unnamedRequest();
   id: string | undefined;
   model: string | undefined;
   stopReason: string | undefined;
@@ -267,7 +270,7 @@ export class AnswerReader {
       (counts.input ?? 0) + (counts.cacheWrite ?? 0) + (counts.cacheRead ?? 0);
     const outputTokens = counts.output ?? 0;
     return {
-      requestId: this.id ?? "unknown",
+      requestId: this.id ?? this.#unnamed,
       model: this.model ?? "unknown",
       inputTokens,
       outputTokens,

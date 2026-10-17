@@ -35,6 +35,11 @@ export type PendingRewind = {
   readonly task: WorkspaceTask;
   readonly review: RecoveryReview;
   readonly result?: RewindCommitResult;
+  /**
+   * For an undo, what it was planned from, so a restart records it from what
+   * the restore found. An entry without it finishes as `task`.
+   */
+  readonly undo?: { readonly plan: UndoPlan; readonly at: string };
 };
 
 export interface RewindJournal {
@@ -59,6 +64,57 @@ class MemoryRewindJournal implements RewindJournal {
   async complete(id: string) {
     this.#operations.delete(id);
   }
+}
+
+/**
+ * Whether `current` is `rewound` as saved. Saving records when it happened,
+ * so those two fields are not compared.
+ */
+function savedAs(current: WorkspaceTask, rewound: WorkspaceTask): boolean {
+  const unstamped = (task: WorkspaceTask) =>
+    JSON.stringify({ ...task, updatedAt: "", updatedLabel: "" });
+  return unstamped(current) === unstamped(rewound);
+}
+
+/**
+ * The undo as recorded once the restore has run. A file the review could put
+ * back that did not go back, as when another program held it, is tried again
+ * at the next undo: the actions that changed it are not recorded as undone.
+ */
+function recordedUndo(
+  planner: RewindPlanner,
+  task: WorkspaceTask,
+  undo: { readonly plan: UndoPlan; readonly at: string },
+  review: RecoveryReview,
+  result: RewindCommitResult,
+) {
+  const retry = new Set(
+    review.files
+      .filter(
+        (file) =>
+          file.status === "recoverable" &&
+          !result.files.some(
+            (done) =>
+              done.path === file.path &&
+              (done.status === "restored" || done.status === "removed"),
+          ),
+      )
+      .map((file) => file.path),
+  );
+  return planner.applyUndo(
+    task,
+    {
+      ...undo.plan,
+      actions: undo.plan.actions.filter(
+        (action) =>
+          !action.changes?.some((change) =>
+            retry.has(change.path.replaceAll("\\", "/")),
+          ),
+      ),
+    },
+    result.files,
+    undo.at,
+  );
 }
 
 function journalKey(value: string): string {
@@ -273,7 +329,28 @@ export class ComposedRewind implements Rewind {
       try {
         await host.open?.(operation.conversationId);
         const current = host.task(operation.conversationId);
-        if (JSON.stringify(current) === JSON.stringify(operation.task)) {
+        const finished = (from: WorkspaceTask, result: RewindCommitResult) => {
+          if (!operation.undo) return operation.task;
+          const recorded = recordedUndo(
+            this.#members.conversation,
+            from,
+            operation.undo,
+            operation.review,
+            result,
+          );
+          return recorded.ok ? recorded.task : operation.task;
+        };
+        if (
+          savedAs(current, operation.task) ||
+          (operation.result &&
+            savedAs(
+              current,
+              finished(
+                JSON.parse(operation.source) as WorkspaceTask,
+                operation.result,
+              ),
+            ))
+        ) {
           await this.#journal.complete(operation.id);
           completed = true;
           continue;
@@ -287,7 +364,7 @@ export class ComposedRewind implements Rewind {
           (await this.#members.recovery.restore(operation.review));
         if (!operation.result)
           await this.#journal.filesRestored(operation.id, result);
-        await host.save(operation.task);
+        await host.save(finished(current, result));
         await this.#journal.complete(operation.id);
         completed = true;
       } catch (error) {
@@ -492,15 +569,17 @@ export class ComposedRewind implements Rewind {
         source: pending.plan.source,
         task: intended.task,
         review: pending.review,
+        undo: { plan: pending.plan, at },
       });
       durableIntent = true;
       const result = await this.#members.recovery.restore(pending.review);
       await this.#journal.filesRestored(undoId, result);
-      const recorded = this.#members.conversation.applyUndo(
+      const recorded = recordedUndo(
+        this.#members.conversation,
         task,
-        pending.plan,
-        result.files,
-        at,
+        { plan: pending.plan, at },
+        pending.review,
+        result,
       );
       await host.save(recorded.ok ? recorded.task : intended.task);
       await this.#journal.complete(undoId);
@@ -550,7 +629,17 @@ export class ComposedRewind implements Rewind {
     return this.#members.recovery.discard(actionId);
   }
 
-  forgetConversation(conversationId: string): Promise<void> {
-    return this.#members.recovery.forgetConversation(conversationId);
+  /**
+   * A deleted conversation's copies go, and so does a rewind or undo it left
+   * unfinished: there is no conversation left to finish it in.
+   */
+  async forgetConversation(conversationId: string): Promise<void> {
+    if (!this.#restoring.has(conversationId)) {
+      for (const operation of await this.#journal.pending())
+        if (operation.conversationId === conversationId)
+          await this.#journal.complete(operation.id);
+      this.#blocked.delete(conversationId);
+    }
+    await this.#members.recovery.forgetConversation(conversationId);
   }
 }

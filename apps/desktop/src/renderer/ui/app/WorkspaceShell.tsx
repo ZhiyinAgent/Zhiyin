@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import {
   type UserInputResponse,
   type MessageAttachment,
@@ -14,7 +14,7 @@ import {
 } from "../conversation/index.js";
 import { ComposerDock } from "./ComposerDock.js";
 import { ConversationHeader } from "./ConversationHeader.js";
-import { Icon } from "../shared/index.js";
+import { drawn, Icon, keyboardStops } from "../shared/index.js";
 import { IssueNotices } from "./IssueNotices.js";
 import { useConversationDeletion } from "./useConversationDeletion.js";
 import { useAppShortcuts } from "./useAppShortcuts.js";
@@ -104,6 +104,7 @@ export function WorkspaceShell({
     act,
   );
   const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const permissions = useConversationPermissions(
     state.tasks,
@@ -131,6 +132,16 @@ export function WorkspaceShell({
     readonly attachments?: readonly MessageAttachment[];
   }>();
   const [keyFirst, setKeyFirst] = useState(false);
+  // Which empty composer is showing, counted up each time a new conversation
+  // is started, so each starts empty.
+  const [blank, setBlank] = useState(0);
+  // The conversation the empty composer's own first message is opening. The
+  // core shows it before the message is sent, and the composer stays the same
+  // one there, so a send that fails leaves the words where they were typed.
+  const [opening, setOpening] = useState<{
+    readonly blank: number;
+    readonly taskId?: string;
+  }>();
   // The person's message open for editing where it is, as taskId:messageId.
   const [editingMessage, setEditingMessage] = useState<string>();
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -229,7 +240,18 @@ export function WorkspaceShell({
     attachments?: readonly MessageAttachment[],
   ) {
     let taskId = selectedTask?.id;
-    if (!taskId) await budget.adopt((taskId = await commands.createTask()));
+    const opened = !taskId;
+    if (!taskId) {
+      setOpening({ blank });
+      try {
+        taskId = await commands.createTask();
+      } catch (error) {
+        setOpening(undefined);
+        throw error;
+      }
+      setOpening({ blank, taskId });
+      await budget.adopt(taskId);
+    }
     setComposerDraft(undefined);
     await sendComposerMessage(commands.sendMessage, {
       taskId,
@@ -238,6 +260,9 @@ export function WorkspaceShell({
       attachments,
       running: isRunning,
     });
+    // The empty composer is the new conversation's now; the next empty one,
+    // shown once nothing is open, starts empty.
+    if (opened) setBlank((count) => (count === blank ? count + 1 : count));
   }
 
   function openSurface(surface: WorkspaceState["surface"]) {
@@ -253,6 +278,8 @@ export function WorkspaceShell({
   function startNewTask() {
     setNavigationOpen(false);
     dispatch({ type: "newTaskStarted" });
+    setOpening(undefined);
+    setBlank((count) => count + 1);
     // The core is told too. Every snapshot it sends says which conversation is
     // open, so leaving it believing the last one still is means the next
     // snapshot — choosing a folder, for instance — puts that conversation back
@@ -276,11 +303,17 @@ export function WorkspaceShell({
     <div
       className={`${styles["app-shell"]}${navigationOpen ? ` ${styles["app-shell--navigation-open"]}` : ""}`}
       onKeyDown={(event) => {
-        if (event.key === "Escape") setNavigationOpen(false);
+        if (event.key === "Escape" && navigationOpen) {
+          setNavigationOpen(false);
+          navigationToggle.current?.focus();
+        }
+        if (event.key === "Tab" && navigationOpen)
+          keepInDrawer(event, navigationToggle.current);
       }}
     >
       <button
         type="button"
+        ref={navigationToggle}
         className={styles["mobile-navigation"]}
         aria-label={navigationOpen ? "Close navigation" : "Open navigation"}
         aria-expanded={navigationOpen}
@@ -487,6 +520,15 @@ export function WorkspaceShell({
                   />
                 )}
                 <ComposerDock
+                  composerKey={
+                    !selectedTask
+                      ? `new:${blank}`
+                      : opening &&
+                          (opening.taskId ?? selectedTask.id) ===
+                            selectedTask.id
+                        ? `new:${opening.blank}`
+                        : selectedTask.id
+                  }
                   state={state}
                   task={selectedTask}
                   commands={commands}
@@ -515,4 +557,31 @@ export function WorkspaceShell({
       {toast}
     </div>
   );
+}
+
+/**
+ * While the navigation drawer covers the window, Tab and Shift+Tab go round
+ * its button and the drawer, as in a dialog. Where the window is wide enough
+ * the drawer is the sidebar and the button is not drawn, so nothing is kept.
+ */
+function keepInDrawer(
+  event: KeyboardEvent<HTMLElement>,
+  toggle: HTMLButtonElement | null,
+) {
+  const drawer = event.currentTarget.querySelector(
+    'aside[aria-label="Primary navigation"]',
+  );
+  if (!toggle || !drawer || !drawn(toggle)) return;
+  const stops = [toggle, ...keyboardStops(drawer)];
+  const at = stops.indexOf(document.activeElement as HTMLElement);
+  const next = event.shiftKey
+    ? at <= 0
+      ? stops.at(-1)
+      : undefined
+    : at === -1 || at === stops.length - 1
+      ? stops[0]
+      : undefined;
+  if (!next) return;
+  event.preventDefault();
+  next.focus();
 }

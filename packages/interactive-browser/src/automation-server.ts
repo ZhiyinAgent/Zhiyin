@@ -15,6 +15,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type {
   BrowserLauncher,
   InteractiveBrowser,
+  StoppedDownload,
 } from "./interactive-browser.js";
 import type { ConnectionTool, OfferedConnection } from "@zhiyin/contract";
 import {
@@ -22,6 +23,7 @@ import {
   describeBrowserResult,
   describedBrowserTools,
 } from "./browser-presentation.js";
+import { browserAddress } from "./browser-address.js";
 
 /**
  * `@playwright/mcp` publishes CommonJS. Required rather than imported so this
@@ -115,6 +117,73 @@ const hiddenInputs = new Set([
   ...pathInputs,
   ...Object.values(decidedInputs).flatMap((inputs) => Object.keys(inputs)),
 ]);
+
+/** A size as a person reads it: in gigabytes from one up, else megabytes. */
+function sizeOf(bytes: number): string {
+  const gigabytes = bytes / 1024 ** 3;
+  return gigabytes >= 1
+    ? `${Number(gigabytes.toFixed(1))} GB`
+    : `${Number((bytes / 1024 ** 2).toFixed(1))} MB`;
+}
+
+/**
+ * The downloads an answer says the automation server kept, by their names:
+ * it says so once its copy in the conversation's folder is complete.
+ */
+function keptDownloads(result: unknown): readonly string[] {
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((item: { text?: unknown }) =>
+    typeof item.text === "string"
+      ? [...item.text.matchAll(/^- Downloaded file (.+) to "/gm)].map(
+          (said) => said[1]!,
+        )
+      : [],
+  );
+}
+
+/**
+ * A tab Edge opens on its own page of downloads, which ignores being closed
+ * and holds nothing the agent can use.
+ */
+const downloadsTab =
+  /^- \d+:(?: \(current\))? \[[^\n]*\]\(edge:\/\/downloads-hub\/?\)(?: \[crashed\])?(?:\r?\n|$)/gm;
+
+/** The answer without Edge's tab of downloads among the tabs it lists. */
+function withoutDownloadsTab<T>(result: T): T {
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return result;
+  return {
+    ...result,
+    content: content.map((item: { text?: unknown }) =>
+      typeof item.text === "string"
+        ? { ...item, text: item.text.replace(downloadsTab, "") }
+        : item,
+    ),
+  };
+}
+
+/**
+ * The answer, telling the agent of each download stopped for its size: the
+ * automation server says a download began, and never that it ended.
+ */
+function withStoppedDownloads<T>(
+  result: T,
+  stopped: readonly StoppedDownload[],
+): T {
+  const content = (result as { content?: unknown }).content;
+  if (!stopped.length || !Array.isArray(content)) return result;
+  return {
+    ...result,
+    content: [
+      ...content,
+      ...stopped.map((download) => ({
+        type: "text",
+        text: `The download of ${download.name} was stopped: this browser's downloads may come to ${sizeOf(download.limitBytes)} in all.`,
+      })),
+    ],
+  };
+}
 
 function modelArguments(
   name: string,
@@ -397,12 +466,24 @@ export function browserAutomation(
       // an interrupted turn or a renamed tool must not slip past the same rule.
       if (!describedBrowserTools.has(name))
         throw new Error(`${name} is not available in Zhiyin’s browser.`);
+      // Checked again where the call is made, not only when it was shown: an
+      // inspection is a description, and this is the browser being sent.
+      const address =
+        name === "browser_navigate"
+          ? browserAddress(typeof args.url === "string" ? args.url : "")
+          : undefined;
+      if (address && !address.ok)
+        return {
+          isError: true,
+          content: [{ type: "text", text: address.reason }],
+        };
       browser.markAgentAction();
       if (name === "browser_close") {
         await browser.close();
         return { content: [{ type: "text", text: "Browser closed." }] };
       }
       let given = modelArguments(name, args);
+      if (address?.ok) given = { ...given, url: address.url };
       if (
         name === "browser_file_upload" &&
         Array.isArray(args.paths) &&
@@ -442,8 +523,12 @@ export function browserAutomation(
         { name, arguments: given },
         { ...(signal ? { signal } : {}), timeout: 120_000 },
       );
+      browser.downloadsKept?.(keptDownloads(result));
       await browser.refresh();
-      return result;
+      return withStoppedDownloads(
+        withoutDownloadsTab(result),
+        browser.takeStoppedDownloads(),
+      );
     },
     close: reset,
   };

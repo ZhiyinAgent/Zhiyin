@@ -135,6 +135,147 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     expect(await readFile(join(root, "two.txt"), "utf8")).toBe("before two");
   });
 
+  it("finishes a restoration a restart cut short, from what it kept on disk", async () => {
+    const { root, storage, recovery } = await fixture();
+    await writeFile(join(root, "one.txt"), Buffer.from([1, 0, 1]));
+    await writeFile(join(root, "two.txt"), Buffer.from([2, 0, 2]));
+    const changes = [
+      { path: "one.txt", change: "updated" as const },
+      { path: "two.txt", change: "updated" as const },
+    ];
+    await recovery.prepare("action-1", root, changes, "conversation-1");
+    await writeFile(join(root, "one.txt"), "after one");
+    await writeFile(join(root, "two.txt"), "after two");
+    await recovery.commit("action-1");
+    const action = {
+      id: "action-1",
+      action: "Edit files",
+      target: "2 files",
+      status: "completed" as const,
+      sequence: 0,
+      changes,
+    };
+    const review = await recovery.review("review-1", root, [action]);
+    // Zhiyin closed after the first file went back.
+    await writeFile(join(root, "one.txt"), Buffer.from([1, 0, 1]));
+
+    const restarted = new FileRecovery(storage, {
+      now: () => new Date("2026-09-07T10:05:00.000Z"),
+    });
+    const result = await restarted.restore(review);
+
+    expect(result.files).toEqual([
+      { path: "one.txt", status: "restored" },
+      { path: "two.txt", status: "restored" },
+    ]);
+    expect(await readFile(join(root, "one.txt"))).toEqual(
+      Buffer.from([1, 0, 1]),
+    );
+    expect(await readFile(join(root, "two.txt"))).toEqual(
+      Buffer.from([2, 0, 2]),
+    );
+    // And what it kept is reviewed again after the restart as before it.
+    await writeFile(join(root, "two.txt"), "after two");
+    await writeFile(join(root, "one.txt"), "after one");
+    expect((await restarted.review("review-2", root, [action])).files).toEqual([
+      { path: "one.txt", action: "restore", status: "recoverable" },
+      { path: "two.txt", action: "restore", status: "recoverable" },
+    ]);
+  });
+
+  it("uses a copy only in the workspace it was taken in", async () => {
+    const { root, recovery } = await fixture();
+    const other = await mkdtemp(join(tmpdir(), "zhiyin-recovery-other-"));
+    await writeFile(join(root, "note.txt"), "before");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "note.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await writeFile(join(root, "note.txt"), "after");
+    await recovery.commit("action-1");
+    // Another folder holding a file of the same name, as the action left it.
+    await writeFile(join(other, "note.txt"), "after");
+
+    const review = await recovery.review("review-1", other, [
+      {
+        id: "action-1",
+        action: "Write",
+        target: "note.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "note.txt", change: "updated" }],
+      },
+    ]);
+    const result = await recovery.restore(review);
+
+    expect(review.files).toMatchObject([
+      { path: "note.txt", status: "unprotected" },
+    ]);
+    expect(result.files).not.toContainEqual(
+      expect.objectContaining({ status: "restored" }),
+    );
+    expect(await readFile(join(other, "note.txt"), "utf8")).toBe("after");
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("after");
+  });
+
+  it("keeps no more than its total limit: a copy past it is not taken, and the oldest go first", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-recovery-workspace-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-recovery-store-"));
+    let now = new Date("2026-09-07T10:00:00.000Z");
+    const store = (totalBytes: number) =>
+      new FileRecovery(storage, { now: () => now, limits: { totalBytes } });
+    const action = (id: string, path: string) => ({
+      id,
+      action: "Write",
+      target: path,
+      status: "completed" as const,
+      sequence: 0,
+      changes: [{ path, change: "updated" as const }],
+    });
+    const wrote = async (recovery: FileRecovery, id: string, path: string) => {
+      await writeFile(join(root, path), "ten bytes!");
+      const prepared = await recovery.prepare(
+        id,
+        root,
+        [{ path, change: "updated" }],
+        "conversation-1",
+      );
+      await writeFile(join(root, path), "changed");
+      await recovery.commit(id);
+      return prepared.files[0];
+    };
+
+    const roomy = store(25);
+    expect(await wrote(roomy, "action-1", "one.txt")).toMatchObject({
+      status: "protected",
+    });
+    now = new Date("2026-09-07T10:01:00.000Z");
+    expect(await wrote(roomy, "action-2", "two.txt")).toMatchObject({
+      status: "protected",
+    });
+    now = new Date("2026-09-07T10:02:00.000Z");
+    // Twenty bytes are kept: ten more would pass the limit.
+    expect(await wrote(roomy, "action-3", "three.txt")).toEqual({
+      path: "three.txt",
+      status: "unprotected",
+      reason: "The recovery storage limit cannot admit this file.",
+    });
+
+    // A store started with a lower limit lets the oldest copy go.
+    const tight = store(15);
+    await tight.cleanup();
+    const review = await tight.review("review-1", root, [
+      action("action-1", "one.txt"),
+      action("action-2", "two.txt"),
+    ]);
+    expect(review.files).toMatchObject([
+      { path: "one.txt", status: "unprotected" },
+      { path: "two.txt", status: "recoverable" },
+    ]);
+  });
+
   it("puts back a file the work deleted, and the folder it was in", async () => {
     const { root, recovery } = await fixture();
     await mkdir(join(root, "notes"));
@@ -218,6 +359,53 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     expect(
       (await readdir(root)).filter((name) => name.endsWith(".restore")),
     ).toEqual([]);
+  });
+
+  it("puts back as it is a file already as it was, as after an undo another file stopped partway", async () => {
+    const { root, recovery } = await fixture();
+    await writeFile(join(root, "back.txt"), "before");
+    await writeFile(join(root, "held.txt"), "before");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "back.txt", change: "updated" },
+        { path: "held.txt", change: "updated" },
+      ],
+      "conversation-1",
+    );
+    await writeFile(join(root, "back.txt"), "agent result");
+    await writeFile(join(root, "held.txt"), "agent result");
+    await recovery.commit("action-1");
+    // The first undo put one file back; the other was left as the work left it.
+    await writeFile(join(root, "back.txt"), "before");
+    const actions = [
+      {
+        id: "action-1",
+        action: "Edit files",
+        target: "2 files",
+        status: "completed" as const,
+        sequence: 0,
+        changes: [
+          { path: "back.txt", change: "updated" as const },
+          { path: "held.txt", change: "updated" as const },
+        ],
+      },
+    ];
+
+    const review = await recovery.review("review-1", root, actions);
+    const result = await recovery.restore(review);
+
+    expect(review.files.map((file) => file.status)).toEqual([
+      "recoverable",
+      "recoverable",
+    ]);
+    expect(result.files.map((file) => file.status)).toEqual([
+      "restored",
+      "restored",
+    ]);
+    expect(await readFile(join(root, "back.txt"), "utf8")).toBe("before");
+    expect(await readFile(join(root, "held.txt"), "utf8")).toBe("before");
   });
 
   it("refuses to overwrite a file changed after the recorded action", async () => {
@@ -529,6 +717,50 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
           "No copy of this file is kept: none was taken, or it was removed by the storage limits.",
       },
     ]);
+  });
+
+  it("leaves alone the copies of an action still being prepared when it cleans up", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-recovery-workspace-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-recovery-store-"));
+    let copied!: () => void;
+    const copiesTaken = new Promise<void>((resolve) => (copied = resolve));
+    let write!: () => void;
+    const manifestHeld = new Promise<void>((resolve) => (write = resolve));
+    const recovery = new FileRecovery(storage, {
+      now: () => new Date("2026-09-07T10:00:00.000Z"),
+      beforeManifest: async () => {
+        copied();
+        await manifestHeld;
+      },
+    });
+    await writeFile(join(root, "notes.txt"), "before");
+
+    const preparing = recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "notes.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await copiesTaken;
+    await recovery.cleanup();
+    write();
+    await preparing;
+    await writeFile(join(root, "notes.txt"), "after");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Edit notes",
+        target: "notes.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "notes.txt", change: "updated" }],
+      },
+    ]);
+    const result = await recovery.restore(review);
+
+    expect(result.files).toEqual([{ path: "notes.txt", status: "restored" }]);
+    expect(await readFile(join(root, "notes.txt"), "utf8")).toBe("before");
   });
 
   it("removes a folder left without its record", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyConversationLists,
   type TaskAction,
@@ -6,7 +6,16 @@ import {
 } from "@zhiyin/contract";
 import type { RewindPlanner, UndoPlan } from "@zhiyin/conversation-rewind";
 import type { Recovery, RecoveryReview } from "@zhiyin/recovery";
-import { ComposedRewind, type RewindHost } from "../src/index.js";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import {
+  ComposedRewind,
+  FileRewindJournal,
+  type RewindHost,
+} from "../src/index.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
 
 const written: TaskAction = {
   id: "write-1",
@@ -223,6 +232,108 @@ describe("undoing a turn's file changes", () => {
       "conversation",
       "complete",
     ]);
+  });
+
+  it("finishes an undo cut short by a restart as it would have finished at once, offering again a file that did not go back", async () => {
+    const held = [
+      {
+        path: "notes.md",
+        status: "conflict" as const,
+        reason: "Another program has it open.",
+      },
+    ];
+    const now = () => new Date("2026-10-16T09:00:00.000Z");
+    const atOnce = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording(held).recovery,
+      now,
+    });
+    const finished = hostFor(conversation("C:/work"));
+    await atOnce.previewUndo("conversation-1", "u1", finished.host);
+    await atOnce.commitUndo("conversation-1", "undo-1", finished.host);
+
+    const directory = await folders.make("zhiyin-undo-journal-");
+    let current = conversation("C:/work");
+    const closing: RewindHost = {
+      task: () => current,
+      save: async () => {
+        throw new Error("Zhiyin closed before the conversation was saved.");
+      },
+    };
+    const first = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording(held).recovery,
+      journal: new FileRewindJournal(directory),
+      now,
+    });
+    await first.previewUndo("conversation-1", "u1", closing);
+    await expect(
+      first.commitUndo("conversation-1", "undo-1", closing),
+    ).rejects.toThrow("closed before");
+    const restarted = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording(held).recovery,
+      journal: new FileRewindJournal(directory),
+      now,
+    });
+    await restarted.resume({
+      task: () => current,
+      save: async (task) => {
+        current = task;
+      },
+    });
+
+    expect(current.undos).toEqual(finished.saved.at(-1)?.undos);
+    expect(current.undos[0]?.actionIds).toEqual([]);
+    expect(restarted.restoring("conversation-1")).toBe(false);
+  });
+
+  it("clears an undo a restart finds already saved, a file that did not go back included", async () => {
+    const directory = await folders.make("zhiyin-undo-journal-");
+    const stored = new FileRewindJournal(directory);
+    let closing = true;
+    const journal = {
+      pending: () => stored.pending(),
+      begin: (operation: Parameters<FileRewindJournal["begin"]>[0]) =>
+        stored.begin(operation),
+      filesRestored: (
+        id: string,
+        result: Parameters<FileRewindJournal["filesRestored"]>[1],
+      ) => stored.filesRestored(id, result),
+      complete: async (id: string) => {
+        if (closing) throw new Error("Zhiyin closed after saving.");
+        await stored.complete(id);
+      },
+    };
+    const held = [
+      {
+        path: "notes.md",
+        status: "conflict" as const,
+        reason: "Another program has it open.",
+      },
+    ];
+    const { host, saved } = hostFor(conversation("C:/work"));
+    const first = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording(held).recovery,
+      journal,
+    });
+    await first.previewUndo("conversation-1", "u1", host);
+    await expect(
+      first.commitUndo("conversation-1", "undo-1", host),
+    ).rejects.toThrow("closed after saving");
+
+    closing = false;
+    const restarted = new ComposedRewind({
+      conversation: planner(),
+      recovery: recoveryRecording(held).recovery,
+      journal,
+    });
+    await restarted.resume(host);
+
+    await expect(stored.pending()).resolves.toEqual([]);
+    expect(restarted.restoring("conversation-1")).toBe(false);
+    expect(saved).toHaveLength(1);
   });
 
   it("refuses an undo it did not review, and one reviewed before the conversation changed", async () => {

@@ -14,6 +14,7 @@ import {
   type AppEvent,
   type ContextBudgetChoice,
   type ModelWindow,
+  type ReasoningSelection,
   type WorkspaceSnapshot,
   type WorkspaceTask,
 } from "@zhiyin/contract";
@@ -24,18 +25,38 @@ import {
 import type { PluginView } from "@zhiyin/plugins";
 import { ComposedRewind } from "@zhiyin/rewind";
 import type { ModelClient, ModelMessage } from "@zhiyin/model-client";
+import { watched } from "@zhiyin/test-waits";
 import { AgentLoop, type TurnHost } from "../src/index.js";
 import { settledWhenTurnEnded } from "../src/turn/settling.js";
 import { type TurnStubs } from "./stubs.js";
 
 export { pluginsOffering, stubDependencies } from "./stubs.js";
 
-export async function until(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("Condition was not reached.");
+export { until } from "@zhiyin/test-waits";
+
+/**
+ * Goes on once all the work already queued has run, so a test can say that
+ * something late did not happen: what a late answer sets off is either
+ * awaited by the turn it came to, or queued behind it.
+ */
+export const queuedWorkRun = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Each of a turn's dependencies, watched: a turn changes nothing but by
+ * calling one of them or hearing back from one, so each such moment wakes
+ * the waits of the test.
+ */
+function watchedEach<T extends object>(dependencies: T): T {
+  return Object.fromEntries(
+    Object.entries(dependencies).map(([name, value]) => [
+      name,
+      typeof value === "function" ||
+      (typeof value === "object" && value !== null && !Array.isArray(value))
+        ? watched(value as object)
+        : value,
+    ]),
+  ) as T;
 }
 
 export function currentApprovalId(loop: TurnTestApp, taskId: string): string {
@@ -55,12 +76,19 @@ export class TestHost implements TurnHost {
   history = true;
   capabilities = true;
   images = false;
-  reasoningOff = false;
+  least: ReasoningSelection | undefined;
   /**
    * Commit a write only after a save that takes a moment, as the core does.
    * Off, a write lands at once, and two writers can never overlap.
    */
   savesSlowly = false;
+  /**
+   * A save the disk refuses, as the core's does: the write still shows, and
+   * the save throws.
+   */
+  refusesSave: ((task: WorkspaceTask) => boolean) | undefined;
+  /** A save held until what it returns settles, as a slow disk holds one. */
+  holdsSave: ((task: WorkspaceTask) => Promise<void> | undefined) | undefined;
   /** What the turn asked the app around it to do, in order. */
   readonly enteredFolders: string[] = [];
   readonly watchedBrowsers: string[] = [];
@@ -180,6 +208,11 @@ export class TestHost implements TurnHost {
     if (!this.tasks.some((item) => item.id === task.id)) return;
     if (this.savesSlowly)
       await new Promise((resolve) => setTimeout(resolve, 1));
+    await this.holdsSave?.(task);
+    // As the app does: a write whose author lost the conversation while it
+    // was being saved is dropped.
+    if (!options.commit()) return;
+    const refused = options.persist && this.refusesSave?.(task) === true;
     const updated = {
       ...settledWhenTurnEnded(task),
       updatedAt: this.#now().toISOString(),
@@ -191,6 +224,7 @@ export class TestHost implements TurnHost {
     const current = this.find(task.id);
     if (current && options.announce())
       this.#emit({ kind: "taskChanged", data: current });
+    if (refused) throw new Error("The disk is full.");
   }
 
   historyAvailable(): boolean {
@@ -205,8 +239,8 @@ export class TestHost implements TurnHost {
     return this.images;
   }
 
-  reasoningOptional(): boolean {
-    return this.reasoningOff;
+  leastReasoning(): ReasoningSelection | undefined {
+    return this.least;
   }
 
   /** The model's size as the app reads it from the catalogue; unknown here. */
@@ -310,13 +344,18 @@ export type LoopTestDependencies = TurnStubs & {
    * In production the core answers this from the provider's settings.
    */
   readonly acceptsImages?: boolean;
-  /** Whether the model can be asked to answer without reasoning. */
-  readonly reasoningOptional?: boolean;
+  /**
+   * The least reasoning the model can be asked for: none, or its lowest
+   * effort. Absent, it can be asked for no less than was chosen.
+   */
+  readonly leastReasoning?: ReasoningSelection;
   /** The model's size as the catalogue lists it; unknown when absent. */
   readonly modelWindow?: ModelWindow & { readonly model: string };
   readonly defaultContextBudget?: ContextBudgetChoice;
   /** See `TestHost.savesSlowly`. */
   readonly savesSlowly?: boolean;
+  /** See `TestHost.refusesSave`. */
+  readonly refusesSave?: (task: WorkspaceTask) => boolean;
 };
 
 /** A message's words as the model reads them, pictures left out. */
@@ -405,32 +444,35 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
     emit,
     newTaskId,
     acceptsImages,
-    reasoningOptional,
+    leastReasoning,
     modelWindow,
     defaultContextBudget,
     savesSlowly,
+    refusesSave,
     ...rest
   } = dependencies;
   const host = new TestHost({ emit, now: rest.now, newTaskId });
   host.images = acceptsImages === true;
-  host.reasoningOff = reasoningOptional === true;
+  host.least = leastReasoning;
   if (modelWindow) host.window = modelWindow;
   if (defaultContextBudget) host.contextBudget = defaultContextBudget;
   host.savesSlowly = savesSlowly === true;
-  const capabilities = new ComposedCapabilities({
-    tools,
-    mcp,
-    plugins,
-    toolchains,
-    connectionToolchains,
-    browsers: rest.browsers as CapabilityMembers["browsers"],
-  });
+  host.refusesSave = refusesSave;
+  const capabilities = new ComposedCapabilities(
+    watchedEach({
+      tools,
+      mcp,
+      plugins,
+      toolchains,
+      connectionToolchains,
+      browsers: rest.browsers as CapabilityMembers["browsers"],
+    }),
+  );
   const loop = new AgentLoop({
-    ...rest,
-    model: withOneChannel(rest.model),
+    ...watchedEach({ ...rest, model: withOneChannel(rest.model) }),
     capabilities,
-    rewind: new ComposedRewind({ conversation: rewind, recovery }),
-    host,
+    rewind: new ComposedRewind(watchedEach({ conversation: rewind, recovery })),
+    host: watched(host),
   });
   // Wired as the application wires it.
   capabilities.onCommandEnded((taskId, notice, wakes) =>

@@ -17,6 +17,7 @@ import { CommandEndings } from "./tools/command-endings.js";
 import { TurnRecords } from "./turn/turn-records.js";
 import { TurnWaits } from "./turn/turn-waits.js";
 import { TurnOwnership } from "./turn/turn-ownership.js";
+import { turnWriteGuard } from "./turn/turn-write-guard.js";
 import { TurnLoop } from "./turn/turn-loop.js";
 import { ContextGuard } from "./context/context-guard.js";
 import { condenseBetweenTurns } from "./plan/request-plan.js";
@@ -40,6 +41,12 @@ export class AgentLoop {
   readonly #pendingHandoffs = new PendingHandoffs();
   readonly #commandEndings = new CommandEndings();
   readonly #wakeScheduled = new Set<string>();
+  /**
+   * Conversations whose stop is still being written: what arrives meanwhile
+   * waits for the person's next turn, as what was waiting at the stop does.
+   * Counted, since the person can stop again before the first stop is saved.
+   */
+  readonly #stopping = new Map<string, number>();
   readonly #turnLoop: TurnLoop;
   readonly #context: ContextGuard;
   /** A condensing the person asked for between turns, until it ends. */
@@ -47,7 +54,7 @@ export class AgentLoop {
 
   constructor(deps: AgentLoopDependencies) {
     this.#deps = deps;
-    this.#records = new TurnRecords(deps, (task) => this.#storeGuard(task));
+    this.#records = new TurnRecords(deps, turnWriteGuard(this.#activeTurns));
     this.#auxiliary = new AuxiliaryWork(deps, { records: this.#records });
     this.#waits = new TurnWaits(deps, { records: this.#records });
     this.#toolCalls = new ToolCalls(deps, {
@@ -60,6 +67,7 @@ export class AgentLoop {
       toolCalls: this.#toolCalls,
       ownership: this.#activeTurns,
       onSettled: (taskId, result) => this.#deliverHandoff(taskId, result),
+      rateLimited: (taskId) => this.#auxiliary.giveWay(taskId),
     });
     this.#pluginActivation = new PluginActivation(deps, {
       records: this.#records,
@@ -75,6 +83,7 @@ export class AgentLoop {
       pendingHandoffs: this.#pendingHandoffs,
       commandEndings: this.#commandEndings,
       context: this.#context,
+      rateLimited: (taskId) => this.#auxiliary.giveWay(taskId),
     });
   }
 
@@ -84,48 +93,70 @@ export class AgentLoop {
    * next turn.
    */
   commandEnded(taskId: string, notice: string, wakes = true): void {
-    this.#commandEndings.push(taskId, notice, wakes);
-    if (wakes) this.#wakeIfQueued(taskId);
+    const waking = wakes && !this.#stopping.has(taskId);
+    this.#commandEndings.push(taskId, notice, waking);
+    if (waking) this.#wakeIfQueued(taskId);
   }
 
   /**
    * This task's commands running as jobs changed. The list is kept with the
    * conversation, so that after a restart the model can be told they stopped.
    */
-  async commandsChanged(taskId: string): Promise<void> {
-    if (!this.#deps.host.find(taskId)) return;
-    const task = this.#records.task(taskId);
-    const jobs = this.#deps.capabilities
-      .runningCommands(taskId)
-      .map(({ id, command }) => ({ id, command }));
-    if (JSON.stringify(jobs) === JSON.stringify(task.runningJobs)) return;
-    await this.#records.replaceTask({ ...task, runningJobs: jobs });
+  commandsChanged(taskId: string): Promise<void> {
+    // A job's record is the job's, not its turn's: it lands after a stop
+    // that ended the job, which is written from the call that started it.
+    return this.#activeTurns.outside(() => this.#keepRunningJobs(taskId));
+  }
+
+  async #keepRunningJobs(taskId: string): Promise<void> {
+    await this.#records.changeOutsideTurns(taskId, (task) => {
+      const jobs = this.#deps.capabilities
+        .runningCommands(taskId)
+        .map(({ id, command }) => ({ id, command }));
+      return JSON.stringify(jobs) === JSON.stringify(task.runningJobs)
+        ? undefined
+        : { ...task, runningJobs: jobs };
+    });
   }
 
   /**
    * A job this task started ended, and this is what changed in its folder
    * while it ran. It belongs to the action whose call started the job.
    */
-  async jobChanged(
+  jobChanged(
     taskId: string,
     job: string,
     changes: CommandFileChanges,
   ): Promise<void> {
-    if (!this.#deps.host.find(taskId)) return;
-    const task = this.#records.task(taskId);
-    const started = task.actions.find(
-      (action) =>
-        action.commandChanges?.status === "running" &&
-        action.commandChanges.job === job,
+    return this.#activeTurns.outside(() =>
+      this.#keepJobChanges(taskId, job, changes),
     );
-    if (!started) return;
-    await this.#records.replaceTask({
-      ...task,
-      actions: task.actions.map((action) =>
-        action === started ? { ...action, commandChanges: changes } : action,
-      ),
+  }
+
+  async #keepJobChanges(
+    taskId: string,
+    job: string,
+    changes: CommandFileChanges,
+  ): Promise<void> {
+    const kept = await this.#records.changeOutsideTurns(taskId, (task) => {
+      const started = task.actions.find(
+        (action) =>
+          action.commandChanges?.status === "running" &&
+          action.commandChanges.job === job,
+      );
+      return started
+        ? {
+            ...task,
+            actions: task.actions.map((action) =>
+              action === started
+                ? { ...action, commandChanges: changes }
+                : action,
+            ),
+          }
+        : undefined;
     });
-    await this.#records.announceWritten(taskId, writtenFiles([], changes));
+    if (kept)
+      await this.#records.announceWritten(taskId, writtenFiles([], changes));
   }
 
   /**
@@ -290,21 +321,29 @@ export class AgentLoop {
     return async () => {
       // The name is asked for beside the turn, so the first answer does not
       // wait for it, and a name that cannot be written leaves the turn alone.
-      const naming = started.shouldGenerateInitialTitle
-        ? this.#auxiliary
-            .nameConversation(
-              taskId,
-              modelText({ text: message, attachments: claimed }),
-              controller.signal,
-            )
-            .catch((error: unknown) => {
-              if (isOwnDefect(error))
-                this.#deps.recordDefect?.({ taskId, error });
-            })
-        : undefined;
-      await this.#turnLoop.run(taskId, controller, ledger);
-      this.#wakeIfQueued(taskId);
-      await naming;
+      // Where the lab limits how many requests are open, the name gives way
+      // to the answer and is asked again once the turn is over.
+      const name = () =>
+        this.#auxiliary
+          .nameConversation(
+            taskId,
+            modelText({ text: message, attachments: claimed }),
+            controller.signal,
+          )
+          .catch((error: unknown) => {
+            if (isOwnDefect(error))
+              this.#deps.recordDefect?.({ taskId, error });
+            return undefined;
+          });
+      // The turn's work, naming beside it included, is the turn's own.
+      await this.#activeTurns.within(controller, async () => {
+        const naming = started.shouldGenerateInitialTitle ? name() : undefined;
+        await this.#turnLoop.run(taskId, controller, ledger);
+        // What waited when the person stopped the turn waits for their next
+        // message, rather than starting a turn they just stopped.
+        if (!controller.signal.aborted) this.#wakeIfQueued(taskId);
+        if ((await naming) === "gaveWay") await name();
+      });
     };
   }
 
@@ -331,7 +370,7 @@ export class AgentLoop {
     if (this.#activeTurns.running(taskId)) return;
 
     const controller = this.#activeTurns.start(taskId);
-    const condensing = (async () => {
+    const condensing = this.#activeTurns.within(controller, async () => {
       try {
         await this.#deps.host.enterFolderOf(taskId);
         await condenseBetweenTurns(
@@ -344,7 +383,7 @@ export class AgentLoop {
       } finally {
         this.#activeTurns.finish(taskId, controller);
       }
-    })();
+    });
     this.#condensing.set(
       taskId,
       condensing.catch(() => {}).finally(() => this.#condensing.delete(taskId)),
@@ -374,11 +413,13 @@ export class AgentLoop {
       this.#activeTurns.finish(taskId, controller);
       throw error;
     }
-    await this.#turnLoop.run(taskId, controller, ledger, {
-      initialDelegatedChildren:
-        this.#records.task(taskId).specialistRuns.length,
-    });
-    this.#wakeIfQueued(taskId);
+    await this.#activeTurns.within(controller, () =>
+      this.#turnLoop.run(taskId, controller, ledger, {
+        initialDelegatedChildren:
+          this.#records.task(taskId).specialistRuns.length,
+      }),
+    );
+    if (!controller.signal.aborted) this.#wakeIfQueued(taskId);
   }
 
   /**
@@ -389,6 +430,10 @@ export class AgentLoop {
    * everything queued once it starts.
    */
   #deliverHandoff(taskId: string, result: SpecialistExecutionResult): void {
+    if (this.#stopping.has(taskId)) {
+      this.#pendingHandoffs.push(taskId, result, false);
+      return;
+    }
     this.#pendingHandoffs.push(taskId, result);
     this.#wakeIfQueued(taskId);
   }
@@ -454,6 +499,7 @@ export class AgentLoop {
                 runId: run.id,
                 specialist: run.specialist,
                 handoff: run.handoff,
+                ...(run.quiet ? { stopped: true as const } : {}),
               }
             : {
                 ok: false,
@@ -462,7 +508,7 @@ export class AgentLoop {
                 reason:
                   run.reason ?? "The specialist stopped before finishing.",
                 // One the person stopped stays stopped after a restart too.
-                ...(run.reason === stoppedBeforeCompleting
+                ...(run.quiet || run.reason === stoppedBeforeCompleting
                   ? { stopped: true as const }
                   : {}),
               },
@@ -507,15 +553,50 @@ export class AgentLoop {
   }
 
   async cancel(taskId: string): Promise<void> {
-    this.#activeTurns.cancel(taskId);
+    this.#stopping.set(taskId, (this.#stopping.get(taskId) ?? 0) + 1);
     try {
-      await this.#records.interrupt(taskId);
-      await this.#records.releaseGuidance(taskId);
+      await this.#stop(taskId);
     } finally {
-      // Ended even when the stop could not be saved: a command left running
-      // would go on working for a turn that is over.
-      await this.#deps.capabilities.stopConversation(taskId);
+      const left = (this.#stopping.get(taskId) ?? 1) - 1;
+      if (left > 0) this.#stopping.set(taskId, left);
+      else this.#stopping.delete(taskId);
     }
+  }
+
+  async #stop(taskId: string): Promise<void> {
+    this.#activeTurns.cancel(taskId);
+    // What waited for the stopped turn is told to the next one the person
+    // starts, and wakes nothing, now or after a restart.
+    this.#pendingHandoffs.quiet(taskId);
+    this.#commandEndings.quiet(taskId);
+    // The stop is written on no turn's behalf, wherever it was asked from.
+    await this.#activeTurns.outside(async () => {
+      try {
+        await this.#records.interrupt(taskId);
+        await this.#records.changeOutsideTurns(taskId, (task) =>
+          task.specialistRuns.some(
+            (run) =>
+              run.status !== "running" &&
+              run.handoffDelivered === false &&
+              !run.quiet,
+          )
+            ? {
+                ...task,
+                specialistRuns: task.specialistRuns.map((run) =>
+                  run.status !== "running" && run.handoffDelivered === false
+                    ? { ...run, quiet: true as const }
+                    : run,
+                ),
+              }
+            : undefined,
+        );
+        await this.#records.releaseGuidance(taskId);
+      } finally {
+        // Ended even when the stop could not be saved: a command left running
+        // would go on working for a turn that is over.
+        await this.#deps.capabilities.stopConversation(taskId);
+      }
+    });
   }
 
   /** Whether a turn is running in this conversation, including a specialist
@@ -528,15 +609,6 @@ export class AgentLoop {
   /** Whether any turn is running, not counting the one named. */
   anyRunning(exceptTaskId?: string): boolean {
     return this.#activeTurns.anyRunning(exceptTaskId);
-  }
-
-  /** Captures the exact turn that authored a durable write. */
-  #storeGuard(task: WorkspaceTask): () => boolean {
-    if (task.phase.kind === "interrupted") return () => true;
-    const controller = this.#activeTurns.controller(task.id);
-    if (!controller) return () => true;
-    return () =>
-      this.#activeTurns.owns(task.id, controller) && !controller.signal.aborted;
   }
 
   async shutdown(): Promise<void> {

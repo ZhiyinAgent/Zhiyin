@@ -226,13 +226,4 @@ export function resultOf(
   return JSON.parse(inside ?? "null") as Record<string, unknown>;
 }
 
-export async function until(
-  predicate: () => boolean,
-  attempts = 500,
-): Promise<void> {
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("Condition was not reached.");
-}
+export { until } from "./support.js";

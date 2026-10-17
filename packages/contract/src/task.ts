@@ -22,6 +22,11 @@ export type ApprovalRequest = {
   readonly action: string;
   readonly target: string;
   readonly reason: string;
+  /**
+   * The reason was written by a model rather than by Zhiyin's code, so it is
+   * unverified and shown as a claim, as `claim` is.
+   */
+  readonly reasonByModel?: true;
   readonly command: string;
   readonly effect?: string;
   /** What the action will change, in the words of the feature that owns it. */

@@ -54,6 +54,11 @@ some sites refuse headless browsers.
     surface the agent used last.
   - `automation()`: the browser context the automation server attaches to, or
     nothing when no browser is running.
+  - `takeStoppedDownloads()`: the downloads stopped at the limit on what
+    the browser's downloads come to, since it was last asked.
+  - `downloadsKept(names)`: the automation server finished keeping these
+    downloads, by the names their pages gave them, in the conversation's
+    folder.
   - `preview`: the conversation's workspace preview.
   - `uploads`: the open folder's files a page's file chooser may be given.
 - `BrowserSessions(create, { outputDirectory })` implements
@@ -106,15 +111,30 @@ some sites refuse headless browsers.
 - **A second tab is not a second session.** One page is bound at launch, so a
   tab or popup the page opens does not change what the person watches and
   drives. Managing tabs is not offered to the agent, so it never moves to a
-  page the person cannot see.
+  page the person cannot see, and the tabs it is shown leave out the page of
+  downloads Edge opens on its own.
 - **A download stays with the conversation.** It lands in the conversation's
   own browser folder, never the person's Downloads folder, and the answer
   names it. That folder, with the copies of what was uploaded, is deleted
-  with the conversation.
+  with the conversation. One browser's downloads may come to 1 GB in all:
+  once they pass it, every download still arriving, whichever page, frame or
+  popup started it, is stopped within about a second and nothing of it is
+  kept, and the agent's next answer from the browser says which download was
+  stopped and what the limit is. A download is held once on disk: the
+  browser's own copy is removed once the automation server says its copy in
+  the conversation's folder is complete, and that copy counts toward the
+  limit. Of several downloads under one name, those that cannot be told
+  apart from one still being copied are held twice until the browser
+  closes. A download goes on after the page that started it
+  closes, as a popup opened by a download link closes at once.
 - **A browser that goes away is reported.** When the page or the connection
-  is lost, the session becomes `failed` with a reason and the automation
-  context is withdrawn. A closed session refuses navigation and takeover input
-  rather than reopening.
+  is lost, even while the browser is still opening, the session becomes
+  `failed` with a reason, said before the preview closes, the automation
+  context is withdrawn, and what is left of the browser is ended, though the
+  preview fail to close; a browser
+  opened while that ends, or before an earlier one says it was lost, stays
+  open and is not said to have failed. A closed
+  session refuses navigation and takeover input rather than reopening.
 
 ### What the person sees
 
@@ -124,7 +144,9 @@ some sites refuse headless browsers.
   fails keeps the previous frame.
 - **Every frame has one size, the page's own**, including after the agent
   resizes the page, so the panel never alternates between scales and clicks
-  are mapped against the right size.
+  are mapped against the right size. A streamed frame whose picture was drawn
+  for the size before a resize is left out, and the capture after the action
+  stands in for it.
 - **The page is drawn at the density of the screen** the window is on when
   the browser starts, so text is sharp at 200%.
 - **A scroll lands at once.** Smooth scrolling is off, so a position read or a
@@ -161,6 +183,11 @@ some sites refuse headless browsers.
   their size and last change, so a file changed since is not sent. The page is
   given a copy kept in the conversation's browser folder, the one place the
   browser reads from.
+- **The browser opens only web pages**: `https:`, `http:` and `about:blank`,
+  whether the agent or the person sends it. Any other scheme, such as the
+  browser's own pages, `view-source:` or `data:`, is refused before the
+  browser sees it. An address typed without a scheme is read as `https://`,
+  or `http://` for this computer.
 - **Each agent action is announced before it runs**, through
   `markAgentAction`; a refused tool is not announced. Closing the automation
   server leaves the page open for whoever is still reading it.

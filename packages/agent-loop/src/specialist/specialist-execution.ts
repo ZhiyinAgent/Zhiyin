@@ -12,8 +12,12 @@ import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures, withdrawCalls } from "../tools/quiet-failures.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 import type { ToolCalls } from "../tools/tool-calls.js";
-import { ModelRound } from "../turn/model-round.js";
-import type { TurnOwnership } from "../turn/turn-ownership.js";
+import {
+  ModelRound,
+  ThoughtTooLong,
+  withLeastReasoning,
+} from "../turn/model-round.js";
+import { ParentTurnEnded, type TurnOwnership } from "../turn/turn-ownership.js";
 import type { TurnRecords } from "../turn/turn-records.js";
 import { readToolInput } from "../tools/tool-input.js";
 import {
@@ -28,8 +32,11 @@ import {
   WorkLedger,
 } from "../turn/work-limits.js";
 import { RoundResults } from "../context/result-size.js";
-import { toolOutput } from "../turn/notices.js";
-import { isOwnDefect } from "../turn/turn-recovery.js";
+import { harnessNotice, toolOutput } from "../turn/notices.js";
+import {
+  isOwnDefect,
+  stoppedTwiceForReasoning,
+} from "../turn/turn-recovery.js";
 import { refusal, skippedAfterDecline } from "../tools/refusals.js";
 
 /**
@@ -157,6 +164,8 @@ export type SpecialistExecutionResult =
       readonly runId: string;
       readonly specialist: SpecialistDefinition;
       readonly handoff: SpecialistHandoff;
+      /** Its turn was stopped as it finished: told, and wakes nothing. */
+      readonly stopped?: true;
     }
   | {
       readonly ok: false;
@@ -227,6 +236,14 @@ export function completeHandoffMessage(
   return `${handoffReport(result)}Tool timeline (${timeline.length} calls, in order; recorded details are in the conversation):\n${timeline.map((line) => JSON.stringify(line)).join("\n")}`;
 }
 
+/**
+ * What a specialist whose request was stopped for reasoning at length is told
+ * when it is asked again. It has no person to ask: a round that neither acts
+ * nor finishes fails it.
+ */
+const specialistDecidesNow =
+  "Your last request was stopped: you reasoned at length without calling a tool, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, or call finish_specialist with what you have found.";
+
 /** The handoff notice: Zhiyin's words, and the report fenced after them. */
 export function handoffMessage(
   result: SpecialistExecutionResult,
@@ -275,11 +292,18 @@ export class SpecialistExecution {
         taskId: string,
         result: SpecialistExecutionResult,
       ) => void;
+      /** Told when the lab refuses one of its requests for their number. */
+      readonly rateLimited: (taskId: string) => void;
     },
   ) {
     this.#deps = deps;
     this.#records = parts.records;
-    this.#round = new ModelRound(deps, parts.records, "specialist");
+    this.#round = new ModelRound(
+      deps,
+      parts.records,
+      "specialist",
+      parts.rateLimited,
+    );
     this.#toolCalls = parts.toolCalls;
     this.#ownership = parts.ownership;
     this.#onSettled = parts.onSettled;
@@ -305,274 +329,321 @@ export class SpecialistExecution {
     const runId = options.runId;
     const childTurnId = `${options.taskId}:specialist:${runId}`;
     const controller = this.#ownership.start(childTurnId, options.parentTurnId);
-    const ownActionIds = () =>
-      this.#records
-        .task(options.taskId)
-        .actions.filter((action) => action.specialistRunId === runId)
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((action) => action.id);
+    return this.#ownership.within(controller, async () => {
+      const ownActionIds = () =>
+        this.#records
+          .task(options.taskId)
+          .actions.filter((action) => action.specialistRunId === runId)
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((action) => action.id);
 
-    const messages: ModelMessage[] = [
-      ...options.fixedMessages,
-      {
-        role: "system",
-        content: [
-          `You are the ${options.specialist.name} specialist (${options.specialist.id}).`,
-          options.specialist.instructions,
-          `Your exact delegated task is: ${options.request.task}`,
-          "Work only on that task. Use ordinary tools when evidence is needed; every tool remains subject to the parent's permission policy.",
-          ...(options.specialist.access === "read"
-            ? [
-                "This role can only read. Report any needed changes to the parent.",
-              ]
-            : []),
-          "Finish by calling finish_specialist once with a concise structured handoff. Do not address the user directly.",
-        ].join("\n"),
-      },
-    ];
-    let tools = [
-      ...options.tools.filter(
-        (tool) =>
-          // The space beside the conversation is the main agent's to give
-          // back; a specialist never had it.
-          tool.name !== "close_document" &&
-          (!options.specialist.tools ||
-            options.specialist.tools.includes(tool.name)) &&
-          (options.specialist.access !== "read" ||
-            (readingOwners.has(options.ownerOf(tool.name)) &&
-              tool.access === "read")),
-      ),
-      finishSpecialistTool,
-    ];
-    const quiet = new QuietFailures();
-    let wrappingUp = false;
-    let spent = false;
+      const messages: ModelMessage[] = [
+        ...options.fixedMessages,
+        {
+          role: "system",
+          content: [
+            `You are the ${options.specialist.name} specialist (${options.specialist.id}).`,
+            options.specialist.instructions,
+            `Your exact delegated task is: ${options.request.task}`,
+            "Work only on that task. Use ordinary tools when evidence is needed; every tool remains subject to the parent's permission policy.",
+            ...(options.specialist.access === "read"
+              ? [
+                  "This role can only read. Report any needed changes to the parent.",
+                ]
+              : []),
+            "Finish by calling finish_specialist once with a concise structured handoff. Do not address the user directly.",
+          ].join("\n"),
+        },
+      ];
+      let tools = [
+        ...options.tools.filter(
+          (tool) =>
+            // The space beside the conversation is the main agent's to give
+            // back; a specialist never had it.
+            tool.name !== "close_document" &&
+            (!options.specialist.tools ||
+              options.specialist.tools.includes(tool.name)) &&
+            (options.specialist.access !== "read" ||
+              (readingOwners.has(options.ownerOf(tool.name)) &&
+                tool.access === "read")),
+        ),
+        finishSpecialistTool,
+      ];
+      const quiet = new QuietFailures();
+      let wrappingUp = false;
+      let spent = false;
 
-    try {
-      // A start that cannot be saved ends the run as a failure would.
-      await this.#storeRun(options.taskId, {
-        id: runId,
-        ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
-        specialist: options.specialist,
-        task: options.request.task,
-        depth: options.depth,
-        status: "running",
-        startedAt: this.#deps.now().toISOString(),
-        actionIds: [],
-      });
-      for (;;) {
-        // The same round a turn runs, gathered without being shown.
-        const { calls, text } = await this.#round.run(
-          options.taskId,
-          controller,
-          ledger,
-          { messages, tools },
-          () => !controller.signal.aborted,
-        );
-        controller.signal.throwIfAborted();
-        const finish = calls.find(
-          (call) => call.name === finishSpecialistTool.name,
-        );
-        // A finish beside other calls is answered, not taken: the report would
-        // be written before the results it asked for. Once the budget is spent
-        // nothing else is on offer, so the report is all there is to take.
-        if (finish && (calls.length === 1 || wrappingUp)) {
-          const input = readToolInput(finish.arguments);
-          const result = input.ok ? handoff(input.arguments) : undefined;
-          if (!result)
-            throw new VisibleError(
-              "The specialist returned an invalid structured handoff.",
-            );
-          const actionIds = ownActionIds();
-          await this.#finishRun(options.taskId, runId, {
-            status: "completed",
-            handoff: result,
-            actionIds,
-          });
-          this.#ownership.finish(childTurnId, controller);
-          return {
-            ok: true,
-            runId,
-            specialist: options.specialist,
-            handoff: result,
-          };
-        }
-        if (wrappingUp) {
-          spent = true;
-          throw new VisibleError(
-            `The specialist used up its work budget (${ledger.describe(this.#deps.now(), ledger.reached(this.#deps.now()))}) and did not report.`,
-          );
-        }
-        if (calls.length === 0)
-          throw new VisibleError(
-            "The specialist stopped without returning a structured handoff.",
-          );
-
-        const { answerable, nameless } = answerableCalls(
-          calls,
-          () => `call-${this.#deps.newMessageId()}`,
-        );
-        messages.push({
-          role: "assistant",
-          content: text,
-          toolCalls: answerable.map(protocolCall),
+      try {
+        // A start that cannot be saved ends the run as a failure would.
+        await this.#storeRun(options.taskId, {
+          id: runId,
+          ...(options.parentRunId ? { parentRunId: options.parentRunId } : {}),
+          specialist: options.specialist,
+          task: options.request.task,
+          depth: options.depth,
+          status: "running",
+          startedAt: this.#deps.now().toISOString(),
+          actionIds: [],
         });
-        const round = { text, reasoning: "", messages, tools };
-        const sizes = new RoundResults((kept) =>
-          this.#deps.sessions.keep("output", options.taskId, { text: kept }),
-        );
-        let declinedInBatch = false;
-        for (const call of answerable) {
-          if (declinedInBatch) {
-            messages.push({
-              role: "tool",
-              toolCallId: call.callId,
-              name: call.name,
-              content: toolOutput(
-                call.name,
-                JSON.stringify(skippedAfterDecline()),
-              ),
+        /** The last request was stopped for reasoning at length. */
+        let overthought = false;
+        for (;;) {
+          // The same round a turn runs, gathered without being shown, and
+          // asked again as a turn's is when it reasons at length.
+          const request = { messages, tools };
+          const answered = await this.#round
+            .run(
+              options.taskId,
+              controller,
+              ledger,
+              overthought
+                ? withLeastReasoning(request, this.#deps.host.leastReasoning())
+                : request,
+              () => !controller.signal.aborted,
+            )
+            .catch((error: unknown) => {
+              if (
+                !(error instanceof ThoughtTooLong) ||
+                controller.signal.aborted
+              )
+                throw error;
+              if (overthought) throw new VisibleError(stoppedTwiceForReasoning);
+              overthought = true;
+              messages.push({
+                role: "user",
+                content: harnessNotice("thinking", specialistDecidesNow),
+              });
+              return undefined;
             });
-            continue;
+          if (!answered) continue;
+          overthought = false;
+          const { calls, text, reasoning, replay } = answered;
+          controller.signal.throwIfAborted();
+          const finish = calls.find(
+            (call) => call.name === finishSpecialistTool.name,
+          );
+          // A finish beside other calls is answered, not taken: the report would
+          // be written before the results it asked for. Once the budget is spent
+          // nothing else is on offer, so the report is all there is to take.
+          if (finish && (calls.length === 1 || wrappingUp)) {
+            const input = readToolInput(finish.arguments);
+            const result = input.ok ? handoff(input.arguments) : undefined;
+            if (!result)
+              throw new VisibleError(
+                "The specialist returned an invalid structured handoff.",
+              );
+            const actionIds = ownActionIds();
+            await this.#finishRun(
+              options.taskId,
+              runId,
+              {
+                status: "completed",
+                handoff: result,
+                actionIds,
+              },
+              controller.signal,
+            );
+            this.#ownership.finish(childTurnId, controller);
+            return {
+              ok: true,
+              runId,
+              specialist: options.specialist,
+              handoff: result,
+              ...(controller.signal.aborted ? { stopped: true as const } : {}),
+            };
           }
-          if (call.name === finishSpecialistTool.name) {
-            messages.push({
-              role: "tool",
-              toolCallId: call.callId,
-              name: call.name,
-              content: toolOutput(
-                call.name,
-                JSON.stringify(
-                  refusal(
-                    "tool",
-                    "The report was sent together with other actions, before their results were known.",
-                    "Read the results of the other actions, then call finish_specialist on its own.",
+          if (wrappingUp) {
+            spent = true;
+            throw new VisibleError(
+              `The specialist used up its work budget (${ledger.describe(this.#deps.now(), ledger.reached(this.#deps.now()))}) and did not report.`,
+            );
+          }
+          if (calls.length === 0)
+            throw new VisibleError(
+              "The specialist stopped without returning a structured handoff.",
+            );
+
+          const { answerable, nameless } = answerableCalls(
+            calls,
+            () => `call-${this.#deps.newMessageId()}`,
+          );
+          // The round goes back as a turn's does, with its reasoning and what
+          // the provider needs back: some refuse a later request without them.
+          messages.push({
+            role: "assistant",
+            content: text,
+            toolCalls: answerable.map(protocolCall),
+            ...(reasoning ? { reasoning } : {}),
+            ...(replay ? { replay } : {}),
+          });
+          const round = { text, reasoning, messages, tools };
+          const sizes = new RoundResults((kept) =>
+            this.#deps.sessions.keep("output", options.taskId, { text: kept }),
+          );
+          let declinedInBatch = false;
+          for (const call of answerable) {
+            if (declinedInBatch) {
+              messages.push({
+                role: "tool",
+                toolCallId: call.callId,
+                name: call.name,
+                content: toolOutput(
+                  call.name,
+                  JSON.stringify(skippedAfterDecline()),
+                ),
+              });
+              continue;
+            }
+            if (call.name === finishSpecialistTool.name) {
+              messages.push({
+                role: "tool",
+                toolCallId: call.callId,
+                name: call.name,
+                content: toolOutput(
+                  call.name,
+                  JSON.stringify(
+                    refusal(
+                      "tool",
+                      "The report was sent together with other actions, before their results were known.",
+                      "Read the results of the other actions, then call finish_specialist on its own.",
+                    ),
                   ),
                 ),
-              ),
-            });
-            continue;
-          }
-          if (!tools.some((tool) => tool.name === call.name)) {
-            const reason =
-              options.specialist.access === "read"
-                ? "This specialist can only read."
-                : "This specialist is not allowed to use this tool.";
-            const result = refusal(
-              "permission",
-              reason,
-              "Use a tool allowed for this specialist or report the limitation.",
+              });
+              continue;
+            }
+            if (!tools.some((tool) => tool.name === call.name)) {
+              const reason =
+                options.specialist.access === "read"
+                  ? "This specialist can only read."
+                  : "This specialist is not allowed to use this tool.";
+              const result = refusal(
+                "permission",
+                reason,
+                "Use a tool allowed for this specialist or report the limitation.",
+              );
+              await this.#toolCalls.recordFailedProposal(options.taskId, call, {
+                description:
+                  "The specialist requested a tool outside its role.",
+                reason,
+                specialistRunId: runId,
+                status: "blocked",
+                answer: result,
+              });
+              messages.push({
+                role: "tool",
+                toolCallId: call.callId,
+                name: call.name,
+                content: toolOutput(call.name, JSON.stringify(result)),
+              });
+              continue;
+            }
+            const quietRetriesLeft =
+              maximumQuietRetries - quiet.attempts(call.name);
+            const input = await this.#toolCalls.readInput(
+              options.taskId,
+              call,
+              {
+                round,
+                quietRetriesLeft,
+                signal: controller.signal,
+                specialistRunId: runId,
+              },
             );
-            await this.#toolCalls.recordFailedProposal(options.taskId, call, {
-              description: "The specialist requested a tool outside its role.",
-              reason,
-              specialistRunId: runId,
-              status: "blocked",
-              answer: result,
-            });
+            rewriteCallArguments(messages, call);
+            const outcome = input.ok
+              ? await this.#toolCalls.runToolCall(options.taskId, call, {
+                  proposedArguments: input.arguments,
+                  owner: options.ownerOf(call.name),
+                  controller,
+                  quietRetriesLeft,
+                  round,
+                  specialistRunId: runId,
+                })
+              : { result: input.result, quiet: input.quiet };
+            if ("denied" in outcome && outcome.denied) declinedInBatch = true;
+            controller.signal.throwIfAborted();
+            rewriteCallArguments(messages, call);
+            // What the tool answered for the model, without the person's copy
+            // or pictures written out as text.
+            const answered = {
+              ...outcome.result,
+              images: undefined,
+              details: undefined,
+              ...(input.ok && input.note ? { note: input.note } : {}),
+            };
             messages.push({
               role: "tool",
               toolCallId: call.callId,
               name: call.name,
-              content: toolOutput(call.name, JSON.stringify(result)),
+              content: toolOutput(
+                call.name,
+                await sizes.fit(JSON.stringify(answered), answered),
+              ),
             });
-            continue;
+            if (outcome.quiet) quiet.remember(call.name, call.callId);
+            else if (outcome.result.ok)
+              withdrawCalls(
+                messages,
+                quiet.take(call.name),
+                (message) => message,
+                (_, message) => message,
+              );
           }
-          const quietRetriesLeft =
-            maximumQuietRetries - quiet.attempts(call.name);
-          const input = await this.#toolCalls.readInput(options.taskId, call, {
-            round,
-            quietRetriesLeft,
-            signal: controller.signal,
-            specialistRunId: runId,
-          });
-          rewriteCallArguments(messages, call);
-          const outcome = input.ok
-            ? await this.#toolCalls.runToolCall(options.taskId, call, {
-                proposedArguments: input.arguments,
-                owner: options.ownerOf(call.name),
-                controller,
-                quietRetriesLeft,
-                round,
-                specialistRunId: runId,
-              })
-            : { result: input.result, quiet: input.quiet };
-          if ("denied" in outcome && outcome.denied) declinedInBatch = true;
-          controller.signal.throwIfAborted();
-          rewriteCallArguments(messages, call);
-          // What the tool answered for the model, without the person's copy
-          // or pictures written out as text.
-          const answered = {
-            ...outcome.result,
-            images: undefined,
-            details: undefined,
-            ...(input.ok && input.note ? { note: input.note } : {}),
-          };
-          messages.push({
-            role: "tool",
-            toolCallId: call.callId,
-            name: call.name,
-            content: toolOutput(
-              call.name,
-              await sizes.fit(JSON.stringify(answered), answered),
-            ),
-          });
-          if (outcome.quiet) quiet.remember(call.name, call.callId);
-          else if (outcome.result.ok)
-            withdrawCalls(
-              messages,
-              quiet.take(call.name),
-              (message) => message,
-              (_, message) => message,
-            );
+          if (nameless) throw new VisibleError(namelessCallFailure);
+          ledger.completeToolRound();
+          // A specialist has no one to ask for more. When its own budget is spent
+          // it is given one request to report what it has, with nothing else on
+          // offer, instead of being cut off and losing what it found.
+          if (ledger.reached(this.#deps.now()).length > 0) {
+            wrappingUp = true;
+            tools = [finishSpecialistTool];
+            messages.push({
+              role: "user",
+              content:
+                "Your work budget is used up. Call finish_specialist now with what you have found so far, and list anything you did not finish under limitations.",
+            });
+          }
         }
-        if (nameless) throw new VisibleError(namelessCallFailure);
-        ledger.completeToolRound();
-        // A specialist has no one to ask for more. When its own budget is spent
-        // it is given one request to report what it has, with nothing else on
-        // offer, instead of being cut off and losing what it found.
-        if (ledger.reached(this.#deps.now()).length > 0) {
-          wrappingUp = true;
-          tools = [finishSpecialistTool];
-          messages.push({
-            role: "user",
-            content:
-              "Your work budget is used up. Call finish_specialist now with what you have found so far, and list anything you did not finish under limitations.",
-          });
+      } catch (error) {
+        // An error neither the model client nor this loop accounts for is
+        // Zhiyin's own: it is kept for whoever looks into it, and its message
+        // stays out of the conversation, as in the main loop.
+        const own = !controller.signal.aborted && isOwnDefect(error);
+        if (own) this.#deps.recordDefect?.({ taskId: options.taskId, error });
+        const reason = controller.signal.aborted
+          ? stoppedBeforeCompleting
+          : own
+            ? "Zhiyin stopped on an error of its own while this specialist was working."
+            : error instanceof Error
+              ? error.message
+              : "The specialist failed before returning a handoff.";
+        // Let go even when the end cannot be saved, or the conversation would
+        // count a specialist as running for good.
+        try {
+          await this.#finishRun(
+            options.taskId,
+            runId,
+            {
+              status:
+                controller.signal.aborted || spent ? "interrupted" : "failed",
+              reason,
+              actionIds: ownActionIds(),
+            },
+            controller.signal,
+          );
+        } finally {
+          this.#ownership.finish(childTurnId, controller);
         }
-      }
-    } catch (error) {
-      // An error neither the model client nor this loop accounts for is
-      // Zhiyin's own: it is kept for whoever looks into it, and its message
-      // stays out of the conversation, as in the main loop.
-      const own = !controller.signal.aborted && isOwnDefect(error);
-      if (own) this.#deps.recordDefect?.({ taskId: options.taskId, error });
-      const reason = controller.signal.aborted
-        ? stoppedBeforeCompleting
-        : own
-          ? "Zhiyin stopped on an error of its own while this specialist was working."
-          : error instanceof Error
-            ? error.message
-            : "The specialist failed before returning a handoff.";
-      // Let go even when the end cannot be saved, or the conversation would
-      // count a specialist as running for good.
-      try {
-        await this.#finishRun(options.taskId, runId, {
-          status: controller.signal.aborted || spent ? "interrupted" : "failed",
+        return {
+          ok: false,
+          runId,
+          specialist: options.specialist,
           reason,
-          actionIds: ownActionIds(),
-        });
-      } finally {
-        this.#ownership.finish(childTurnId, controller);
+          ...(controller.signal.aborted ? { stopped: true as const } : {}),
+        };
       }
-      return {
-        ok: false,
-        runId,
-        specialist: options.specialist,
-        reason,
-        ...(controller.signal.aborted ? { stopped: true as const } : {}),
-      };
-    }
+    });
   }
 
   /**
@@ -641,6 +712,11 @@ export class SpecialistExecution {
             error instanceof Error
               ? error.message
               : "The specialist failed before returning a handoff.",
+          // Asked after its turn ended, as when the person stopped it: it
+          // settles that turn rather than waking the conversation.
+          ...(error instanceof ParentTurnEnded
+            ? { stopped: true as const }
+            : {}),
         }),
     );
     return {
@@ -683,20 +759,45 @@ export class SpecialistExecution {
           readonly reason: string;
           readonly actionIds: readonly string[];
         },
+    stopped: AbortSignal,
   ): Promise<void> {
-    const task = this.#records.task(taskId);
-    await this.#records.replaceTask({
-      ...task,
-      specialistRuns: task.specialistRuns.map((run) =>
-        run.id === runId
+    // The run's end is recorded on no turn's behalf: a stopped specialist
+    // settles its run rather than carrying on with it.
+    const finishedAt = this.#deps.now().toISOString();
+    await this.#ownership.outside(async () => {
+      await this.#records.changeOutsideTurns(taskId, (task) =>
+        task.specialistRuns.some(
+          (run) => run.id === runId && run.finishedAt !== finishedAt,
+        )
           ? {
-              ...run,
-              ...finish,
-              handoffDelivered: false,
-              finishedAt: this.#deps.now().toISOString(),
+              ...task,
+              specialistRuns: task.specialistRuns.map((run) =>
+                run.id === runId
+                  ? {
+                      ...run,
+                      ...finish,
+                      handoffDelivered: false,
+                      finishedAt,
+                      ...(stopped.aborted ? { quiet: true as const } : {}),
+                    }
+                  : run,
+              ),
             }
-          : run,
-      ),
+          : undefined,
+      );
+      // Stopped while its end was being saved: the stop found it running,
+      // so it is marked here, to wake nothing after a restart either.
+      if (stopped.aborted)
+        await this.#records.changeOutsideTurns(taskId, (task) =>
+          task.specialistRuns.some((run) => run.id === runId && !run.quiet)
+            ? {
+                ...task,
+                specialistRuns: task.specialistRuns.map((run) =>
+                  run.id === runId ? { ...run, quiet: true as const } : run,
+                ),
+              }
+            : undefined,
+        );
     });
   }
 }

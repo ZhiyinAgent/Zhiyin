@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createServer, type ServerResponse } from "node:http";
 import {
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   SdkHttpError,
@@ -12,6 +13,7 @@ import {
   ManagedMcpServers,
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
   connectHttpMcpServer,
   type McpConnection,
   type McpConnectionFactory,
@@ -105,6 +107,23 @@ describe("connections come only from declarations", () => {
     expect((await servers.manage())[0]).toMatchObject({
       credential: { status: "none" },
       tools: [{ name: "search", enabled: true }],
+    });
+  });
+
+  it("keeps a connection's token and tool choices while its package cannot be read", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = await engine(credentials);
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+    await servers.setToolEnabled(search.id, "search", false);
+
+    await servers.damage("research");
+    expect(await credentials.get(search.id)).toBe("secret");
+
+    await servers.repair("research", [search]);
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "saved" },
+      tools: [{ name: "search", enabled: false }],
     });
   });
 
@@ -1008,6 +1027,74 @@ describe("ManagedMcpServers", () => {
     expect(JSON.stringify(result.value)).toContain("not shown");
   });
 
+  it("withholds a tool whose input schema is too large to send with every request, and says why, offering the server's other tools", async () => {
+    const enormous = {
+      type: "object",
+      properties: Object.fromEntries(
+        Array.from({ length: 3_000 }, (_, index) => [
+          `field${index}`,
+          { type: "string", description: "One more field nobody needs." },
+        ]),
+      ),
+    };
+    const connection: McpConnection = {
+      listTools: async () => [
+        {
+          name: "weather",
+          description: "Read the current forecast.",
+          inputSchema: { type: "object" },
+        },
+        {
+          name: "everything",
+          description: "Do it all.",
+          inputSchema: enormous,
+        },
+      ],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    };
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => connection,
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+
+    const [state] = await servers.manage();
+    const offered = await servers.availableTools();
+
+    expect(offered.map((tool) => tool.name)).toEqual([
+      "mcp__local-weather__weather",
+    ]);
+    expect(state?.tools).toEqual([
+      {
+        name: "weather",
+        description: "Read the current forecast.",
+        enabled: true,
+      },
+      {
+        name: "everything",
+        description: "Do it all.",
+        enabled: false,
+        withheld: expect.stringMatching(
+          /^Not offered to the model: its input schema is \d+ KB, more than the 64 KB a tool may have\.$/,
+        ),
+      },
+    ]);
+    await expect(
+      servers.execute("mcp__local-weather__everything", {}),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "This MCP tool is no longer available.",
+    });
+  });
+
   it("connects an enabled HTTP server and routes its discovered tools", async () => {
     const close = vi.fn(async () => {});
     const callTool = vi.fn(async () => ({
@@ -1090,6 +1177,44 @@ describe("ManagedMcpServers", () => {
     await servers.switchTo("local-weather", false);
     expect(close).toHaveBeenCalledOnce();
     expect(await servers.availableTools()).toEqual([]);
+  });
+
+  it("refuses a switched-off connector's tools at once, and reaches it no more until it is switched back on", async () => {
+    const callTool = vi.fn(async () => ({ content: [] }));
+    const connect = vi.fn<McpConnectionFactory>(async () => ({
+      listTools: async () => [{ name: "weather" }],
+      callTool,
+      close: async () => {},
+    }));
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+    const [tool] = await servers.availableTools();
+    const name = tool!.name;
+
+    await servers.switchTo("local-weather", false);
+
+    expect(await servers.inspect(name, { city: "Paris" })).toMatchObject({
+      ok: false,
+    });
+    expect(await servers.execute(name, { city: "Paris" })).toMatchObject({
+      ok: false,
+    });
+    expect(callTool).not.toHaveBeenCalled();
+    await servers.manage();
+    await servers.availableTools();
+    expect(connect).toHaveBeenCalledOnce();
+    expect(await servers.states()).toEqual([
+      expect.objectContaining({ id: "local-weather", enabled: false }),
+    ]);
   });
 
   it("reports a failed server's state and tries again when asked or switched back on", async () => {
@@ -1304,6 +1429,61 @@ describe("ManagedMcpServers", () => {
     expect(connect).toHaveBeenCalledTimes(2);
     expect(calls).toBe(2);
   });
+
+  it.each([
+    [
+      "an error answer to the call",
+      new ProtocolError(-32602, "Unknown argument: q"),
+      "Unknown argument: q",
+    ],
+    [
+      "an answer that does not match the tool's declared output",
+      new McpUndeclaredAnswerError(
+        "Structured content does not match the tool's output schema: data/count must be number",
+      ),
+      "The MCP server ran the call, but its answer does not match the output the tool declares, so it is not used. The action may already have taken effect: check before calling it again.",
+    ],
+  ])(
+    "reports %s as a failed call, and keeps the connection",
+    async (_case, error, said) => {
+      const close = vi.fn(async () => {});
+      const connect = vi.fn(async () => ({
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => {
+          throw error;
+        },
+        close,
+      }));
+      const servers = managed(
+        await folders.make("zhiyin-mcp-"),
+        connect,
+        new InMemoryMcpCredentials(),
+        [],
+        () => 0,
+      );
+      await servers.declare({
+        id: "docs",
+        name: "Docs",
+        url: "https://example.com/mcp",
+        enabled: true,
+      });
+
+      const result = await servers.execute("mcp__docs__lookup", {});
+
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining(said),
+      });
+      expect(result).not.toMatchObject({
+        reason: expect.stringContaining("lost"),
+      });
+      expect(close).not.toHaveBeenCalled();
+      await servers.execute("mcp__docs__lookup", {});
+      expect(connect).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("waits before reconnecting when the server is still down after a lost connection", async () => {
     let reachable = true;

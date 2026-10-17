@@ -16,6 +16,7 @@ import mathutils
 import numpy
 
 from .common import (
+    CUT_OF,
     LIGHTING,
     PREVIEW,
     SHAPE_TYPES,
@@ -117,6 +118,14 @@ DRAFT = (
     "EEVEE is a quick look at layout and framing: it lets a sky's light through walls and ceilings and shows glass roughly, "
     "so light and colours are judged, and the picture to hand over is made, with Cycles."
 )
+# Samples for a draft asked of EEVEE from inside a room, which Cycles draws
+# instead: within a few levels of its colours at 128.
+DRAFT_SAMPLES = 16
+# Said with that draft.
+ROOM_DRAFT = (
+    f"Asked of EEVEE from inside a room, this draft is drawn with Cycles at {DRAFT_SAMPLES} samples: EEVEE lets a sky's light "
+    "through walls and ceilings. The picture to hand over is made with Cycles at its full samples."
+)
 
 
 # How much of a plan's picture is left empty round the scene.
@@ -175,8 +184,9 @@ def footprint(obj):
 def filled_cut(level, made):
     """
     Fills what a plan's cut passes through: the inside of each closed shape
-    where it crosses the level, as one object just under the cut, added to
-    what was made for the picture. A shape as high as the highest of them is
+    where it crosses the level, as an object of its own just under the cut
+    that names the shape it was cut from, added to what was made for the
+    picture. A shape as high as the highest of them is
     filled dark, as a drawn plan fills its walls. A lower one, as a door's
     leaf, a window or a wardrobe is, is filled with its own material, so it
     shows as it would from above and is not taken for a wall. Returns the
@@ -240,37 +250,27 @@ def filled_cut(level, made):
         surface.inputs["Base Color"].default_value = CUT_FILL
         surface.inputs["Roughness"].default_value = 1
         surface.inputs["Specular IOR Level"].default_value = 0
-        materials = [dark]
         walled, lower = [], []
-        fill = bmesh.new()
-        try:
-            for obj, top, material, crossing in crossings:
-                as_walls = top >= highest - AS_HIGH
-                (walled if as_walls else lower).append(obj)
-                wanted = dark if as_walls else material
-                if not any(m == wanted for m in materials):
-                    materials.append(wanted)
-                index = next(i for i, m in enumerate(materials) if m == wanted)
-                before = len(fill.faces)
-                fill.from_mesh(crossing)
-                fill.faces.ensure_lookup_table()
-                for face in fill.faces[before:]:
-                    face.material_index = index
-            mesh = bpy.data.meshes.new(PREVIEW)
-            fill.to_mesh(mesh)
-        finally:
-            fill.free()
-        for material in materials:
-            mesh.materials.append(material)
-        filled = bpy.data.objects.new(PREVIEW, mesh)
-        made.append(filled)
-        filled.location.z = -UNDER_THE_CUT
-        scene().collection.objects.link(filled)
+        for obj, top, material, crossing in crossings:
+            as_walls = top >= highest - AS_HIGH
+            (walled if as_walls else lower).append(obj)
+            crossing.materials.append(dark if as_walls else material)
+            for face in crossing.polygons:
+                face.material_index = 0
+            # Its own object, so the colours read from the picture can name
+            # what its fill shows as the shape it was cut from.
+            filled = bpy.data.objects.new(PREVIEW, crossing)
+            filled[CUT_OF] = obj.name
+            made.append(filled)
+            filled.location.z = -UNDER_THE_CUT
+            scene().collection.objects.link(filled)
         by_cover = lambda objs: [o.name for o in sorted(objs, key=footprint, reverse=True)]
         return by_cover(walled), by_cover(lower)
     finally:
+        # What became a fill is removed with what was made; the rest now.
         for _, _, _, crossing in crossings:
-            bpy.data.meshes.remove(crossing)
+            if not crossing.users:
+                bpy.data.meshes.remove(crossing)
 
 
 def plan_from_above(aside, cut=None):
@@ -440,14 +440,20 @@ def render(args, scene_file, device):
             need(16 <= width <= 16384 and 16 <= height <= 16384, "resolution must be between 16 and 16384 pixels each way.")
             s.render.resolution_x, s.render.resolution_y = int(width), int(height)
         s.render.resolution_percentage = 100
-        if engine == "cycles":
+        aside.hide([part for obj in left_out for part in (obj, *obj.children_recursive)])
+        # From inside a room EEVEE lets a sky's light through the walls and
+        # the ceiling; the draft is drawn as the room is lit, and says so.
+        drafted = engine == "eevee" and not plan and under_a_roof(s.camera)
+        if drafted:
+            engine = "cycles"
+            device.use_cycles(DRAFT_SAMPLES)
+        elif engine == "cycles":
             device.use_cycles(whole(args.get("samples"), "samples", maximum=16384, default=128))
         else:
             s.render.engine = "BLENDER_EEVEE"
             s.eevee.taa_render_samples = whole(args.get("samples"), "samples", maximum=16384, default=64)
             lifelike_eevee(s)
         s.render.film_transparent = background == "transparent"
-        aside.hide([part for obj in left_out for part in (obj, *obj.children_recursive)])
         if plan:
             made, level, above, through = plan_from_above(aside, cut)
         # A see-through background leaves the backdrop out of the picture; it still
@@ -500,7 +506,7 @@ def render(args, scene_file, device):
         + (f", without {listed(left)}" if left else "")
         + "."
         + cut_text(level, above, through)
-        + (PLAN_KEEPS if plan else "" if engine == "cycles" else f" {DRAFT}")
+        + (PLAN_KEEPS if plan else f" {ROOM_DRAFT}" if drafted else "" if engine == "cycles" else f" {DRAFT}")
         + (
             f" {listed(over)} {'lies' if one else 'lie'} over the rest and {'hides' if one else 'hide'} it from above: "
             f"name {'it' if one else 'them'} in without to leave {'it' if one else 'them'} out of the plan."
@@ -889,14 +895,15 @@ def preview(view, path, device):
         partial = path + ".part.jpg"
         if view.get("quick") is True:
             quick_picture(s, partial)
-        elif device.name and (see_through() or (used == "camera" and under_a_roof(s.camera))):
+        elif (device.name and see_through()) or (used == "camera" and under_a_roof(s.camera)):
             # EEVEE draws light through one layer of glass at most, so a
             # liquid in a bottle vanishes, and it lets a sky's light through
             # walls, so a room shows paler and bluer than it is lit; Cycles
             # draws both as the render will. Light through glass takes many
-            # bounces, so that picture is drawn at half size; a room without
-            # any is quick enough at full size.
-            s.render.resolution_percentage = 50 if see_through() else 100
+            # bounces, so that picture is drawn at half size, and a room on
+            # the processor too; a room on a graphics card is quick enough at
+            # full size.
+            s.render.resolution_percentage = 50 if see_through() or not device.name else 100
             device.use_cycles(16)
             s.cycles.time_limit = PREVIEW_DRAWING
             deep_bounces()

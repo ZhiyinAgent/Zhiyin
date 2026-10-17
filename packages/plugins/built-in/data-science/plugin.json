@@ -19,7 +19,7 @@
       }
     },
     "com.zhiyin": {
-      "accessSummary": "Works with data in your project folder. Scripts run in a separate Python environment Zhiyin manages on this computer.",
+      "accessSummary": "Works with data in your project folder. Scripts run in a Python environment Zhiyin manages on this computer, and each asks first: a script can reach what your account can, as a shell command can.",
       "dataDestination": "Installing the environment downloads uv and Python. Adding a package downloads it from the Python Package Index.",
       "specialists": [
         {
@@ -41,8 +41,8 @@
           "connector": "python",
           "name": "Python environment",
           "description": "Runs Python scripts for one-off data work in a separate environment with pandas, polars, NumPy, SciPy, Matplotlib, seaborn, statsmodels, and openpyxl for Excel workbooks, and can add packages or be reset.",
-          "access": "Runs scripts that read and write files in your workspace folder, in an environment kept apart from your own projects. Installs uv and Python when you ask.",
-          "dataDestination": "Installing downloads uv and Python from GitHub. Adding a package downloads it from pypi.org."
+          "access": "Runs scripts that can read and write anything your account can, as a shell command can, each after you approve it. Its packages are kept apart from your own projects. Installs uv and Python when you ask.",
+          "dataDestination": "Installing downloads uv from GitHub and Python as built by Astral's python-build-standalone project. Adding a package downloads it from pypi.org."
         }
       ]
     }

@@ -6,8 +6,8 @@
  * so the compiled Python it starts on has to be there when the installation
  * is complete. This installs the pinned archive with the installer and the
  * compile step the composition gives it, and starts the installed Blender
- * once. It is skipped unless the archive is named in the environment, because
- * the gate downloads nothing:
+ * once. It is skipped unless the archive is named in the environment, as CI's
+ * gate names the one it downloads (`ZHIYIN_TEST_TOOLS`):
  *
  *   $env:ZHIYIN_BLENDER_ARCHIVE = "…\blender-5.2.2-windows-x64.zip"
  *   npx vitest run --project system-boundary apps/desktop/system-boundary/blender-install.test.ts

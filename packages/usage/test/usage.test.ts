@@ -212,6 +212,34 @@ describe("FileUsageTelemetry", () => {
     ]);
   });
 
+  it("says how many of each model's requests were priced, so one with no price is not shown as free", async () => {
+    const usage = new FileUsageTelemetry(await temporaryRoot());
+    const spend = (id: string, model: string, costUsd: number | undefined) =>
+      usage.record({
+        ...request(id, "2026-09-05T08:00:00.000Z"),
+        model,
+        ...(costUsd === undefined ? {} : { costUsd }),
+      });
+    await spend("p1", "lab/priced", 0.01);
+    await spend("f1", "lab/free", 0);
+    await spend("u1", "lab/unpriced", undefined);
+
+    const state = await usage.state(new Date("2026-09-05T12:00:00.000Z"));
+
+    if (state.status !== "ready") throw new Error("Expected usage data");
+    const priced = Object.fromEntries(
+      state.ranges["7"].models.map((model) => [
+        model.model,
+        model.pricedRequests,
+      ]),
+    );
+    expect(priced).toEqual({
+      "lab/priced": 1,
+      "lab/free": 1,
+      "lab/unpriced": 0,
+    });
+  });
+
   it("aggregates request, token, cost, model, and daily activity without text", async () => {
     const usage = new FileUsageTelemetry(await temporaryRoot());
     await usage.record({

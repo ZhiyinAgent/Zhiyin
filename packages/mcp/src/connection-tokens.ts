@@ -28,6 +28,16 @@ export class ConnectionTokens {
   readonly #states = new Map<string, McpCredentialState>();
   /** One refresh at a time per connection: a second would void the first. */
   readonly #refreshing = new Map<string, Promise<string | undefined>>();
+  /**
+   * Moves on whenever the person signs in, pastes a key or signs out, so a
+   * refresh that set off before then knows its answer is no longer wanted.
+   */
+  readonly #generations = new Map<string, number>();
+  /**
+   * Each connection's credential is written in several steps, so one write
+   * runs at a time per connection: the last asked for is the last to land.
+   */
+  readonly #writing = new Map<string, Promise<unknown>>();
   readonly #now: () => number;
 
   constructor(store: McpCredentialStore, now: () => number = Date.now) {
@@ -64,11 +74,36 @@ export class ConnectionTokens {
     return refreshing;
   }
 
+  #generation(id: string): number {
+    return this.#generations.get(id) ?? 0;
+  }
+
+  #moveOn(id: string): void {
+    this.#generations.set(id, this.#generation(id) + 1);
+  }
+
+  /** Runs one write to a connection's credential once the ones before it end. */
+  #inTurn<T>(id: string, write: () => Promise<T>): Promise<T> {
+    const before = this.#writing.get(id) ?? Promise.resolve();
+    const written = before.then(write, write);
+    const settled = written.catch(() => undefined);
+    this.#writing.set(id, settled);
+    void settled.then(() => {
+      if (this.#writing.get(id) === settled) this.#writing.delete(id);
+    });
+    return written;
+  }
+
   async #refresh(id: string): Promise<string | undefined> {
-    const signedIn = await this.#signedIn.read(id);
+    const generation = this.#generation(id);
+    // Read behind the writes already asked for, so a sign-out or sign-in
+    // being written is what it refreshes, or not.
+    const signedIn = await this.#inTurn(id, () => this.#signedIn.read(id));
     if (!signedIn) return undefined;
     const refreshToken = signedIn.tokens.refresh_token;
     if (!refreshToken) {
+      if (generation !== this.#generation(id))
+        return this.#inTurn(id, () => this.#current(id));
       await this.forget(id);
       return undefined;
     }
@@ -79,18 +114,34 @@ export class ConnectionTokens {
         ...(signedIn.metadata ? { metadata: signedIn.metadata } : {}),
         ...(signedIn.resource ? { resource: new URL(signedIn.resource) } : {}),
       });
-      const next: SignedIn = {
-        ...signedIn,
-        tokens: { refresh_token: refreshToken, ...tokens },
-        issuedAt: this.#now(),
-      };
-      await this.#signedIn.write(id, next);
-      return next.tokens.access_token;
+      return await this.#inTurn(id, async () => {
+        // The person signed out or in again while it was asked for, or while
+        // a write before this one ran.
+        if (generation !== this.#generation(id)) return this.#current(id);
+        const next: SignedIn = {
+          ...signedIn,
+          tokens: { refresh_token: refreshToken, ...tokens },
+          issuedAt: this.#now(),
+        };
+        await this.#signedIn.write(id, next);
+        return next.tokens.access_token;
+      });
     } catch (error) {
+      // What the person did meanwhile answers a call that joined this one.
+      if (generation !== this.#generation(id))
+        return this.#inTurn(id, () => this.#current(id));
       // A refusal ends the sign-in; an unreachable service leaves it for later.
       if (error instanceof OAuthError) await this.forget(id);
       return undefined;
     }
+  }
+
+  /** The token the connection holds now: the pasted key, or the sign-in's. */
+  async #current(id: string): Promise<string | undefined> {
+    return (
+      (await this.#store.get(id)) ??
+      (await this.#signedIn.read(id))?.tokens.access_token
+    );
   }
 
   async state(id: string): Promise<McpCredentialState> {
@@ -111,38 +162,47 @@ export class ConnectionTokens {
     return state;
   }
 
-  async save(id: string, token: string): Promise<void> {
-    try {
-      await this.#store.set(id, token);
-    } catch (error) {
-      this.#states.delete(id);
-      throw new Error(STORAGE_UNAVAILABLE, { cause: error });
-    }
-    this.#states.set(id, { status: "saved" });
+  save(id: string, token: string): Promise<void> {
+    this.#moveOn(id);
+    return this.#inTurn(id, async () => {
+      try {
+        await this.#store.set(id, token);
+      } catch (error) {
+        this.#states.delete(id);
+        throw new Error(STORAGE_UNAVAILABLE, { cause: error });
+      }
+      this.#states.set(id, { status: "saved" });
+    });
   }
 
-  async saveSignIn(id: string, signedIn: SignedIn): Promise<void> {
-    try {
-      await this.#signedIn.write(id, signedIn);
-    } catch (error) {
-      await this.#signedIn.delete(id).catch(() => undefined);
-      this.#states.delete(id);
-      throw new Error(STORAGE_UNAVAILABLE, { cause: error });
-    }
-    this.#states.set(id, { status: "signed-in" });
+  saveSignIn(id: string, signedIn: SignedIn): Promise<void> {
+    this.#moveOn(id);
+    return this.#inTurn(id, async () => {
+      try {
+        await this.#signedIn.write(id, signedIn);
+      } catch (error) {
+        await this.#signedIn.delete(id).catch(() => undefined);
+        this.#states.delete(id);
+        throw new Error(STORAGE_UNAVAILABLE, { cause: error });
+      }
+      this.#states.set(id, { status: "signed-in" });
+    });
   }
 
   /** Forgets the key and the sign-in. True only when both are known gone. */
-  async forget(id: string): Promise<boolean> {
-    try {
-      await this.#store.delete(id);
-      await this.#signedIn.delete(id);
-      this.#states.set(id, { status: "none" });
-      return true;
-    } catch {
-      this.#states.delete(id);
-      return false;
-    }
+  forget(id: string): Promise<boolean> {
+    this.#moveOn(id);
+    return this.#inTurn(id, async () => {
+      try {
+        await this.#store.delete(id);
+        await this.#signedIn.delete(id);
+        this.#states.set(id, { status: "none" });
+        return true;
+      } catch {
+        this.#states.delete(id);
+        return false;
+      }
+    });
   }
 
   /** Stops answering for a connection that is no longer declared. */

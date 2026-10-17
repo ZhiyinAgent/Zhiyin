@@ -112,7 +112,16 @@ function SignInConnectorExample() {
             status: account === "signed-in" ? "connected" : "unauthorized",
             tools:
               account === "signed-in"
-                ? [{ name: "file_issue", enabled: true }]
+                ? [
+                    { name: "file_issue", enabled: true },
+                    {
+                      name: "export_everything",
+                      description: "Export every record in the tracker.",
+                      enabled: false,
+                      withheld:
+                        "Not offered to the model: its input schema is 220 KB, more than the 64 KB a tool may have.",
+                    },
+                  ]
                 : [],
             tokenSaved: false,
             account,
@@ -189,6 +198,7 @@ function LibraryExample() {
       onOverrideComponent={async () => {}}
       onResetComponent={async () => {}}
       onInstallToolchain={async () => {}}
+      onCancelToolchainInstall={async () => {}}
       onTestConnection={async () => ({
         ok: true,
         tools: [{ name: "search", description: "Search.", enabled: true }],

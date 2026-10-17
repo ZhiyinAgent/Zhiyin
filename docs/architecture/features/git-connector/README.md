@@ -67,10 +67,23 @@ there is no second implementation of git's storage format to audit.
   configure git are kept.
 - A call that only reads (status, diffs, log, show, branches, the stash list,
   and the look at what is staged before a commit) starts no program the
-  repository's own settings name: no file monitor, outside diff tool, diff
-  converter, filter or signature checker. A folder can arrive with its `.git`
-  from anywhere. Staging, committing and stashing run as git runs them for
-  the person, hooks and filters included, after approval.
+  repository brings: no hook, in its hooks folder or defined in its
+  settings, no file monitor, outside diff tool, diff converter, filter its
+  own settings define, whatever its name, or signature checker, no fetch, of
+  what a partial clone is missing or anything else, over any transport, even
+  one the repository allows itself, and nothing from a submodule's own
+  settings, whose work tree a read does not look inside. A folder can arrive
+  with its `.git` from anywhere. The person's own filters, as Git LFS is,
+  and hooks they define in their own settings still apply, so a file stored
+  through one reads as unchanged. Reading needs Git 2.31 or newer, the first to take
+  the settings that do this; an older git is refused before it reads. A
+  repository whose settings cannot be read whole is not read.
+  Staging, committing and stashing run as git runs them for the person,
+  hooks and filters included, after approval.
+- In a repository with submodules, the status and the diff of unstaged or
+  staged changes say that changes
+  inside submodules' own files are not shown, from whichever of its folders
+  the workspace is.
 - Each git call runs through the process-ownership mechanism, with a
   30-second limit.
 

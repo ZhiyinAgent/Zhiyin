@@ -43,4 +43,13 @@ export type ViewCheckRequest = {
  * either a view or nothing about it.
  */
 export type ViewCheckOutcome =
-  { readonly ok: true } | { readonly ok: false; readonly reason: string };
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      /**
+       * Nobody judged the view: the window did not answer in time, or could
+       * not be asked. Not a reason to repair it.
+       */
+      readonly unchecked?: true;
+    };

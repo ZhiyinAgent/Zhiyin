@@ -133,6 +133,9 @@ export function WorkspacePicker({
 
   async function run(action: () => void | Promise<void>) {
     close();
+    // The item chosen goes with the menu; focus goes back to what opened it,
+    // which is also where the folder dialog returns it.
+    trigger.current?.focus();
     await action();
   }
 

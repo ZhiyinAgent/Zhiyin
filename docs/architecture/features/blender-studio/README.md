@@ -100,12 +100,16 @@ for its launch; nothing listens on a port.
   Python, taking nothing from the person's, compiles Blender's scripts and
   library, and the compiled files name their sources where they are installed.
 - **Blender starts on its own settings.** It ignores the person's Blender
-  startup file, preferences and add-ons, and Blender's own variables in
-  Zhiyin's environment, keeps its own settings in Zhiyin's data, and never runs
-  a script saved in a scene file.
+  startup file, preferences and add-ons, Blender's own variables in Zhiyin's
+  environment, and USD's and MaterialX's, which name the plugins it loads and
+  the folders it reads models and materials from; it keeps its own settings in Zhiyin's data, and never
+  runs a script saved in a scene file.
 - **Nothing changes before a scene is open.** The scene file is a
   workspace-relative `.blend` that stays inside the workspace, and creating
-  one never replaces an existing file.
+  one never replaces an existing file. A scene opened in a folder the
+  conversation has since left is not open in the new one: nothing there
+  changes it, and a scene the new folder contains is named as that folder
+  has it.
 - **Every file a tool names stays in the workspace.** Pictures, fonts,
   drawings and models it reads, and renders and exports it writes, are
   workspace-relative paths with an expected kind of file. Anything else is
@@ -113,8 +117,17 @@ for its launch; nothing listens on a port.
   workspace has it, however the path was written, so the approval and the
   conversation's files agree.
 - **A model file reads nothing from outside the workspace.** A model whose
-  pictures or parts lie outside is refused and leaves the scene as it was. A
-  scene file that uses files kept elsewhere opens, and the answer names them.
+  pictures, geometry, materials or parts lie outside is refused and leaves the
+  scene as it was; what an importer would read itself is refused before it is
+  read. USD comes as text, binary or a package (`.usd`, `.usda`, `.usdc` and
+  `.usdz`): text is checked by the paths it writes as files, binary USD by
+  every string it holds, and a package by each scene in it, read as USD reads
+  them; its pictures are kept in the scene named as the package holds them.
+  Each path is checked from every folder USD would look in, the workspace
+  being the folder Blender reads from while it imports. USD that names a file
+  in a way the check reads differently from USD, binary USD or a package that
+  cannot be read that way, and USD text that plays clips are refused. A scene
+  file that uses files kept elsewhere opens, and the answer names them.
 - **An export writes the one file it names.** No materials, pictures or data
   are written beside it, and objects it names are exported even when hidden.
 - **A change is saved, answered, then previewed.** After every command that
@@ -122,6 +135,10 @@ for its launch; nothing listens on a port.
   follows, so stopping a preview never takes back a saved change. A command
   that fails, a render included, reloads the saved file, so a half-made change
   reaches neither the file nor the preview.
+- **An error the session carries on past is kept.** Where the session goes on
+  past an error, such as a saved file that cannot be loaded again after a
+  failed change, it writes the reason and its trace to the session's log in
+  the conversation's 3D folder.
 - **The file is the truth.** When the scene file changed on disk since the
   session saved or loaded it, the session loads it before the next command.
 - **A command that does not finish ends the session.** Past its time limit,
@@ -147,7 +164,8 @@ for its launch; nothing listens on a port.
   Cycles on the graphics card, as the render will be. EEVEE also lets a sky's
   light through walls and ceilings, so a full preview through a camera that
   has something of the scene straight above it, as in a room, is drawn by
-  Cycles too, and shows the room as a render does. A full preview drawn by
+  Cycles too, at half size on a PC with no graphics card Cycles can use, and
+  shows the room as a render does. A full preview drawn by
   Cycles takes about a second of drawing at most, so a scene that is slow to
   draw never holds up turning for long, and the scene's own settings stay as
   they were.
@@ -290,7 +308,9 @@ for its launch; nothing listens on a port.
 - **An EEVEE picture is said to be a draft.** The answer to an EEVEE render
   says it is a quick look at layout and framing, and that light, colours and
   the picture to hand over are Cycles's; a Cycles render says nothing of the
-  kind.
+  kind. An EEVEE render through a camera with something of the scene straight
+  above it, as in a room, is drawn by Cycles at a few samples, so its light
+  and colours are the room's, and its answer says so.
 - **A plan is one picture that leaves the scene as it was.** A render asked
   for as a plan shows the whole scene from straight above, with +y up the
   picture, lit by a white background alone in the neutral tone, with the
@@ -324,7 +344,8 @@ for its launch; nothing listens on a port.
   in the picture and the background around it is clear.
 - **A render says the colours it shows.** Its answer gives the colour each
   object shows in the picture, what is inside glass or a liquid told apart
-  from it, and the background's; reading them leaves the scene as it was. It
+  from it, and the background's; in a plan, what fills a cut is said as the
+  object it was cut from. Reading them leaves the scene as it was. It
   also gives the tone and exposure the picture was made with, which decide
   how those colours stand against the ones given.
 - **Thick glass has no dark bands.** With something see-through in the scene,
@@ -439,6 +460,13 @@ for its launch; nothing listens on a port.
   conversation's work and a render can be shown in the document viewer.
 - **No Blender, no tools.** With Blender not installed the connection offers
   nothing, and it offers every tool once Blender is installed.
+- **No drawing, no tools.** A Blender that ends while it draws its warm-up
+  picture, as one does on a PC without a working graphics driver, means the
+  3D tools cannot show or render a scene there. That start fails saying so,
+  and for the rest of the app's run no Blender is started: every call to a
+  3D tool is refused with the same reason, and a conversation that has not
+  listed the tools yet is not offered them, also saying why. A Blender that
+  ends before it begins drawing only failed to start, and the tools stay.
 
 ## Testing notes
 
@@ -446,14 +474,21 @@ The session's launch is replaceable, so lifecycles, refusals, time limits and
 approvals are tested against a stand-in session. The script inside Blender,
 the pipes and the previews are tested against a real Blender when
 `ZHIYIN_BLENDER` names its executable; without it those tests are skipped and
-say so.
+say so. They need a graphics card, so they do not run in CI, whose machine
+has none; they run on a PC that has one.
 
 The compile step is tested for what it asks of Blender's Python. Blender
 installed from its real archive, compiled and started once, is tested when
-`ZHIYIN_BLENDER_ARCHIVE` names the archive; without it that test is skipped.
+`ZHIYIN_BLENDER_ARCHIVE` names the archive; without it that test is skipped,
+except in CI, which keeps the archive for it.
 
 When EEVEE cannot render, previews fall back to Cycles on the processor. No
-test covers that path: it needs a PC whose graphics EEVEE cannot use.
+test covers that path: it needs a PC whose graphics EEVEE cannot use. Nor
+does one cover a room's preview or draft on a PC with no graphics card Cycles
+can use, which Cycles draws on the processor: the tests run on a PC with one.
+That a Blender on a PC without a working graphics driver ends while it draws its
+warm-up picture is not tested either; the stand-in session ends there, and
+the tests of what follows run on it.
 
 Blender at low integrity is tested with NVIDIA graphics, in a workspace on a
 drive that keeps permissions. Other makers' graphics, a drive without

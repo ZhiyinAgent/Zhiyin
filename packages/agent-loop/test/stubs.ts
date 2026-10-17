@@ -53,6 +53,7 @@ export function stubDependencies(
     }),
     lastFrame: () => undefined,
     automation: () => undefined,
+    takeStoppedDownloads: () => [],
     markAgentAction: () => {},
     onAgentAction: () => () => {},
     onState: () => () => {},

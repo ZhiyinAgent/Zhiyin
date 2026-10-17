@@ -3,7 +3,8 @@
  *
  * One JSON line per event, in a file per day, kept for two weeks. It stays on
  * this computer: nothing here sends anything anywhere. Entries are stored as
- * written, like the saved history beside them.
+ * written, like the saved history beside them, less the credentials the
+ * contract recognises: an error's words can carry a request's key.
  *
  * Written synchronously, so an entry recorded as the process fails is on disk
  * before anything else can happen. It never throws: a log that cannot be
@@ -13,6 +14,7 @@
 import { appendFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import type { EventEmitter } from "node:events";
 import { join } from "node:path";
+import { withoutCredentials } from "@zhiyin/contract";
 
 export type LogEntry = {
   readonly level: "error" | "warn" | "info";
@@ -43,13 +45,15 @@ export class DiagnosticLog {
 
   record(entry: LogEntry): void {
     const time = this.#now().toISOString();
-    const line = JSON.stringify({
-      time,
-      level: entry.level,
-      source: entry.source,
-      message: entry.message,
-      ...(entry.error === undefined ? {} : { error: described(entry.error) }),
-    });
+    const line = JSON.stringify(
+      withoutCredentials({
+        time,
+        level: entry.level,
+        source: entry.source,
+        message: entry.message,
+        ...(entry.error === undefined ? {} : { error: described(entry.error) }),
+      }),
+    );
     try {
       mkdirSync(this.#folder, { recursive: true });
       appendFileSync(

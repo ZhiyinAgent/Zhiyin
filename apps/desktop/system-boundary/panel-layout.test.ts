@@ -124,6 +124,7 @@ const page = () =>
         onOverrideComponent: async () => undefined,
         onResetComponent: async () => undefined,
         onInstallToolchain: async () => undefined,
+        onCancelToolchainInstall: async () => undefined,
         onTestConnection: async () => ({ ok: false as const, reason: "" }),
         onSetConnectionToolEnabled: async () => undefined,
         onSaveConnectionToken: async () => undefined,

@@ -23,6 +23,7 @@ const range = (days: 7 | 30, requests: number, costUsd: number) => ({
     {
       model: "z-ai/glm-5.3-flash",
       requests: Math.round(requests * 0.6),
+      pricedRequests: Math.round(requests * 0.6),
       inputTokens: days * 600_000,
       outputTokens: days * 240_000,
       costUsd: Number((costUsd * 0.6).toFixed(2)),
@@ -30,6 +31,7 @@ const range = (days: 7 | 30, requests: number, costUsd: number) => ({
     {
       model: "anthropic/claude-sonnet-5",
       requests: requests - Math.round(requests * 0.6),
+      pricedRequests: requests - Math.round(requests * 0.6),
       inputTokens: days * 400_000,
       outputTokens: days * 160_000,
       costUsd: Number((costUsd * 0.4).toFixed(2)),
@@ -62,6 +64,40 @@ describe("UsagePanel", () => {
       within(panel).getByText("Usage history could not be saved."),
     ).toBeVisible();
     expect(within(panel).queryByText("No usage data yet")).toBeNull();
+  });
+
+  it("says a model has no price rather than that it cost nothing", () => {
+    const unpriced = {
+      ...range(7, 12, 0),
+      pricedRequests: 0,
+      models: [
+        {
+          model: "lab/unpriced",
+          requests: 12,
+          pricedRequests: 0,
+          inputTokens: 1_000,
+          outputTokens: 200,
+          costUsd: 0,
+        },
+      ],
+      conversations: [
+        { conversationId: "c1", requests: 12, pricedRequests: 0, costUsd: 0 },
+      ],
+    };
+    render(
+      <UsagePanel
+        availability={{
+          status: "ready",
+          costSource: "provider-reported",
+          ranges: { "7": unpriced, "30": { ...unpriced, days: 30 } },
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const panel = screen.getByRole("region", { name: "Usage overview" });
+    expect(within(panel).queryAllByText("$0.00")).toEqual([]);
+    expect(within(panel).getAllByText("No price").length).toBeGreaterThan(0);
   });
 
   it("uses visual summaries and updates when the range changes", () => {

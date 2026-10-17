@@ -1,12 +1,14 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { constants, getPriority } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import koffi from "koffi";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
+  ansiCodePage,
+  ansiText,
   containmentAvailability,
   openProcessContainer,
   openToLowIntegrity,
@@ -306,6 +308,41 @@ describe.runIf(process.platform === "win32")("process containment", () => {
     },
   );
 
+  /**
+   * Windows reads its strings up to the first NUL, so a value carrying one
+   * would start something other than what it says: the rest of an argument,
+   * a shorter program path, a different folder.
+   */
+  it.each([
+    [
+      "an argument",
+      { arguments: ["-e", "require('fs').writeFileSync('ran','')", "a\0b"] },
+    ],
+    ["the program", { executable: `${process.execPath}\0.txt` }],
+    ["the folder", { cwd: "C:\\\0" }],
+    ["an environment value", { environment: { NOTE: "a\0b" } }],
+    ["an environment name", { environment: { "NO\0TE": "a" } }],
+  ])("starts nothing when %s holds a NUL character", async (_where, change) => {
+    const directory = await workingDirectory();
+    const container = openProcessContainer();
+    try {
+      expect(() =>
+        container.launch({
+          executable: process.execPath,
+          arguments: ["-e", "require('fs').writeFileSync('ran','')"],
+          cwd: directory,
+          stdout: join(directory, "stdout.txt"),
+          stderr: join(directory, "stderr.txt"),
+          ...change,
+        }),
+      ).toThrow(/NUL/);
+      // Its output files are made before the process is: neither was.
+      expect(await readdir(directory)).toEqual([]);
+    } finally {
+      container.close();
+    }
+  });
+
   it(
     "keeps Zhiyin's own file work going while many processes it started are still running",
     { timeout: 60_000 },
@@ -347,6 +384,61 @@ describe.runIf(process.platform === "win32")("process containment", () => {
       } finally {
         container.close();
       }
+    },
+  );
+
+  it(
+    "tells a process's end as it happens, with no timer asking whether it has",
+    { timeout: 20_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const container = openProcessContainer();
+      // Timers stand still: an end found by asking on one is never told.
+      vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] });
+      try {
+        const child = container.launch({
+          executable: process.execPath,
+          arguments: [join(fixtures, "sleeper.mjs")],
+          cwd: directory,
+          stdout: join(directory, "stdout.txt"),
+          stderr: join(directory, "stderr.txt"),
+        });
+        const ended = child.wait();
+        container.close();
+
+        expect(typeof (await ended)).toBe("number");
+      } finally {
+        vi.useRealTimers();
+        container.close();
+      }
+    },
+  );
+
+  it(
+    "ends the processes it was waiting on when its owner exits",
+    { timeout: 60_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const quitter = spawn(
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          "--no-warnings",
+          join(fixtures, "quitter.mts"),
+          directory,
+        ],
+        { stdio: "ignore", windowsHide: true },
+      );
+      const code = await new Promise<number | null>((resolve) =>
+        quitter.once("exit", resolve),
+      );
+      const sleepers = JSON.parse(
+        await readFile(join(directory, "sleepers.json"), "utf8"),
+      ) as number[];
+
+      expect(code).toBe(0);
+      expect(sleepers).toHaveLength(8);
+      await allGone(sleepers);
     },
   );
 
@@ -548,6 +640,40 @@ describe("a process started at low integrity", () => {
     },
   );
 
+  it("is what the shared run path starts when asked, contained", async () => {
+    const directory = await workingDirectory();
+    const file = join(directory, "new.txt");
+
+    const run = await runProcess({
+      executable: process.execPath,
+      arguments: [join(fixtures, "writes.mjs"), file],
+      cwd: directory,
+      timeoutMs: 30_000,
+      containment: { open: openProcessContainer },
+      integrity: "low",
+    });
+
+    expect(JSON.parse(run.stdout)).toEqual([
+      { wrote: "EPERM", read: "ENOENT" },
+    ]);
+  });
+
+  it("is refused by the shared run path without containment, and nothing runs", async () => {
+    const directory = await workingDirectory();
+    const file = join(directory, "new.txt");
+
+    const run = await runProcess({
+      executable: process.execPath,
+      arguments: [join(fixtures, "writes.mjs"), file],
+      cwd: directory,
+      timeoutMs: 30_000,
+      integrity: "low",
+    });
+
+    expect(run).toMatchObject({ exitCode: null, failure: "containment" });
+    expect(await readdir(directory)).toEqual([]);
+  });
+
   it("says why a folder could not be opened to it", async () => {
     const directory = await workingDirectory();
 
@@ -556,3 +682,19 @@ describe("a process started at low integrity", () => {
     ).rejects.toThrow(/not there.*could not be opened to low integrity/s);
   });
 });
+
+describe.runIf(process.platform === "win32")(
+  "text in Windows' own code page",
+  () => {
+    it("is read in the ANSI code page, the one Windows reads files' text in, not the console's", () => {
+      // "café" as a Western code page writes it: é is the one byte E9.
+      const bytes = Buffer.from([0x63, 0x61, 0x66, 0xe9]);
+      const page = ansiCodePage();
+
+      expect(page).toEqual(expect.any(Number));
+      expect(ansiText(bytes)).toBe(
+        new TextDecoder(`windows-${page}`).decode(bytes),
+      );
+    });
+  },
+);

@@ -80,6 +80,7 @@ import { Issues } from "./issues.js";
 import { ConversationList, type RecordDamage } from "./conversation-list.js";
 import { KeptItems } from "./kept-items.js";
 import { Attention, type Notifier } from "./attention.js";
+import { LeftAlone } from "./left-alone.js";
 
 const modelSettingsIssue =
   "The model's settings could not be read. Open the Model page to check them.";
@@ -180,6 +181,8 @@ export class Workspace {
   readonly kept: KeptItems;
   /** Asks for the person outside the window when a conversation needs them. */
   readonly #attention: Attention | undefined;
+  /** Closes the browser and Blender of a conversation left alone. */
+  readonly #leftAlone: LeftAlone;
   /** What the window was sent, so it is sent only what changed. */
   readonly #window = new WindowFeed();
 
@@ -284,6 +287,11 @@ export class Workspace {
       (task) => this.turns.settleAfterRestart(task),
       deps.recordDamage,
     );
+    this.#leftAlone = new LeftAlone({
+      inUse: (taskId) =>
+        this.turns.running(taskId) || this.#selectedTaskId === taskId,
+      close: (taskId) => deps.capabilities.restConversation(taskId),
+    });
     this.#attention = deps.notifier
       ? new Attention({
           notifier: deps.notifier,
@@ -297,6 +305,7 @@ export class Workspace {
   emit(event: AppEvent): void {
     this.#attention?.observe(event);
     this.#panel.observe(event);
+    this.#leftAlone.observe(event);
     const sent = this.#window.translate(event);
     if (sent) this.#deps.emit(sent);
   }
@@ -581,6 +590,7 @@ export class Workspace {
     this.#scene.forget(taskId);
     this.#panel.forget(taskId);
     await this.#deps.capabilities.forgetConversation(taskId);
+    this.#leftAlone.forget(taskId);
     this.#tasks = this.#tasks.filter((task) => task.id !== taskId);
     const next = this.#conversations.remove(taskId, this.#tasks);
     this.#issues.forgetConversation(taskId);
@@ -617,6 +627,7 @@ export class Workspace {
       ["conversation turns", () => this.turns.shutdown()],
       ["browsers and connections", () => this.#deps.capabilities.shutdown()],
     ]).finally(() => {
+      this.#leftAlone.stop();
       this.#browser.stopWatching();
       this.#scene.stopWatching();
       this.#panel.shutdown();
@@ -642,6 +653,9 @@ export class Workspace {
 
   installToolchain = (id: string): Promise<void> =>
     this.#pluginLifecycle.installToolchain(id);
+
+  cancelToolchainInstall = (id: string): Promise<void> =>
+    this.#pluginLifecycle.cancelToolchainInstall(id);
 
   installPlugin(
     chooseSource: () => Promise<string | undefined>,

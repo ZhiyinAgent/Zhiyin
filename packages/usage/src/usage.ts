@@ -141,6 +141,7 @@ export function aggregate(
     {
       model: string;
       requests: number;
+      pricedRequests: number;
       inputTokens: number;
       outputTokens: number;
       costUsd: number;
@@ -185,12 +186,14 @@ export function aggregate(
     const model = models.get(event.model) ?? {
       model: event.model,
       requests: 0,
+      pricedRequests: 0,
       inputTokens: 0,
       outputTokens: 0,
       costUsd: 0,
       estimates: new Estimates(),
     };
     model.requests += 1;
+    if (priced(event)) model.pricedRequests += 1;
     model.inputTokens += event.inputTokens;
     model.outputTokens += event.outputTokens;
     model.costUsd += event.costUsd ?? 0;

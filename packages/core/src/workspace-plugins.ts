@@ -21,9 +21,14 @@ type PluginCapabilities = Pick<
 >;
 
 /** Plugin and component lifecycle, refreshing the workspace's snapshot after each change. */
+/** How often an install under way is shown again, so its progress moves. */
+const installProgressMs = 1_000;
+
 export class WorkspacePlugins {
   readonly #capabilities: PluginCapabilities;
   readonly #refresh: () => Promise<void>;
+  /** Installs under way, by connector, with what stops each. */
+  readonly #installs = new Map<string, AbortController>();
 
   constructor(options: {
     readonly capabilities: PluginCapabilities;
@@ -98,17 +103,39 @@ export class WorkspacePlugins {
 
   /**
    * An installation takes as long as its download. The snapshot is refreshed
-   * when it starts, so the connector shows it is installing, and again when it
-   * ends, whichever way.
+   * when it starts, so the connector shows it is installing, about every
+   * second while it runs, so its progress moves, and again when it ends,
+   * whichever way. One the person stopped ends without a failure.
    */
   async installToolchain(id: string): Promise<void> {
-    const installing = this.#capabilities.installToolchain(id);
-    await this.#refresh();
+    // One asked for again while the last is still being stopped starts anew.
+    const running = this.#installs.get(id);
+    const controller =
+      running && !running.signal.aborted ? running : new AbortController();
+    this.#installs.set(id, controller);
+    const installing = this.#capabilities.installToolchain(
+      id,
+      controller.signal,
+    );
+    const progress = setInterval(
+      () => void this.#refresh().catch(() => {}),
+      installProgressMs,
+    );
     try {
+      await this.#refresh();
       await installing;
+    } catch (error) {
+      if (!controller.signal.aborted) throw error;
     } finally {
+      clearInterval(progress);
+      if (this.#installs.get(id) === controller) this.#installs.delete(id);
       await this.#refresh();
     }
+  }
+
+  /** Stops an install under way; nothing happens when none is. */
+  async cancelToolchainInstall(id: string): Promise<void> {
+    this.#installs.get(id)?.abort();
   }
 
   async #applySource(

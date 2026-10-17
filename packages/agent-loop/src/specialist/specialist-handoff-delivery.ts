@@ -15,6 +15,7 @@ export async function deliverPendingHandoffs(
   records: TurnRecords,
   sessions: Sessions,
   history: ModelHistory,
+  signal?: AbortSignal,
 ): Promise<void> {
   const drained = pending.drain(taskId);
   for (let index = 0; index < drained.length; index++) {
@@ -44,10 +45,14 @@ export async function deliverPendingHandoffs(
           output: { tool: handoffReportTool, content: report },
         });
       }
+      // A stop while it was told may have kept it out: it and the rest wait
+      // for the next turn the person starts, which tells each once.
+      signal?.throwIfAborted();
       await records.markHandoffDelivered(taskId, settled.runId);
     } catch (error) {
       for (const remaining of drained.slice(index)) {
-        pending.push(taskId, remaining);
+        if (signal?.aborted) pending.push(taskId, remaining, false);
+        else pending.push(taskId, remaining);
       }
       throw error;
     }

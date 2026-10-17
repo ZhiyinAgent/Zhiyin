@@ -2,6 +2,7 @@ import type {
   ContextBudgetChoice,
   ModelWindow,
   PictureFitting,
+  ReasoningSelection,
   WorkspaceContext,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -82,8 +83,12 @@ export interface TurnHost {
   historyAvailable(): boolean;
   capabilitiesAvailable(): boolean;
   acceptsImages(): boolean;
-  /** Whether the chosen model can be asked to answer without reasoning. */
-  reasoningOptional(): boolean;
+  /**
+   * The least reasoning the chosen model can be asked for: none where it
+   * answers without it, otherwise its lowest effort. Nothing when it can be
+   * asked for no less than was chosen.
+   */
+  leastReasoning(): ReasoningSelection | undefined;
   /** The model the next request goes to, and what it lists of its size. */
   modelWindow(): ModelWindow & { readonly model: string };
   /**

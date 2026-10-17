@@ -11,10 +11,15 @@ import {
   font,
   kinds,
   readable,
+  sceneIn,
   writable,
   type Refusal,
 } from "./paths.js";
-import type { SceneCommand, SceneSession } from "./scene-session.js";
+import {
+  cannotDraw,
+  type SceneCommand,
+  type SceneSession,
+} from "./scene-session.js";
 import { studioTools } from "./tools.js";
 import {
   addRows,
@@ -103,6 +108,15 @@ function textResult(text: string, isError = false) {
     content: [{ type: "text" as const, text: text || "(no answer)" }],
     ...(isError ? { isError: true } : {}),
   };
+}
+
+/** The open scene, named as this workspace has it; nothing if it is not in it. */
+async function sceneHere(
+  root: string,
+  session: SceneSession,
+): Promise<string | undefined> {
+  const file = session.sceneFile();
+  return file ? sceneIn(root, file) : undefined;
 }
 
 /** The scene file as a change, so going back can restore it. */
@@ -244,7 +258,9 @@ async function prepare(
       access: "read",
     };
   }
-  const scene = session.scene();
+  // A scene opened in a folder the conversation has since left is not this
+  // workspace's: nothing here changes it.
+  const scene = await sceneHere(root, session);
   if (!scene) return noScene;
   if (name === "blender_describe_scene")
     return {
@@ -415,6 +431,7 @@ export function sceneAutomation(
     /** Asked again every look, so installing Blender is noticed without a restart. */
     async listTools() {
       if (!(await options.blender())) throw new Error(notInstalled);
+      if (!session.draws) throw new Error(cannotDraw);
       return studioTools;
     },
 
@@ -427,6 +444,7 @@ export function sceneAutomation(
         };
       if (!(await options.blender()))
         return { ok: false, reason: notInstalled };
+      if (!session.draws) return { ok: false, reason: cannotDraw };
       const prepared = await prepare(name, args, root, session);
       if ("reason" in prepared)
         return {
@@ -441,7 +459,7 @@ export function sceneAutomation(
       // Changes to the open scene that write no file over another are one
       // set the person can allow for the conversation; a script, which
       // reaches past the scene, never is.
-      const scene = session.scene();
+      const scene = await sceneHere(root, session);
       const replaces = (prepared.written ?? []).some((file) => file.exists);
       const allowance =
         scene &&
@@ -471,7 +489,7 @@ export function sceneAutomation(
         boundToCall: true,
         identity: JSON.stringify({
           name,
-          scene: session.scene() ?? null,
+          scene: scene ?? null,
           args: prepared.args,
           written: (prepared.written ?? []).map((file) => [
             file.relative,

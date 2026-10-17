@@ -1,5 +1,6 @@
 import {
   Client,
+  ProtocolError,
   SdkErrorCode,
   SdkHttpError,
   StreamableHTTPClientTransport,
@@ -9,6 +10,7 @@ import {
 import {
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
   UNAUTHORIZED,
 } from "./connection-problems.js";
 import type { ConnectionTool } from "@zhiyin/contract";
@@ -26,6 +28,20 @@ function rethrowRefusals(error: unknown): never {
   )
     throw new McpUnauthorizedError(UNAUTHORIZED, { cause: error });
   throw error;
+}
+
+/**
+ * The SDK checks an answer against the output its tool declares after the
+ * server has run the call, and reports a mismatch as it reports an error
+ * the server answered with, told apart only by its words.
+ */
+const undeclaredAnswer =
+  /^(?:Tool .+ has an output schema but did not return structured content|Structured content does not match the tool's output schema|Failed to validate structured content)/s;
+
+function rethrowCallProblems(error: unknown): never {
+  if (ProtocolError.isInstance(error) && undeclaredAnswer.test(error.message))
+    throw new McpUndeclaredAnswerError(error.message, { cause: error });
+  rethrowRefusals(error);
 }
 
 /**
@@ -126,7 +142,7 @@ export const connectHttpMcpServer: McpConnectionFactory = async (
           { name, arguments: args },
           { ...(signal ? { signal } : {}), timeout: 60_000 },
         )
-        .catch(rethrowRefusals),
+        .catch(rethrowCallProblems),
     close: () => client.close(),
     onToolsChanged: (listener) => {
       listeners.push(listener);

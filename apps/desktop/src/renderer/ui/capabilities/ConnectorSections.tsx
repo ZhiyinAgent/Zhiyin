@@ -381,10 +381,17 @@ export function ConnectorTools({
         <ul>
           {tools.map((tool) => (
             <li key={tool.name}>
-              <label>
+              <label
+                className={
+                  tool.withheld
+                    ? styles["component-editor__tool--withheld"]
+                    : undefined
+                }
+              >
                 <input
                   type="checkbox"
-                  checked={tool.enabled}
+                  checked={tool.enabled && !tool.withheld}
+                  disabled={Boolean(tool.withheld)}
                   onChange={(event) =>
                     void onSetToolEnabled(tool.name, event.target.checked)
                   }
@@ -392,6 +399,11 @@ export function ConnectorTools({
                 <span>
                   <strong data-tip={tool.name}>{inWords(tool.name)}</strong>
                   {tool.description && <small>{tool.description}</small>}
+                  {tool.withheld && (
+                    <small className={styles["component-editor__tool-reason"]}>
+                      {tool.withheld}
+                    </small>
+                  )}
                 </span>
               </label>
             </li>

@@ -12,6 +12,7 @@ import {
   ComposedCapabilities,
   browserConnection,
   declaredConnectionsOf,
+  unreadablePackagesOf,
   documentsConnection,
   sceneConnection,
   gitConnection,
@@ -122,6 +123,8 @@ export type Surroundings = {
   readonly notifier?: Notifier;
   /** Paints the window light, dark, or as Windows is set. */
   readonly appearance?: { readonly apply: (appearance: Appearance) => void };
+  /** Windows' own window controls, dimmed under a dialog. */
+  readonly windowControls?: CoreDependencies["windowControls"];
   /** The spellchecker, where its dictionaries come from and are read. */
   readonly spelling?: {
     readonly engine: SpellcheckEngine;
@@ -193,6 +196,7 @@ export function buildCore({
   recycle,
   notifier,
   appearance,
+  windowControls,
   spelling,
   credentialEntry,
   connectionsNeverClose,
@@ -216,12 +220,13 @@ export function buildCore({
    * until they make it, nothing is sent. Routing starts unrestricted: a single
    * upstream has no recovery when it is busy. ADR 0010, ADR 0024.
    *
-   * For a test run or the benchmark, ZHIYIN_MODEL fixes the model, on the
-   * provider and region ZHIYIN_PROVIDER and ZHIYIN_REGION name (OpenRouter
-   * when unnamed). Outside an installed app, ZHIYIN_MODEL_ENDPOINT sends
-   * every request elsewhere; an installed app would send its keys there.
+   * Outside an installed app, for a test run or the benchmark, ZHIYIN_MODEL
+   * fixes the model, on the provider and region ZHIYIN_PROVIDER and
+   * ZHIYIN_REGION name (OpenRouter when unnamed), and ZHIYIN_MODEL_ENDPOINT
+   * sends every request elsewhere. An installed app answers with the
+   * person's choice, and would send its keys to another endpoint.
    */
-  const fixedModel = process.env["ZHIYIN_MODEL"];
+  const fixedModel = packaged ? undefined : process.env["ZHIYIN_MODEL"];
   const endpoint = packaged ? undefined : process.env["ZHIYIN_MODEL_ENDPOINT"];
   const model = new ModelProviders({
     environment: (variable) => process.env[variable],
@@ -366,6 +371,7 @@ export function buildCore({
                 ...(await executable("typst")),
                 ...(await executable("tectonic")),
               }),
+              tectonicCache: join(dataDirectory, "tectonic"),
               containment,
             }),
           ),
@@ -393,6 +399,7 @@ export function buildCore({
             : []),
         ],
         declared: () => declaredConnectionsOf(plugins),
+        unreadable: () => unreadablePackagesOf(plugins),
         now: Date.now,
         signInOptions: { openBrowser: openExternal },
       },
@@ -533,6 +540,7 @@ export function buildCore({
     openExternal,
     openPath,
     showInFolder,
+    ...(windowControls ? { windowControls } : {}),
     version,
   });
 }

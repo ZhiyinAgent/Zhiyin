@@ -25,6 +25,13 @@ describe("WorkspaceTools", () => {
       await tools.execute("read_file", { path: "note.txt" }),
     ).toMatchObject({ ok: true, value: { text: "1→second" } });
   });
+  it("takes an empty folder name for no folder, not for the folder Zhiyin was started in", () => {
+    const tools = new WorkspaceTools("");
+
+    expect(tools.workspaceRoot()).toBeUndefined();
+    expect(tools.list().map((tool) => tool.name)).not.toContain("read_file");
+  });
+
   /**
    * A folder that cannot be opened is a change that did not happen. Leaving the
    * boundary switched off would take the file tools away from the folder the

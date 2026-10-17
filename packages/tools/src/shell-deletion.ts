@@ -58,6 +58,16 @@ const keywords = new Set([
 const shells = new Set(["bash", "sh", "zsh", "dash", "ksh"]);
 const pythons = new Set(["python", "python3", "py"]);
 const powershells = new Set(["powershell", "pwsh"]);
+/** git's own options that take the next word as their value. */
+const gitValueOptions = new Set([
+  "-C",
+  "-c",
+  "--git-dir",
+  "--work-tree",
+  "--namespace",
+  "--super-prefix",
+  "--config-env",
+]);
 
 const pythonDeletion =
   /\b(os\.remove|os\.unlink|os\.rmdir|os\.removedirs|shutil\.rmtree|\.unlink|\.rmdir)\s*\(/;
@@ -125,7 +135,12 @@ function deletionBy(words: readonly string[]): string | undefined {
     return deletionBy(args.slice(at));
   }
   if (name === "git") {
-    const sub = args.find((arg) => !arg.startsWith("-"));
+    // The subcommand comes after git's own options, some of which take the
+    // next word as their value.
+    let at = 0;
+    while (at < args.length && args[at]!.startsWith("-"))
+      at += gitValueOptions.has(args[at]!) ? 2 : 1;
+    const sub = args[at];
     if (sub === "clean") return "git clean";
     if (sub === "rm" && !args.includes("--cached")) return "git rm";
     return undefined;
@@ -136,7 +151,8 @@ function deletionBy(words: readonly string[]): string | undefined {
   }
   if (name === "eval") return deletionIn(args.join(" "));
   if (name === "cmd") {
-    const at = args.findIndex((arg) => /^\/[ck]$/i.test(arg));
+    // Git Bash would turn `/c` into a drive, so it is written `//c` there.
+    const at = args.findIndex((arg) => /^\/\/?[ck]$/i.test(arg));
     return at >= 0 ? cmdDeletion(args.slice(at + 1).join(" ")) : undefined;
   }
   if (powershells.has(name)) {

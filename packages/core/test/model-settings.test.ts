@@ -59,31 +59,37 @@ async function chosenSettings(stated: Partial<ProviderSettings> = {}) {
 }
 
 /**
- * A turn may turn the model's reasoning off partway only where the chosen
- * model is known to answer without it.
+ * The least reasoning a turn may ask the chosen model for partway: none where
+ * the model is known to answer without it, and otherwise its lowest effort.
  */
-describe("whether a turn may go on without the model's reasoning", () => {
+describe("the least reasoning a turn may ask of the model", () => {
   const optional = {
     status: "available",
     required: false,
     defaultEnabled: true,
-    efforts: ["high"],
+    efforts: ["high", "low", "medium"],
   } as const;
-  const drops = async (stated: Partial<ProviderSettings>) =>
-    (await chosenSettings(stated)).settings.forTurns().reasoningOptional();
+  const least = async (stated: Partial<ProviderSettings>) =>
+    (await chosenSettings(stated)).settings.forTurns().leastReasoning();
 
-  it("is yes where the model lists reasoning as optional", async () => {
-    expect(await drops({ reasoning: optional })).toBe(true);
+  it("is none where the model lists reasoning as optional", async () => {
+    expect(await least({ reasoning: optional })).toEqual({ enabled: false });
   });
 
-  it("is no where the model requires reasoning, or its controls are unknown", async () => {
-    expect(await drops({ reasoning: { ...optional, required: true } })).toBe(
-      false,
+  it("is the lowest effort the model lists where it requires reasoning", async () => {
+    expect(await least({ reasoning: { ...optional, required: true } })).toEqual(
+      { enabled: true, effort: "low" },
     );
+  });
+
+  it("is nothing to ask where the model requires reasoning and lists no effort, or its controls are unknown", async () => {
     expect(
-      await drops({ reasoning: { status: "unavailable", reason: "Unknown." } }),
-    ).toBe(false);
-    expect(await drops({})).toBe(false);
+      await least({ reasoning: { ...optional, required: true, efforts: [] } }),
+    ).toBeUndefined();
+    expect(
+      await least({ reasoning: { status: "unavailable", reason: "Unknown." } }),
+    ).toBeUndefined();
+    expect(await least({})).toBeUndefined();
   });
 });
 

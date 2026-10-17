@@ -66,6 +66,14 @@ type Running = {
   /** Revisions this process has open, so a new one is given them again. */
   readonly open: Set<string>;
   readonly waiting: Map<number, (reply: HostReply) => void>;
+  /**
+   * The request last sent. The process works through its requests one at a
+   * time, so the next is sent only once this one is answered, and each one's
+   * time limit counts its own work, never the wait behind the others.
+   */
+  turn: Promise<unknown>;
+  /** The process ended: whatever is still to be sent is answered as ended. */
+  ended: boolean;
 };
 
 export class DrawingHost {
@@ -201,6 +209,8 @@ export class DrawingHost {
       container,
       open: new Set(),
       waiting: new Map(),
+      turn: Promise.resolve(),
+      ended: false,
     };
     process.onReply((reply) => {
       const answer = running.waiting.get(reply.id);
@@ -223,18 +233,27 @@ export class DrawingHost {
     request: DistributiveOmit<DrawingRequest, "id">,
   ): Promise<HostReply> {
     const id = ++this.#next;
-    return new Promise<HostReply>((resolve) => {
-      const timer = setTimeout(() => {
-        if (!running.waiting.has(id)) return;
-        // Closing the container ends the process wherever it is stuck.
-        void this.#ended(running, "timed-out", id);
-      }, this.#timeoutMs);
-      running.waiting.set(id, (reply) => {
-        clearTimeout(timer);
-        resolve(reply);
-      });
-      running.process.send({ ...request, id } as DrawingRequest);
-    });
+    const asked = running.turn.then(
+      () =>
+        new Promise<HostReply>((resolve) => {
+          if (running.ended) {
+            resolve({ ok: false, failure: "ended" });
+            return;
+          }
+          const timer = setTimeout(() => {
+            if (!running.waiting.has(id)) return;
+            // Closing the container ends the process wherever it is stuck.
+            void this.#ended(running, "timed-out", id);
+          }, this.#timeoutMs);
+          running.waiting.set(id, (reply) => {
+            clearTimeout(timer);
+            resolve(reply);
+          });
+          running.process.send({ ...request, id } as DrawingRequest);
+        }),
+    );
+    running.turn = asked;
+    return asked;
   }
 
   /**
@@ -246,6 +265,7 @@ export class DrawingHost {
     failure: "timed-out" | "ended",
     culprit?: number,
   ): Promise<void> {
+    running.ended = true;
     if ((await this.#running) === running) this.#running = undefined;
     running.container.close();
     const waiting = [...running.waiting];

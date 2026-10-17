@@ -8,10 +8,10 @@
  * feel frozen while it happens, including during the view validation each
  * drawing goes through, which runs Mermaid's parser on that same thread.
  *
- * Skipped without a credential, and never given one by default: it costs money
- * and needs a network, so the gate does not run it. Run it deliberately:
+ * It costs money and needs a network, so it is a live test the gate never
+ * runs. Run it deliberately, after a build, with the key in `.env.local`:
  *
- *   $env:ZHIYIN_OPENROUTER_API_KEY = "..."; npx vitest run --project installed many-views
+ *   pnpm test:live:installed many-views
  */
 
 import { writeFile } from "node:fs/promises";

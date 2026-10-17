@@ -61,7 +61,7 @@ export function UsagePanel({
     <SurfacePanel
       className={styles["usage"]}
       label="Usage overview"
-      eyebrow={<p className="instrument-label">Account / Usage</p>}
+      eyebrow={<p className="instrument-label">Your preferences / Usage</p>}
       title="Usage"
       description="Requests, model mix, and cost on this device, as providers reported it or estimated from price lists."
       controls={

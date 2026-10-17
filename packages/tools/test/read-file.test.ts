@@ -2,6 +2,7 @@ import { copyFile, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { estimatedTokens, type FileRead } from "@zhiyin/contract";
+import { ansiCodePage, ansiText } from "@zhiyin/process-ownership";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   WorkspaceTools,
@@ -22,6 +23,17 @@ function numberedLines(count: number): string {
     { length: count },
     (_, index) => `line ${index + 1}: the quick brown fox`,
   ).join("\n");
+}
+
+/**
+ * A line that is not UTF-8 as Windows reads text naming no encoding, or as
+ * Windows-1252 on a PC whose own code page is UTF-8.
+ */
+function asWindowsReads(bytes: Buffer): string {
+  return (
+    (ansiCodePage() === 65001 ? undefined : ansiText(bytes)) ??
+    new TextDecoder("windows-1252").decode(bytes)
+  );
 }
 
 function textOf(result: ToolResult): string {
@@ -163,6 +175,204 @@ describe("reading a file", () => {
     expect(binary).toMatchObject({ ok: false });
     if (binary.ok) throw new Error("A binary is not text");
     expect(binary.reason).toMatch(/not a text file/i);
+  });
+
+  it("keeps the UTF-8 lines of a file that is not all UTF-8, however late its first stray byte", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "mixed.txt"),
+      Buffer.concat([
+        Buffer.from("第一行\ncafé\n", "utf8"),
+        // One byte that UTF-8 cannot read, as Windows-1252 writes é.
+        Buffer.from("naïve\n", "latin1"),
+        Buffer.from("最后一行\n", "utf8"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "mixed.txt" }),
+    );
+
+    expect(text).toContain("1→第一行");
+    expect(text).toContain("2→café");
+    expect(text).toContain(
+      `3→${asWindowsReads(Buffer.from("naïve", "latin1"))}`,
+    );
+    expect(text).toContain("4→最后一行");
+    expect(text).toMatch(/line 3 is the first that is not/);
+  });
+
+  it("reads a file that is not all UTF-8 line by line when its lines end in a carriage return alone", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "classic.txt"),
+      Buffer.concat([
+        Buffer.from("第一行\r", "utf8"),
+        Buffer.from("café\r", "latin1"),
+        Buffer.from("最后一行\r", "utf8"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "classic.txt" }),
+    );
+
+    expect(text).toContain("1→第一行");
+    expect(text).toContain(
+      `2→${asWindowsReads(Buffer.from("café", "latin1"))}`,
+    );
+    expect(text).toContain("3→最后一行");
+    expect(text).toMatch(/line 2 is the first that is not/);
+  });
+
+  it("counts a carriage return and line feed together as one line break", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "windows.txt"),
+      Buffer.concat([
+        Buffer.from("one\r\ntwo\r\n", "utf8"),
+        Buffer.from("café\r\n", "latin1"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "windows.txt" }),
+    );
+
+    expect(text).toMatch(/line 3 is the first that is not/);
+    expect(text).toContain(
+      `3→${asWindowsReads(Buffer.from("café", "latin1"))}`,
+    );
+  });
+
+  it("keeps the last line of a file that is not all UTF-8 and does not end in a line break", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "unended.txt"),
+      Buffer.concat([
+        Buffer.from("café\n", "latin1"),
+        Buffer.from("最后一行", "utf8"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "unended.txt" }),
+    );
+
+    expect(text).toContain("2→最后一行");
+  });
+
+  it("keeps a UTF-8 line of any length whole in a file that is not all UTF-8", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "long.txt"),
+      Buffer.concat([
+        Buffer.from("café!\n", "latin1"),
+        // More than a megabyte on one line, each character three bytes, so
+        // a line read in pieces would split one.
+        Buffer.from(`${"中".repeat(400_000)}\n`, "utf8"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(await tools.execute("read_file", { path: "long.txt" }));
+
+    expect(text).toContain(`2→${"中".repeat(2_000)} … 398,000 more characters`);
+  });
+
+  it("reads text that is not UTF-8 in this PC's own code page, and says so with the first line that is not", async () => {
+    const root = await workspace();
+    // "café" and "naïve" as Windows-1252 writes them: é is E9, ï is EF.
+    await writeFile(
+      join(root, "legacy.txt"),
+      Buffer.concat([
+        Buffer.from("plain\n", "latin1"),
+        Buffer.from("café\nnaïve\n", "latin1"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(
+      await tools.execute("read_file", { path: "legacy.txt" }),
+    );
+
+    expect(text).toContain("1→plain");
+    // As Windows reads text that names no encoding: café on most Western PCs.
+    expect(text).toContain(
+      `2→${asWindowsReads(Buffer.from("café", "latin1"))}`,
+    );
+    expect(text).toContain(
+      `3→${asWindowsReads(Buffer.from("naïve", "latin1"))}`,
+    );
+    expect(text).toMatch(/not all UTF-8/);
+    expect(text).toMatch(/line 2/);
+    expect(text).toContain(
+      ansiCodePage() === 65001
+        ? "as Windows-1252"
+        : `code page ${ansiCodePage()}`,
+    );
+    expect(text).toMatch(/multi_edit/);
+  });
+
+  it("finds text that is not UTF-8 however far into the file it starts", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "long.txt"),
+      Buffer.concat([
+        Buffer.from(`${numberedLines(3_000)}\n`, "utf8"),
+        Buffer.from("café\n", "latin1"),
+      ]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const text = textOf(await tools.execute("read_file", { path: "long.txt" }));
+
+    expect(text).toMatch(/line 3,001/);
+    expect(text).toContain("1→line 1: the quick brown fox");
+  });
+
+  it.each([
+    ["little-endian", "utf16le" as const, [0xff, 0xfe]],
+    ["big-endian", "utf16be" as const, [0xfe, 0xff]],
+  ])(
+    "reads UTF-16 text (%s, with its byte-order mark) as text, and names it",
+    async (_order, encoding, mark) => {
+      const root = await workspace();
+      const little = Buffer.from("Hello\r\nWörld\r\n", "utf16le");
+      const bytes = encoding === "utf16le" ? little : little.swap16();
+      await writeFile(
+        join(root, "out.txt"),
+        Buffer.concat([Buffer.from(mark), bytes]),
+      );
+      const tools = new WorkspaceTools(root);
+
+      const text = textOf(
+        await tools.execute("read_file", { path: "out.txt" }),
+      );
+
+      expect(text).toContain("1→Hello");
+      expect(text).toContain("2→Wörld");
+      expect(text).toMatch(/UTF-16/);
+    },
+  );
+
+  it("still refuses a binary file that happens to begin like UTF-16", async () => {
+    const root = await workspace();
+    await writeFile(
+      join(root, "data.bin"),
+      Buffer.from([0xff, 0xfe, 0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00]),
+    );
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("read_file", { path: "data.bin" });
+
+    expect(result).toMatchObject({ ok: false });
+    if (result.ok) throw new Error("A binary is not text");
+    expect(result.reason).toMatch(/not a text file/i);
   });
 
   it("reads a text file that merely contains unusual characters", async () => {

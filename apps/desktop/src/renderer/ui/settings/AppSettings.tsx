@@ -66,8 +66,8 @@ export function AppSettings({
     <section className={styles["app-settings"]} aria-label="Settings">
       <header className={styles["app-settings__head"]}>
         <div>
-          <p className="instrument-label">Workspace / Settings</p>
-          <h1>Settings</h1>
+          <p className="instrument-label">Your preferences / Settings</p>
+          <h1 tabIndex={-1}>Settings</h1>
         </div>
         <CloseButton label="Close settings" onClick={onClose} />
       </header>

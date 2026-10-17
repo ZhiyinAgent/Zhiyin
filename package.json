@@ -18,13 +18,15 @@
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run --project packages --project desktop --project repository --project system-boundary --reporter=default --reporter=./scripts/skipped-tests.mjs",
     "test:installed": "vitest run --project installed --reporter=default --reporter=./scripts/skipped-tests.mjs",
-    "test:live": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --project live"
+    "test:live": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --project live",
+    "test:live:installed": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --project installed-live"
   },
   "devDependencies": {
     "@electron/fuses": "1.8.0",
     "@eslint/js": "10.0.1",
     "@types/node": "26.4.1",
     "@zhiyin/model-client": "workspace:*",
+    "@zhiyin/toolchains": "workspace:*",
     "desktop": "workspace:*",
     "eslint": "10.9.1",
     "eslint-config-prettier": "10.1.8",

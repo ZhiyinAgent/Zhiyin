@@ -247,6 +247,12 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* A heading takes focus only to start the reader there, as a page or an
+   approval opens; it is not a control, so it draws no ring. */
+:is(h1, h2, h3)[tabindex="-1"]:focus {
+  outline: none;
+}
+
 :root {
   /* The gutter every scrollbar takes, for a rule that must leave it alone. */
   --zy-scrollbar: 12px;

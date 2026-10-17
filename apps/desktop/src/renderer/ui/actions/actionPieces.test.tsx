@@ -371,6 +371,61 @@ describe("ApprovalPrompt", () => {
     expect(screen.getByText("Clean up a draft.")).toBeVisible();
   });
 
+  it("attributes a reason the AI wrote to Zhiyin, as it does a claim", () => {
+    render(
+      <ApprovalPrompt
+        title="Save the summary"
+        target="summary.md"
+        description="Save the summary the person asked for."
+        descriptionByModel
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("Save the summary the person asked for."),
+    ).toHaveTextContent(/^Zhiyin says/);
+    expect(
+      screen.getByRole("button", { name: "About this AI explanation" }),
+    ).toBeVisible();
+  });
+
+  it("gives a reason and a claim the AI wrote one attribution", () => {
+    render(
+      <ApprovalPrompt
+        title="Run a command"
+        target="command -v python3"
+        description="See what is installed."
+        descriptionByModel
+        claim="Check whether Python 3 is installed."
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByText("Zhiyin says")).toHaveLength(1);
+    expect(
+      screen.getByText(
+        "See what is installed. Check whether Python 3 is installed.",
+      ),
+    ).toHaveTextContent(/^Zhiyin says/);
+  });
+
+  it("leaves a reason Zhiyin's code wrote unattributed", () => {
+    render(
+      <ApprovalPrompt
+        title="Write a workspace file"
+        target="summary.md"
+        description="Write summary.md in the workspace."
+        onDecision={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByText("Write summary.md in the workspace."),
+    ).toBeVisible();
+    expect(screen.queryByText(/Zhiyin says/)).toBeNull();
+  });
+
   it("shows a long command whole rather than clipping what is consented to", () => {
     const command = `python3 -c "import pandas, numpy; print('pandas', pandas.__version__, '| numpy', numpy.__version__)" && echo done && ls -la && git status --short && git log --oneline -20`;
     render(
@@ -601,6 +656,43 @@ describe("ApprovalPrompt", () => {
     expect(onDecision).not.toHaveBeenCalled();
   });
 
+  it("keeps the reader's place in the review when the request behind it is drawn again, and gives focus back on close", () => {
+    const onDecision = vi.fn();
+    const changes = [
+      { path: "a.md", change: "updated", before: "a\n", after: "b\n" },
+      { path: "b.md", change: "created", after: "c\n" },
+    ] as const;
+    // A new element each time, as the conversation draws it again.
+    const prompt = () => (
+      <ApprovalPrompt
+        title="Edit workspace files"
+        target="a.md, b.md"
+        changes={changes}
+        onDecision={onDecision}
+      />
+    );
+    const { rerender } = render(prompt());
+    const opener = screen.getByRole("button", {
+      name: "Review this change to b.md",
+    });
+
+    // Focused as a click focuses it, for focus to have somewhere to return.
+    opener.focus();
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog");
+    // The reader has moved from where the dialog put them to a file's tab.
+    const placed = document.activeElement;
+    const reached = within(dialog).getAllByRole("tab")[0]!;
+    reached.focus();
+    expect(reached).not.toBe(placed);
+    rerender(prompt());
+
+    expect(document.activeElement).toBe(reached);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
   /**
    * A change too large to carry must not look like a change with nothing in
    * it. The person is told they are approving something they have not seen.
@@ -693,6 +785,25 @@ describe("ApprovalPrompt", () => {
     );
 
     expect(screen.queryByRole("button", { name: /Review/ })).toBeNull();
+  });
+
+  it("draws nothing where the files would be when its list of changes is empty", () => {
+    const { container } = render(
+      <ApprovalPrompt
+        title="Edit a workspace file"
+        target="notes"
+        invocation={{
+          name: "multi_edit",
+          arguments: [{ name: "path", value: "notes" }],
+        }}
+        changes={[]}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    // Nothing in this request is a number, so any digit drawn is a stray one.
+    expect(container.textContent).not.toMatch(/\d/);
+    expect(screen.queryByRole("list", { name: "What will change" })).toBeNull();
   });
 
   it("offers guidance only after Deny, while allowing a denial without text", () => {

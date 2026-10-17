@@ -28,6 +28,7 @@ import {
   ModelRound,
   SentNow,
   ThoughtTooLong,
+  withLeastReasoning,
   type RoundResult,
 } from "./model-round.js";
 import { RoundResults, resultLimits } from "../context/result-size.js";
@@ -96,11 +97,14 @@ type Turn = {
   refused: boolean;
   /** One fresh round may resume from completed tools after retry exhaustion. */
   connectionRecoveries: number;
-  /** This step's request was stopped for reasoning at length, and asked again. */
+  /**
+   * This step's request was stopped for reasoning at length, and is asked
+   * again with the least reasoning the model can be asked for.
+   */
   overthought: boolean;
   /**
    * The person asked for the answer now: the turn's remaining requests go
-   * without reasoning, where the model can be asked that.
+   * with the least reasoning the model can be asked for.
    */
   answerNow: boolean;
 };
@@ -134,6 +138,8 @@ export class TurnLoop {
       readonly pendingHandoffs: PendingHandoffs;
       readonly commandEndings: CommandEndings;
       readonly context: ContextGuard;
+      /** Told when the lab refuses one of the turn's requests for their number. */
+      readonly rateLimited: (taskId: string) => void;
     },
   ) {
     this.#deps = deps;
@@ -146,7 +152,12 @@ export class TurnLoop {
     this.#ownership = parts.ownership;
     this.#pendingHandoffs = parts.pendingHandoffs;
     this.#commandEndings = parts.commandEndings;
-    this.#round = new ModelRound(deps, parts.records);
+    this.#round = new ModelRound(
+      deps,
+      parts.records,
+      "conversation",
+      parts.rateLimited,
+    );
     this.#context = parts.context;
     this.#plan = new PlanProgress(parts.records);
   }
@@ -200,11 +211,13 @@ export class TurnLoop {
 
         await this.#keepRound(taskId, answered, incomplete);
         if (text.trim()) turn.said.push(text);
-        if (turn.reportOnly && calls.length > 0)
-          return this.#records.finishPausedReport(
+        if (turn.reportOnly && calls.length > 0) {
+          await this.#records.finishPausedReport(
             taskId,
             turn.said.join("\n\n"),
           );
+          return;
+        }
         if (calls.length === 0) {
           const ending = await this.#afterLastWords(turn, answered, incomplete);
           if (ending === "ended") return;
@@ -316,6 +329,8 @@ export class TurnLoop {
    */
   async #ask(turn: Turn): Promise<RoundResult | undefined> {
     const { taskId, controller, ledger, offering } = turn;
+    // A stopped turn takes nothing more from what waits for the next one.
+    controller.signal.throwIfAborted();
     await this.#plan.remind(taskId, turn.history);
     await turn.standing.send(turn.history);
     await deliverBackgroundWork(taskId, turn.history, {
@@ -323,6 +338,7 @@ export class TurnLoop {
       pendingHandoffs: this.#pendingHandoffs,
       commandEndings: this.#commandEndings,
       sessions: this.#deps.sessions,
+      signal: controller.signal,
     });
     if (await deliverGuidance(taskId, this.#records, turn.history))
       turn.guard.reset();
@@ -346,10 +362,11 @@ export class TurnLoop {
       plan.tools,
       fixed.length,
       this.#lastRequestLength,
+      turn.history.firstPictureThatCanGo(),
     );
     const request =
-      turn.answerNow && this.#deps.host.reasoningOptional()
-        ? { ...planned, reasoning: { enabled: false } as const }
+      turn.answerNow || turn.overthought
+        ? withLeastReasoning(planned, this.#deps.host.leastReasoning())
         : planned;
     const shown = this.#records.task(taskId).messages.length;
     const answered = await this.#round
@@ -376,8 +393,8 @@ export class TurnLoop {
    * What a failed round is recovered from: a connection lost for good, resumed
    * once from the tools that completed, a request refused as too long,
    * condensed once per step, one stopped for reasoning at length, asked once
-   * per step to decide, and one the person stopped, to have the answer now
-   * or to have what they added read now.
+   * per step to decide with less reasoning, and one the person stopped, to
+   * have the answer now or to have what they added read now.
    * Everything else is thrown on, and so is whatever ended a turn that was
    * stopped.
    */
@@ -459,13 +476,6 @@ export class TurnLoop {
         reasoning,
         ...(replay ? { replay } : {}),
       });
-    if (
-      this.#records
-        .task(taskId)
-        .guidance.some((item) => item.status === "pending")
-    ) {
-      turn.history = await this.#openHistory(taskId);
-    }
     if (await deliverGuidance(taskId, this.#records, turn.history)) {
       guard.reset();
       return "resumed";
@@ -579,6 +589,12 @@ export class TurnLoop {
     let declinedInBatch = false;
     const quietBefore = quiet.total();
     for (const call of answerable) {
+      // A stop while an earlier call was answered ends the round there,
+      // whichever call it was.
+      if (turn.controller.signal.aborted) {
+        await this.#interruptIfCurrent(taskId, turn.controller);
+        return "stopped";
+      }
       if (declinedInBatch) {
         await answerDeclinedCall(call, history);
         continue;
@@ -635,6 +651,11 @@ export class TurnLoop {
       const answer = JSON.stringify({ ...own.answered, ...note });
       await history.result(call, toolOutput(call.name, answer), false);
       return "answered";
+    }
+    // A stop while this call's input was read hands nothing on.
+    if (controller.signal.aborted) {
+      await this.#interruptIfCurrent(taskId, controller);
+      return "stopped";
     }
     if (call.name === delegateSpecialistToolName)
       return this.#delegate(turn, call, parsed, note);

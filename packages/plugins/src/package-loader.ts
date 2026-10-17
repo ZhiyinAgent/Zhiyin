@@ -115,10 +115,15 @@ async function jsonFile(path: string, label: string): Promise<unknown> {
     throw new InvalidPluginError(`${label} could not be read.`);
   }
   try {
-    return JSON.parse(source) as unknown;
+    return JSON.parse(withoutMark(source)) as unknown;
   } catch {
     throw new InvalidPluginError(`${label} is not valid JSON.`);
   }
+}
+
+/** A file as written, without the byte-order mark some editors put first. */
+function withoutMark(source: string): string {
+  return source.startsWith("\uFEFF") ? source.slice(1) : source;
 }
 
 function localId(value: unknown, label: string): string {
@@ -312,6 +317,47 @@ function manifestFrom(value: unknown, root: string): ParsedManifest {
   };
 }
 
+/**
+ * A skill's frontmatter: each top-level key's value, plain or quoted on its
+ * line, or a `>` or `|` block on the indented lines after it, folded into
+ * one line or kept line by line as YAML reads them.
+ */
+function frontmatter(lines: readonly string[]): Map<string, string> {
+  const metadata = new Map<string, string>();
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const separator = line.indexOf(":");
+    if (separator <= 0 || /^\s/.test(line)) continue;
+    const key = line.slice(0, separator).trim();
+    const value = line.slice(separator + 1).trim();
+    const block = /^([|>])[-+]?$/.exec(value);
+    if (!block) {
+      metadata.set(key, unquote(value));
+      continue;
+    }
+    const body: string[] = [];
+    while (
+      index + 1 < lines.length &&
+      (/^\s/.test(lines[index + 1]!) || !lines[index + 1]!.trim())
+    ) {
+      index += 1;
+      body.push(lines[index]!.trim());
+    }
+    metadata.set(
+      key,
+      block[1] === "|"
+        ? body.join("\n").trim()
+        : body
+            .join("\n")
+            .trim()
+            .split(/\n{2,}/)
+            .map((paragraph) => paragraph.replaceAll("\n", " "))
+            .join("\n"),
+    );
+  }
+  return metadata;
+}
+
 function unquote(value: string): string {
   const trimmed = value.trim();
   if (
@@ -359,7 +405,7 @@ async function skillsFrom(
         `Skill “${entry.name}” is missing SKILL.md.`,
       );
     });
-    const lines = source.replaceAll("\r\n", "\n").split("\n");
+    const lines = withoutMark(source).replaceAll("\r\n", "\n").split("\n");
     if (lines[0] !== "---")
       throw new InvalidPluginError(
         `Skill “${entry.name}” is missing YAML frontmatter.`,
@@ -369,15 +415,7 @@ async function skillsFrom(
       throw new InvalidPluginError(
         `Skill “${entry.name}” has unfinished YAML frontmatter.`,
       );
-    const metadata = new Map<string, string>();
-    for (const line of lines.slice(1, closing)) {
-      const separator = line.indexOf(":");
-      if (separator > 0)
-        metadata.set(
-          line.slice(0, separator).trim(),
-          unquote(line.slice(separator + 1)),
-        );
-    }
+    const metadata = frontmatter(lines.slice(1, closing));
     const name = text(metadata.get("name"), `Skill “${entry.name}” name`);
     if (!portableName.test(name))
       throw new InvalidPluginError(

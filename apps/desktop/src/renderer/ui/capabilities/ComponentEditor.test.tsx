@@ -289,6 +289,47 @@ describe("ComponentEditor", () => {
     );
   });
 
+  it("shows a withheld tool with its reason, and offers no switch for it", () => {
+    const reason =
+      "Not offered to the model: its input schema is 220 KB, more than the 64 KB a tool may have.";
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "weather-api",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [
+            { name: "search", description: "Search.", enabled: true },
+            {
+              name: "everything",
+              description: "Do it all.",
+              enabled: false,
+              withheld: reason,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSetToolEnabled={async () => undefined}
+      />,
+    );
+
+    const tools = screen.getByRole("group", { name: "Tools" });
+    const withheld = within(tools).getByLabelText(/Everything/);
+
+    expect(withheld).toBeDisabled();
+    expect(withheld).not.toBeChecked();
+    expect(within(tools).getByText(reason)).toBeVisible();
+    expect(within(tools).getByLabelText(/Search/)).toBeEnabled();
+  });
+
   it("asks how Zhiyin gets access, and asks for a token only when the person chooses one", () => {
     render(
       <ComponentEditor

@@ -41,6 +41,7 @@ const PACKAGE_LAYERS = {
   "workspace-containment": "platform",
   "pdf-engine": "platform",
   "temporary-folders": "platform",
+  "test-waits": "platform",
   mcp: "feature",
   toolchains: "feature",
   plugins: "feature",

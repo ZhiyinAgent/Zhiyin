@@ -5,8 +5,13 @@ const reachable =
   'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])';
 
 /** Drawn, so focus can land on it; a test's page draws nothing and counts all. */
-const drawn = (element: HTMLElement) =>
+export const drawn = (element: HTMLElement) =>
   typeof element.checkVisibility !== "function" || element.checkVisibility();
+
+/** The controls inside an element the keyboard can reach, in order. */
+export function keyboardStops(container: Element): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>(reachable)].filter(drawn);
+}
 
 /**
  * Keeps the keyboard inside a modal dialog: focus moves into it when it
@@ -47,12 +52,29 @@ export function useModalFocus(
       }
       if (event.key !== "Tab") return;
       if (!own.contains(focused) && modals.at(-1) !== own) return;
-      const controls = [...own.querySelectorAll<HTMLElement>(reachable)].filter(
-        drawn,
-      );
+      const controls = keyboardStops(own);
       const at = controls.findIndex((control) => control === focused);
       const first = controls[0];
       const last = controls.at(-1);
+      if (at === -1 && focused && focused !== own && own.contains(focused)) {
+        // Focus on something the list does not name, such as a body that
+        // scrolls, which Chromium lets the keyboard reach: the next control is
+        // the one after it in the dialog, or before it with Shift.
+        const next = event.shiftKey
+          ? controls.findLast(
+              (control) =>
+                control.compareDocumentPosition(focused) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            )
+          : controls.find(
+              (control) =>
+                focused.compareDocumentPosition(control) &
+                Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+        event.preventDefault();
+        (next ?? (event.shiftKey ? last : first))?.focus();
+        return;
+      }
       if (!first || !last) event.preventDefault();
       else if (event.shiftKey && at <= 0) {
         event.preventDefault();

@@ -137,6 +137,19 @@ describe("a command call's input", () => {
     ).toMatchObject({ ok: true, claim: "Shows which files have changed." });
   });
 
+  it("hands on a command over 2,000 characters whole, to the last character", async () => {
+    const files = Array.from({ length: 300 }, (_, index) => `part-${index}.md`);
+    const command = `cat ${files.join(" ")} > joined.md`;
+    expect(command.length).toBeGreaterThan(2_000);
+
+    const inspection = await tools.inspect("bash", {
+      command,
+      description: "Joins the parts into one file.",
+    });
+
+    expect(inspection).toMatchObject({ ok: true, target: command });
+  });
+
   it("refuses the description under any other name", async () => {
     expect(
       await tools.inspect("bash", {

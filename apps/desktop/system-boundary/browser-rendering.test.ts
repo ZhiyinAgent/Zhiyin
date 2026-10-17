@@ -10,7 +10,7 @@ import {
   playwrightBrowserLauncher,
 } from "@zhiyin/interactive-browser";
 import { openProcessContainer } from "@zhiyin/process-ownership";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   BrowserPanel,
   BrowserSurface,
@@ -59,12 +59,31 @@ it.runIf(availability.available)(
   30_000,
 );
 
-async function openBrowser(width: number, height: number, url: string) {
+/** Pages are served over http: the browser opens only web pages. */
+const pages = new Map<string, string>();
+const pageServer = createServer((request, response) => {
+  const body = pages.get(request.url ?? "/");
+  response.writeHead(body === undefined ? 404 : 200, {
+    "content-type": "text/html; charset=utf-8",
+  });
+  response.end(body ?? "");
+});
+await new Promise<void>((done) => pageServer.listen(0, "127.0.0.1", done));
+afterAll(() => {
+  pageServer.closeAllConnections();
+  pageServer.close();
+});
+
+async function openBrowser(width: number, height: number, html: string) {
+  const address = pageServer.address();
+  if (!address || typeof address === "string") throw new Error("No port");
+  const path = `/${pages.size}`;
+  pages.set(path, html);
   const browser = new BrowserSession({
     launcher,
     viewport: { width, height },
   });
-  await browser.open(url);
+  await browser.open(`http://127.0.0.1:${address.port}${path}`);
   const deadline = Date.now() + 20_000;
   while (!browser.lastFrame()) {
     if (Date.now() > deadline)
@@ -76,11 +95,7 @@ async function openBrowser(width: number, height: number, url: string) {
 
 describe.runIf(availability.available)("browser frames in the renderer", () => {
   it("keeps the browser image fixed when an approval arrives in the split conversation", async () => {
-    const target = await openBrowser(
-      1280,
-      800,
-      "data:text/html,<h1>Browser workspace</h1>",
-    );
+    const target = await openBrowser(1280, 800, "<h1>Browser workspace</h1>");
     const server = createServer();
     try {
       const frame = target.lastFrame()!;
@@ -226,11 +241,7 @@ describe.runIf(availability.available)("browser frames in the renderer", () => {
   }, 120_000);
 
   it("decodes a captured browser frame under the production security policy while blocking inline scripts", async () => {
-    const target = await openBrowser(
-      400,
-      300,
-      "data:text/html,<h1>Live browser frame</h1>",
-    );
+    const target = await openBrowser(400, 300, "<h1>Live browser frame</h1>");
     const server = createServer();
     try {
       const frame = target.lastFrame()!;

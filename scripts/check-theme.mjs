@@ -208,6 +208,13 @@ export function themeProblems(sheets, setInCode = new Set()) {
       problems.push(
         `${where}: ${name} is in the light theme but not the dark one`,
       );
+  // A colour the check cannot read would leave its contrast unchecked.
+  for (const theme of ["dark", "light"])
+    for (const name of [...textTokens, ...groundTokens])
+      if (themes[theme].has(name) && !values[theme].has(name))
+        problems.push(
+          `${themes[theme].get(name)}: ${name} in the ${theme} theme is not a six-digit hex colour, so its contrast cannot be checked`,
+        );
   for (const theme of ["dark", "light"])
     for (const text of textTokens)
       for (const ground of groundTokens) {

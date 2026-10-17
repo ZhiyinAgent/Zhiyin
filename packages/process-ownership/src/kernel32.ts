@@ -14,6 +14,7 @@ export const BELOW_NORMAL_PRIORITY_CLASS = 0x00004000;
 export const CREATE_SUSPENDED = 0x00000004;
 export const CREATE_NO_WINDOW = 0x08000000;
 export const CREATE_UNICODE_ENVIRONMENT = 0x00000400;
+const CP_ACP = 0;
 const CP_OEMCP = 1;
 export const STARTF_USESTDHANDLES = 0x00000100;
 export const GENERIC_READ = 0x80000000;
@@ -76,7 +77,22 @@ export type Win32 = {
   /** Asks whether a process has ended, without waiting for it. */
   readonly ended: (process: unknown) => number;
   readonly exitCode: (process: unknown, code: unknown[]) => boolean;
+  /** A manual-reset event, not set. */
+  readonly createEvent: () => unknown;
+  readonly setEvent: (event: unknown) => boolean;
+  readonly resetEvent: (event: unknown) => boolean;
+  /**
+   * Waits, off the calling thread, until any of the handles is signalled,
+   * then calls `done` on it with what the wait returned.
+   */
+  readonly waitForAny: (
+    handles: readonly unknown[],
+    done: (error: unknown, result: number) => void,
+  ) => void;
   readonly oemToWide: (bytes: Buffer, wide: Buffer | null) => number;
+  readonly ansiToWide: (bytes: Buffer, wide: Buffer | null) => number;
+  /** The code page Windows reads files' text in when they say none. */
+  readonly ansiCodePage: () => number;
 };
 
 let loaded: Win32 | undefined;
@@ -178,9 +194,18 @@ export function win32(): Win32 {
     const GetExitCodeProcess = kernel32.func(
       "bool GetExitCodeProcess(void*, _Out_ uint32*)",
     );
+    const CreateEventW = kernel32.func(
+      "void* CreateEventW(void*, bool, bool, const char16_t*)",
+    );
+    const SetEvent = kernel32.func("bool SetEvent(void*)");
+    const ResetEvent = kernel32.func("bool ResetEvent(void*)");
+    const WaitForMultipleObjects = kernel32.func(
+      "uint32 WaitForMultipleObjects(uint32, void**, bool, uint32)",
+    );
     const MultiByteToWideChar = kernel32.func(
       "int MultiByteToWideChar(uint32, uint32, void*, int, void*, int)",
     );
+    const GetACP = kernel32.func("uint32 GetACP()");
     const CreateNamedPipeW = kernel32.func(
       "void* CreateNamedPipeW(const char16_t*, uint32, uint32, uint32, uint32, uint32, uint32, void*)",
     );
@@ -324,6 +349,17 @@ export function win32(): Win32 {
         TerminateProcess(process, exitCode),
       ended: (process) => WaitForSingleObject(process, 0),
       exitCode: (process, code) => GetExitCodeProcess(process, code),
+      createEvent: () => CreateEventW(null, true, false, null),
+      setEvent: (event) => SetEvent(event),
+      resetEvent: (event) => ResetEvent(event),
+      waitForAny: (handles, done) =>
+        WaitForMultipleObjects.async(
+          handles.length,
+          [...handles],
+          false,
+          INFINITE,
+          done,
+        ),
       oemToWide: (bytes, wide) =>
         MultiByteToWideChar(
           CP_OEMCP,
@@ -333,6 +369,16 @@ export function win32(): Win32 {
           wide,
           wide ? wide.length / 2 : 0,
         ),
+      ansiToWide: (bytes, wide) =>
+        MultiByteToWideChar(
+          CP_ACP,
+          0,
+          bytes,
+          bytes.length,
+          wide,
+          wide ? wide.length / 2 : 0,
+        ),
+      ansiCodePage: () => GetACP(),
     };
     return loaded;
   } catch (error) {

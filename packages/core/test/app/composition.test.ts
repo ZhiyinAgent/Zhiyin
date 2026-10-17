@@ -12,6 +12,7 @@ import {
   pluginStore,
   pluginView,
   stubDependencies,
+  until,
 } from "./support.js";
 
 describe("the core and a turn together", () => {
@@ -38,7 +39,8 @@ describe("the core and a turn together", () => {
     });
     await loop.initialize();
     expect(loop.snapshot().runtime.tasks).toBe("unavailable");
-    expect(loop.snapshot().issues?.length).toBeGreaterThan(0);
+    // Connections arrive when they arrive, after the window is ready.
+    await until(() => (loop.snapshot().issues?.length ?? 0) > 0);
     await expect(loop.createTask()).rejects.toThrow("Restore saved history");
     expect(saves).toBe(0);
   });

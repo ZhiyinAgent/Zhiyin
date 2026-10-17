@@ -101,6 +101,54 @@ describe("FileSessions single ownership", () => {
     await expect(next.saveWorkspace(snapshot)).resolves.toBeUndefined();
   });
 
+  it("refuses every write from an instance that does not own the folder, and leaves the owner's items", async () => {
+    const root = await temporaryRoot();
+    const owner = launch(root, 1111);
+    await owner.claim();
+    const kept = await owner.keep("pastedText", "task-1", { text: "Notes." });
+    await owner.saveWorkspace(snapshot);
+    const intruder = launch(root, 2222);
+    const read = { modifiedMs: 1, size: 6, readAt: "2026-10-16T09:00:00Z" };
+
+    const writes: Record<string, () => Promise<unknown>> = {
+      keep: () => intruder.keep("pastedText", "task-1", { text: "Mine." }),
+      keepPicture: () =>
+        intruder.keepPicture({
+          name: "a.png",
+          mediaType: "image/png",
+          data: "iVBORw0KGgo=",
+        }),
+      savePicture: () =>
+        intruder.savePicture("task-1", {
+          mediaType: "image/png",
+          data: "iVBORw0KGgo=",
+        } as never),
+      noteRead: () => intruder.noteRead("task-1", "notes.md", read),
+      claimDrafts: () => intruder.claimDrafts("task-1", ["draft"]),
+      forgetConversation: () => intruder.forgetConversation("task-1"),
+      saveWorkspace: () => intruder.saveWorkspace(snapshot),
+      startAfresh: () => intruder.startAfresh("kept"),
+      recoverReadable: () => intruder.recoverReadable(),
+      updateConversations: () => intruder.updateConversations(),
+      recycleOutdatedConversations: () =>
+        intruder.recycleOutdatedConversations(),
+    };
+    const refused: Record<string, string | undefined> = {};
+    for (const [name, write] of Object.entries(writes))
+      refused[name] = await write().then(
+        () => undefined,
+        (error: { code?: string }) => error.code,
+      );
+
+    expect(refused).toEqual(
+      Object.fromEntries(Object.keys(writes).map((name) => [name, "in-use"])),
+    );
+    expect(kept.status).toBe("kept");
+    await expect(
+      owner.locate("pastedText", "task-1", kept.id),
+    ).resolves.toMatchObject({ status: "ready" });
+  });
+
   it("reads without claiming, so a refused instance can still show what is saved", async () => {
     const root = await temporaryRoot();
     const owner = launch(root, 1111);

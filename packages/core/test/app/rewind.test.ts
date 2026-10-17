@@ -6,8 +6,10 @@ import { ModelClientError } from "@zhiyin/model-client";
 import { InMemoryMcpCredentials, ManagedMcpServers } from "@zhiyin/mcp";
 import { GuardedPermissionEngine } from "@zhiyin/permission-engine";
 import { FileRecovery } from "@zhiyin/recovery";
+import { FileRewindJournal } from "@zhiyin/rewind";
+import { FileSessions } from "@zhiyin/session";
 import { WorkspaceTools } from "@zhiyin/tools";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { open, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
@@ -493,6 +495,242 @@ describe("conversation rewind composition", () => {
   });
 });
 
+/**
+ * A turn that writes `note.txt` once per entry in `contents`, one write a
+ * round, with `between` run before each round after the first.
+ */
+async function turnWritingNote(
+  prefix: string,
+  contents: readonly string[],
+  between: (round: number, root: string) => Promise<void> = async () => {},
+) {
+  const root = await folders.make(`zhiyin-${prefix}-`);
+  const storage = await folders.make(`zhiyin-${prefix}-recovery-`);
+  await writeFile(join(root, "note.txt"), "my note", "utf8");
+  const workspace = new WorkspaceTools(root, { shell: undefined });
+  const deps = stubDependencies(() => {});
+  let request = 0;
+  const agent = loopFrom({
+    ...deps,
+    permissions: {
+      decide: async () => ({ outcome: "allow", reason: "Test policy." }),
+    },
+    tools: workspace,
+    workspace,
+    recovery: new FileRecovery(storage),
+    rewind: new ConversationRewind(() => `${prefix}-${request}`),
+    model: {
+      ...deps.model,
+      send: async function* () {
+        request += 1;
+        const content = contents[request - 1];
+        if (request > 1) await between(request, root);
+        if (content !== undefined)
+          yield {
+            kind: "toolCallDelta",
+            index: 0,
+            callId: `write-${request}`,
+            name: "write_file",
+            argumentsDelta: JSON.stringify({ path: "note.txt", content }),
+          };
+        else yield { kind: "textDelta", text: "Done." };
+        yield { kind: "done" };
+      },
+    },
+  });
+  await agent.selectWorkspace(root);
+  const taskId = await agent.createTask();
+  await agent.start(taskId, "Rewrite the note");
+  const opening = agent.snapshot().tasks[0]!.messages[0]!.id;
+  return { agent, root, taskId, opening };
+}
+
+describe("undoing a turn's files", () => {
+  it("can be tried again for a file that could not be put back", async () => {
+    const { agent, root, taskId, opening } = await turnWritingNote(
+      "undo-again",
+      ["agent note"],
+    );
+
+    // Another program holds the note open for writing, so it cannot be
+    // put back this time.
+    const held = await open(join(root, "note.txt"), "r+");
+    let first;
+    try {
+      const preview = await agent.previewUndo(taskId, opening);
+      first = await agent.commitUndo(taskId, preview.id);
+    } finally {
+      await held.close();
+    }
+    expect(first.files).toMatchObject([
+      { path: "note.txt", status: "unprotected" },
+    ]);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("agent note");
+
+    const again = await agent.previewUndo(taskId, opening);
+    expect(again.files).toMatchObject([
+      { path: "note.txt", status: "recoverable" },
+    ]);
+    const second = await agent.commitUndo(taskId, again.id);
+
+    expect(second.files).toMatchObject([
+      { path: "note.txt", status: "restored" },
+    ]);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("my note");
+  });
+
+  it("leaves a file as it is when the person edited it between two of the turn's changes", async () => {
+    const { agent, root, taskId, opening } = await turnWritingNote(
+      "undo-between",
+      ["agent one", "agent two"],
+      async (round, folder) => {
+        if (round === 2)
+          await writeFile(join(folder, "note.txt"), "edited by hand", "utf8");
+      },
+    );
+
+    const preview = await agent.previewUndo(taskId, opening);
+
+    expect(preview.files).toMatchObject([
+      { path: "note.txt", status: "conflict" },
+    ]);
+    await agent.commitUndo(taskId, preview.id);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("agent two");
+  });
+});
+
+/**
+ * The app as it runs, on one data folder: history, file copies and the rewind
+ * journal all on disk, so a second one built on the folder is a restart. The
+ * history can be made to refuse saving, as when Zhiyin closes mid-save.
+ */
+async function savedApp(data: string, root: string) {
+  const real = new FileSessions(data);
+  const refusing = { now: false };
+  const sessions = new Proxy(real, {
+    get(target, key) {
+      if (key === "saveWorkspace" && refusing.now)
+        return async () => {
+          throw new Error("Zhiyin closed before the conversation was saved.");
+        };
+      const value: unknown = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  const workspace = new WorkspaceTools(root, { shell: undefined });
+  const deps = stubDependencies(() => {});
+  let request = 0;
+  let rewinds = 0;
+  const agent = loopFrom({
+    ...deps,
+    sessions,
+    permissions: {
+      decide: async () => ({ outcome: "allow", reason: "Test policy." }),
+    },
+    tools: workspace,
+    workspace,
+    recovery: new FileRecovery(data),
+    journal: new FileRewindJournal(data),
+    rewind: new ConversationRewind(() => `rewind-${++rewinds}`),
+    model: {
+      ...deps.model,
+      send: async function* () {
+        request += 1;
+        if (request === 2)
+          yield {
+            kind: "toolCallDelta",
+            index: 0,
+            callId: "write-1",
+            name: "write_file",
+            argumentsDelta: JSON.stringify({
+              path: "note.txt",
+              content: "agent result",
+            }),
+          };
+        else yield { kind: "textDelta", text: "Answer" };
+        yield { kind: "done" };
+      },
+    },
+  });
+  await agent.initialize();
+  return { agent, refusing };
+}
+
+describe("a rewind and the saved history", () => {
+  async function changedNote() {
+    const root = await folders.make("zhiyin-saved-rewind-work-");
+    const data = await folders.make("zhiyin-saved-rewind-data-");
+    await writeFile(join(root, "note.txt"), "before", "utf8");
+    const first = await savedApp(data, root);
+    await first.agent.selectWorkspace(root);
+    const taskId = await first.agent.createTask();
+    await first.agent.start(taskId, "First");
+    await first.agent.start(taskId, "Change the note");
+    const message = first.agent
+      .snapshot()
+      .tasks[0]!.messages.find((item) => item.text === "Change the note")!;
+    return { root, data, first, taskId, message };
+  }
+
+  it("is finished at the next start when Zhiyin closed after the files went back but before the conversation was saved", async () => {
+    const { root, data, first, taskId, message } = await changedNote();
+    const preview = await first.agent.previewRewind(taskId, message.id);
+    first.refusing.now = true;
+    await expect(
+      first.agent.commitRewind(taskId, preview.id, "restore"),
+    ).rejects.toThrow("Zhiyin closed before the conversation was saved.");
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("before");
+
+    const next = await savedApp(data, root);
+
+    const reopened = next.agent.snapshot();
+    expect(reopened.issues ?? []).toEqual([]);
+    await next.agent.selectTask(taskId);
+    expect(
+      next.agent
+        .snapshot()
+        .tasks.find((task) => task.id === taskId)!
+        .messages.map((item) => item.text),
+    ).toEqual(["First", "Answer"]);
+    expect(await readFile(join(root, "note.txt"), "utf8")).toBe("before");
+    expect(await new FileRewindJournal(data).pending()).toEqual([]);
+    // Nothing is left blocked: the conversation can be rewound again.
+    const again = next.agent
+      .snapshot()
+      .tasks.find((task) => task.id === taskId)!.messages[0]!;
+    await expect(
+      next.agent.previewRewind(taskId, again.id),
+    ).resolves.toMatchObject({ taskId });
+  });
+
+  it("whose save failed stays on screen as not yet stored, and is kept by the next save that succeeds", async () => {
+    const { root, data, first, taskId, message } = await changedNote();
+    const preview = await first.agent.previewRewind(taskId, message.id);
+    first.refusing.now = true;
+    await expect(
+      first.agent.commitRewind(taskId, preview.id, "keep"),
+    ).rejects.toThrow("Zhiyin closed before the conversation was saved.");
+
+    const texts = (agent: TestApp) =>
+      agent
+        .snapshot()
+        .tasks.find((task) => task.id === taskId)!
+        .messages.map((item) => item.text);
+    expect(texts(first.agent)).toEqual(["First", "Answer"]);
+    expect(
+      (first.agent.snapshot().issues ?? []).map((issue) =>
+        typeof issue === "string" ? issue : issue.message,
+      ),
+    ).toContainEqual(expect.stringContaining("not yet stored"));
+
+    first.refusing.now = false;
+    await first.agent.renameTask(taskId, "The note");
+    const next = await savedApp(data, root);
+    await next.agent.selectTask(taskId);
+    expect(texts(next.agent)).toEqual(["First", "Answer"]);
+  });
+});
+
 describe("files a connection changes", () => {
   it("restores a PDF the built-in document compiler wrote over, byte for byte, and draws it again", async () => {
     const root = await folders.make("zhiyin-loop-compile-");
@@ -600,8 +838,14 @@ async function compilingApp(root: string) {
   const compiler = documentCompiler({
     workspaceRoot: () => root,
     programs: async () => ({ typst: "C:/programs/typst.exe" }),
-    run: async () => {
-      await writeFile(join(root, "paper.pdf"), "%PDF-1.7\nrecompiled\n");
+    tectonicCache: "C:/programs/tectonic-cache",
+    run: async ({ arguments: args }) => {
+      // As Typst does: the PDF, and the list of files it read.
+      await writeFile(args.at(-1)!, "%PDF-1.7\nrecompiled\n");
+      await writeFile(
+        args[args.indexOf("--deps") + 1]!,
+        JSON.stringify({ inputs: [args.at(-2)], outputs: [args.at(-1)] }),
+      );
       return { exitCode: 0, stdout: "", stderr: "" };
     },
   });

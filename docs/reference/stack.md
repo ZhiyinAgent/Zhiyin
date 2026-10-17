@@ -34,6 +34,17 @@ start from inside the archive, so ripgrep's binary is listed in `asarUnpack`.
 packaged executable ignores `ELECTRON_RUN_AS_NODE`, and `process.fork` from the
 main process stops working (Zhiyin does not call it).
 
+**The window is served by `protocol.handle`, not loaded from `file:`.**
+_Verified 2026-10-16 against Electron 44.1.1 and its docs._ A scheme registered
+with `protocol.registerSchemesAsPrivileged` as `standard` and `secure`, before
+the app is ready, gives the page an origin of its own; the handler answers
+with `net.fetch` on the file's `file:` address. Under that origin Chromium
+itself refuses to load a `file:` picture, local or on a share, before the
+security policy is asked, so no policy violation is reported. Mermaid's
+dynamically imported chunks load under it. Electron's security checklist
+(item 18) recommends this, and its fuses page says to switch
+`grantFileProtocolExtraPrivileges` off once no page is served from `file:`.
+
 **The installer is not code-signed yet.** _Verified 2026-09-13._
 `Get-AuthenticodeSignature` reports `NotSigned`; electron-builder's "signing
 with signtool.exe" log line is not evidence of a signature. Microsoft
@@ -125,9 +136,12 @@ are JSON, each ending in a NUL byte. Node and Electron export libuv, so
 handle into a descriptor for `new net.Socket({ fd })`; overlapped named pipes
 work, anonymous ones fail on their second write. ADR 0017.
 
-**`@playwright/mcp` 0.0.80 and `playwright-core` 1.63.0-alpha-2026-08-31.**
-_Verified 2026-10-01 to 2026-10-07 against the installed packages and by
-running them._ `createConnection(config, contextGetter)` runs the MCP server
+**`@playwright/mcp` 0.0.83 and `playwright-core` 1.64.0-alpha-1790635538000.**
+_Verified 2026-10-01 to 2026-10-07 against 0.0.80 and by running it; 0.0.83,
+published 2026-09-28, checked 2026-10-16 by the browser's tests, real browser
+included._ 0.0.80 saved each download without catching its failure, so a
+download Zhiyin stopped for its size left a rejection nobody handled; 0.0.83
+catches it. `createConnection(config, contextGetter)` runs the MCP server
 in the calling process, reached over an in-memory transport with no port; its
 README states it is not a security boundary. `chromium.connectOverCDP` takes a
 transport (`send`, `close`, `onmessage`, `onclose`), so it drives a browser
@@ -187,6 +201,20 @@ Blender writes `__pycache__` beside its scripts on its first run, and a
 start that can keep none takes 1.5 s against 0.7 s. Its bundled `python.exe`
 does not start by itself ("Failed to import encodings module"), so
 `sys.executable -m pip` fails from a script at any integrity. ADR 0028.
+
+**Blender 5.2.2 and USD.** _Verified 2026-10-17 by running it, and against
+OpenUSD's `release` branch (`sdf/crateFile.cpp`, `tf/fastCompression.cpp`,
+`usd/clipsAPI.h`)._ Its `pxr` Python package has the modules' Python files
+but none of their compiled parts (`from pxr import Usd` fails with `No module
+named 'pxr.Tf._tf'`); USD itself is `usd_ms.dll`. Binary USD (`PXR-USDC`,
+layout 0.15.0 the newest) keeps every string it holds, asset paths and
+reference, payload and sublayer paths included, in its `TOKENS` section,
+packed from layout 0.4.0 on as a one-byte count of LZ4 blocks, 0 meaning one
+block. A clip's `templateAssetPath` is a plain string, not an asset path. A
+relative path not starting with `./` or `../` is also looked for in the
+folders `PXR_AR_DEFAULT_SEARCH_PATH` names. Importing a `.usdz` with
+Blender's default texture mode packs its pictures into the scene with paths
+in Blender's temporary folder; `IMPORT_NONE` leaves them out.
 
 **Windows' `tar.exe`.** _Verified 2026-09-17, version re-checked 2026-10-07._
 bsdtar 3.7.7 extracts zip archives and by default refuses entries with absolute
@@ -366,8 +394,38 @@ The message after it, with thinking on again, read all 11,085 tokens that came
 before the stop and wrote only what followed: the entries written with
 thinking on were still there. Haiku 5.5 accepted the per-message effort that
 Anthropic lists for Fable 5.1, Mythos 5.1 and Opus 5; whether it applied it is
-not known. One run each, on a question that asks for exhaustive work. No other
-lab has been checked.
+not known. One run each, on a question that asks for exhaustive work.
+
+**Reasoning turned down within a tool loop, on every lab.** _Checked
+2026-10-16 through the model client, on each lab's international platform,
+with a prompt of about 5,500 tokens._ Each run asked for one tool call with
+reasoning at the model's default effort, sent the call back with its
+reasoning and replay as a turn does, then asked twice more: once with the
+setting unchanged and once with the least reasoning the model allows, as
+asking for the answer now does. Every lab accepted the second request and
+answered from the tool's result:
+
+| Lab, model | Least reasoning sent | Reasoning in that answer | Cache kept |
+| --- | --- | --- | --- |
+| Anthropic, Claude Haiku 5.5 (also through OpenRouter) | off | none | no: read 0, wrote it all again |
+| OpenAI, GPT-6 Luna | off (`none`) | none | yes |
+| DeepSeek, DeepSeek Flash | off | none, and no reasoning count | yes |
+| Moonshot, Kimi K2.6 | off | 1 token | yes |
+| Xiaomi, MiMo V2.6 Flash | off | none | yes |
+| Qwen, Qwen3.8 Flash | off | none, and no reasoning count | yes |
+| Mistral, Mistral Medium 3.5 | off | none | yes |
+| MiniMax, MiniMax-M3 | off (`disabled`) | none, and no reasoning count | in 3 of 5 runs |
+| Z.ai, GLM-5.3 Flash | lowest effort, `low`: reasoning cannot be off | 0 to 17 tokens | in 1 of 3 runs |
+
+A request sent at once after the one before read nothing from the cache on
+OpenAI, DeepSeek and Qwen whatever its setting; five seconds later it read the
+cache, so each case above was asked again after that pause. On MiniMax and
+Z.ai the cache was read by some requests and not by others with the same
+setting, so neither shows the setting as what decides it. GPT-6 Luna at
+medium effort streamed a readable summary of its reasoning only when the
+question needed working out. What each lab bills for a request stopped while
+it reasoned was not compared: no lab reports usage for a stream that was cut
+off, so that takes each lab's own usage page.
 
 **Models in tests.** _Verified 2026-09-02 to 2026-09-14 against the
 catalogue._ The app chooses no model for the person. Most tests and live
@@ -421,8 +479,11 @@ the key in a header, streamed tool calls in OpenAI's delta form, and usage on
 the last chunk. None reports a cost, so any cost Zhiyin shows for them is
 estimated. All of them cache a repeated request start on their own except
 Anthropic and Qwen's explicit mode, which cache only what is marked. Most
-want earlier assistant turns sent back with their reasoning: DeepSeek and
-Xiaomi refuse a tool conversation without it (400), Anthropic refuses one
+want earlier assistant turns sent back with their reasoning: DeepSeek refuses
+a tool conversation without it (400). Xiaomi's guide says to send it back, but
+`mimo-v2.6-flash` and `mimo-v2.6-pro` with thinking on accepted tool turns
+without it, both later in the same turn and after a new message (live,
+2026-10-16). Anthropic refuses one
 whose latest thinking blocks were dropped or changed, and Moonshot's K3,
 MiniMax, Mistral and OpenAI ask for it. Anthropic's blocks are signed and
 OpenAI's encrypted, so they go back as received. `tool_choice` other than

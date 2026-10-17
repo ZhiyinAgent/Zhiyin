@@ -57,12 +57,16 @@ describe("a tool call that describes itself", () => {
       script: (request) => steps[request - 1] ?? finish,
     });
     const taskId = await fixture.loop.createTask();
-    const prompts: string[] = [];
+    const prompts: { reason: string; reasonByModel?: true }[] = [];
 
     const running = fixture.loop.start(taskId, "Summarise the reports");
     await until(() => task(fixture)?.phase.kind === "approval");
     const phase = task(fixture)?.phase;
-    if (phase?.kind === "approval") prompts.push(phase.prompt.reason);
+    if (phase?.kind === "approval")
+      prompts.push({
+        reason: phase.prompt.reason,
+        ...(phase.prompt.reasonByModel ? { reasonByModel: true } : {}),
+      });
     await approveEach(fixture, taskId, running);
 
     const work = fixture.log
@@ -73,7 +77,9 @@ describe("a tool call that describes itself", () => {
         .slice(work[0], work.at(-1))
         .filter((entry) => entry !== "work"),
     ).toEqual([]);
-    expect(prompts).toEqual(["Save the summary the person asked for."]);
+    expect(prompts).toEqual([
+      { reason: "Save the summary the person asked for.", reasonByModel: true },
+    ]);
   });
 
   it("does not hand the tool its purpose, and shows it with the action", async () => {
@@ -141,6 +147,10 @@ describe("a tool call that does not describe itself", () => {
     expect(before?.kind === "approval" && before.prompt.action).toBe(
       "Write a workspace file",
     );
+    // Until the label lands, what the approval says is the code's own.
+    expect(
+      before?.kind === "approval" && before.prompt.reasonByModel,
+    ).toBeFalsy();
 
     fixture.release.forEach((release) => release());
     await until(() => {
@@ -148,6 +158,11 @@ describe("a tool call that does not describe itself", () => {
       return (
         phase?.kind === "approval" && phase.prompt.action === "Save the summary"
       );
+    });
+    const labelled = task(fixture)?.phase;
+    expect(labelled?.kind === "approval" && labelled.prompt).toMatchObject({
+      reason: "Keeps the result.",
+      reasonByModel: true,
     });
     await approveEach(fixture, taskId, running);
 

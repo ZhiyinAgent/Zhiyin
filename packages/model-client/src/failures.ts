@@ -222,6 +222,8 @@ export type FailureReport = {
   readonly model?: string;
   /** Inside a stream whose status already went out as 200. */
   readonly inStream?: boolean;
+  /** The refused request carried a picture. */
+  readonly withPictures?: boolean;
 };
 
 /** The provider's own sentence about a failure, where it gave one. */

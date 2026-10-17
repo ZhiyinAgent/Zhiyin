@@ -40,7 +40,12 @@ export type ToolchainState =
       /** Everything installing downloads, stated before a person agrees. */
       readonly downloads: readonly ToolchainDownload[];
     }
-  | { readonly status: "installing" }
+  | {
+      readonly status: "installing";
+      /** How much of the download has arrived, of how much in all. */
+      readonly received?: number;
+      readonly bytes?: number;
+    }
   | { readonly status: "failed"; readonly reason: string };
 
 export type PluginComponentState = {

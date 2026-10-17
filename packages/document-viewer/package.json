@@ -19,6 +19,7 @@
   },
   "devDependencies": {
     "@zhiyin/process-ownership": "workspace:*",
-    "@zhiyin/temporary-folders": "workspace:*"
+    "@zhiyin/temporary-folders": "workspace:*",
+    "@zhiyin/test-waits": "workspace:*"
   }
 }

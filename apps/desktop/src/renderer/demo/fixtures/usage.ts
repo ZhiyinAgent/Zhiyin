@@ -56,7 +56,7 @@ function demoRange(days: 7 | 30, requests: number, costUsd: number) {
         outputTokens: days === 7 ? 250_000 : 1_100_000,
         costUsd: Number((costUsd * 0.18).toFixed(6)),
       },
-    ],
+    ].map((model) => ({ ...model, pricedRequests: model.requests })),
     conversations: [
       {
         conversationId: "release",
@@ -121,11 +121,16 @@ function withYuanEstimates(range: ReturnType<typeof demoRange>) {
     ),
     // The mainland requests are part of the range, taken from its first model.
     models: [
-      { ...range.models[0]!, requests: range.models[0]!.requests - 212 },
+      {
+        ...range.models[0]!,
+        requests: range.models[0]!.requests - 212,
+        pricedRequests: range.models[0]!.requests - 212,
+      },
       ...range.models.slice(1),
       {
         model: "deepseek-v4-pro",
         requests: 212,
+        pricedRequests: 212,
         inputTokens: 3_100_000,
         outputTokens: 820_000,
         costUsd: 0,

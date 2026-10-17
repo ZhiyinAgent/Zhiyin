@@ -43,6 +43,9 @@ async function setUp(
   options: {
     installed?: boolean;
     ready?: boolean;
+    cannotDraw?: boolean;
+    endsAtOnce?: boolean;
+    slowPipe?: boolean;
     previewTimeoutMs?: number;
   } = {},
 ) {
@@ -52,10 +55,12 @@ async function setUp(
   const workspace = join(root, "workspace");
   const data = join(root, "data");
   await mkdir(workspace, { recursive: true });
-  const blender = standInBlender(
-    behaviour,
-    options.ready === false ? { ready: false } : {},
-  );
+  const blender = standInBlender(behaviour, {
+    ...(options.ready === false ? { ready: false } : {}),
+    ...(options.cannotDraw ? { cannotDraw: true } : {}),
+    ...(options.endsAtOnce ? { endsAtOnce: true } : {}),
+    ...(options.slowPipe ? { slowPipe: true } : {}),
+  });
   const installed = async () =>
     options.installed === false ? undefined : "C:/Blender/blender.exe";
   const scenes = new ConversationScenes({
@@ -890,6 +895,27 @@ describe("a conversation's session", () => {
     expect(ops[ops.lastIndexOf("add") - 1]).toBe("open");
   });
 
+  it("starts a conversation's Blender again from its scene file on the next command once it was closed", async () => {
+    const { tools, blender, scenes } = await setUp((request) => ({
+      ok: true,
+      text: `did ${request.op}`,
+    }));
+    await call(tools(), "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+
+    await scenes.close("first");
+    const after = await call(tools(), "blender_add_objects", {
+      objects: [can],
+    });
+
+    expect(after.isError).toBeUndefined();
+    expect(blender.launches).toHaveLength(2);
+    const ops = blender.ops();
+    expect(ops[ops.lastIndexOf("add") - 1]).toBe("open");
+  });
+
   it("answers a change before drawing its preview, so a preview that hangs takes nothing back", async () => {
     const { tools, scenes } = await setUp(
       (request) =>
@@ -944,9 +970,12 @@ describe("a conversation's session", () => {
   });
 
   it("says a render stopped while writing may have left an incomplete file", async () => {
+    const controller = new AbortController();
     const { tools } = await setUp(async (request) => {
       if (request.op === "render") {
         await writeFile(String(request.args["output"]), "half a picture");
+        // Stopped once part of the picture is on disk.
+        controller.abort();
         return "silent";
       }
       return { ok: true, text: `did ${request.op}` };
@@ -956,8 +985,6 @@ describe("a conversation's session", () => {
       create: true,
     });
 
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 50);
     const stopped = await call(
       tools(),
       "blender_render",
@@ -1040,6 +1067,57 @@ describe("a conversation's session", () => {
       status: "failed",
       reason: "Blender did not start.",
     });
+  });
+
+  it.each([
+    ["", false],
+    [", its end seen before its last words", true],
+  ])(
+    "says the 3D tools cannot work when Blender ends while drawing its warm-up picture%s, and offers them in no conversation after",
+    async (_when, slowPipe) => {
+      const { tools, scenes, blender } = await setUp(undefined, {
+        cannotDraw: true,
+        slowPipe,
+      });
+      const why = "Blender cannot draw on this PC's graphics card";
+
+      const opened = await call(tools(), "blender_open_scene", {
+        path: "scene.blend",
+        create: true,
+      });
+
+      expect(opened.isError).toBe(true);
+      expect(said(opened)).toContain(why);
+      expect(scenes.scene("first").state()).toMatchObject({
+        status: "failed",
+        reason: expect.stringContaining(why),
+      });
+      await expect(tools("second").listTools()).rejects.toThrow(why);
+      await expect(
+        tools("second").inspect("blender_open_scene", {
+          path: "other.blend",
+          create: true,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        reason: expect.stringContaining(why),
+      });
+      expect(blender.launches).toHaveLength(1);
+    },
+  );
+
+  it("says only that Blender did not start, and keeps offering the tools, when it ends before drawing anything", async () => {
+    const { tools, blender } = await setUp(undefined, { endsAtOnce: true });
+
+    const result = await call(tools(), "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+
+    expect(said(result)).toMatch(/Blender did not start/);
+    expect(said(result)).not.toContain("graphics card");
+    await expect(tools().listTools()).resolves.not.toHaveLength(0);
+    expect(blender.launches).toHaveLength(1);
   });
 
   it("passes on Blender's refusal as one the model can act on, and keeps going", async () => {
@@ -1176,5 +1254,67 @@ describe("where Blender may write", () => {
       `PermissionError: [Errno 13] Permission denied\nZhiyin could not let Blender write in ${workspace}: Access is denied. (Windows error 5)`,
     );
     expect(asked).toEqual([workspace, workspace, workspace]);
+  });
+});
+
+describe("a conversation whose folder changes while its scene is open", () => {
+  async function sessionWithFolder() {
+    const { scenes, blender, workspace, installed } = await setUp();
+    const other = join(workspace, "..", "other");
+    await mkdir(other);
+    const folder = { root: workspace };
+    const tools = sceneAutomation(scenes.scene("first"), {
+      workspaceRoot: () => folder.root,
+      blender: installed,
+      directory: scenes.directory("first"),
+      openToBlender: async () => undefined,
+    });
+    await call(tools, "blender_open_scene", {
+      path: "scene.blend",
+      create: true,
+    });
+    return { tools, blender, workspace, other, folder };
+  }
+
+  it("changes nothing in a scene left in the folder before, and says no scene is open", async () => {
+    const { tools, blender, workspace, other, folder } =
+      await sessionWithFolder();
+
+    folder.root = other;
+    const inspected = await tools.inspect("blender_add_objects", {
+      objects: [can],
+    });
+    const sent = blender.ops().length;
+    const called = await call(tools, "blender_add_objects", {
+      objects: [can],
+    });
+
+    expect(inspected).toMatchObject({ ok: false });
+    expect(inspected.ok ? "" : inspected.reason).toMatch(/No scene is open/);
+    expect(called.isError).toBe(true);
+    expect(blender.ops()).toHaveLength(sent);
+
+    folder.root = workspace;
+    expect(
+      await tools.inspect("blender_add_objects", { objects: [can] }),
+    ).toMatchObject({
+      ok: true,
+      target: "scene.blend",
+      changes: [expect.objectContaining({ path: "scene.blend" })],
+    });
+  });
+
+  it("names the scene as the folder it is now in has it", async () => {
+    const { tools, workspace, folder } = await sessionWithFolder();
+
+    folder.root = join(workspace, "..");
+
+    expect(
+      await tools.inspect("blender_add_objects", { objects: [can] }),
+    ).toMatchObject({
+      ok: true,
+      target: "workspace/scene.blend",
+      changes: [expect.objectContaining({ path: "workspace/scene.blend" })],
+    });
   });
 });

@@ -21,8 +21,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
 ## Public interface
 
 - `state(id)` answers `ready`; `missing`, with what installing would download
-  (name, version, size, source); `installing`; or `failed`, with a reason a
-  person can read.
+  (name, version, size, source); `installing`, with how much of the download
+  has arrived of its size; or `failed`, with a reason a person can read.
 - `install(id, signal?)` downloads, verifies, unpacks and moves one program
   into place.
 - `executable(id)` answers the installed program's path, or nothing.
@@ -47,7 +47,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
   a full disk, fails the install, which can then be tried again.
 - Nothing partial is ever used. An install is assembled in a staging folder
   and moved into place whole; a stopped or failed one leaves neither a staging
-  folder nor a program. What an install cut short by Zhiyin closing left is
+  folder nor a program. A stopped one is not a failure: the program is offered
+  as before. What an install cut short by Zhiyin closing left is
   cleared before the next install begins.
 - An archive may not reach outside its own folder: entries that climb out, and
   links of any kind, are refused. Archives are unpacked with the `tar.exe`
@@ -57,7 +58,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
   before it is in place, so what the step makes is installed with it. A step
   that fails does not fail the install, since the program works without it; an
   install stopped during the step leaves nothing.
-- A program is installed once, however many ask at the same time.
+- A program is installed once, however many ask at the same time. One
+  asked for while a stopped install is still ending starts once it has ended.
 - Only the pinned version is kept; installing it removes any other.
 - A program is verified when it is installed. After that it is found through a
   marker naming the pinned version and digest, so a new pin makes an older

@@ -18,7 +18,7 @@ import {
 } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { userInfo } from "node:os";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools, type RecycleBin } from "../src/index.js";
@@ -88,6 +88,22 @@ describe("delete_file", () => {
       await tools.execute("delete_file", { paths: ["notes.md"] }),
     ).toMatchObject({ ok: true });
     expect(recycled).toEqual(["notes.md"]);
+  });
+
+  it.each([
+    [["notes.md"], "To the Recycle Bin, where it can be restored: notes.md"],
+    [
+      ["notes.md", "huge.iso"],
+      "To the Recycle Bin, where they can be restored: notes.md",
+    ],
+  ])("says before approval that %j can be restored", async (paths, said) => {
+    const root = await workspace();
+    const { bin } = recycleBin(root);
+    const tools = new WorkspaceTools(root, { recycleBin: bin });
+
+    const inspection = await tools.inspect("delete_file", { paths });
+
+    expect(inspection.ok && inspection.detail).toContain(said);
   });
 
   it("deletes permanently only when asked to, and says it cannot be restored", async () => {
@@ -236,6 +252,30 @@ describe("delete_file", () => {
       "The Recycle Bin is not available here.",
     );
   });
+
+  it.each([
+    [
+      "its own name in other letters",
+      (root: string) => `../${basename(root).toUpperCase()}`,
+    ],
+    ["a way back up from inside it", () => "build/.."],
+    ["a trailing separator", () => "./"],
+  ])(
+    "refuses the workspace folder itself, named by %s",
+    async (_how, named) => {
+      const root = await workspace();
+      const tools = new WorkspaceTools(root, {
+        recycleBin: recycleBin(root).bin,
+      });
+
+      expect(
+        await tools.inspect("delete_file", { paths: [named(root)] }),
+      ).toEqual({
+        ok: false,
+        reason: "The workspace folder itself cannot be deleted.",
+      });
+    },
+  );
 
   it("refuses to delete outside the workspace, the workspace itself, or something absent", async () => {
     const root = await workspace();

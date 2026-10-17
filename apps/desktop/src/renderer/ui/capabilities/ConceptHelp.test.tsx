@@ -44,6 +44,7 @@ function show() {
         onToggle: () => undefined,
         onOpen: () => undefined,
         onInstall: () => undefined,
+        onCancelInstall: () => undefined,
         onRecheck: () => undefined,
       }}
       management={{

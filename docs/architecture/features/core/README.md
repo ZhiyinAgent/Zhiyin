@@ -74,14 +74,19 @@ answers every other command:
 - **Kept items:** `kept` keeps a paste or an attached picture as a draft,
   finds a paste to open in the person's editor, and reads a stored picture.
 - **Rewind and undo:** refused while the conversation's turn is running, and
-  otherwise handed to the rewind group. None starts a model request.
+  otherwise handed to the rewind group. None starts a model request. One whose
+  conversation could not be saved stays on screen as not yet stored, and the
+  next save that succeeds stores it.
 - **Produced files and exports:** a person's direct request, not a model
   action, handed to the artifacts feature or the conversation export with a
   callback that asks where to save. A conversation not yet opened is read from
   disk first, so its export holds the whole record (ADR 0020).
 - **The space beside a conversation,** plugins, connections, the shell's
   availability, the person's own browsing, and `lookAtScene`, the person
-  turning, zooming or switching the 3D view.
+  turning, zooming or switching the 3D view. A program a connector needs is
+  shown about every second while it installs, so its progress moves, and
+  `cancelToolchainInstall` stops it; a stopped install ends without a failure,
+  and one asked for again at once starts anew.
 - **Turns:** `turns` forwards to the agent loop starting, stopping and
   condensing a turn, the person's answers to approvals and questions, and
   revoking a permission granted for the conversation.
@@ -122,10 +127,11 @@ answers every other command:
   waits for the turn it starts: a message typed while that turn runs is taken
   and added to it. One that cannot be put in the conversation is refused to the
   window. How the turn goes is told by the conversation.
-- **Asking for the answer now reaches the request that is reasoning.** Whether
-  the next request can go without reasoning is read from the chosen model's
-  own reasoning controls: optional there, it is turned off; required, it is
-  left as the conversation has it. The window is told whether anything was
+- **Asking for the answer now reaches the request that is reasoning.** The
+  least reasoning the next request can ask for is read from the chosen
+  model's own reasoning controls: optional there, it is none; required, it is
+  the lowest effort the model lists; with no effort listed, or controls
+  unknown, nothing lower is asked. The window is told whether anything was
   stopped.
 - **A message that waits for a turn's next step can be sent now or taken
   back.** The window names the conversation, and for taking back the message;
@@ -161,6 +167,11 @@ answers every other command:
   have arrived. A damaged one is reported and stays closed while every other
   opens; selecting it shows its report in its place. One whose last save was
   cut off by a crash opens without it, and the person is told.
+- **A conversation left alone lets go of its browser and Blender.** Fifteen
+  minutes after anything last changed in a conversation, or after the person
+  left it for another, its browser and Blender close. The conversation on
+  screen and one whose turn runs are never left alone. The conversation keeps
+  everything else, and both open again on their next use.
 - **Quitting always finishes.** Turns, then browsers, Blender and connections, are
   given until one deadline five seconds after quitting starts. Whatever has not
   closed is named and left. The data folder is given up either way, once the
@@ -210,7 +221,9 @@ answers every other command:
 - **Damaged history is kept before anything else happens,** and nothing is
   written over it until the person chooses. What can still be read is counted
   and offered. Starting fresh happens only when chosen, and the question stays
-  until the history store has cleared the damage.
+  until the history store has cleared the damage, or the history opens.
+- **History that could not be read just now is not damage.** The person is
+  told, and nothing is copied aside or offered in its place.
 - **History another version saved is not damage (ADR 0022).** History a newer
   version saved is refused whole: the window is told which version saved it,
   and nothing is copied aside or offered for a fresh start. A conversation a
@@ -291,7 +304,9 @@ answers every other command:
 - The data folder is `Zhiyin` under the person's application data however the
   app was started; a folder given on the command line wins.
 - A diagnostic log keeps one JSON line per event, a file per day under the
-  data folder's `logs`, for two weeks, and is never sent anywhere. An
+  data folder's `logs`, for two weeks, and is never sent anywhere. What it
+  writes, an error's words and stack included, has the credentials the
+  contract recognises removed. An
   exception nobody handled is recorded and the process keeps running. An
   error of Zhiyin's own that ended a turn is recorded with its stack and its
   conversation's id. A conversation that would not open is recorded with its

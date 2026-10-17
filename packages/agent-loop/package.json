@@ -30,6 +30,7 @@
     "@zhiyin/plugins": "workspace:*",
     "@zhiyin/recovery": "workspace:*",
     "@zhiyin/temporary-folders": "workspace:*",
+    "@zhiyin/test-waits": "workspace:*",
     "@zhiyin/tools": "workspace:*"
   }
 }

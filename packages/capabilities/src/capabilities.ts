@@ -66,8 +66,8 @@ export type CapabilityMembers = {
   readonly connectionToolchains: ConnectionToolchains;
   /**
    * The browsers conversations drive. This group never opens one — it reaches
-   * them only to let go of what a conversation holds, so stopping, deleting and
-   * shutting down each have one place to ask.
+   * them only to let go of what a conversation holds, so stopping, leaving a
+   * conversation alone, deleting and shutting down each have one place to ask.
    */
   readonly browsers: ConversationBrowsers;
   /** Each conversation's Blender, let go of the same way as its browser. */
@@ -158,6 +158,12 @@ export interface Capabilities {
    */
   stopConversation(conversationId: string): Promise<void>;
   /**
+   * Closes the browser and Blender of a conversation left alone, which hold
+   * the most memory. The conversation keeps everything else, and both open
+   * again on their next use.
+   */
+  restConversation(conversationId: string): Promise<void>;
+  /**
    * Lets go of everything a conversation held, for one that is gone. Nothing is
    * kept for it, because nothing will ask for it again.
    */
@@ -200,7 +206,8 @@ export interface Capabilities {
     contents: AuthoredPluginContents,
   ): Promise<void>;
   /** Installs the program an application connector needs. */
-  installToolchain(componentId: string): Promise<void>;
+  /** Installs what a connector needs; the signal stops it. */
+  installToolchain(componentId: string, signal?: AbortSignal): Promise<void>;
 
   connections(): Promise<readonly McpServerState[]>;
   checkConnection(id: string): Promise<McpServerState>;
@@ -290,6 +297,16 @@ export async function declaredConnectionsOf(
   plugins: Plugins,
 ): Promise<readonly DeclaredMcpServer[]> {
   return declaredConnections(await plugins.list());
+}
+
+/**
+ * The installed packages that cannot be read right now, whose connectors keep
+ * their saved keys and choices until they open again.
+ */
+export async function unreadablePackagesOf(
+  plugins: Plugins,
+): Promise<readonly string[]> {
+  return (await plugins.damaged()).map((plugin) => plugin.name);
 }
 
 export class ComposedCapabilities implements Capabilities {
@@ -540,6 +557,14 @@ export class ComposedCapabilities implements Capabilities {
     await this.#members.tools.stopCommands?.(conversationId);
   }
 
+  async restConversation(conversationId: string): Promise<void> {
+    const { browsers, scenes } = this.#members;
+    await Promise.all([
+      browsers.close(conversationId),
+      scenes?.close(conversationId),
+    ]);
+  }
+
   async forgetConversation(conversationId: string): Promise<void> {
     const { browsers, mcp, scenes } = this.#members;
     this.#offered.delete(conversationId);
@@ -644,7 +669,10 @@ export class ComposedCapabilities implements Capabilities {
     return this.#members.plugins.saveContents(id, contents);
   }
 
-  async installToolchain(componentId: string): Promise<void> {
+  async installToolchain(
+    componentId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const connector = (await this.#members.plugins.list())
       .flatMap((view) => view.appConnectors)
       .find((item) => item.id === componentId);
@@ -653,8 +681,12 @@ export class ComposedCapabilities implements Capabilities {
       : [];
     if (!programs.length)
       throw new Error("This connector does not need anything installed.");
-    for (const program of programs)
-      await this.#members.toolchains.install(program);
+    for (const program of programs) {
+      signal?.throwIfAborted();
+      await (signal
+        ? this.#members.toolchains.install(program, signal)
+        : this.#members.toolchains.install(program));
+    }
     await this.#members.mcp.retryFailed();
   }
 
@@ -785,8 +817,18 @@ export class ComposedCapabilities implements Capabilities {
     );
     const failed = states.find((state) => state.status === "failed");
     if (failed) return failed;
-    if (states.some((state) => state.status === "installing"))
-      return { status: "installing" };
+    // What has arrived of everything still to come.
+    if (states.some((state) => state.status === "installing")) {
+      let received = 0;
+      let bytes = 0;
+      for (const state of states)
+        if (state.status === "installing") {
+          received += state.received ?? 0;
+          bytes += state.bytes ?? 0;
+        } else if (state.status === "missing")
+          for (const item of state.downloads) bytes += item.bytes;
+      return { status: "installing", received, bytes };
+    }
     const downloads = states.flatMap((state) =>
       state.status === "missing" ? state.downloads : [],
     );

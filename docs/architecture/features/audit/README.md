@@ -40,16 +40,20 @@ sensitive text cannot be recognised reliably (ADR 0019).
 
 ## Invariants
 
-- The log keeps the newest 5,000 entries. It is trimmed every 500 writes
-  rather than on each one, and a trim replaces the file in one step.
+- The log keeps the newest 5,000 entries. It is trimmed at each run's first
+  write and every 500 writes after, rather than on each one, so it keeps to
+  its limit however few entries each run adds. A trim replaces the file in one
+  step.
 - An entry survives a restart and reads back in the order it was written.
 - Overlapping writes all land, because appends are serialized.
 - A rejected repair records the exact reason. Among them: `content-changed`,
   when the repair tried to alter what an approved action would write, and
   `out-of-room`, when the repair model ran out of room to answer, kept apart
   from an answer that could not be used.
-- A damaged line costs that line only. A line that is not an entry, including
-  a whole file written by something else, is not read as history.
+- A damaged line costs that line only, including a last line cut short by a
+  crash: the next entry starts on a line of its own. A line that is not an
+  entry, including a whole file written by something else, is not read as
+  history.
 - No log yet reads as no entries.
 - A failure to write never costs the person their turn. Work continues, and
   the app reports that the audit record is incomplete.

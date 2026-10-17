@@ -1,12 +1,17 @@
 /**
  * A person who has waited long enough on a model's reasoning can ask for the
  * answer now. The request is stopped, what it reasoned is dropped, and the
- * model is asked again and told to answer directly: without reasoning where
- * the model allows that, for the rest of the turn.
+ * model is asked again and told to answer directly, for the rest of the turn
+ * with the least reasoning the model can be asked for: none where it allows
+ * that, and otherwise its lowest effort.
  */
 
 import { describe, expect, it } from "vitest";
-import type { AppEvent, WorkspaceTask } from "@zhiyin/contract";
+import type {
+  AppEvent,
+  ReasoningSelection,
+  WorkspaceTask,
+} from "@zhiyin/contract";
 import type { ModelEvent, ModelRequest } from "@zhiyin/model-client";
 import { notices } from "./plan-fixture.js";
 import { loopAndHost, stubDependencies, until } from "./support.js";
@@ -28,7 +33,12 @@ async function* answers(text: string): AsyncGenerator<ModelEvent> {
 
 function setUp(
   answer: (request: ModelRequest, number: number) => AsyncIterable<ModelEvent>,
-  { reasoningOptional = true } = {},
+  {
+    leastReasoning = { enabled: false },
+  }: {
+    /** The least reasoning the model can be asked for; `null` for no less. */
+    readonly leastReasoning?: ReasoningSelection | null;
+  } = {},
 ) {
   const requests: ModelRequest[] = [];
   const seen: AppEvent[] = [];
@@ -36,7 +46,7 @@ function setUp(
   const { host } = loopAndHost({
     ...deps,
     revealDelayMs: 0,
-    reasoningOptional,
+    ...(leastReasoning ? { leastReasoning } : {}),
     model: {
       ...deps.model,
       send: (request) => {
@@ -95,11 +105,32 @@ describe("asking for the answer now", () => {
     ]);
   });
 
-  it("asks again as before, and still says to answer, where the model cannot stop reasoning", async () => {
+  it("asks again at the model's lowest effort, and still says to answer, where the model cannot stop reasoning", async () => {
     const { loop, requests, thinking } = setUp(
       (request, number) =>
         number === 1 ? reasonsWithoutEnd(request) : answers("A wedge."),
-      { reasoningOptional: false },
+      { leastReasoning: { enabled: true, effort: "low" } },
+    );
+    const taskId = await loop.createTask();
+    const turn = loop.start(taskId, "Design a phone stand", {
+      enabled: true,
+      effort: "high",
+    });
+    await thinking();
+
+    expect(await loop.answerNow(taskId)).toBe(true);
+    await turn;
+
+    expect(requests[1]?.reasoning).toEqual({ enabled: true, effort: "low" });
+    expect(notices(requests[1], "answerNow")).toHaveLength(1);
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("completed");
+  });
+
+  it("asks again as before, and still says to answer, where the model can be asked for no less reasoning", async () => {
+    const { loop, requests, thinking } = setUp(
+      (request, number) =>
+        number === 1 ? reasonsWithoutEnd(request) : answers("A wedge."),
+      { leastReasoning: null },
     );
     const taskId = await loop.createTask();
     const turn = loop.start(taskId, "Design a phone stand", {

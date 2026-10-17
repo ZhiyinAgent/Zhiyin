@@ -30,20 +30,15 @@ import {
   PIPE_ACCESS_OUTBOUND,
   STARTF_USESTDHANDLES,
   STILL_ACTIVE,
-  WAIT_TIMEOUT,
   closeEach,
   invalid,
   win32,
 } from "./kernel32.js";
 import type { Win32 } from "./kernel32.js";
+import { ProcessEnds, tooManyProcesses } from "./process-ends.js";
 
-/**
- * The longest a running process goes between two looks at whether it has
- * ended. It is asked, never waited on: a wait would hold, for as long as the
- * process lives, one of the few threads all of Zhiyin's file work shares. The
- * looks start a millisecond apart, so a short run is not kept waiting.
- */
-const exitCheckMs = 50;
+/** The ends of every process this module launched, told as they happen. */
+let processEnds: ProcessEnds | undefined;
 
 export type ContainmentAvailability =
   | { readonly available: true }
@@ -138,6 +133,32 @@ function quoteWindowsArgument(value: string): string {
   return `${quoted}${"\\".repeat(backslashes * 2)}"`;
 }
 
+/**
+ * Windows reads each of these strings up to its first NUL, so a value carrying
+ * one would start something other than what it says. Refused before anything
+ * is opened, rather than cut where Windows would cut it.
+ */
+function refuseNul(options: ContainedProcessOptions): void {
+  const named: [string, string][] = [
+    ["program", options.executable],
+    ["folder", options.cwd],
+    ["output file", options.stdout],
+    ["error file", options.stderr],
+    ...options.arguments.map((value): [string, string] => ["argument", value]),
+    ...Object.entries(options.environment ?? {}).flatMap(
+      ([name, value]): [string, string][] => [
+        ["environment name", name],
+        ["environment value", value ?? ""],
+      ],
+    ),
+  ];
+  const held = named.find(([, value]) => value.includes("\0"));
+  if (held)
+    throw new Error(
+      `The process was not started: its ${held[0]} holds a NUL character.`,
+    );
+}
+
 function writableCommandLine(
   executable: string,
   args: readonly string[],
@@ -179,6 +200,34 @@ export function oemText(bytes: Buffer): string | undefined {
     const wide = Buffer.alloc(bytes.length * 2);
     const written = api.oemToWide(bytes, wide);
     return written > 0 ? wide.toString("utf16le", 0, written * 2) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Bytes in Windows' own code page for text that says no encoding, the ANSI
+ * code page, as text: Windows-1252 on most Western PCs, GBK on Chinese ones.
+ * Undefined where there is no such conversion to ask.
+ */
+export function ansiText(bytes: Buffer): string | undefined {
+  if (process.platform !== "win32") return undefined;
+  if (!bytes.length) return "";
+  try {
+    const api = win32();
+    const wide = Buffer.alloc(bytes.length * 2);
+    const written = api.ansiToWide(bytes, wide);
+    return written > 0 ? wide.toString("utf16le", 0, written * 2) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The number of that code page, such as 1252 or 936. */
+export function ansiCodePage(): number | undefined {
+  if (process.platform !== "win32") return undefined;
+  try {
+    return win32().ansiCodePage();
   } catch {
     return undefined;
   }
@@ -313,6 +362,10 @@ export function openProcessContainer(
     },
     launch(options: ContainedProcessOptions): ContainedProcess {
       if (closed) throw new Error("This process container is already closed.");
+      // Past the most waited on, the waits would take every thread file work
+      // shares, so the process is not started.
+      if (processEnds?.full) throw new Error(tooManyProcesses);
+      refuseNul(options);
       const security = {
         nLength: api.securityAttributesSize,
         lpSecurityDescriptor: null,
@@ -462,12 +515,8 @@ export function openProcessContainer(
         ...(pipes ? { pipes } : {}),
         wait() {
           waited ??= new Promise<number>((resolve, reject) => {
-            const look = (nextMs: number) => {
+            const settle = () => {
               const state = api.ended(processHandle);
-              if (state === WAIT_TIMEOUT) {
-                setTimeout(look, nextMs, Math.min(nextMs * 2, exitCheckMs));
-                return;
-              }
               if (state !== 0) {
                 api.closeHandle(processHandle);
                 reject(new Error("Waiting for the process failed."));
@@ -484,7 +533,14 @@ export function openProcessContainer(
                 reject(new Error("The process exit code was unavailable."));
               else resolve(code[0]);
             };
-            look(1);
+            processEnds ??= new ProcessEnds(api);
+            try {
+              processEnds.watch(processHandle, settle);
+            } catch (error) {
+              // Nothing will settle it, so nothing else lets the handle go.
+              api.closeHandle(processHandle);
+              throw error;
+            }
           });
           return waited;
         },

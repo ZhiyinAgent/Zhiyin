@@ -122,7 +122,8 @@ instead, so nothing a conversation is called can name a path.
   they were asked for, and every append is flushed to disk before it counts. A
   crash that cuts off the last line loses that save only, and the read says
   so. A failed append is cut back off. A log damaged anywhere but its last
-  line is refused.
+  line is refused. A save that fails for one conversation ends only once every
+  other conversation's write has ended, so the next save writes no edit twice.
 - **There is always one complete file to read.** A log grown past four times
   the size of its state, and the settings at every change, are written whole
   under another name and renamed into place. A log that cannot be started
@@ -137,6 +138,8 @@ instead, so nothing a conversation is called can name a path.
   let go of, as when another program has a file in it open, is tried again at
   each save, and what the conversation kept beside itself stays until the
   folder goes: a conversation that is back at the next launch is back whole.
+  What a deleted conversation kept is noted on disk until it is cleared, so
+  Zhiyin closing between the two clears it at the next launch.
 - **Only what lasts is saved:** the conversations, the open one, the person's
   choices and the folders worked in. Connection, plugin, usage and browser
   state are read again at every launch, so a passing state never decides
@@ -186,7 +189,7 @@ instead, so nothing a conversation is called can name a path.
   settings and every conversation that will not open are copied aside before
   anything is decided, and every copy is kept. A save over them is refused.
 - Recovering writes fresh settings beside the conversations that open,
-  carrying over the preferences and folders still sound. A history with
+  carrying over every setting still sound on its own. A history with
   nothing readable is refused rather than turned into an empty one.
 - Starting afresh is the person's choice. It acts only once the settings are
   kept, and copies every conversation there too before clearing the history.

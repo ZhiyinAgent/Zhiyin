@@ -40,7 +40,8 @@ built-in tools are trusted to declare a read. A tool's name earns nothing,
 and neither does a connector's description of itself, including the
 connectors that ship with Zhiyin.
 
-An approval covers the exact request you saw. Before an approved action runs,
+An approval covers the exact request you saw, and shows each of its inputs
+whole, however long. Before an approved action runs,
 Zhiyin inspects it again, and if its target changed while it waited, it does
 not run.
 
@@ -57,7 +58,11 @@ editing and deleting files is refused outside it; reading or listing outside
 it asks first. Each path is checked when the request is inspected and again,
 with links resolved, when it runs. That check holds for the moment it is
 made: a file replaced by a link after it, while the operation runs, is not
-checked again.
+checked again. A hard link is a file's second name, as real as its first, so
+a file the folder holds through one counts as part of the folder; package
+managers such as pnpm fill `node_modules` with them. Git's tools that only read a repository start none of the
+programs it names, such as its hooks, filters or file monitor; they need Git
+2.31 or newer, and refuse an older one.
 
 Before a file changes, Zhiyin keeps a copy, so going back in a conversation or
 undoing a turn can restore it. Copies are bounded: 10 MiB per file and
@@ -89,7 +94,11 @@ there is no list when the folder holds more than 20,000 files.
 
 Python scripts run in an environment Zhiyin manages, kept apart from your own
 projects. That separation keeps packages apart; it is not a security
-boundary, and a script has the same access as a shell command.
+boundary, and a script has the same access as a shell command. Python and its
+package installer are given only Windows' own variables and your proxy and
+certificate settings, so a variable left in your environment does not point
+them elsewhere, and a key kept in a variable does not reach a script, apart
+from a password written into a proxy's address.
 
 ### 3D scenes
 
@@ -99,9 +108,26 @@ preferences, add-ons and startup file, and never runs a script saved in a
 scene file. Blender runs at Windows' low integrity level, so Windows refuses
 it, and every program it starts, any write outside the folder you chose and
 its own folder in Zhiyin's data. It still reads whatever your account can read,
-and it can use the network. A whole drive, or a folder that holds your user
-folder, is never opened to it. A Blender script asks every time, and its
+and it can use the network. A model file is brought in only when the files it
+names, such as its pictures, geometry and parts, are inside the folder you
+chose, read as the importer reads them; a USD file that names one in a way
+that cannot be read the same way, or USD text that plays clips, is refused. A whole drive,
+or a folder that holds your user folder, is never opened to it. A Blender script asks every time, and its
 approval says what it can reach; going back restores only the scene file.
+
+### Documents
+
+The document compiler builds a PDF from a Typst or LaTeX file in the folder
+you chose, and asks each time. A Typst document can name files in that folder
+only. LaTeX never runs a program a document names, and it runs at Windows' low
+integrity level, so Windows refuses it any write outside a folder of that
+compile's own in Zhiyin's data, on drives that keep integrity labels, as NTFS
+drives do, and except in a folder the 3D studio has opened to Blender. It
+reads LaTeX's packages there through links it cannot write through, so no
+document changes the packages a later one reads. Each compiler lists the files it
+read; when a document read one outside the folder, by name or through a link,
+or the list is missing, nothing the compiler made or printed is kept or shown.
+Both compilers download the packages a document needs.
 
 ### Processes Zhiyin starts
 
@@ -122,8 +148,11 @@ programs started outside Zhiyin.
 Each conversation gets its own headless Edge, or Chrome when Edge is missing,
 on a temporary profile that is removed when the browser closes. It never uses
 your own browser profile, cookies or sign-ins. Zhiyin drives it over pipes
-only Zhiyin holds, and the browser listens on no network port. While it runs,
-its profile is on disk and readable by programs running as your account.
+only Zhiyin holds, and the browser listens on no network port. It opens only
+web pages, at `https:` or `http:` addresses, whether the model or you send
+it there, and stops its downloads once together they pass 1 GB. While it
+runs, its profile is on disk and readable by programs running as your
+account.
 
 Web pages are untrusted. What they say reaches the model marked as untrusted
 tool output, and it grants nothing. A specialist's report reaches the main
@@ -136,7 +165,10 @@ files inside the folder.
 
 Remote connectors use Streamable HTTP MCP. Their tool descriptions and
 results are untrusted, and a server's own read-only labels are ignored, so
-every call asks unless you allowed that tool for the conversation.
+every call asks unless you allowed that tool for the conversation. To list a
+connector's tools, Zhiyin connects to it without asking whenever a
+conversation can use it, such as once a plugin it belongs to is active; that
+sends the connector's key or sign-in and nothing from the conversation.
 
 A connector takes a pasted key or, where its service offers the standard MCP
 sign-in (OAuth 2.1 with PKCE), a sign-in in your own browser. During a
@@ -162,18 +194,21 @@ own: conversation content leaves the computer only as a conversation sends it
 to its model, through OpenRouter or the lab's own API as the person chose,
 and to its connectors.
 
-Exported conversations have credentials in recognised formats removed, such as
-`Authorization` and key headers, bearer tokens, fields and variables named for
-a key, keys in a web address, and common key prefixes. Recognition
-cannot prove that none remain, and each export says so.
+Exported conversations and Zhiyin's logs have credentials in recognised
+formats removed, such as `Authorization` and key headers, bearer tokens,
+fields and variables named for a key, quoted or not, keys in a web address, a
+password given to a command, private key blocks, and common key formats.
+Recognition cannot prove that none remain, and each export says so.
 
 ### The app window
 
 The window runs sandboxed, with context isolation, no Node.js integration and
-a content security policy. It cannot navigate away or open new windows, and
-the main process accepts commands only from the app's own top frame. The
-installed executable has Electron's run-as-Node and inspector switches
-turned off, so another program cannot run its own code as Zhiyin.
+a content security policy. It cannot navigate away or open new windows, is
+granted no permission a web page could ask for, and shows a picture an answer
+names as its words, without fetching its address. The main process accepts
+commands only from the app's own top frame. The installed executable has
+Electron's run-as-Node, `NODE_OPTIONS` and inspector switches turned off, so
+another program cannot run its own code as Zhiyin.
 
 ## Environment
 

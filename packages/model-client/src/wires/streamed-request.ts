@@ -4,6 +4,7 @@
  * How a request is put together and what its events mean is each wire's own.
  */
 
+import { randomUUID } from "node:crypto";
 import {
   ModelClientError,
   refusalBody,
@@ -13,6 +14,14 @@ import {
 import type { ModelFetchResponse } from "../model-client.js";
 import type { SendInput } from "../provider.js";
 import { serverSentEvents, withoutStalling } from "../stream.js";
+
+/**
+ * The id of a request the provider named none for. Usage is counted by
+ * request, so two unnamed requests must not be taken for one.
+ */
+export function unnamedRequest(): string {
+  return `unnamed-${randomUUID()}`;
+}
 
 /** What sending needs of a provider, whichever wire it speaks. */
 export type StreamingDialect = {
@@ -65,6 +74,14 @@ export async function* streamedEvents(
       status: response.status,
       headers: response.headers,
       model: chosen.model,
+      ...(request.messages.some(
+        (message) =>
+          message.role === "user" &&
+          typeof message.content !== "string" &&
+          message.content.some((part) => part.kind === "image"),
+      )
+        ? { withPictures: true }
+        : {}),
       ...(await refusalBody(response.body, dialect.refusal).then((error) =>
         error ? { error } : {},
       )),

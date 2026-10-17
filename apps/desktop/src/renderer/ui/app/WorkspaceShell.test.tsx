@@ -6,13 +6,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useEffect, useMemo, useReducer } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   emptyConversationLists,
   type BrowserPanelState,
   type CoreApi,
   type DocumentPanelState,
+  type MessageAttachment,
   type TurnRemedy,
   type WorkspaceTask as CoreWorkspaceTask,
 } from "@zhiyin/contract";
@@ -24,6 +25,7 @@ import {
   type WorkspaceTask,
 } from "./workspaceState.js";
 import { WorkspaceShell } from "./WorkspaceShell.js";
+import { Dialog } from "../shared/index.js";
 import { stubCommands } from "../../stubCommands.js";
 
 describe("WorkspaceShell", () => {
@@ -258,6 +260,89 @@ describe("WorkspaceShell", () => {
     await waitFor(() =>
       expect(takeBackMessage).toHaveBeenCalledWith("reasoning", "g1"),
     );
+  });
+
+  it("shows the paste and the picture a waiting message carries, and puts both back in the message box once it is taken back", async () => {
+    const carried: MessageAttachment[] = [
+      { kind: "pastedText", id: "paste-1", bytes: 1200, lines: 40 },
+      {
+        kind: "picture",
+        id: "shot-1",
+        name: "pasted-1.png",
+        mediaType: "image/png",
+        bytes: 5000,
+        // Claimed into the conversation as the message was sent.
+        source: "pasted-pictures/reasoning/shot-1",
+      },
+    ];
+    const conversation = (status: "pending" | "draft"): WorkspaceTask => ({
+      id: "reasoning",
+      title: "Phone stand",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-14T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { sequence: 0, id: "u", role: "user", text: "Design a phone stand" },
+      ],
+      guidance: [
+        {
+          id: "g1",
+          text: "Compare it with this",
+          status,
+          attachments: carried,
+        },
+      ],
+      phase:
+        status === "pending"
+          ? { kind: "working", steps: [], note: "Thinking" }
+          : { kind: "interrupted" },
+    });
+    const shell = (task: WorkspaceTask) => (
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          tasks: [task],
+          selectedTaskId: task.id,
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          readPicture: async () => ({
+            status: "ready" as const,
+            mediaType: "image/png",
+            data: "iVBORw0KGgo=",
+          }),
+        }}
+      />
+    );
+    const { rerender } = render(shell(conversation("pending")));
+    const waiting = screen.getByRole("group", {
+      name: "Message waiting to be read",
+    });
+    expect(
+      within(waiting).getByRole("button", { name: "Open pasted text paste-1" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(waiting).findByRole("button", {
+        name: "Open picture pasted-1.png",
+      }),
+    ).toBeInTheDocument();
+
+    // Taken back, it is a draft: its words and what it carried are in the box.
+    rerender(shell(conversation("draft")));
+
+    expect(
+      screen.queryByRole("group", { name: "Message waiting to be read" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /message/i })).toHaveValue(
+      "Compare it with this",
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove pasted text" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove picture pasted-1.png" }),
+    ).toBeInTheDocument();
   });
 
   it("shows task activity and lets the user stop work from the browser workspace", async () => {
@@ -710,6 +795,194 @@ describe("WorkspaceShell", () => {
       );
     },
   );
+
+  it.each([
+    ["Usage", "Usage"],
+    ["Model", "Model"],
+    ["Custom instructions", "Custom instructions"],
+    ["Settings", "Settings"],
+  ])(
+    "moves focus to the %s page it opens from the app menu",
+    async (item, heading) => {
+      function Live() {
+        const [state, dispatch] = useReducer(
+          workspaceReducer,
+          createWorkspaceState({ connection: "ready" }),
+        );
+        return (
+          <WorkspaceShell
+            state={state}
+            dispatch={dispatch}
+            commands={stubCommands}
+          />
+        );
+      }
+      render(<Live />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Open app menu" }));
+      const entry = screen.getByRole("menuitem", { name: item });
+      entry.focus();
+      fireEvent.click(entry);
+
+      expect(
+        await screen.findByRole("heading", { level: 1, name: heading }),
+      ).toHaveFocus();
+    },
+  );
+
+  it("keeps Tab inside the open navigation drawer, and gives focus back on Escape", () => {
+    render(
+      <WorkspaceShell
+        state={createWorkspaceState({ connection: "ready" })}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />,
+    );
+    const toggle = screen.getByRole("button", { name: "Open navigation" });
+    toggle.focus();
+    fireEvent.click(toggle);
+    const drawer = screen.getByRole("complementary", {
+      name: "Primary navigation",
+    });
+    const last = screen.getByRole("button", { name: "Open app menu" });
+    expect(drawer).toContainElement(last);
+
+    last.focus();
+    fireEvent.keyDown(last, { key: "Tab" });
+    expect(toggle).toHaveFocus();
+    fireEvent.keyDown(toggle, { key: "Tab", shiftKey: true });
+    expect(last).toHaveFocus();
+
+    fireEvent.keyDown(last, { key: "Escape" });
+    expect(toggle).toHaveFocus();
+    expect(toggle).toHaveAccessibleName("Open navigation");
+  });
+
+  describe("an approval that arrives during a turn", () => {
+    const working: WorkspaceTask = {
+      id: "save",
+      title: "Summary",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "working", steps: [] },
+    };
+    const asking: WorkspaceTask = {
+      ...working,
+      phase: {
+        kind: "approval",
+        steps: [],
+        prompt: {
+          id: "write",
+          action: "Save the summary",
+          reason: "Write summary.md in the workspace.",
+          target: "summary.md",
+          command: "write_file(…)",
+        },
+      },
+    };
+    const shell = (task: WorkspaceTask) => (
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId: "save",
+          tasks: [task],
+        })}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />
+    );
+
+    it("takes focus when nothing is being written, so the keyboard answers it", () => {
+      const { rerender } = render(shell(working));
+      screen.getByLabelText("Message Zhiyin").focus();
+
+      rerender(shell(asking));
+
+      expect(
+        screen.getByRole("heading", { name: "Save the summary" }),
+      ).toHaveFocus();
+    });
+
+    it("leaves focus with a message being written, and says it is waiting", () => {
+      const { rerender } = render(shell(working));
+      const composer = screen.getByLabelText("Message Zhiyin");
+      composer.focus();
+      fireEvent.change(composer, { target: { value: "Also add a chart" } });
+
+      rerender(shell(asking));
+
+      expect(composer).toHaveFocus();
+      expect(
+        screen.getByText("Permission needed: Save the summary"),
+      ).toBeInTheDocument();
+      expect(
+        screen
+          .getByText("Permission needed: Save the summary")
+          .closest("[aria-live]"),
+      ).toBeInTheDocument();
+    });
+
+    it("leaves focus in a dialog that is open", () => {
+      const withDialog = (task: WorkspaceTask) => (
+        <>
+          {shell(task)}
+          <Dialog title="Rename the conversation" onClose={() => undefined}>
+            <button type="button">Keep the name</button>
+          </Dialog>
+        </>
+      );
+      const { rerender } = render(withDialog(working));
+      const inDialog = screen.getByRole("button", { name: "Keep the name" });
+      inDialog.focus();
+
+      rerender(withDialog(asking));
+
+      expect(inDialog).toHaveFocus();
+    });
+  });
+
+  it("shows an approval's reason the AI wrote as Zhiyin's account", () => {
+    const state = createWorkspaceState({
+      connection: "ready",
+      selectedTaskId: "save",
+      tasks: [
+        {
+          id: "save",
+          title: "Summary",
+          updatedLabel: "Now",
+          updatedAt: "2026-10-05T09:00:00.000Z",
+          ...emptyConversationLists,
+          messages: [],
+          phase: {
+            kind: "approval",
+            steps: [],
+            prompt: {
+              id: "write",
+              action: "Save the summary",
+              reason: "Save the summary the person asked for.",
+              reasonByModel: true,
+              target: "summary.md",
+              command: "write_file(…)",
+            },
+          },
+        },
+      ],
+    });
+    render(
+      <WorkspaceShell
+        state={state}
+        dispatch={() => undefined}
+        commands={stubCommands}
+      />,
+    );
+
+    expect(
+      screen.getByText("Save the summary the person asked for."),
+    ).toHaveTextContent(/^Zhiyin says/);
+  });
 
   it("shows reasoning only while it arrives, and passes the selected effort to the core", async () => {
     const task: WorkspaceTask = {
@@ -1221,6 +1494,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),
@@ -1536,6 +1810,159 @@ describe("WorkspaceShell", () => {
         undefined,
       ),
     );
+  });
+
+  /**
+   * The core opens a new conversation before it says it made it, so the
+   * window shows that conversation while its first message is still being
+   * sent. A send that fails there leaves the words where they were typed.
+   */
+  it("keeps a new conversation's first message in the composer when it could not be sent", async () => {
+    const ready = {
+      connection: "ready" as const,
+      runtime: {
+        tasks: "available" as const,
+        capabilities: "available" as const,
+      },
+    };
+    const draft: WorkspaceTask = {
+      id: "task-new",
+      title: "New task",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "draft" },
+    };
+    function Opening() {
+      const [state, setState] = useState(createWorkspaceState(ready));
+      const commands = useMemo(
+        () => ({
+          ...stubCommands,
+          createTask: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [draft],
+                selectedTaskId: draft.id,
+              }),
+            );
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            return draft.id;
+          },
+          sendMessage: async () => {
+            throw new Error("Choose a model before sending.");
+          },
+        }),
+        [],
+      );
+      return (
+        <WorkspaceShell
+          state={state}
+          dispatch={() => undefined}
+          commands={commands}
+        />
+      );
+    }
+    render(<Opening />);
+
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Plan a trip to Xi'an" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByText(/Your message could not be sent/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Message Zhiyin")).toHaveValue(
+      "Plan a trip to Xi'an",
+    );
+  });
+
+  it("leaves the next empty composer empty once the conversation its first message opened is deleted", async () => {
+    const ready = {
+      connection: "ready" as const,
+      runtime: {
+        tasks: "available" as const,
+        capabilities: "available" as const,
+      },
+    };
+    const opened: WorkspaceTask = {
+      id: "task-new",
+      title: "Trip",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "draft" },
+    };
+    type Show = (state: ReturnType<typeof createWorkspaceState>) => void;
+    let show: Show = () => undefined;
+    function Opening({ shows }: { readonly shows: (set: Show) => void }) {
+      const [state, setState] = useState(createWorkspaceState(ready));
+      useEffect(() => shows(setState), [shows]);
+      const commands = useMemo(
+        () => ({
+          ...stubCommands,
+          createTask: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [opened],
+                selectedTaskId: opened.id,
+              }),
+            );
+            return opened.id;
+          },
+          sendMessage: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [
+                  {
+                    ...opened,
+                    messages: [
+                      {
+                        sequence: 0,
+                        id: "u",
+                        role: "user",
+                        text: "Plan a trip",
+                      },
+                    ],
+                    phase: { kind: "interrupted" },
+                  },
+                ],
+                selectedTaskId: opened.id,
+              }),
+            );
+          },
+        }),
+        [],
+      );
+      return (
+        <WorkspaceShell
+          state={state}
+          dispatch={() => undefined}
+          commands={commands}
+        />
+      );
+    }
+    render(<Opening shows={(set) => (show = set)} />);
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Plan a trip" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Message Zhiyin")).toHaveValue(""),
+    );
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "A draft for the trip" },
+    });
+
+    // Deleted, and it was the only one: nothing is open.
+    act(() => show(createWorkspaceState({ ...ready, tasks: [] })));
+
+    expect(screen.getByLabelText("Message Zhiyin")).toHaveValue("");
   });
 
   it("shows how full the conversation is and sends a budget change to the core", () => {
@@ -1882,6 +2309,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),
@@ -2661,6 +3089,7 @@ describe("WorkspaceShell", () => {
           overrideComponent: async () => {},
           resetComponent: async () => {},
           installToolchain: async () => {},
+          cancelToolchainInstall: async () => {},
           setPluginEnabled: async () => {},
           installPlugin: async () => ({ status: "cancelled" as const }),
           updatePlugin: async () => ({ status: "cancelled" as const }),

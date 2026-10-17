@@ -368,6 +368,11 @@ export class FilePluginStore {
       await this.#writeJournal({ ...journal, phase: "state-committed" });
       await rm(this.#journalFile, { force: true });
     } catch (error) {
+      // What the failed install left is undone now, as a restart would undo
+      // it, so it can be tried again in this session.
+      await rm(staging, { recursive: true, force: true }).catch(() => {});
+      this.#recovered = false;
+      await this.#ensureRecovered().catch(() => {});
       if (
         error instanceof InvalidPluginError ||
         error instanceof PluginStoreError

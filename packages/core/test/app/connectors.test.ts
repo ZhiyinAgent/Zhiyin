@@ -13,6 +13,7 @@ import {
   pluginStore,
   pluginView,
   stubDependencies,
+  until,
   type TestApp,
 } from "./support.js";
 
@@ -67,13 +68,12 @@ async function activatingResearch(connect: McpConnectionFactory) {
   return { agent, taskId };
 }
 
-/** Waits for what the window would show, as long as a slow disk needs. */
-async function shows(agent: TestApp, predicate: (app: TestApp) => boolean) {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (predicate(agent)) return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error("The window never showed it.");
+/** Waits for what the window would show, however long a slow disk takes. */
+function shows(
+  agent: TestApp,
+  predicate: (app: TestApp) => boolean,
+): Promise<void> {
+  return until(() => predicate(agent));
 }
 
 const tavily = (agent: TestApp) =>

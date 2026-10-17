@@ -399,6 +399,62 @@ export class KeptItems {
       ),
       rm(this.#readsFile(conversationId), { force: true }),
     ]);
+    const pending = await this.#pending();
+    if (pending.includes(conversationId))
+      await this.#writePending(pending.filter((id) => id !== conversationId));
+  }
+
+  /**
+   * Notes, on disk, a deleted conversation whose kept items are cleared once
+   * its folder is gone, so Zhiyin closing in between does not strand them.
+   */
+  async willForget(conversationId: string): Promise<void> {
+    const pending = await this.#pending();
+    if (!pending.includes(conversationId))
+      await this.#writePending([...pending, conversationId]);
+  }
+
+  /**
+   * Finishes what an earlier run noted: a conversation whose folder is gone
+   * has its kept items cleared, and one whose folder is still there came back
+   * whole, with them.
+   */
+  async finishForgetting(
+    holds: (conversationId: string) => Promise<boolean>,
+  ): Promise<void> {
+    for (const id of await this.#pending())
+      if (await holds(id)) {
+        const pending = await this.#pending();
+        await this.#writePending(pending.filter((other) => other !== id));
+      } else await this.forget(id);
+  }
+
+  #pendingFile(): string {
+    return join(this.#root, "forgetting.json");
+  }
+
+  async #pending(): Promise<string[]> {
+    try {
+      const stored: unknown = JSON.parse(
+        await readFile(this.#pendingFile(), "utf8"),
+      );
+      return Array.isArray(stored)
+        ? stored.filter((id): id is string => typeof id === "string")
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async #writePending(ids: readonly string[]): Promise<void> {
+    if (!ids.length) {
+      await rm(this.#pendingFile(), { force: true });
+      return;
+    }
+    await mkdir(this.#root, { recursive: true });
+    const partial = `${this.#pendingFile()}.${randomUUID().slice(0, 8)}`;
+    await writeFile(partial, JSON.stringify(ids), "utf8");
+    await rename(partial, this.#pendingFile());
   }
 
   #readsFile(conversationId: string): string {

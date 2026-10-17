@@ -71,7 +71,9 @@ A package uses the portable Agent Plugins layout:
   declarations in the `com.zhiyin` extension: an access summary, where data
   goes, specialists, and application connectors.
 - `skills/<name>/SKILL.md`: one skill per folder, with `name` and
-  `description` in its frontmatter and the instructions below.
+  `description` in its frontmatter and the instructions below. A value may be
+  plain, quoted, or a YAML `>` or `|` block. Any of a package's files may
+  start with the byte-order mark some editors write.
 - `mcp.json`: the connectors, each a Streamable HTTP endpoint with what it can
   access and where its data goes. A connector may also declare:
   - `requestsPerMinute`, the most calls a minute its service accepts, which
@@ -123,7 +125,9 @@ A package uses the portable Agent Plugins layout:
   updating copy the package into a staging folder, validate the copy, journal
   each step and commit by writing the state file. The next time the store is
   opened, what an unfinished change left behind is cleaned up, so the last
-  committed version is the one used. An update keeps the previous version, and
+  committed version is the one used; an install or update that fails is
+  cleaned up the same way at once, so it can be tried again without a
+  restart. An update keeps the previous version, and
   rolling back switches to it whole.
 - **Changes are serialized,** so concurrent requests never lose a package or a
   choice.

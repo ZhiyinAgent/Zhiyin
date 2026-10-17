@@ -22,6 +22,8 @@ export type McpToolSummary = {
   readonly name: string;
   readonly description?: string;
   readonly enabled: boolean;
+  /** Why the tool is never offered to the model, whatever its switch says. */
+  readonly withheld?: string;
 };
 
 /** The outcome of a dry-run connection attempt, made without saving anything. */

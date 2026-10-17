@@ -112,6 +112,17 @@ export type RoundRequest = {
   readonly reasoning?: NonNullable<ModelRequest["reasoning"]>;
 };
 
+/**
+ * The request asked with the least reasoning the model can be asked for, as
+ * after its reasoning was stopped; as it was where it can be asked for no less.
+ */
+export function withLeastReasoning<Request extends RoundRequest>(
+  request: Request,
+  least: RoundRequest["reasoning"] | undefined,
+): Request {
+  return least ? { ...request, reasoning: least } : request;
+}
+
 export type RoundResult = {
   /** Assembled tool calls, in the order the model gave them. */
   readonly calls: AssembledToolCall[];
@@ -178,6 +189,8 @@ export class ModelRound {
   readonly #deps: AgentLoopDependencies;
   readonly #records: TurnRecords;
   readonly #shown: boolean;
+  /** Told when the lab refuses a request for how many are being sent. */
+  readonly #rateLimited: (taskId: string) => void;
   /** What each conversation's last counted request sent, and when. */
   readonly #lastCounted = new Map<
     string,
@@ -190,10 +203,12 @@ export class ModelRound {
     deps: AgentLoopDependencies,
     records: TurnRecords,
     audience: RoundAudience = "conversation",
+    rateLimited: (taskId: string) => void = () => {},
   ) {
     this.#deps = deps;
     this.#records = records;
     this.#shown = audience === "conversation";
+    this.#rateLimited = rateLimited;
   }
 
   /**
@@ -308,6 +323,11 @@ export class ModelRound {
         }
         // The wait before a repeat is counted down already; silence is
         // counted from when the repeat is sent.
+        if (
+          (event.kind === "restarting" || event.kind === "retrying") &&
+          event.reason === "rateLimited"
+        )
+          this.#rateLimited(taskId);
         listen(
           quietAfter +
             (event.kind === "restarting" || event.kind === "retrying"
@@ -348,6 +368,17 @@ export class ModelRound {
           continue;
         }
         await this.#receive(taskId, event, attempt, reveal, ledger);
+        // Shown or not, a request is held to one length of reasoning before
+        // it has answered or called anything.
+        if (
+          event.kind === "reasoningDelta" &&
+          !attempt.text &&
+          attempt.calls.size === 0 &&
+          attempt.reasoningBytes / reasoningBytesPerToken > longestThought
+        ) {
+          thought.abort();
+          throw new ThoughtTooLong();
+        }
         if (!this.#shown) continue;
         if (event.kind === "textDelta" || event.kind === "toolCallDelta") {
           // A call's composing note has already taken the thinking note's place.
@@ -367,10 +398,6 @@ export class ModelRound {
         if (!thinking) {
           thinking = true;
           await this.#note(taskId, thinkingNote);
-        }
-        if (attempt.reasoningBytes / reasoningBytesPerToken > longestThought) {
-          thought.abort();
-          throw new ThoughtTooLong();
         }
       }
       // A stream that ends quietly once stopped was stopped all the same.

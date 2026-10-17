@@ -76,6 +76,8 @@ const calls: { readonly [Name in CommandName]: Parameters<Commands[Name]> } = {
   ],
   resetComponent: ["research/reader"],
   installToolchain: ["blender"],
+  cancelToolchainInstall: ["blender"],
+  dimWindowControls: [true],
   installPlugin: [],
   updatePlugin: ["research"],
   rollbackPlugin: ["research"],

@@ -1,8 +1,16 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { gitAutomation, resolveGit } from "../src/index.js";
+import { readGit } from "../src/run-git.js";
 
 const folders = new TemporaryFolders();
 
@@ -39,6 +47,25 @@ describe("gitAutomation without a workspace folder", () => {
     };
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toBe("Choose a folder before using git.");
+  });
+});
+
+describe("gitAutomation with a git whose version it cannot trust", () => {
+  it("reads nothing with a program that does not say it is git 2.31 or newer", async () => {
+    const root = await folders.make("zhiyin-git-old-");
+    // Node answers --version with its own version, not git's.
+    const automation = gitAutomation({
+      workspaceRoot: () => root,
+      resolveGit: () => process.execPath,
+    });
+
+    const result = (await automation.callTool("git_status", {})) as {
+      isError?: boolean;
+      content: readonly { text: string }[];
+    };
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain("Git 2.31 or newer");
   });
 });
 
@@ -297,6 +324,328 @@ withGit("gitAutomation against a real repository", () => {
     await gitOutput(root, ["diff"]).catch(() => "");
     expect(await readdir(ran)).toEqual(
       expect.arrayContaining(["fsmonitor", "process"]),
+    );
+  });
+
+  it.each([
+    ["its settings", []],
+    ["the settings of its work tree", ["--worktree"]],
+  ] as const)(
+    "runs no hook the repository defines in %s when it is only read",
+    async (_where, scope) => {
+      const ran = await folders.make("zhiyin-git-ran-");
+      await writeFile(join(root, "same.txt"), "hello\n", "utf8");
+      await run("git_stage", { paths: ["same.txt"] });
+      await run("git_commit", { message: "Add same" });
+      if (scope.length)
+        await gitOutput(root, ["config", "extensions.worktreeConfig", "true"]);
+      // Git 2.54 and later run a hook named in settings, wherever hooks are
+      // looked for; writing the index runs this one.
+      await gitOutput(root, [
+        "config",
+        ...scope,
+        "hook.planted.event",
+        "post-index-change",
+      ]);
+      await gitOutput(root, [
+        "config",
+        ...scope,
+        "hook.planted.command",
+        `touch '${join(ran, "hook").replaceAll("\\", "/")}'`,
+      ]);
+      // Touched without a change, so a diff writes the index again.
+      const touch = async (hoursAgo: number) => {
+        const then = new Date(Date.now() - hoursAgo * 3_600_000);
+        await utimes(join(root, "same.txt"), then, then);
+      };
+      await touch(1);
+
+      for (const [name, args] of [
+        ["git_status", {}],
+        ["git_diff", {}],
+        ["git_diff", { staged: true }],
+      ] as const)
+        await run(name, args);
+
+      expect(await readdir(ran)).toEqual([]);
+
+      // The same read, run as git runs it by default, runs the hook where git
+      // knows such hooks.
+      await touch(2);
+      await gitOutput(root, ["diff"]);
+      const [major, minor] = (await gitOutput(root, ["--version"]))
+        .replace(/^git version /, "")
+        .split(".")
+        .map(Number);
+      const knowsSuchHooks = major! > 2 || (major === 2 && minor! >= 54);
+      expect(await readdir(ran)).toEqual(knowsSuchHooks ? ["hook"] : []);
+    },
+  );
+
+  it("starts no transport the repository's own settings allow when it is only read", async () => {
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    const clone = join(await folders.make("zhiyin-git-clone-"), "clone");
+    await gitOutput(root, [
+      "clone",
+      "--no-local",
+      `file:///${root.replaceAll("\\", "/")}`,
+      clone,
+    ]);
+    // A repository can allow a transport for itself, as partial clones
+    // fetching what they miss through a program would need.
+    await gitOutput(clone, ["config", "protocol.file.allow", "always"]);
+
+    const listed = await readGit(git as string, clone, ["ls-remote", "origin"]);
+
+    expect(listed.exitCode).not.toBe(0);
+    // Run as git runs it by default, it reaches the other repository.
+    expect(await gitOutput(clone, ["ls-remote", "origin"])).toContain("HEAD");
+  });
+
+  it("reads nothing from a repository whose settings it cannot read whole", async () => {
+    // A hook named at such length that the list of settings is shortened.
+    await appendFile(
+      join(root, ".git", "config"),
+      `[hook "${"a".repeat(410_000)}"]\n\tcommand = echo ran\n`,
+    );
+
+    const status = await readGit(git as string, root, ["status"]);
+
+    expect(status.exitCode).toBeNull();
+    expect(status.stderr).toContain(
+      "could not read this repository's settings",
+    );
+  });
+
+  it("keeps the person's own filters when it reads, so a file they store through one reads as unchanged", async () => {
+    // A filter of the person's, as Git LFS is: stored in capitals.
+    const global = join(await folders.make("zhiyin-git-global-"), "config");
+    await writeFile(global, '[filter "upper"]\n\tclean = tr a-z A-Z\n');
+    process.env.GIT_CONFIG_GLOBAL = global;
+    await writeFile(join(root, ".gitattributes"), "*.up filter=upper\n");
+    await writeFile(join(root, "note.up"), "hello\n");
+    await run("git_stage", { paths: [".gitattributes", "note.up"] });
+    await run("git_commit", { message: "Add note" });
+    // Touched without a change, so git compares it through the filter again.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    await utimes(join(root, "note.up"), hourAgo, hourAgo);
+
+    const status = await run("git_status", {});
+
+    expect(status.isError).toBeFalsy();
+    expect(status.text).not.toContain("note.up");
+  });
+
+  it("fetches nothing a partial clone is missing when it is only read", async () => {
+    const ran = await folders.make("zhiyin-git-ran-");
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    await gitOutput(root, ["config", "uploadpack.allowFilter", "true"]);
+    const clone = join(await folders.make("zhiyin-git-clone-"), "clone");
+    await gitOutput(root, [
+      "clone",
+      "--no-local",
+      "--filter=blob:none",
+      "--no-checkout",
+      `file:///${root.replaceAll("\\", "/")}`,
+      clone,
+    ]);
+    // Fetching a missing file runs the program the clone's settings name.
+    await gitOutput(clone, [
+      "config",
+      "remote.origin.uploadpack",
+      `touch '${join(ran, "fetch").replaceAll("\\", "/")}'; git upload-pack`,
+    ]);
+    const reading = gitAutomation({ workspaceRoot: () => clone });
+
+    for (const [name, args] of [
+      ["git_status", {}],
+      ["git_diff", { staged: true }],
+      ["git_log", { limit: 5 }],
+      ["git_show", { ref: "HEAD" }],
+    ] as const)
+      await reading.callTool(name, args);
+
+    expect(await readdir(ran)).toEqual([]);
+
+    // The same read, run as git runs it by default, fetches the file.
+    await gitOutput(clone, ["show", "HEAD"]);
+    expect(await readdir(ran)).toEqual(["fetch"]);
+  });
+
+  const submodulesUnseen =
+    "Changes inside submodules' own files are not shown.";
+
+  it("says that changes inside a submodule's own files are not shown, from any folder of the repository", async () => {
+    const sub = await folders.make("zhiyin-git-submodule-");
+    await execGitInit(git as string, sub);
+    await writeFile(join(sub, "sub.txt"), "a\n", "utf8");
+    await gitOutput(sub, ["add", "sub.txt"]);
+    await gitOutput(sub, ["commit", "-m", "Sub"]);
+    await mkdir(join(root, "docs"));
+    await writeFile(join(root, "docs", "note.txt"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["docs/note.txt"] });
+    await run("git_commit", { message: "Add note" });
+    await gitOutput(root, [
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      sub.replaceAll("\\", "/"),
+      "sub",
+    ]);
+    await gitOutput(root, ["commit", "-m", "Add submodule"]);
+    await writeFile(join(root, "sub", "sub.txt"), "edited\n", "utf8");
+    await writeFile(join(root, "docs", "note.txt"), "changed\n", "utf8");
+
+    const status = await run("git_status", {});
+    const diff = await run("git_diff", {});
+    const inDocs = (await gitAutomation({
+      workspaceRoot: () => join(root, "docs"),
+    }).callTool("git_status", {})) as { content: readonly { text: string }[] };
+
+    expect(status.text).toContain("docs/note.txt");
+    expect(status.text).toContain(submodulesUnseen);
+    expect(diff.text).toContain("changed");
+    expect(diff.text).toContain(submodulesUnseen);
+    expect(inDocs.content[0]?.text).toContain(submodulesUnseen);
+  });
+
+  it("says nothing of submodules in a repository without any", async () => {
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+
+    const status = await run("git_status", {});
+    const diff = await run("git_diff", {});
+
+    expect(status.text).toContain("note.txt");
+    expect(status.text).not.toContain("submodule");
+    expect(diff.text).not.toContain("submodule");
+  });
+
+  /**
+   * The same rule, for what a repository brings that its settings do not
+   * name outright: a hook git runs when a read refreshes the index, a filter
+   * whose name holds "=" or whose program reads like another filter's name,
+   * and a submodule's settings, which the parent's never mention, even where
+   * the parent's settings have git look inside the submodule.
+   */
+  it("runs no hook, and nothing a submodule or an odd filter brings, when it is only read", async () => {
+    const ran = join(root, "ran");
+    const marking = (name: string) =>
+      `touch '${join(ran, name).replaceAll("\\", "/")}';`;
+    await mkdir(ran);
+    const sub = await folders.make("zhiyin-git-submodule-");
+    await execGitInit(git as string, sub);
+    await writeFile(join(sub, "sub.txt"), "a\n", "utf8");
+    await gitOutput(sub, ["add", "sub.txt"]);
+    await gitOutput(sub, ["commit", "-m", "Sub"]);
+    await writeFile(join(root, "note.txt"), "hello\n", "utf8");
+    await writeFile(join(root, "readme.md"), "hello\n", "utf8");
+    await run("git_stage", { paths: ["note.txt", "readme.md"] });
+    await run("git_commit", { message: "Add note" });
+    await gitOutput(root, [
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      sub.replaceAll("\\", "/"),
+      "sub",
+    ]);
+    await gitOutput(root, ["commit", "-m", "Add submodule"]);
+
+    await writeFile(
+      join(root, ".git", "hooks", "post-index-change"),
+      `#!/bin/sh\n${marking("hook")}\n`,
+      "utf8",
+    );
+    await gitOutput(root, [
+      "config",
+      "filter.a=b.clean",
+      `${marking("odd")} cat`,
+    ]);
+    // Settings are listed as name and value on one line, and this program
+    // ends in what reads like the name of another filter.
+    await gitOutput(root, [
+      "config",
+      "filter.c.clean",
+      `${marking("value")} cat; : x.smudge y`,
+    ]);
+    await writeFile(
+      join(root, ".git", "info", "attributes"),
+      "*.txt filter=a=b\n*.md filter=c\n",
+      "utf8",
+    );
+    // Settings that have git look inside a submodule, as a git of its own
+    // that reads the submodule's settings.
+    await gitOutput(root, ["config", "diff.submodule", "diff"]);
+    await gitOutput(root, ["config", "status.submoduleSummary", "true"]);
+    const subGit = join(root, ".git", "modules", "sub");
+    await gitOutput(root, [
+      "config",
+      "--file",
+      join(subGit, "config"),
+      "filter.inner.clean",
+      `${marking("submodule")} cat`,
+    ]);
+    await gitOutput(root, [
+      "config",
+      "--file",
+      join(subGit, "config"),
+      "diff.external",
+      `${marking("external")} :`,
+    ]);
+    await mkdir(join(subGit, "info"), { recursive: true });
+    await writeFile(
+      join(subGit, "info", "attributes"),
+      "*.txt filter=inner\n",
+      "utf8",
+    );
+    // Changed at the same size, so git has to read each file to know.
+    const sameSize = async (path: string) => {
+      const before = await readFile(path, "utf8");
+      await writeFile(
+        path,
+        `${before[0] === "a" ? "b" : "a"}${before.slice(1)}`,
+      );
+    };
+    await sameSize(join(root, "note.txt"));
+    await sameSize(join(root, "readme.md"));
+    await sameSize(join(root, "sub", "sub.txt"));
+    // Touched without a change, so a read refreshes its entry, writes the
+    // index and would run the hook.
+    const twoHoursAgo = new Date(Date.now() - 7_200_000);
+    await utimes(join(root, ".gitmodules"), twoHoursAgo, twoHoursAgo);
+
+    const failed: string[] = [];
+    for (const [name, args] of [
+      ["git_status", {}],
+      ["git_diff", {}],
+      ["git_diff", { staged: true }],
+      ["git_log", { limit: 5 }],
+      ["git_show", { ref: "HEAD" }],
+      ["git_branch", {}],
+      ["git_stash", { action: "list" }],
+    ] as const) {
+      const result = await run(name, args);
+      if (result.isError) failed.push(`${name}: ${result.text}`);
+    }
+    await automation.inspect("git_commit", { message: "Add other" });
+
+    expect(failed).toEqual([]);
+    expect(await readdir(ran)).toEqual([]);
+
+    // The same read, run as git runs it by default, does start them. A file
+    // git last saw at another time has its entry refreshed, so the index is
+    // written and the hook runs, however fast the steps above went.
+    const hourAgo = new Date(Date.now() - 3_600_000);
+    await utimes(join(root, ".gitmodules"), hourAgo, hourAgo);
+    await gitOutput(root, ["status"]);
+    await gitOutput(root, ["show", "HEAD"]);
+    expect(await readdir(ran)).toEqual(
+      expect.arrayContaining(["hook", "odd", "value", "submodule", "external"]),
     );
   });
 });

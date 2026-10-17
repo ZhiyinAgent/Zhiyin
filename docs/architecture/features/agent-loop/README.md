@@ -22,7 +22,10 @@ an expected cache miss (ADR 0012).
 
 The loop also names a new conversation from its first message, alongside the
 turn so the first answer does not wait for the name, and in the background
-names an action whose call did not say what it is for. The working
+names an action whose call did not say what it is for. When the lab refuses one
+of the conversation's requests for how many are being sent, the open requests
+for names and labels stop, so the answer gets the place; a name stopped this
+way is asked again once the turn is over. The working
 model keeps its own plan with `update_plan` (ADR 0013). None of this can affect
 permission or execution.
 
@@ -54,7 +57,8 @@ permission or execution.
 - `send(taskId, text, reasoning?, attachments?, delivery?)` takes the person's
   message and is settled once it is in the conversation. It opens a turn, which
   then runs on. While a turn already runs, the message is saved and delivered
-  at that turn's next round boundary as a `guidance` notice; one that misses
+  at that turn's next round boundary as a `guidance` notice, after the answer
+  it arrived beside when that answer would have ended the turn; one that misses
   the turn comes back as a draft and starts nothing on its own. `start` does
   the same and waits for the turn it opened to end.
 - `cancel(taskId)` stops the conversation's turn and its specialists.
@@ -102,8 +106,9 @@ time, so one that refused says what it needs in that same answer. One whose
 tools cannot then be gathered is undone, and its answer says why. In a turn,
 every other tool is offered with a `purpose` argument, listed among what a call
 has to give. The loop takes it off before the tool sees its input and shows it
-as the action's description and the approval's reason. A call that leaves it
-out still runs, and is named in the background.
+as the action's description and the approval's reason, marked as written by a
+model. A call that leaves it out still runs, and is named in the background;
+that name is marked the same way once it arrives.
 
 - `TurnOwnership`, the lifecycle tree of root turns and the work they delegate,
   and `WorkLedger`, what one stretch of work has spent, renewed when the person
@@ -124,13 +129,29 @@ out still runs, and is named in the background.
   browser and its 3D scene, stays open with its connections (ADR 0029). The
   commands end even when the stop cannot be saved. Other conversations keep
   working.
-- Stopping gives the conversation back at once. Every write is checked against
-  its exact owning turn before it is committed, so a stopped turn's late
-  answer cannot overwrite the turn that replaced it or reach a deleted
-  conversation. Nothing resumes a stopped turn: a specialist it stopped is
-  reported to the next turn the person starts, after a restart too.
+- Stopping gives the conversation back at once. Every write is its author's:
+  the turn whose work made it, known however the write was reached. Once that
+  turn is stopped, nothing it writes lands, whoever holds the conversation by
+  then, a question it was about to ask included: one about a folder's
+  instructions, or a specialist's approval waiting behind the turn's own. The
+  stop itself, the end a specialist records, and a job's end and what it
+  changed are written on no turn's behalf. A write begun while a turn owns
+  the conversation is committed unless that turn is stopped by then, so a
+  stopped turn's late answer cannot overwrite the turn that replaced it or
+  reach a deleted conversation, and what was being saved as a turn finished
+  on its own lands. A change made on no turn's behalf that a stop refuses
+  that way, or that the stop's own save lands over, is made again on what
+  the stop left, so it still lands. Work a turn left running after it
+  finished on its own, such as naming an action, still lands. Nothing
+  resumes a stopped turn: a specialist it stopped, a handoff or a job's end
+  that was waiting when it was stopped, and a specialist that finished as it
+  was stopped are told to the next turn the person starts, never waking the
+  conversation, after a restart too.
 - A turn that fails before it starts, such as one whose folder cannot be
   entered, gives its conversation back, so the next message starts a turn.
+- Stopped while one call of a round is answered, or at the work-budget
+  checkpoint before it, a turn answers none of the round's other calls: no
+  tool runs, no specialist is handed work, and the model is not asked again.
 - An approved action not yet dispatched does not run once the turn is stopped.
   A connector action already dispatched is recorded as one that may already
   have taken effect.
@@ -155,6 +176,9 @@ out still runs, and is named in the background.
   going on beside it, the turn's or a specialist's, does not replace it, and a
   turn that ends or fails while a specialist's prompt waits leaves that prompt
   showing.
+- A prompt shows each of the call's inputs whole, however long. The action's
+  record afterwards may keep only both ends of a long input, and says how much
+  it left out.
 - After approval the action is inspected again. If it no longer matches what
   the person approved, such as a create that became an overwrite, it does not
   run. The model is told why and can propose it again for a fresh approval.
@@ -226,7 +250,8 @@ out still runs, and is named in the background.
   the model's settings say it goes back; the replay record is never counted.
 - Each request names its conversation as the session, so it stays with the
   provider holding its cache, and marks where the fixed start, the previous
-  request and the newest message end.
+  request and the newest message end, and the last message before the oldest
+  picture that can still be dropped.
 - What happened outside the turn reaches the model as a notice at its next
   request: a job's end (`job`; a job that ended by itself wakes a conversation
   with no turn running) and files the person put back with undo (`undo`, told
@@ -238,12 +263,16 @@ out still runs, and is named in the background.
 - A long paste reaches the model as an `attachment://` address. Pictures travel
   as pictures, fitted to what the model accepts, and a model that cannot see
   them gets a line saying one was there. When a request would carry more than
-  8 pictures, all but the newest 4 are dropped. Eight is the fewest any lab
-  Zhiyin reaches accepts in one request (Mistral; the others accept 50 or
-  more), and the same limit is kept for all of them. Four go at once because
-  dropping a picture changes the conversation from where it stood, and the
-  provider's cache is written again from that point: it happens once every few
-  pictures rather than with each one.
+  8 pictures, those in the middle are dropped: the first 2 stay, and the
+  newest make up 4 kept in all. The first are kept by whole messages, so a
+  first message with more than 2 keeps none, and the newest message always
+  stays whole, so one that leaves the first no room within 8 drops them too.
+  Eight is the fewest any lab Zhiyin reaches accepts in one request (Mistral;
+  the others accept 50 or more), and the same limit is kept for all of them.
+  Several go at once, and the first only in those two cases, because dropping
+  a picture changes the conversation from where it stood and the provider's
+  cache is written again from that point: it happens once every few pictures
+  rather than with each one, and only from the oldest picture dropped.
 
 ### Context budget
 
@@ -282,7 +311,9 @@ out still runs, and is named in the background.
   limited, because every request is counted whole. Continue starts the time and cost again and
   doubles the rounds; Pause runs nothing more and asks for one tool-free
   progress report, which alone is the turn's answer, without what was said
-  before the pause.
+  before the pause. The report is saved before the turn lets go of the
+  conversation, whatever else the model asked for, and one that cannot be
+  saved ends the turn as failed.
 - The plan holds at most eight items, an update is corrected rather than
   refused, and each turn the person starts begins with an empty plan. A turn
   about to finish with items open is reminded of them once. After four rounds
@@ -293,7 +324,9 @@ out still runs, and is named in the background.
   before then is unseen. After it, the shown text is withdrawn openly and
   exactly one answer remains. A specialist's round is the same round as a
   turn's, gathered without being shown: an answer of its own that drops midway
-  is started again too, and its waiting is not said in the conversation. The
+  is started again too, and its waiting is not said in the conversation. Its
+  rounds go back with their reasoning and replay record, as a turn's do, for
+  the providers that refuse a later request without them. The
   background work and condensing keep nothing of an attempt a restart replaced
   either.
 - When the model has sent nothing for fifteen seconds, the conversation says
@@ -306,18 +339,25 @@ out still runs, and is named in the background.
   has been measured to take so that no model is stopped short of that, is
   stopped and asked once, in a
   `thinking` notice, to act on what it knows: call a tool, answer, or ask one
-  question. What it reasoned leaves no empty answer behind, and a message the
+  question. That request goes with the least reasoning the model can be asked
+  for: none where it answers without reasoning, otherwise its lowest effort,
+  and the conversation's setting where it can be asked for no less. The
+  request after one that answered or acted has the conversation's setting
+  again. What it reasoned leaves no empty answer behind, and a message the
   person added meanwhile goes with the new request. Stopped twice in a row,
   the turn ends and says why. Reasoning that continues once an answer or a
-  call has begun is never cut. A specialist's own rounds are not held to this
-  limit.
+  call has begun is never cut. A specialist's own rounds are held to the same
+  limit and asked again the same way, though told to call a tool or finish,
+  since it has no person to ask; stopped twice in a row, the specialist
+  settles as failed with that reason, which the conversation is told in its
+  handoff.
 - A person can ask for the answer while the turn's request has only reasoned.
   That request is stopped, what it reasoned leaves no empty answer behind, and
   the model is asked again with an `answerNow` notice telling it to answer
-  from what it knows or take the next step directly. Where the chosen model
-  can answer without reasoning, that request and the rest of the turn go
-  without it; where it cannot, they keep the conversation's setting. The next
-  turn has the conversation's setting again. Once an answer or a call has
+  from what it knows or take the next step directly. That request and the
+  rest of the turn go with the least reasoning the model can be asked for, as
+  after reasoning at length. The next turn has the conversation's setting
+  again. Once an answer or a call has
   begun, or when no request is reasoning, asking changes nothing and says so.
   A person's Stop meanwhile ends the turn as it always does.
 - A message added while a turn works waits for the turn's next request, and
@@ -348,6 +388,8 @@ out still runs, and is named in the background.
   The repair works from the tool's own input; a `purpose` it adds is taken off
   before the tool sees the call. Once the tool succeeds, the failed attempts
   are removed from the request.
+- A view the window could not check in time is never sent to repair: nobody
+  judged it wrong.
 - Input that stops before it ends is never repaired. The model is told to send
   less only when what arrived was long; a short call that stopped early was not
   cut for its length, and it is told to send the whole call again. A failed

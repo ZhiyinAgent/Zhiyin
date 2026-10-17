@@ -4,16 +4,34 @@
  * touches a conversation, so it sits beside the workspace rather than inside it.
  */
 
-import type {
-  ApiKeySaveOutcome,
-  AppEvent,
-  ModelCatalog,
-  ModelProviderList,
-  ProviderSettings,
-  ProviderSummary,
-  ProviderTarget,
+import {
+  REASONING_EFFORTS,
+  type ApiKeySaveOutcome,
+  type AppEvent,
+  type ModelCatalog,
+  type ModelProviderList,
+  type ProviderSettings,
+  type ProviderSummary,
+  type ProviderTarget,
+  type ReasoningSelection,
 } from "@zhiyin/contract";
 import type { ModelClient, ProviderDirectory } from "@zhiyin/model-client";
+
+/**
+ * The least reasoning a model can be asked for: none where it answers without
+ * it, otherwise the lowest effort it lists, and nothing where it lists neither
+ * or its controls are unknown.
+ */
+function leastReasoningOf(
+  reasoning: ProviderSettings["reasoning"],
+): ReasoningSelection | undefined {
+  if (reasoning?.status !== "available") return undefined;
+  if (!reasoning.required) return { enabled: false };
+  const lowest = REASONING_EFFORTS.find((effort) =>
+    reasoning.efforts.includes(effort),
+  );
+  return lowest ? { enabled: true, effort: lowest } : undefined;
+}
 
 /**
  * Which choice a lowered window was learned on: the provider and region, the
@@ -93,10 +111,7 @@ export class ModelSettings {
   forTurns() {
     return {
       acceptsImages: () => this.current()?.acceptsImages === true,
-      reasoningOptional: () => {
-        const reasoning = this.current()?.reasoning;
-        return reasoning?.status === "available" && !reasoning.required;
-      },
+      leastReasoning: () => leastReasoningOf(this.current()?.reasoning),
       modelWindow: () => ({ model: "", ...this.current() }),
       lowerWindow: (contextWindow: number, refusedTokens: number) =>
         this.lowerWindow(contextWindow, refusedTokens),

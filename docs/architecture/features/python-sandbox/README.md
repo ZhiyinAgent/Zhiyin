@@ -32,7 +32,9 @@ and every call needs the person's approval.
   `reset_python_environment`.
 - `defaultPackages` is what a fresh environment holds: pandas, polars, NumPy,
   SciPy, Matplotlib, seaborn, statsmodels, and openpyxl for Excel workbooks.
-  The default Python is 3.13.
+  The default Python is 3.13 as uv manages it, downloaded or one uv already
+  keeps, never another Python on the PC, and no uv settings file around the
+  sandbox's folder applies.
 - Programs run through the process-ownership mechanism (ADR 0004). A script
   may run for five minutes, and building the environment for fifteen. Tests
   may replace the runner.
@@ -62,18 +64,24 @@ and every call needs the person's approval.
 - A failure reports what the run or the build printed, with the exit code. The
   whole output is passed on, so a traceback at the end survives; how much of
   it the model sees is decided where every tool's answer is sized.
-- Python reads and writes UTF-8 whatever the console's code page, and
-  otherwise inherits Zhiyin's environment variables.
+- Python reads and writes UTF-8 whatever the console's code page. Python and
+  `uv` are given only the variables Windows programs expect and those that
+  say how to reach the network (proxies and certificates), so no variable
+  points them at another environment, package index or startup script, and
+  no credential kept in a variable reaches a script, apart from one written
+  into a proxy's address.
 - With no `uv` installed the connector offers no tool, and it offers all three
   as soon as `uv` is installed.
 - The approval says what a call will do and where anything is downloaded
   from: Python and the default packages when the environment is first built,
   and added packages from pypi.org. Running a script says that it runs with
   the person's own access to files and the network.
+- A script to run is shown whole, with its line breaks, however long.
 
 ## Testing notes
 
 The runner is replaceable, so argument building and isolation are tested
 without `uv`. A system-boundary test builds a real environment when
 `ZHIYIN_UV` points to `uv`, in a workspace holding a project whose dependency
-does not exist; the isolation claim fails there if it is wrong.
+does not exist; the isolation claim fails there if it is wrong. CI's gate
+installs `uv`, so there it runs.

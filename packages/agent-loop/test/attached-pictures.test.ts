@@ -137,7 +137,7 @@ describe("a picture a person attached", () => {
     );
   });
 
-  it("past what one request holds, the oldest are let go and the person's words stay", async () => {
+  it("past what one request holds, those in the middle are let go: the first two and the newest stay, and the person's words stay", async () => {
     const ids = Array.from({ length: 9 }, (_, index) => `p${index + 1}`);
     const { loop, requests } = loopSeeing(true, storing(...ids));
     const taskId = await loop.createTask();
@@ -150,10 +150,18 @@ describe("a picture a person attached", () => {
     const pictures = sent.map((message) =>
       JSON.stringify(message.content).includes('"kind":"image"'),
     );
-    expect(pictures.filter(Boolean).length).toBeLessThanOrEqual(8);
-    expect(pictures.at(-1)).toBe(true);
-    expect(pictures[0]).toBe(false);
-    expect(JSON.stringify(sent[0]?.content)).toContain("What is in p1?");
+    expect(pictures).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+    ]);
+    expect(JSON.stringify(sent[2]?.content)).toContain("What is in p3?");
   });
 
   it("counts pictures, not messages, so two full messages never send sixteen", async () => {
@@ -170,6 +178,21 @@ describe("a picture a person attached", () => {
     expect(JSON.stringify(personal(requests.at(-1))[0])).toContain(
       "What is in these?",
     );
+  });
+
+  it("lets the first two go too when the newest message leaves them no room", async () => {
+    const newest = Array.from({ length: 7 }, (_, index) => `n${index}`);
+    const { loop, requests } = loopSeeing(true, storing("p1", "p2", ...newest));
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "What is in p1?", undefined, ["p1"]);
+    await loop.start(taskId, "What is in p2?", undefined, ["p2"]);
+    await loop.start(taskId, "What is in these?", undefined, newest);
+
+    const pictures = personal(requests.at(-1)).map((message) =>
+      JSON.stringify(message.content).includes('"kind":"image"'),
+    );
+    expect(pictures).toEqual([false, false, true]);
   });
 
   it("refuses more than one request can hold in one message", async () => {

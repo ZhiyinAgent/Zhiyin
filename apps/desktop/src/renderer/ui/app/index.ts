@@ -5,6 +5,7 @@ export { ExportConversationDialog } from "./ExportConversationDialog.js";
 export { IssueNotices } from "./IssueNotices.js";
 export { RestartNotice } from "./RestartNotice.js";
 export { useToast } from "./Toast.js";
+export { useDimmedWindowControls } from "./useDimmedWindowControls.js";
 export { WorkspaceShell } from "./WorkspaceShell.js";
 export type { WorkspaceCommands } from "./workspaceCommands.js";
 export { WorkspacePicker } from "./WorkspacePicker.js";

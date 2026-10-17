@@ -158,6 +158,23 @@ describe("the theme check", () => {
     ]);
   });
 
+  it("refuses a text colour or ground whose contrast it cannot read", () => {
+    const grounds = dark.replace(
+      "color-scheme: dark;",
+      "color-scheme: dark;\n  --zy-canvas: #1b1c1e;\n  --zy-faint: rgb(123, 125, 131);",
+    );
+    const lightGrounds = light.replace(
+      "color-scheme: light;",
+      "color-scheme: light;\n    --zy-canvas: #f4f4f2;\n    --zy-faint: #5f6268;",
+    );
+
+    expect(themeProblems([foundations(grounds, lightGrounds)])).toEqual([
+      expect.stringContaining(
+        "--zy-faint in the dark theme is not a six-digit hex colour",
+      ),
+    ]);
+  });
+
   it("refuses any custom property used but set nowhere, in a stylesheet or a component", () => {
     const sheet = {
       path: "ui/recovery/recovery.module.css",

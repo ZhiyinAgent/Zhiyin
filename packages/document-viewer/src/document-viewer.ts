@@ -187,10 +187,12 @@ export class DocumentViewer {
     const located = await locateInside(root, place.path);
     switch (located.kind) {
       case "found":
+        // Judged on the file that will be opened: a link's own name says
+        // nothing about what Windows would do with what it leads to.
         return {
           ok: true,
           path: located.path,
-          openable: mayOpenInItsOwnApp(place.path),
+          openable: mayOpenInItsOwnApp(located.path),
         };
       case "outside":
         return { ok: false, reason: sentences.outsideFolder(place.path) };

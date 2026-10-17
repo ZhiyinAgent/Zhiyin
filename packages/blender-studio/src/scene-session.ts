@@ -43,7 +43,27 @@ export type SceneSessionOptions = {
   readonly startTimeoutMs?: number;
   /** How long a preview the person asked for may take. */
   readonly previewTimeoutMs?: number;
+  /** Whether Blender draws on this PC's graphics card; one for the session when absent. */
+  readonly drawing?: BlenderDrawing;
 };
+
+/**
+ * Whether Blender can draw on this PC's graphics card, shared by every
+ * conversation's scene. It can until a Blender ends while it draws its
+ * warm-up picture, as one does on a PC without a working graphics driver;
+ * from then on, for the rest of the app's run, no Blender is started.
+ */
+export class BlenderDrawing {
+  #fails = false;
+
+  get works(): boolean {
+    return !this.#fails;
+  }
+
+  failed(): void {
+    this.#fails = true;
+  }
+}
 
 type Look = {
   view: SceneView;
@@ -95,6 +115,9 @@ const stamp = (path: string) =>
 
 const notInstalled =
   "Blender is not installed. Install it from the 3D & Rendering plugin first.";
+/** Why no Blender starts on a PC whose graphics card Blender cannot draw on. */
+export const cannotDraw =
+  "Blender cannot draw on this PC's graphics card, which the 3D tools need to show and render a scene: its graphics driver may be missing or too old. Updating it, then restarting Zhiyin, may help.";
 const firstLook: Look = {
   view: "overview",
   yaw: 0,
@@ -112,11 +135,11 @@ const settleMs = 250;
 
 const endings: readonly string[] = ["timeout", "stopped", "ended"];
 
-/** Whether the first line Blender sent says it is ready. */
-function readyLine(line: string): boolean {
+/** Whether a line Blender sent as it started says it is ready, or drawing its warm-up picture. */
+function startLine(line: string, field: "ready" | "warming"): boolean {
   if (endings.includes(line)) return false;
   try {
-    return (JSON.parse(line) as { ready?: unknown }).ready === true;
+    return (JSON.parse(line) as Record<string, unknown>)[field] === true;
   } catch {
     return false;
   }
@@ -166,6 +189,7 @@ function previewSize(width: number, height: number) {
  */
 export class SceneSession {
   readonly #options: SceneSessionOptions;
+  readonly #drawing: BlenderDrawing;
   readonly #previews: string;
   readonly #listeners = new Set<(state: ScenePanelState) => void>();
   #state: ScenePanelState = {
@@ -187,11 +211,17 @@ export class SceneSession {
 
   constructor(options: SceneSessionOptions) {
     this.#options = options;
+    this.#drawing = options.drawing ?? new BlenderDrawing();
     this.#previews = join(options.directory, "previews");
   }
 
   state(): ScenePanelState {
     return this.#state;
+  }
+
+  /** Whether Blender can draw on this PC's graphics card, as far as is known. */
+  get draws(): boolean {
+    return this.#drawing.works;
   }
 
   onState(listener: (state: ScenePanelState) => void): () => void {
@@ -202,6 +232,11 @@ export class SceneSession {
   /** The workspace-relative scene file the session works on, if one is open. */
   scene(): string | undefined {
     return this.#scene?.relative;
+  }
+
+  /** The scene file the session works on, wherever it is, if one is open. */
+  sceneFile(): string | undefined {
+    return this.#scene?.absolute;
   }
 
   /**
@@ -439,6 +474,10 @@ export class SceneSession {
       this.#set({ status: "failed", reason: notInstalled });
       throw new Error(notInstalled);
     }
+    if (!this.#drawing.works) {
+      this.#set({ status: "failed", reason: cannotDraw });
+      throw new Error(cannotDraw);
+    }
     this.#set({ status: "starting" }, ["reason"]);
     await mkdir(this.#previews, { recursive: true });
     let process: SessionProcess;
@@ -454,13 +493,25 @@ export class SceneSession {
       this.#set({ status: "failed", reason });
       throw new Error(reason, { cause: error });
     }
-    const first = await this.#race(
-      process,
-      process.next(),
-      this.#options.startTimeoutMs ?? 180_000,
-    );
-    if (!readyLine(first)) {
+    const startMs = this.#options.startTimeoutMs ?? 180_000;
+    // A line sent just before the end may be read after the end is seen:
+    // the read already asked for is the one that gets it.
+    const read = async () => {
+      const reading = process.next();
+      const line = await this.#race(process, reading, startMs);
+      return line === "ended" ? ((await reading) ?? "ended") : line;
+    };
+    let first = await read();
+    const warming = startLine(first, "warming");
+    if (warming) first = await read();
+    if (!startLine(first, "ready")) {
       process.end();
+      // Ended while drawing on the graphics card: the 3D tools cannot work here.
+      if (warming && first === "ended") {
+        this.#drawing.failed();
+        this.#set({ status: "failed", reason: cannotDraw });
+        throw new Error(cannotDraw);
+      }
       const printed = await process.printed();
       this.#set({ status: "failed", reason: "Blender did not start." });
       throw new Error(`Blender did not start.${printed ? `\n${printed}` : ""}`);

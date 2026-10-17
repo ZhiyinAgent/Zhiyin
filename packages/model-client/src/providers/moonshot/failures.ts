@@ -46,6 +46,28 @@ function refusedRequest(failure: FailureReport, sentence: string | undefined) {
   );
 }
 
+/**
+ * A rate limit, told as the account's own limit where Moonshot names it. Its
+ * limits rise with what the account has been topped up by (rate limits page,
+ * checked 2026-10-15); a new account takes one request at a time. Moonshot's
+ * sentence names the organization and the key, which the message leaves out.
+ */
+function rateLimit(sentence: string | undefined): string {
+  const raises = "Kimi raises the limit as the account is topped up.";
+  const concurrency = /max organization concurrency: (\d+)/i.exec(
+    sentence ?? "",
+  );
+  if (concurrency) {
+    const open = Number(concurrency[1]);
+    return `This Kimi account takes ${open} request${open === 1 ? "" : "s"} at a time, and another was still open. ${raises}`;
+  }
+  if (/\bRPM\b/.test(sentence ?? ""))
+    return `This Kimi account reached the number of requests it may send in a minute. ${raises}`;
+  return sentence
+    ? `Kimi is limiting how fast requests are sent: ${sentence}`
+    : "Kimi is limiting how fast requests are sent. Trying again shortly.";
+}
+
 export function classifyFailure(failure: FailureReport): ModelClientError {
   const sentence = said(failure);
   const wait = retryAfterMs(failure.headers);
@@ -73,13 +95,7 @@ export function classifyFailure(failure: FailureReport): ModelClientError {
       { retryable: true, ...waiting },
     );
   if (type === "rate_limit_reached_error")
-    return new ModelClientError(
-      "rateLimited",
-      sentence
-        ? `Kimi is limiting how fast requests are sent: ${sentence}`
-        : "Kimi is limiting how fast requests are sent. Trying again shortly.",
-      waiting,
-    );
+    return new ModelClientError("rateLimited", rateLimit(sentence), waiting);
 
   switch (failure.status) {
     case 400: {

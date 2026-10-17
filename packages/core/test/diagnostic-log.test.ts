@@ -53,6 +53,27 @@ describe("the diagnostic log", () => {
     ]);
   });
 
+  it("removes credentials from what it writes, the error's words and where it came from included", async () => {
+    const folder = await logsFolder();
+    const log = new DiagnosticLog(folder, at("2026-09-23T10:00:00.000Z"));
+    const failure = new Error(
+      "Request failed: Authorization: Bearer sk-or-v1-0123456789abcdef0123",
+    );
+    failure.stack = `${failure.message}\n    at send (https://ana:s3cret@example.com/x.js:1:1)`;
+
+    log.record({
+      level: "error",
+      source: "model",
+      message: "Sending with OPENAI_API_KEY=k1a2b3 failed.",
+      error: failure,
+    });
+
+    const written = await readFile(join(folder, "2026-09-23.jsonl"), "utf8");
+    for (const secret of ["sk-or-v1-0123456789abcdef0123", "k1a2b3", "s3cret"])
+      expect(written).not.toContain(secret);
+    expect(written).toContain("[credential omitted]");
+  });
+
   it("keeps where an error came from", async () => {
     const folder = await logsFolder();
     const log = new DiagnosticLog(folder, at("2026-09-23T10:00:00.000Z"));

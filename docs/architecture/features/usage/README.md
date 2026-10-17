@@ -52,7 +52,8 @@ because request accounting has its own retention and failure behavior.
   reported dollars and each currency's estimates apart, never converting one
   into another, and order conversations by dollars, then by each other
   currency. A request with either is priced; one with neither still counts,
-  and the summary says how many were priced.
+  and the summary says how many were priced, in all, by model and by
+  conversation.
 - A failure to save usage never fails the request it describes. The usage
   state is then `failed`, apart from `unavailable`, and the usage view says the
   history could not be saved rather than that there is none yet.

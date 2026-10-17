@@ -8,12 +8,14 @@ import type {
   ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
+import { ProtocolError } from "@modelcontextprotocol/client";
 import type { BuiltInMcpServer, McpConnection } from "./connection-types.js";
 import { actionTitle, routedName } from "./action-title.js";
 import { asArguments } from "./call-arguments.js";
 import {
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
   UNAUTHORIZED,
   SIGN_IN,
   RETRY_AFTER_MS,
@@ -37,6 +39,7 @@ import {
 import { BuiltInDescriptions } from "./built-in-descriptions.js";
 import { testConnection } from "./connection-test.js";
 import { validateDefinition } from "./endpoint.js";
+import { toolSummary, withheldReason } from "./schema-limit.js";
 
 /**
  * `token` is asked for the current credential rather than handed one, so a
@@ -76,6 +79,13 @@ export type DeclaredMcpServer = {
 };
 
 export type DeclaredMcpServers = () => Promise<readonly DeclaredMcpServer[]>;
+
+/**
+ * The packages that cannot be read right now, by name. Their connectors, whose
+ * ids start with the package's name and a slash, are declared by nobody until
+ * the package opens again, and keep what is remembered about them meanwhile.
+ */
+export type UnreadableMcpPackages = () => Promise<readonly string[]>;
 
 /** What running a connector's tool may be given beside its name and arguments. */
 export type McpExecuteOptions = {
@@ -173,6 +183,7 @@ export class ManagedMcpServers implements McpServers {
   readonly #tokens: ConnectionTokens;
   readonly #builtIns: readonly BuiltInMcpServer[];
   readonly #declared: DeclaredMcpServers;
+  readonly #unreadable: UnreadableMcpPackages;
   readonly #connected = new Map<string, ConnectedServer>();
   readonly #connecting = new Map<string, Promise<void>>();
   readonly #epochs = new Map<string, number>();
@@ -199,11 +210,13 @@ export class ManagedMcpServers implements McpServers {
     {
       builtIns = [],
       declared = async () => [],
+      unreadable = async () => [],
       now = Date.now,
       signInOptions,
     }: {
       readonly builtIns?: readonly BuiltInMcpServer[];
       readonly declared?: DeclaredMcpServers;
+      readonly unreadable?: UnreadableMcpPackages;
       readonly now?: (() => number) | undefined;
       readonly signInOptions?: SignInOptions | undefined;
     } = {},
@@ -215,6 +228,7 @@ export class ManagedMcpServers implements McpServers {
     this.#tokens = new ConnectionTokens(store, now);
     this.#builtIns = builtIns;
     this.#declared = declared;
+    this.#unreadable = unreadable;
   }
 
   /** Built-in connections have no stored definition to look up. */
@@ -402,11 +416,9 @@ export class ManagedMcpServers implements McpServers {
           status,
           toolCount: connected?.tools.length ?? 0,
           tools:
-            connected?.tools.map(({ name, description }) => ({
-              name,
-              enabled: !disabledTools.has(name),
-              ...(description ? { description } : {}),
-            })) ?? [],
+            connected?.tools.map((tool) =>
+              toolSummary(tool, !disabledTools.has(tool.name)),
+            ) ?? [],
           ...(failure ? { reason: failure.reason } : {}),
           ...(checkedAt === undefined ? {} : { checkedAt }),
           ...(this.#signIns.offered(server.id)
@@ -682,6 +694,18 @@ export class ManagedMcpServers implements McpServers {
               ? error.message
               : "The built-in connection could not complete this action.",
         });
+      // The server answered, so the connection is as sound as it was. An
+      // answer unlike the tool's declared output comes from a call that ran.
+      if (error instanceof McpUndeclaredAnswerError)
+        return {
+          ok: false,
+          reason: `The MCP server ran the call, but its answer does not match the output the tool declares, so it is not used. The action may already have taken effect: check before calling it again. ${error.message.trim().slice(0, 1_000)}`,
+        };
+      if (ProtocolError.isInstance(error))
+        return {
+          ok: false,
+          reason: `The MCP server answered the call with an error: ${error.message.trim().slice(0, 1_000) || `code ${error.code}`}`,
+        };
       const refused = error instanceof McpUnauthorizedError;
       await this.#disconnect(route.connectionKey);
       const refusal =
@@ -949,6 +973,7 @@ export class ManagedMcpServers implements McpServers {
       const connected = this.#connected.get(connectionKey);
       if (!connected) continue;
       for (const tool of connected.tools) {
+        if (withheldReason(tool)) continue;
         route(routedName(server.id, tool.name), {
           server: { id: server.id, name: server.name, url: "", enabled: true },
           tool,
@@ -963,7 +988,7 @@ export class ManagedMcpServers implements McpServers {
       if (!server.enabled || !connected) continue;
       const disabledTools = new Set(server.disabledTools ?? []);
       for (const tool of connected.tools) {
-        if (disabledTools.has(tool.name)) continue;
+        if (disabledTools.has(tool.name) || withheldReason(tool)) continue;
         route(routedName(server.id, tool.name), {
           server,
           tool,
@@ -994,8 +1019,12 @@ export class ManagedMcpServers implements McpServers {
    */
   async #reconcile(): Promise<McpServerDefinition[]> {
     let declared: readonly DeclaredMcpServer[];
+    let unreadable: readonly string[];
     try {
-      declared = await this.#declared();
+      [declared, unreadable] = await Promise.all([
+        this.#declared(),
+        this.#unreadable(),
+      ]);
     } catch (error) {
       throw new Error("Connections could not be read.", { cause: error });
     }
@@ -1018,6 +1047,8 @@ export class ManagedMcpServers implements McpServers {
     for (const id of Object.keys(state)) {
       if (byId.has(id)) continue;
       await this.#disconnect(id);
+      // Not undeclared, only unread: kept for when its package opens again.
+      if (unreadable.some((name) => id.startsWith(`${name}/`))) continue;
       this.#signIns.forget(id);
       if (await this.#tokens.forget(id)) {
         delete next[id];

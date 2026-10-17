@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PluginComponentState, PluginState } from "@zhiyin/contract";
 import { Icon, InfoTip, Toggle } from "../shared/index.js";
 import { inWords } from "./names.js";
@@ -57,7 +57,11 @@ function originLabel(plugin: PluginState): string {
  * told by the switch beside them.
  */
 function connectionStatus(component: PluginComponentState): string {
-  if (component.toolchain?.status === "installing") return "Installing…";
+  const toolchain = component.toolchain;
+  if (toolchain?.status === "installing")
+    return toolchain.bytes
+      ? `Installing… ${Math.floor(((toolchain.received ?? 0) / toolchain.bytes) * 100)}%`
+      : "Installing…";
   switch (component.status) {
     case "ready":
       return "";
@@ -89,6 +93,9 @@ export type ComponentActions = {
   readonly onToggle: (id: string, enabled: boolean) => void | Promise<void>;
   readonly onOpen: (component: PluginComponentState) => void;
   readonly onInstall: (component: PluginComponentState) => void;
+  readonly onCancelInstall: (
+    component: PluginComponentState,
+  ) => void | Promise<void>;
   readonly onRecheck: (component: PluginComponentState) => void | Promise<void>;
 };
 
@@ -131,8 +138,21 @@ function ComponentRow({
     (component.status === "failed" ||
       component.status === "unchecked" ||
       (component.status === "setup-required" && component.appConnector));
+  // The install's button goes once it ends, and focus with it: it stays in
+  // the row, on the next control there.
+  const row = useRef<HTMLLIElement>(null);
+  const wasInstalling = useRef(installing);
+  useEffect(() => {
+    const ended = wasInstalling.current && !installing;
+    wasInstalling.current = installing;
+    if (!ended || document.activeElement !== document.body) return;
+    row.current
+      ?.querySelector<HTMLElement>("button:not(:disabled), [role=switch]")
+      ?.focus();
+  }, [installing]);
   return (
     <li
+      ref={row}
       className={`${styles["plugin-component"]}${component.enabled && !awaitingSetup ? "" : ` ${styles["plugin-component--disabled"]}`}`}
     >
       <span className={styles["plugin-component__copy"]}>
@@ -169,22 +189,23 @@ function ComponentRow({
         )}
       </span>
       <span className={styles["plugin-component__actions"]}>
-        {needsInstall && (
+        {/* One button in one place, so focus stays on it as the install
+            starts: Set up becomes Cancel. */}
+        {(needsInstall || installing) && (
           <button
             type="button"
             className={styles["plugin-component__edit"]}
-            onClick={() => actions.onInstall(component)}
+            onClick={() =>
+              installing
+                ? void actions.onCancelInstall(component)
+                : actions.onInstall(component)
+            }
           >
-            {toolchain?.status === "failed" ? "Try again" : "Set up"}
-          </button>
-        )}
-        {installing && (
-          <button
-            type="button"
-            className={styles["plugin-component__edit"]}
-            disabled
-          >
-            Installing…
+            {installing
+              ? "Cancel"
+              : toolchain?.status === "failed"
+                ? "Try again"
+                : "Set up"}
           </button>
         )}
         {canRecheck && (

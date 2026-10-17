@@ -121,4 +121,20 @@ describe("browser permission requests", () => {
         reason: expect.stringContaining("File URLs are not supported"),
       });
   });
+
+  it("opens only web addresses", async () => {
+    for (const url of [
+      "view-source:https://example.com/",
+      "edge://settings",
+      "data:text/html,hello",
+      "about:config",
+    ])
+      expect(
+        await inspectBrowser(
+          onPage("https://example.com/pricing"),
+          "browser_navigate",
+          { url },
+        ),
+      ).toMatchObject({ ok: false, reason: expect.stringContaining("web") });
+  });
 });
