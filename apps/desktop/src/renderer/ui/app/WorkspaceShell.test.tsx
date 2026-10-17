@@ -25,6 +25,7 @@ import {
   type WorkspaceTask,
 } from "./workspaceState.js";
 import { WorkspaceShell } from "./WorkspaceShell.js";
+import { Dialog } from "../shared/index.js";
 import { stubCommands } from "../../stubCommands.js";
 
 describe("WorkspaceShell", () => {
@@ -922,6 +923,24 @@ describe("WorkspaceShell", () => {
           .getByText("Permission needed: Save the summary")
           .closest("[aria-live]"),
       ).toBeInTheDocument();
+    });
+
+    it("leaves focus in a dialog that is open", () => {
+      const withDialog = (task: WorkspaceTask) => (
+        <>
+          {shell(task)}
+          <Dialog title="Rename the conversation" onClose={() => undefined}>
+            <button type="button">Keep the name</button>
+          </Dialog>
+        </>
+      );
+      const { rerender } = render(withDialog(working));
+      const inDialog = screen.getByRole("button", { name: "Keep the name" });
+      inDialog.focus();
+
+      rerender(withDialog(asking));
+
+      expect(inDialog).toHaveFocus();
     });
   });
 
@@ -1858,6 +1877,92 @@ describe("WorkspaceShell", () => {
     expect(screen.getByLabelText("Message Zhiyin")).toHaveValue(
       "Plan a trip to Xi'an",
     );
+  });
+
+  it("leaves the next empty composer empty once the conversation its first message opened is deleted", async () => {
+    const ready = {
+      connection: "ready" as const,
+      runtime: {
+        tasks: "available" as const,
+        capabilities: "available" as const,
+      },
+    };
+    const opened: WorkspaceTask = {
+      id: "task-new",
+      title: "Trip",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-05T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "draft" },
+    };
+    type Show = (state: ReturnType<typeof createWorkspaceState>) => void;
+    let show: Show = () => undefined;
+    function Opening({ shows }: { readonly shows: (set: Show) => void }) {
+      const [state, setState] = useState(createWorkspaceState(ready));
+      useEffect(() => shows(setState), [shows]);
+      const commands = useMemo(
+        () => ({
+          ...stubCommands,
+          createTask: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [opened],
+                selectedTaskId: opened.id,
+              }),
+            );
+            return opened.id;
+          },
+          sendMessage: async () => {
+            setState(
+              createWorkspaceState({
+                ...ready,
+                tasks: [
+                  {
+                    ...opened,
+                    messages: [
+                      {
+                        sequence: 0,
+                        id: "u",
+                        role: "user",
+                        text: "Plan a trip",
+                      },
+                    ],
+                    phase: { kind: "interrupted" },
+                  },
+                ],
+                selectedTaskId: opened.id,
+              }),
+            );
+          },
+        }),
+        [],
+      );
+      return (
+        <WorkspaceShell
+          state={state}
+          dispatch={() => undefined}
+          commands={commands}
+        />
+      );
+    }
+    render(<Opening shows={(set) => (show = set)} />);
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "Plan a trip" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Message Zhiyin")).toHaveValue(""),
+    );
+    fireEvent.change(screen.getByLabelText("Message Zhiyin"), {
+      target: { value: "A draft for the trip" },
+    });
+
+    // Deleted, and it was the only one: nothing is open.
+    act(() => show(createWorkspaceState({ ...ready, tasks: [] })));
+
+    expect(screen.getByLabelText("Message Zhiyin")).toHaveValue("");
   });
 
   it("shows how full the conversation is and sends a budget change to the core", () => {

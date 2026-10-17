@@ -54,6 +54,25 @@ describe("installing what a connector needs", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("installs again when asked right after a cancel, and that install can be stopped too", async () => {
+    const { stopped, capabilities } = installingUntilStopped();
+    const { plugins: lifecycle } = plugins(capabilities);
+
+    const first = lifecycle.installToolchain("software-engineering/browser");
+    await lifecycle.cancelToolchainInstall("software-engineering/browser");
+    // Asked again before the first has ended.
+    const second = lifecycle.installToolchain("software-engineering/browser");
+    await first;
+    expect(stopped).toEqual(["software-engineering/browser"]);
+
+    await lifecycle.cancelToolchainInstall("software-engineering/browser");
+    await expect(second).resolves.toBeUndefined();
+    expect(stopped).toEqual([
+      "software-engineering/browser",
+      "software-engineering/browser",
+    ]);
+  });
+
   it("cancels nothing for a connector that is not installing", async () => {
     const { stopped, capabilities } = installingUntilStopped();
     const { plugins: lifecycle } = plugins(capabilities);

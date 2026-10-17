@@ -838,8 +838,14 @@ async function compilingApp(root: string) {
   const compiler = documentCompiler({
     workspaceRoot: () => root,
     programs: async () => ({ typst: "C:/programs/typst.exe" }),
+    tectonicCache: "C:/programs/tectonic-cache",
     run: async ({ arguments: args }) => {
+      // As Typst does: the PDF, and the list of files it read.
       await writeFile(args.at(-1)!, "%PDF-1.7\nrecompiled\n");
+      await writeFile(
+        args[args.indexOf("--deps") + 1]!,
+        JSON.stringify({ inputs: [args.at(-2)], outputs: [args.at(-1)] }),
+      );
       return { exitCode: 0, stdout: "", stderr: "" };
     },
   });

@@ -26,6 +26,8 @@ afterEach(() => folders.removeAll());
 function fakeAutomationServer(
   /** Tools it lists besides its usual four, as Playwright describes them. */
   more: readonly { name: string; description: string }[] = [],
+  /** What it answers each tool call with. */
+  said = "done",
 ) {
   let contextGetter: (() => Promise<unknown>) | undefined;
   let closed = false;
@@ -107,7 +109,7 @@ function fakeAutomationServer(
                         message as { params?: { arguments?: unknown } }
                       ).params?.arguments;
                       await contextGetter?.();
-                      return { content: [{ type: "text", text: "done" }] };
+                      return { content: [{ type: "text", text: said }] };
                     })().catch((cause: unknown) => ({
                       failed:
                         cause instanceof Error ? cause.message : String(cause),
@@ -263,7 +265,7 @@ describe("browser automation", () => {
     expect(browser.open).toHaveBeenCalledTimes(2);
   });
 
-  it("tells the agent, once, of each download the browser stopped for its size", async () => {
+  it("tells the agent, once, of each download the browser stopped at its limit", async () => {
     const server = fakeAutomationServer();
     const stopped = [{ name: "endless.bin", limitBytes: 1024 ** 3 }];
     const browser = Object.assign(fakeBrowser(), {
@@ -285,9 +287,61 @@ describe("browser automation", () => {
     });
 
     expect(text(told)).toContain(
-      "The download of endless.bin was stopped at 1 GB, the most a download may be.",
+      "The download of endless.bin was stopped: this browser's downloads may come to 1 GB in all.",
     );
     expect(text(after)).not.toContain("endless.bin");
+  });
+
+  it("lists no tab on Edge's own page of downloads among the tabs the agent is shown", async () => {
+    const server = fakeAutomationServer(
+      [],
+      [
+        "### Open tabs",
+        "- 0: (current) [Files](http://127.0.0.1/)",
+        "- 1: [Téléchargements](edge://downloads-hub/)",
+        "- 2: [Docs](https://example.com/docs)",
+      ].join("\n"),
+    );
+    const automation = browserAutomation(fakeBrowser(), {
+      createConnection: server.createConnection,
+    });
+
+    const result = await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+
+    expect((result as { content: { text?: string }[] }).content[0]?.text).toBe(
+      [
+        "### Open tabs",
+        "- 0: (current) [Files](http://127.0.0.1/)",
+        "- 2: [Docs](https://example.com/docs)",
+      ].join("\n"),
+    );
+  });
+
+  it("tells the browser of each download the automation server says it kept", async () => {
+    const server = fakeAutomationServer(
+      [],
+      [
+        "### Events",
+        '- Downloaded file report.pdf to "./report.pdf"',
+        "- Downloading file data.csv ...",
+        '- Downloaded file data.csv to "./data.csv"',
+      ].join("\n"),
+    );
+    const kept: string[] = [];
+    const browser = Object.assign(fakeBrowser(), {
+      downloadsKept: (names: readonly string[]) => kept.push(...names),
+    });
+    const automation = browserAutomation(browser, {
+      createConnection: server.createConnection,
+    });
+
+    await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+
+    expect(kept).toEqual(["report.pdf", "data.csv"]);
   });
 
   it("refuses a tool with the reason the browser gave, rather than acting", async () => {

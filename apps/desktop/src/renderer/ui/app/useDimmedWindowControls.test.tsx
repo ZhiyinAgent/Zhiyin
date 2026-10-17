@@ -26,13 +26,14 @@ describe("Windows' own window controls", () => {
     const dim = vi.fn(async () => {});
     const { getByRole } = render(<Page dim={dim} />);
     await act(async () => {});
-    expect(dim).not.toHaveBeenCalled();
+    // Said as the page starts, so a page loaded again after one that had a
+    // dialog open leaves them lit.
+    expect(dim.mock.calls).toEqual([[false]]);
 
     await act(async () => getByRole("button", { name: "Open" }).click());
     expect(dim).toHaveBeenLastCalledWith(true);
 
     await act(async () => getByRole("button", { name: /close/i }).click());
-    expect(dim).toHaveBeenLastCalledWith(false);
-    expect(dim).toHaveBeenCalledTimes(2);
+    expect(dim.mock.calls).toEqual([[false], [true], [false]]);
   });
 });

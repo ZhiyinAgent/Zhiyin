@@ -361,6 +361,53 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     ).toEqual([]);
   });
 
+  it("puts back as it is a file already as it was, as after an undo another file stopped partway", async () => {
+    const { root, recovery } = await fixture();
+    await writeFile(join(root, "back.txt"), "before");
+    await writeFile(join(root, "held.txt"), "before");
+    await recovery.prepare(
+      "action-1",
+      root,
+      [
+        { path: "back.txt", change: "updated" },
+        { path: "held.txt", change: "updated" },
+      ],
+      "conversation-1",
+    );
+    await writeFile(join(root, "back.txt"), "agent result");
+    await writeFile(join(root, "held.txt"), "agent result");
+    await recovery.commit("action-1");
+    // The first undo put one file back; the other was left as the work left it.
+    await writeFile(join(root, "back.txt"), "before");
+    const actions = [
+      {
+        id: "action-1",
+        action: "Edit files",
+        target: "2 files",
+        status: "completed" as const,
+        sequence: 0,
+        changes: [
+          { path: "back.txt", change: "updated" as const },
+          { path: "held.txt", change: "updated" as const },
+        ],
+      },
+    ];
+
+    const review = await recovery.review("review-1", root, actions);
+    const result = await recovery.restore(review);
+
+    expect(review.files.map((file) => file.status)).toEqual([
+      "recoverable",
+      "recoverable",
+    ]);
+    expect(result.files.map((file) => file.status)).toEqual([
+      "restored",
+      "restored",
+    ]);
+    expect(await readFile(join(root, "back.txt"), "utf8")).toBe("before");
+    expect(await readFile(join(root, "held.txt"), "utf8")).toBe("before");
+  });
+
   it("refuses to overwrite a file changed after the recorded action", async () => {
     const { root, recovery } = await fixture();
     await writeFile(join(root, "note.txt"), "before");

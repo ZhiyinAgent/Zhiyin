@@ -51,11 +51,19 @@ export const pictureBytes = Buffer.from("not really a jpeg");
  * A Blender stand-in speaking the session's protocol. By default it does what
  * it is asked, and draws a preview when asked for one. It says it is drawing
  * its warm-up picture first; one that `cannotDraw` ends there, as Blender
- * does on a PC without a working graphics driver.
+ * does on a PC without a working graphics driver. One that `endsAtOnce`
+ * ends before saying anything. Through a `slowPipe`, each line reaches its
+ * reader a moment after it was sent, so an end can be seen before the last
+ * lines sent ahead of it, as a real process's can.
  */
 export function standInBlender(
   behaviour?: Behaviour,
-  options: { ready?: boolean; cannotDraw?: boolean } = {},
+  options: {
+    ready?: boolean;
+    cannotDraw?: boolean;
+    endsAtOnce?: boolean;
+    slowPipe?: boolean;
+  } = {},
 ) {
   const launches: SessionLaunchOptions[] = [];
   const requests: Request[] = [];
@@ -64,26 +72,40 @@ export function standInBlender(
     launches.push(launchOptions);
     const index = ended.push(false) - 1;
     const lines: string[] = [];
-    let waiting: ((line: string | undefined) => void) | undefined;
+    // Reads are answered in the order they were asked, as a line reader's.
+    const waiting: ((line: string | undefined) => void)[] = [];
+    /** Whether every line sent has been read or is waiting to be. */
+    let drained = false;
+    let inTransit = Promise.resolve();
     let finish!: () => void;
     const finished = new Promise<void>((resolve) => {
       finish = resolve;
     });
+    const arrive = (line: string) => {
+      const wake = waiting.shift();
+      if (wake) wake(line);
+      else lines.push(line);
+    };
     const push = (line: string) => {
       if (ended[index]) return;
-      if (waiting) {
-        const wake = waiting;
-        waiting = undefined;
-        wake(line);
-      } else lines.push(line);
+      if (!options.slowPipe) return arrive(line);
+      inTransit = inTransit
+        .then(() => new Promise<void>((resolve) => setImmediate(resolve)))
+        .then(() => arrive(line));
+    };
+    const drain = () => {
+      drained = true;
+      for (const wake of waiting.splice(0)) wake(undefined);
     };
     const end = () => {
       if (ended[index]) return;
       ended[index] = true;
-      waiting?.(undefined);
+      if (options.slowPipe) void inTransit.then(drain);
+      else drain();
       finish();
     };
-    if (options.ready !== false) push(JSON.stringify({ warming: true }));
+    if (options.endsAtOnce) end();
+    else if (options.ready !== false) push(JSON.stringify({ warming: true }));
     if (options.cannotDraw) end();
     else if (options.ready !== false) push(JSON.stringify({ ready: true }));
     const process: SessionProcess = {
@@ -134,10 +156,10 @@ export function standInBlender(
       next: () =>
         lines.length
           ? Promise.resolve(lines.shift())
-          : ended[index]
+          : drained
             ? Promise.resolve(undefined)
             : new Promise((resolve) => {
-                waiting = resolve;
+                waiting.push(resolve);
               }),
       ended: finished,
       end,

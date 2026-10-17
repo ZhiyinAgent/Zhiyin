@@ -9,9 +9,11 @@ import { describe, expect, it } from "vitest";
 import type { WorkspaceTask } from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import {
+  loopAndHost,
   loopFrom,
   pluginOffering,
   pluginsOffering,
+  queuedWorkRun,
   stubDependencies,
   until,
 } from "./support.js";
@@ -48,6 +50,43 @@ function withSavedReport(task: WorkspaceTask, summary: string): WorkspaceTask {
     ],
   };
 }
+
+/** Two specialists, Alpha and Beta, for runs that settle apart. */
+const twoSpecialists = pluginsOffering([
+  pluginOffering({
+    name: "engineering",
+    specialists: [
+      { id: "a", name: "Alpha", description: "A.", instructions: "A." },
+      { id: "b", name: "Beta", description: "B.", instructions: "B." },
+    ],
+  }),
+]);
+
+const finishing = (summary: string) => ({
+  kind: "toolCallDelta" as const,
+  index: 0,
+  callId: `finish-${summary}`,
+  name: "finish_specialist",
+  argumentsDelta: JSON.stringify({
+    summary,
+    findings: [],
+    recommendations: [],
+    limitations: [],
+  }),
+});
+
+const delegating = (
+  index: number,
+  callId: string,
+  id: string,
+  task: string,
+) => ({
+  kind: "toolCallDelta" as const,
+  index,
+  callId,
+  name: "delegate_specialist",
+  argumentsDelta: JSON.stringify({ id, task }),
+});
 
 describe("waking a task after a background specialist settles", () => {
   it("delivers a finished handoff from saved history after a simulated restart", async () => {
@@ -239,5 +278,326 @@ describe("waking a task after a background specialist settles", () => {
         /^<zhiyin-notice kind="specialists">.*"status":"completed"/,
       ),
     });
+  });
+  it("wakes nothing for a handoff already waiting when the person stops the turn, after a restart too", async () => {
+    const base = stubDependencies(() => {});
+    let woken = 0;
+    let parentWaiting = false;
+    const dependencies: Parameters<typeof loopFrom>[0] = {
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Reviews work.",
+              instructions: "Review the evidence.",
+            },
+          ],
+        }),
+      ]),
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Reviewer specialist")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "finish-1",
+              name: "finish_specialist",
+              argumentsDelta: JSON.stringify({
+                summary: "All clear.",
+                findings: [],
+                recommendations: [],
+                limitations: [],
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (text.includes("finished in the background")) {
+            woken += 1;
+            yield { kind: "textDelta" as const, text: "Review complete." };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (!text.includes("Review this.")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Review this.",
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          // The parent's next request is still out when the person stops it.
+          parentWaiting = true;
+          await until(() => request.signal?.aborted === true);
+        },
+      },
+      newSpecialistRunId: () => "specialist-1",
+    };
+    const loop = loopFrom(dependencies);
+    const taskId = await loop.createTask(["engineering"]);
+
+    const turn = loop.start(taskId, "Review this change");
+    await until(
+      () =>
+        parentWaiting &&
+        loop.snapshot().tasks[0]?.specialistRuns?.[0]?.status === "completed",
+    );
+    await loop.cancel(taskId);
+    await turn;
+    await until(() => !loop.running(taskId));
+    await queuedWorkRun();
+
+    expect(woken).toBe(0);
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
+
+    // A restart: a fresh loop opens the conversation as it was saved.
+    const saved = loop.snapshot().tasks[0]!;
+    const restarted = loopFrom(dependencies);
+    restarted.restore([saved]);
+    restarted.wakeSaved([saved]);
+    await queuedWorkRun();
+    expect(restarted.running(saved.id)).toBe(false);
+    expect(woken).toBe(0);
+  });
+  it("tells a specialist that finished as the person stopped it to their next turn, without waking", async () => {
+    const base = stubDependencies(() => {});
+    let releaseSpecialist!: () => void;
+    const specialistGate = new Promise<void>((resolve) => {
+      releaseSpecialist = resolve;
+    });
+    const requests: ModelRequest[] = [];
+    let woken = 0;
+    const { host } = loopAndHost({
+      ...base,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "reviewer",
+              name: "Reviewer",
+              description: "Reviews work.",
+              instructions: "Review the evidence.",
+            },
+          ],
+        }),
+      ]),
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Reviewer specialist")) {
+            await specialistGate;
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "finish-1",
+              name: "finish_specialist",
+              argumentsDelta: JSON.stringify({
+                summary: "All clear.",
+                findings: [],
+                recommendations: [],
+                limitations: [],
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          requests.push(request);
+          if (!text.includes("Review this.")) {
+            yield {
+              kind: "toolCallDelta" as const,
+              index: 0,
+              callId: "delegate-1",
+              name: "delegate_specialist",
+              argumentsDelta: JSON.stringify({
+                id: "engineering/reviewer",
+                task: "Review this.",
+              }),
+            };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (
+            text.includes("finished in the background") &&
+            requests.length === 3
+          )
+            woken += 1;
+          yield { kind: "textDelta" as const, text: "Noted." };
+          yield { kind: "done" as const };
+        },
+      },
+      newSpecialistRunId: () => "specialist-1",
+    });
+    const loop = host.app;
+    const taskId = await loop.createTask(["engineering"]);
+    await loop.start(taskId, "Review this change");
+
+    // The specialist's end is being saved when the person stops it.
+    let release = () => {};
+    let held = false;
+    host.holdsSave = (task) => {
+      if (held || task.specialistRuns[0]?.status !== "completed")
+        return undefined;
+      held = true;
+      return new Promise<void>((resolve) => (release = resolve));
+    };
+    releaseSpecialist();
+    await until(() => held);
+    await loop.cancel(taskId);
+    release();
+    await until(() => !loop.running(taskId));
+    await queuedWorkRun();
+
+    expect(woken).toBe(0);
+    expect(requests).toHaveLength(2);
+    expect(loop.snapshot().tasks[0]?.specialistRuns[0]?.status).toBe(
+      "completed",
+    );
+
+    await loop.start(taskId, "Any news?");
+    expect(JSON.stringify(requests.at(-1)?.messages)).toContain("All clear.");
+  });
+  it("wakes nothing when a specialist stopped after the turn settles beside a handoff that was waiting", async () => {
+    const base = stubDependencies(() => {});
+    let woken = 0;
+    let parentWaiting = false;
+    let ids = 0;
+    const loop = loopFrom({
+      ...base,
+      plugins: twoSpecialists,
+      model: {
+        ...base.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Alpha specialist")) {
+            await until(() => parentWaiting);
+            yield finishing("Alpha done.");
+            yield { kind: "done" as const };
+            return;
+          }
+          if (text.includes("You are the Beta specialist")) {
+            // Works until the stop ends it.
+            await until(() => request.signal?.aborted === true);
+            return;
+          }
+          if (
+            text.includes("finished in the background") ||
+            text.includes("stopped before finishing")
+          ) {
+            woken += 1;
+            yield { kind: "textDelta" as const, text: "Woken." };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (!text.includes("delegate-a")) {
+            yield delegating(0, "delegate-a", "engineering/a", "Do A.");
+            yield delegating(1, "delegate-b", "engineering/b", "Do B.");
+            yield { kind: "done" as const };
+            return;
+          }
+          parentWaiting = true;
+          await until(() => request.signal?.aborted === true);
+        },
+      },
+      newSpecialistRunId: () => `run-${++ids}`,
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    const turn = loop.start(taskId, "Do both");
+    await until(
+      () =>
+        parentWaiting &&
+        loop
+          .snapshot()
+          .tasks[0]?.specialistRuns.find((run) => run.id === "run-1")
+          ?.status === "completed",
+    );
+    await loop.cancel(taskId);
+    await turn;
+    await until(() => !loop.running(taskId));
+    await queuedWorkRun();
+
+    expect(woken).toBe(0);
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
+  });
+
+  it("wakes nothing after a restart for a specialist that finished as the person stopped it", async () => {
+    const base = stubDependencies(() => {});
+    let releaseSpecialist!: () => void;
+    const specialistGate = new Promise<void>((resolve) => {
+      releaseSpecialist = resolve;
+    });
+    let woken = 0;
+    const dependencies = {
+      ...base,
+      plugins: twoSpecialists,
+      model: {
+        ...base.model,
+        send: async function* (request: ModelRequest) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Alpha specialist")) {
+            await specialistGate;
+            yield finishing("Alpha done.");
+            yield { kind: "done" as const };
+            return;
+          }
+          if (text.includes("finished in the background")) {
+            woken += 1;
+            yield { kind: "textDelta" as const, text: "Woken." };
+            yield { kind: "done" as const };
+            return;
+          }
+          if (!text.includes("Do A.")) {
+            yield delegating(0, "delegate-a", "engineering/a", "Do A.");
+            yield { kind: "done" as const };
+            return;
+          }
+          yield { kind: "textDelta" as const, text: "Noted." };
+          yield { kind: "done" as const };
+        },
+      },
+      newSpecialistRunId: () => "run-1",
+    };
+    const { host } = loopAndHost(dependencies);
+    const loop = host.app;
+    const taskId = await loop.createTask(["engineering"]);
+    await loop.start(taskId, "Do A");
+    let release = () => {};
+    let held = false;
+    host.holdsSave = (task) => {
+      if (held || task.specialistRuns[0]?.status !== "completed")
+        return undefined;
+      held = true;
+      return new Promise<void>((resolve) => (release = resolve));
+    };
+    releaseSpecialist();
+    await until(() => held);
+    await loop.cancel(taskId);
+    release();
+    await until(() => !loop.running(taskId));
+    await queuedWorkRun();
+    const saved = loop.snapshot().tasks[0]!;
+
+    // A restart: a fresh loop opens the conversation as it was saved.
+    const restarted = loopFrom(dependencies);
+    restarted.restore([saved]);
+    restarted.wakeSaved([saved]);
+
+    expect(restarted.running(saved.id)).toBe(false);
+    await queuedWorkRun();
+    expect(woken).toBe(0);
   });
 });

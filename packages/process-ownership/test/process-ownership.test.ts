@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { constants, getPriority } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,6 +7,8 @@ import koffi from "koffi";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
+  ansiCodePage,
+  ansiText,
   containmentAvailability,
   openProcessContainer,
   openToLowIntegrity,
@@ -334,8 +336,8 @@ describe.runIf(process.platform === "win32")("process containment", () => {
           ...change,
         }),
       ).toThrow(/NUL/);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await expect(readFile(join(directory, "ran"))).rejects.toThrow();
+      // Its output files are made before the process is: neither was.
+      expect(await readdir(directory)).toEqual([]);
     } finally {
       container.close();
     }
@@ -413,7 +415,7 @@ describe.runIf(process.platform === "win32")("process containment", () => {
   );
 
   it(
-    "lets Zhiyin quit while it waits for many processes to end",
+    "ends the processes it was waiting on when its owner exits",
     { timeout: 60_000 },
     async () => {
       const directory = await workingDirectory();
@@ -638,6 +640,40 @@ describe("a process started at low integrity", () => {
     },
   );
 
+  it("is what the shared run path starts when asked, contained", async () => {
+    const directory = await workingDirectory();
+    const file = join(directory, "new.txt");
+
+    const run = await runProcess({
+      executable: process.execPath,
+      arguments: [join(fixtures, "writes.mjs"), file],
+      cwd: directory,
+      timeoutMs: 30_000,
+      containment: { open: openProcessContainer },
+      integrity: "low",
+    });
+
+    expect(JSON.parse(run.stdout)).toEqual([
+      { wrote: "EPERM", read: "ENOENT" },
+    ]);
+  });
+
+  it("is refused by the shared run path without containment, and nothing runs", async () => {
+    const directory = await workingDirectory();
+    const file = join(directory, "new.txt");
+
+    const run = await runProcess({
+      executable: process.execPath,
+      arguments: [join(fixtures, "writes.mjs"), file],
+      cwd: directory,
+      timeoutMs: 30_000,
+      integrity: "low",
+    });
+
+    expect(run).toMatchObject({ exitCode: null, failure: "containment" });
+    expect(await readdir(directory)).toEqual([]);
+  });
+
   it("says why a folder could not be opened to it", async () => {
     const directory = await workingDirectory();
 
@@ -646,3 +682,19 @@ describe("a process started at low integrity", () => {
     ).rejects.toThrow(/not there.*could not be opened to low integrity/s);
   });
 });
+
+describe.runIf(process.platform === "win32")(
+  "text in Windows' own code page",
+  () => {
+    it("is read in the ANSI code page, the one Windows reads files' text in, not the console's", () => {
+      // "café" as a Western code page writes it: é is the one byte E9.
+      const bytes = Buffer.from([0x63, 0x61, 0x66, 0xe9]);
+      const page = ansiCodePage();
+
+      expect(page).toEqual(expect.any(Number));
+      expect(ansiText(bytes)).toBe(
+        new TextDecoder(`windows-${page}`).decode(bytes),
+      );
+    });
+  },
+);

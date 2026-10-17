@@ -20,8 +20,8 @@ a process that may write only where it is let in (ADR 0028).
 - **Owns:** the Job Object a process tree lives in and its lifetime, starting
   a process inside one, the memory limit set on it, starting it at low
   integrity and opening a folder to such a process, the shared way to run a
-  program with bounded output, and an exclusive file hold that Windows
-  releases with its holder.
+  program with bounded output, an exclusive file hold that Windows releases
+  with its holder, and reading text in Windows' own code page.
 - **Does not own:** which programs run, their arguments, timeouts or
   cancellation policy (the calling feature), or what a process may do
   (permission engine). Containment is about cleanup, not authority: beyond
@@ -59,9 +59,15 @@ a process that may write only where it is let in (ADR 0028).
   ended early (`timeout`, `stopped`, `outputLimit`) or could not start
   (`containment`, `start`). `onStart` hands over a way to read what the
   program has printed so far; `keep` hands over each stream whole, as a file.
+  Given `integrity: "low"`, it launches the program at low integrity through
+  its container; without containment such a run does not start, and answers
+  `containment`.
 - `openToLowIntegrity(folder)` opens a folder to processes started at low
   integrity: they may write in it, in everything it holds and in everything
   put in it later. It throws, with Windows' reason, when it cannot.
+- `ansiText(bytes)` reads bytes in the code page Windows reads text that
+  names no encoding in, the ANSI code page, and `ansiCodePage()` names it.
+  Both answer nothing where Windows cannot be asked.
 - `holdExclusively(path)` opens a file only one holder can have, which Windows
   deletes when its holder goes. It answers the hold, `held-elsewhere`, or
   `unavailable` for any other reason.
@@ -94,15 +100,21 @@ a process that may write only where it is let in (ADR 0028).
   writes in a folder opened to it, in what the folder already held and in
   what is added later, and Windows refuses it a write anywhere else. It reads
   what the person can read. A process not asked for low integrity writes
-  where the person can.
+  where the person can. The shared run path starts a program at low
+  integrity when asked, and never uncontained, where it cannot lower it.
 - **Opening a folder twice changes nothing**, and a folder that cannot be
   opened is refused with Windows' reason.
-- **A running process costs Zhiyin's own work nothing.** However many are
+- **A running process costs Zhiyin's own work nothing.** With up to 189
   running at once, Zhiyin goes on reading and writing its files, and each
   process's end is still reported with its exit code, as it happens, with no
   timer asking for it. Every running process shares one wait, held on one of
-  the few threads all file work shares, plus one more thread for each further
-  sixty-three processes.
+  the four threads all file work shares, plus one more thread for each
+  further sixty-three processes, and each end is told whichever wait holds
+  it. At 189, three waits, it waits on no more, so one thread is always left
+  to file work: a process past them is not started, and the answer says
+  why, until one ends. Should
+  Windows make no event to wake the wait, waiting for a process fails rather
+  than holding a wait nothing could wake.
 - **Zhiyin quits while it waits for processes to end.** Electron's quit waits
   for the thread the wait is held on, so the wait is woken on the way out and
   not held again.

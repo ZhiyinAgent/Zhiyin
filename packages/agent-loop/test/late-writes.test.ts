@@ -17,7 +17,13 @@ import {
 } from "@zhiyin/permission-engine";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import { WorkspaceTools } from "@zhiyin/tools";
-import { loopAndHost, loopFrom, stubDependencies, until } from "./support.js";
+import {
+  loopAndHost,
+  loopFrom,
+  queuedWorkRun,
+  stubDependencies,
+  until,
+} from "./support.js";
 
 const folders = new TemporaryFolders();
 
@@ -88,7 +94,7 @@ describe("a turn stopped while the permission engine decides", () => {
       await turn.loop.cancel(taskId);
       turn.decide();
       await running;
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await queuedWorkRun();
 
       const task = turn.loop.snapshot().tasks[0];
       expect(task?.phase.kind).toBe("interrupted");
@@ -125,7 +131,7 @@ describe("a turn stopped while a connector is still connecting", () => {
     await loop.cancel(taskId);
     connect();
     await running;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queuedWorkRun();
 
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
   });
@@ -167,7 +173,7 @@ describe("a turn stopped before its folder's instructions were decided", () => {
     await loop.cancel(taskId);
     connect();
     await running;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queuedWorkRun();
 
     expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
   });
@@ -226,7 +232,7 @@ describe("a turn stopped while a conversation permission is being saved", () => 
     await loop.cancel(taskId);
     saveGrant();
     await running;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queuedWorkRun();
 
     const task = loop.snapshot().tasks[0];
     expect(task?.phase.kind).toBe("interrupted");

@@ -7,7 +7,9 @@ import {
   utimes,
   writeFile,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { existsSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
@@ -33,6 +35,9 @@ const installed: CompilerPrograms = {
 };
 
 type Call = { executable: string; arguments: readonly string[]; cwd: string };
+
+/** Where Tectonic keeps its packages in these tests; it is never filled. */
+const tectonicCache = join(tmpdir(), "zhiyin-compiler-test-tectonic");
 
 /**
  * Where a compiler writes its PDF: Typst at its last argument, Tectonic in
@@ -65,12 +70,61 @@ function compilerWriting(
      */
     readonly writes?: string;
     readonly writesOnFailure?: boolean;
+    /** Each compiler lists the files it read, whether it succeeds or fails. */
+    readonly listsReads?: boolean;
+    /** Files the document reads besides itself, as the compiler names them. */
+    readonly reads?: readonly string[];
+    /** Written where Tectonic's list goes instead, as a document can. */
+    readonly listed?: () => string;
+    /** What the run was asked to run at and with, besides its command. */
+    readonly asked?: (run: Parameters<RunProgram>[0]) => void;
   } = {},
 ) {
   const calls: Call[] = [];
-  const run: RunProgram = async ({ executable, arguments: args, cwd }) => {
+  const run: RunProgram = async (given) => {
+    const { executable, arguments: args, cwd } = given;
     calls.push({ executable, arguments: args, cwd });
+    // As Tectonic fetches one package into the cache it is given, and builds
+    // its format from a document Zhiyin wrote.
+    const cache = given.environment?.["TECTONIC_CACHE_DIR"];
+    if (cache && args[0] === "-X") {
+      await mkdir(join(cache, "bundles", "data", "bundle"), {
+        recursive: true,
+      });
+      await writeFile(
+        join(cache, "bundles", "data", "bundle", args.at(-1)!),
+        `fetched ${args.at(-1)!}`,
+      );
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    if (cache && basename(args.at(-1)!) === "format.tex") {
+      await mkdir(join(cache, "formats"), { recursive: true });
+      await writeFile(join(cache, "formats", "latex.fmt"), "format");
+      return { exitCode: 0, stdout: "", stderr: "" };
+    }
+    options.asked?.(given);
     const result = options.result ?? { exitCode: 0 };
+    // As Tectonic lists them: a make rule for the PDF, one file a line.
+    const rules = args.indexOf("--makefile-rules");
+    if (rules >= 0 && options.listsReads !== false)
+      await writeFile(
+        args[rules + 1]!,
+        options.listed?.() ??
+          `${[`${pdfNamedBy(args)} : ${args.at(-1)!}`, ...(options.reads ?? [])].join(" \\\n  ")}\n`,
+        "utf8",
+      );
+    const list = args.indexOf("--deps");
+    if (list >= 0 && options.listsReads !== false)
+      await writeFile(
+        args[list + 1]!,
+        JSON.stringify({
+          inputs: [...(options.reads ?? []), args.at(-2)!].map(
+            (path) => `\\\\?\\${path}`,
+          ),
+          outputs: null,
+        }),
+        "utf8",
+      );
     if (
       options.writes !== undefined &&
       (result.exitCode === 0 || options.writesOnFailure)
@@ -85,9 +139,12 @@ function compilerWriting(
   };
   return {
     calls,
+    /** The fake compiler itself, for a test that wraps it. */
+    run,
     compiler: documentCompiler({
       workspaceRoot: () => root,
       programs: async () => options.programs ?? installed,
+      tectonicCache,
       run,
     }),
   };
@@ -110,6 +167,8 @@ describe("compiling a document", () => {
           "compile",
           "--root",
           root,
+          "--deps",
+          expect.any(String),
           join(root, "paper.typ"),
           expect.any(String),
         ],
@@ -151,6 +210,395 @@ describe("compiling a document", () => {
     expect(calls[0]?.arguments).toContain("--untrusted");
     expect(await readFile(join(root, "out", "paper.pdf"), "utf8")).toBe(pdf);
     expect(await readdir(join(root, "out"))).toEqual(["paper.pdf"]);
+  });
+
+  it("runs LaTeX at low integrity, with its packages and temporary files in a folder of its own", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    const asked: Parameters<RunProgram>[0][] = [];
+    const { compiler } = compilerWriting(root, {
+      writes: pdf,
+      asked: (run) => asked.push(run),
+    });
+
+    await compiler.callTool("compile_document", { path: "paper.tex" });
+
+    const own = dirname(asked[0]!.environment!["TEMP"]!);
+    expect(asked[0]?.integrity).toBe("low");
+    expect(dirname(own)).toBe(join(tectonicCache, "runs"));
+    expect(asked[0]?.environment?.["TECTONIC_CACHE_DIR"]).toBe(
+      join(own, "cache"),
+    );
+    expect(existsSync(own)).toBe(false);
+  });
+
+  it("keeps in the shared package cache only what Zhiyin fetched itself, never what a compile wrote", async () => {
+    const root = await workspace();
+    const cache = await folders.make("zhiyin-latex-cache-");
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    const run = compilerWriting(root, {
+      writes: pdf,
+    });
+    // A compile that fetched a package, and planted another beside it.
+    const compiler = documentCompiler({
+      workspaceRoot: () => root,
+      programs: async () => installed,
+      tectonicCache: cache,
+      run: async (given) => {
+        const own = given.environment?.["TECTONIC_CACHE_DIR"];
+        if (own && given.integrity === "low") {
+          const kept = join(own, "bundles", "data", "bundle");
+          await mkdir(kept, { recursive: true });
+          await writeFile(join(kept, "xcolor.sty"), "planted");
+          await writeFile(join(kept, "--version"), "planted");
+        }
+        return run.run(given);
+      },
+    });
+
+    await compiler.callTool("compile_document", { path: "paper.tex" });
+
+    const shared = join(cache, "packages", "bundles", "data", "bundle");
+    expect(await readdir(shared)).toEqual(["xcolor.sty"]);
+    expect(await readFile(join(shared, "xcolor.sty"), "utf8")).toBe(
+      "fetched xcolor.sty",
+    );
+    expect(await readdir(join(cache, "packages", "formats"))).toEqual([
+      "latex.fmt",
+    ]);
+  });
+
+  it("gives each LaTeX compile the packages kept before it", async () => {
+    const root = await workspace();
+    const cache = await folders.make("zhiyin-latex-cache-");
+    const shared = join(cache, "packages", "bundles", "data", "bundle");
+    await mkdir(shared, { recursive: true });
+    await writeFile(join(shared, "article.cls"), "kept");
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    let seen: string | undefined;
+    const run = compilerWriting(root, { writes: pdf });
+    const compiler = documentCompiler({
+      workspaceRoot: () => root,
+      programs: async () => installed,
+      tectonicCache: cache,
+      run: async (given) => {
+        const own = given.environment?.["TECTONIC_CACHE_DIR"];
+        if (own && given.integrity === "low")
+          seen = await readFile(
+            join(own, "bundles", "data", "bundle", "article.cls"),
+            "utf8",
+          );
+        return run.run(given);
+      },
+    });
+
+    await compiler.callTool("compile_document", { path: "paper.tex" });
+
+    expect(seen).toBe("kept");
+  });
+
+  it("does not run LaTeX without containment, where it cannot be lowered", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    // The real run path, with a program that would answer if it ran.
+    const compiler = documentCompiler({
+      workspaceRoot: () => root,
+      programs: async () => ({ tectonic: process.execPath }),
+      tectonicCache,
+    });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.tex",
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          text: "Zhiyin could not start the compiler inside the limits it runs within, so it did not run.",
+        },
+      ],
+    });
+    expect(await readdir(root)).toEqual(["paper.tex"]);
+  });
+
+  it("reports the errors LaTeX went on past, and keeps no PDF", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    const { compiler } = compilerWriting(root, {
+      writes: pdf,
+      result: {
+        exitCode: 0,
+        stderr:
+          "error: paper.tex:3: Undefined control sequence\nwarning: errors were issued by the TeX engine, but were ignored",
+      },
+    });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.tex",
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          text: expect.stringContaining(
+            "error: paper.tex:3: Undefined control sequence",
+          ),
+        },
+      ],
+    });
+    expect(await readdir(root)).toEqual(["paper.tex"]);
+  });
+
+  it.each([
+    ["by a whole path", (secret: string) => secret.replaceAll("\\", "/")],
+    // Tectonic lists a relative name behind the folder it writes in.
+    [
+      "by a relative path",
+      (_secret: string, outdir: string) => `${outdir}\\../secret.tex`,
+    ],
+    // Windows opens a name without its trailing dots and spaces.
+    [
+      "by a relative path ending in a dot",
+      (_secret: string, outdir: string) => `${outdir}\\../secret.tex.`,
+    ],
+    [
+      "by a relative path ending in a space",
+      (_secret: string, outdir: string) => `${outdir}\\../secret.tex `,
+    ],
+    [
+      "by a whole path ending in a dot",
+      (secret: string) => `${secret.replaceAll("\\", "/")}.`,
+    ],
+  ])(
+    "keeps and shows nothing from LaTeX that read a file outside the workspace %s",
+    async (_how, named) => {
+      const parent = await workspace();
+      const root = join(parent, "work");
+      await mkdir(root);
+      await writeFile(join(parent, "secret.tex"), "the secret\n");
+      await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+      const reads: string[] = [];
+      const { compiler } = compilerWriting(root, {
+        writes: pdf,
+        result: { exitCode: 0, stdout: "the secret" },
+        asked: ({ arguments: args }) =>
+          reads.push(
+            named(
+              join(parent, "secret.tex"),
+              args[args.indexOf("--outdir") + 1]!,
+            ),
+          ),
+        reads,
+      });
+
+      const result = await compiler.callTool("compile_document", {
+        path: "paper.tex",
+      });
+
+      expect(result).toMatchObject({ isError: true });
+      expect(JSON.stringify(result)).toContain("outside the workspace folder");
+      expect(JSON.stringify(result)).not.toContain("the secret");
+      expect(await readdir(root)).toEqual(["paper.tex"]);
+    },
+  );
+
+  it.each([
+    [
+      "by a relative path",
+      (_root: string, outdir: string) => `${outdir}\\linked/secret.tex`,
+    ],
+    [
+      "by a whole path",
+      (root: string) =>
+        join(root, "linked", "secret.tex").replaceAll("\\", "/"),
+    ],
+    [
+      "by a relative path whose link ends in a dot",
+      (_root: string, outdir: string) => `${outdir}\\linked./secret.tex`,
+    ],
+    [
+      "by a whole path whose link ends in a dot",
+      (root: string) =>
+        join(root, "linked.", "secret.tex").replaceAll("\\", "/"),
+    ],
+  ])(
+    "keeps and shows nothing from LaTeX that read a file a link carries outside, named %s",
+    async (_how, named) => {
+      const parent = await workspace();
+      const root = join(parent, "work");
+      await mkdir(join(parent, "outside"), { recursive: true });
+      await mkdir(root);
+      await writeFile(join(parent, "outside", "secret.tex"), "the secret\n");
+      await symlink(join(parent, "outside"), join(root, "linked"), "junction");
+      await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+      const reads: string[] = [];
+      const { compiler } = compilerWriting(root, {
+        writes: pdf,
+        result: { exitCode: 0, stdout: "the secret" },
+        asked: ({ arguments: args }) =>
+          reads.push(named(root, args[args.indexOf("--outdir") + 1]!)),
+        reads,
+      });
+
+      const result = await compiler.callTool("compile_document", {
+        path: "paper.tex",
+      });
+
+      expect(result).toMatchObject({
+        isError: true,
+        content: [
+          {
+            text: `The document reads ${join("linked", "secret.tex")}, which a link carries outside the workspace folder, so nothing the compiler made or said is kept or shown.`,
+          },
+        ],
+      });
+      expect(await readdir(root)).toEqual(["linked", "paper.tex"]);
+    },
+  );
+
+  it.each([
+    // Beside the source, in a folder of the workspace, it climbs out.
+    ["beside the source", "../../secret.tex"],
+    // From the workspace, where Tectonic also looks, it climbs out.
+    ["in the workspace", "../secret.tex"],
+  ])(
+    "names the file outside the workspace a LaTeX document read by a relative name, looked for %s",
+    async (_where, written) => {
+      const parent = await workspace();
+      const root = join(parent, "work");
+      await mkdir(join(root, "chapters"), { recursive: true });
+      await writeFile(join(parent, "secret.tex"), "the secret\n");
+      await writeFile(
+        join(root, "chapters", "paper.tex"),
+        "\\documentclass{article}",
+      );
+      const reads: string[] = [];
+      const { compiler } = compilerWriting(root, {
+        writes: pdf,
+        result: { exitCode: 0, stdout: "the secret" },
+        asked: ({ arguments: args }) =>
+          reads.push(`${args[args.indexOf("--outdir") + 1]!}\\${written}`),
+        reads,
+      });
+
+      const result = await compiler.callTool("compile_document", {
+        path: "chapters/paper.tex",
+      });
+
+      expect(JSON.stringify(result)).toContain(
+        `reads ${join(parent, "secret.tex").replaceAll("\\", "\\\\")}, outside the workspace folder`,
+      );
+    },
+  );
+
+  it("keeps a LaTeX PDF whose reads all stay in the workspace", async () => {
+    const root = await workspace();
+    await mkdir(join(root, "chapters"));
+    await writeFile(join(root, "chapters", "one.tex"), "One.\n");
+    await writeFile(join(root, "chapters", "two.tex"), "Two.\n");
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    const reads = [join(root, "chapters", "one.tex").replaceAll("\\", "/")];
+    const { compiler } = compilerWriting(root, {
+      writes: pdf,
+      asked: ({ arguments: args }) =>
+        reads.push(`${args[args.indexOf("--outdir") + 1]!}\\chapters/two.tex`),
+      reads,
+    });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.tex",
+    });
+
+    expect(result).not.toHaveProperty("isError");
+    expect(await readFile(join(root, "paper.pdf"), "utf8")).toBe(pdf);
+    expect(await readdir(root)).toEqual(["chapters", "paper.pdf", "paper.tex"]);
+  });
+
+  /** Where a LaTeX run writes, as its command names it. */
+  type LatexRun = {
+    readonly root: string;
+    readonly outdir: string;
+    readonly pdf: string;
+    readonly source: string;
+  };
+  it.each([
+    [
+      "names by its whole path a file in the workspace that cannot be found",
+      (run: LatexRun) =>
+        `${run.pdf} : ${run.source} \\\n  ${join(run.root, "gone.tex")}\n`,
+    ],
+    [
+      "names relatively a file that cannot be found",
+      (run: LatexRun) =>
+        `${run.pdf} : ${run.source} \\\n  ${run.outdir}\\gone.tex\n`,
+    ],
+    [
+      "names a folder by dots and spaces alone",
+      (run: LatexRun) =>
+        `${run.pdf} : ${run.source} \\\n  ${run.outdir}\\notes/.. ./secret.tex\n`,
+    ],
+    // A document can write where the list goes, but cannot know its head.
+    [
+      "starts as the list of another compilation",
+      (run: LatexRun) =>
+        `${run.pdf.replace(/compile-[^\\]+/, (folder) => "x".repeat(folder.length))} : ${run.source}\n`,
+    ],
+  ])(
+    "keeps and shows nothing from LaTeX whose list of reads %s",
+    async (_how, listed) => {
+      const root = await workspace();
+      await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+      await mkdir(join(root, "notes"));
+      await writeFile(join(root, "notes", "secret.tex"), "notes\n");
+      let run: LatexRun | undefined;
+      const { compiler } = compilerWriting(root, {
+        writes: pdf,
+        result: { exitCode: 0, stdout: "quoting the secret" },
+        listed: () => listed(run!),
+        asked: ({ arguments: args }) => {
+          const outdir = args[args.indexOf("--outdir") + 1]!;
+          run = {
+            root,
+            outdir,
+            pdf: join(outdir, "paper.pdf"),
+            source: args.at(-1)!,
+          };
+        },
+      });
+
+      const result = await compiler.callTool("compile_document", {
+        path: "paper.tex",
+      });
+
+      expect(result).toMatchObject({ isError: true });
+      expect(JSON.stringify(result)).not.toContain("the secret");
+      expect(await readdir(root)).toEqual(["notes", "paper.tex"]);
+    },
+  );
+
+  it("keeps and shows nothing from LaTeX that did not list what it read", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.tex"), "\\documentclass{article}");
+    const { compiler } = compilerWriting(root, {
+      writes: pdf,
+      writesOnFailure: true,
+      listsReads: false,
+      result: {
+        exitCode: 1,
+        stderr: "error: something bad happened, quoting the secret",
+      },
+    });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.tex",
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(JSON.stringify(result)).not.toContain("the secret");
+    expect(JSON.stringify(result)).toContain("names a file that is not there");
+    expect(await readdir(root)).toEqual(["paper.tex"]);
   });
 
   it("keeps the PDF from before as it was when a compilation fails partway", async () => {
@@ -388,11 +836,15 @@ describe("compiling a document", () => {
     const outside = await workspace();
     await writeFile(join(outside, "paper.typ"), "= Title\n", "utf8");
     await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await writeFile(join(outside, "paper.tex"), "\\documentclass{article}");
     await symlink(outside, join(root, "linked"), "junction");
     const { compiler, calls } = compilerWriting(root);
 
     for (const args of [
       { path: "linked/paper.typ" },
+      // The output alone is inside: the source is what the link carries out.
+      { path: "linked/paper.typ", output: "paper.pdf" },
+      { path: "linked/paper.tex", output: "paper.pdf" },
       { path: "paper.typ", output: "linked/paper.pdf" },
     ]) {
       expect(await compiler.inspect("compile_document", args)).toEqual({
@@ -407,6 +859,104 @@ describe("compiling a document", () => {
       });
     }
     expect(calls).toEqual([]);
+  });
+
+  it("keeps and shows nothing from a Typst document that read through a link leading out of the folder", async () => {
+    const root = await workspace();
+    const outside = await workspace();
+    await writeFile(join(outside, "secret.txt"), "secret", "utf8");
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await symlink(outside, join(root, "linked"), "junction");
+    const said = "error: panicked with: secret";
+    const refused =
+      "The document reads linked\\secret.txt, which a link carries outside the workspace folder, so nothing the compiler made or said is kept or shown.";
+
+    for (const result of [{ exitCode: 0 }, { exitCode: 1, stderr: said }]) {
+      const { compiler } = compilerWriting(root, {
+        result,
+        writes: pdf,
+        reads: [join(root, "linked", "secret.txt")],
+      });
+      expect(
+        await compiler.callTool("compile_document", { path: "paper.typ" }),
+      ).toEqual({ isError: true, content: [{ type: "text", text: refused }] });
+      expect(await readdir(root)).toEqual(["linked", "paper.typ"]);
+    }
+
+    // Typst's own packages, outside the folder by name, are read as before.
+    const { compiler } = compilerWriting(root, {
+      writes: pdf,
+      reads: [join(outside, "secret.txt")],
+    });
+    expect(
+      await compiler.callTool("compile_document", { path: "paper.typ" }),
+    ).not.toHaveProperty("isError");
+  });
+
+  it("keeps and shows nothing from a Typst compilation that did not list what it read", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+
+    const succeeded = compilerWriting(root, { writes: pdf, listsReads: false });
+    expect(
+      await succeeded.compiler.callTool("compile_document", {
+        path: "paper.typ",
+      }),
+    ).toMatchObject({
+      isError: true,
+      content: [
+        {
+          text: "The compiler did not say which files it read, so paper.pdf is not kept.",
+        },
+      ],
+    });
+    expect(await readdir(root)).toEqual(["paper.typ"]);
+
+    const failed = compilerWriting(root, {
+      result: { exitCode: 1, stderr: "error: panicked with: secret" },
+      listsReads: false,
+    });
+    const text = JSON.stringify(
+      await failed.compiler.callTool("compile_document", { path: "paper.typ" }),
+    );
+    expect(text).toContain("could not tell which files it read");
+    expect(text).not.toContain("secret");
+  });
+
+  it("writes a LaTeX document reached through a link to the output it was asked for", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "notes.tex"), "\\documentclass{article}\n");
+    await symlink(join(root, "notes.tex"), join(root, "paper.tex"), "file");
+    const { compiler } = compilerWriting(root, { writes: pdf });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.tex",
+    });
+
+    expect(result).toMatchObject({
+      content: [{ text: expect.stringContaining("Wrote paper.pdf") }],
+    });
+    expect(await readFile(join(root, "paper.pdf"), "utf8")).toBe(pdf);
+  });
+
+  it("refuses an output that a link leads to a file that is not a PDF", async () => {
+    const root = await workspace();
+    await writeFile(join(root, "paper.typ"), "= Title\n", "utf8");
+    await writeFile(join(root, "letter.docx"), "Dear", "utf8");
+    await symlink(join(root, "letter.docx"), join(root, "out.pdf"), "file");
+    const { compiler, calls } = compilerWriting(root, { writes: pdf });
+
+    const result = await compiler.callTool("compile_document", {
+      path: "paper.typ",
+      output: "out.pdf",
+    });
+
+    expect(result).toMatchObject({
+      isError: true,
+      content: [{ text: "The compiled document is a PDF." }],
+    });
+    expect(calls).toEqual([]);
+    expect(await readFile(join(root, "letter.docx"), "utf8")).toBe("Dear");
   });
 
   it("refuses a file neither engine compiles, and an output that is not a PDF", async () => {
@@ -481,6 +1031,7 @@ describe("compiling a document", () => {
     const compiler = documentCompiler({
       workspaceRoot: () => root,
       programs: async () => programs,
+      tectonicCache,
       run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
     });
 
@@ -496,6 +1047,7 @@ describe("compiling a document", () => {
     const compiler = documentCompiler({
       workspaceRoot: () => undefined,
       programs: async () => installed,
+      tectonicCache,
       run: async () => ({ exitCode: 0, stdout: "", stderr: "" }),
     });
 

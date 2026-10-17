@@ -30,7 +30,12 @@ import {
   type TextEncoding,
 } from "./file-content.js";
 import { keptAddress, type ConversationItems } from "./conversation-items.js";
-import { NotUtf8Error, pageLines, readPage } from "./text-pages.js";
+import {
+  legacyEncodingName,
+  NotUtf8Error,
+  pageLines,
+  readPage,
+} from "./text-pages.js";
 import type { Page } from "./text-pages.js";
 import { fileDigest } from "./file-read-state.js";
 import {
@@ -216,7 +221,7 @@ async function pagedResult(
 ): Promise<ToolInvocationResult> {
   const start = input.startLine ?? 1;
   const read = (
-    encoding: TextEncoding | "windows-1252",
+    encoding: TextEncoding | "by-line",
     said: string,
   ): Promise<Page> =>
     readPage(path, {
@@ -234,14 +239,15 @@ async function pagedResult(
       : `${target} is UTF-16 text; multi_edit changes only UTF-8 files.\n`,
   ).catch(async (error: unknown) => {
     if (!(error instanceof NotUtf8Error)) throw error;
-    // Most text on Windows that is not UTF-8 is Windows-1252: shown as that,
-    // and said to be a guess, rather than as characters the file does not hold.
+    // Text on Windows that is not UTF-8 is most often in Windows' own code
+    // page: each line that is not UTF-8 is shown so, and said to be a guess,
+    // and the lines that are UTF-8 stay as they are.
     const line = await firstLineNotUtf8(
       createReadStream(path, signal ? { signal } : {}),
     );
     return read(
-      "windows-1252",
-      `${target} is not UTF-8: line ${(line ?? 1).toLocaleString("en-US")} is the first that is not. It is shown as Windows-1252, which may not be its encoding, and multi_edit changes only UTF-8 files.\n`,
+      "by-line",
+      `${target} is not all UTF-8: line ${(line ?? 1).toLocaleString("en-US")} is the first that is not. Lines that are not UTF-8 are shown ${legacyEncodingName()}, which may not be their encoding, and multi_edit changes only UTF-8 files.\n`,
     );
   });
   if (start > 1 && start > page.totalLines)

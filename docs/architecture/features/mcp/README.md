@@ -73,8 +73,10 @@ says about itself is shown as its claim.
 - `routedName`, a connector tool's routed name, one that fits every supported
   model API.
 - `McpRateRefusedError`, a server that answered 429 before acting, so sending
-  again repeats nothing, and `McpUnauthorizedError`, a server that rejected the
-  credential: the remedy is a new token, not a retry.
+  again repeats nothing, `McpUnauthorizedError`, a server that rejected the
+  credential: the remedy is a new token, not a retry, and
+  `McpUndeclaredAnswerError`, a call the server ran and answered unlike the
+  output its tool declares.
 - `InMemoryMcpCredentials`, tokens kept for the life of the process, for tests
   and headless use.
 - The types these take and return: `SignInOptions`, `McpConnectionFactory`,
@@ -100,7 +102,8 @@ says about itself is shown as its claim.
   call is never repeated, and its answer says it may have taken effect. A
   server that answers a call with an error, or with an answer that does not
   match the tool's declared output, has failed that call only: its connection
-  stays open.
+  stays open. An answer unlike the declared output is not used, and the call
+  is said to have run, so it may have taken effect.
 - A server may not ask anything of Zhiyin: a request for a model completion
   (sampling) or for an answer from the person (elicitation) is refused, and
   neither is offered when connecting. The call it came during still ends.
@@ -163,8 +166,11 @@ says about itself is shown as its claim.
   declining keeps nothing. It is refreshed a minute before it ends and after a
   refusal, one refresh at a time; a refused refresh forgets it and withdraws
   the tools. A refresh that returns after the person signed out, signed in
-  again or saved a key changes nothing. A saved key is sent in preference to
-  a sign-in.
+  again or saved a key changes nothing, even while what it returned is being
+  written: a connector's credential is written one change at a time, in the
+  order the changes were made. Such a refresh, refused or not, answers with
+  the credential the person left. A saved key is sent in preference to a
+  sign-in.
 - When secure storage cannot be reached, the state says so rather than
   reporting that no credential exists, and saving fails. Storage that comes
   back is asked again on the next look.

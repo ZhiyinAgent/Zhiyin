@@ -240,6 +240,7 @@ export function WorkspaceShell({
     attachments?: readonly MessageAttachment[],
   ) {
     let taskId = selectedTask?.id;
+    const opened = !taskId;
     if (!taskId) {
       setOpening({ blank });
       try {
@@ -259,6 +260,9 @@ export function WorkspaceShell({
       attachments,
       running: isRunning,
     });
+    // The empty composer is the new conversation's now; the next empty one,
+    // shown once nothing is open, starts empty.
+    if (opened) setBlank((count) => (count === blank ? count + 1 : count));
   }
 
   function openSurface(surface: WorkspaceState["surface"]) {

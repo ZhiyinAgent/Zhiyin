@@ -147,8 +147,10 @@ activating it.
 - **What a conversation was offered is forgotten with the conversation.**
 - **Plugin readiness is derived, never stored.** A connector that needs a key
   or a sign-in needs setup and says which, as does one nothing has reached yet
-  that needs a key nobody has saved; any other one nothing has reached yet is
-  unchecked, not ready; an application connector whose program is missing
+  that needs a key nobody has saved or signed in for; one whose key cannot be
+  read for want of secure storage has failed; any other one nothing has
+  reached yet is unchecked, not ready; an application connector whose program
+  is missing
   needs setup; one this build does not include is unavailable. Looking at
   plugin states reaches no connector.
 - **Every declared connector reaches the MCP feature**, switched off when its

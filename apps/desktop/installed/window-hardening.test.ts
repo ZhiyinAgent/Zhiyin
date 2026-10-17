@@ -19,20 +19,67 @@ const pixel = Buffer.from(
 afterEach(closeEverything);
 
 describe("the running app's window", () => {
-  it("is refused every permission a page can ask for", async () => {
+  it("is refused the permissions a page asks for", async () => {
     const { window } = await launch();
 
-    const answers = await window.evaluate(async () => ({
-      notifications: await Notification.requestPermission(),
-      microphone: await navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then(
+    const answers = await window.evaluate(async () => {
+      const media = (constraints: MediaStreamConstraints) =>
+        navigator.mediaDevices.getUserMedia(constraints).then(
+          () => "granted",
+          () => "denied",
+        );
+      return {
+        notifications: await Notification.requestPermission(),
+        microphone: await media({ audio: true }),
+        camera: await media({ video: true }),
+        // Refused, not merely unavailable on a machine that cannot locate.
+        location: await new Promise<string>((resolve) =>
+          navigator.geolocation.getCurrentPosition(
+            () => resolve("granted"),
+            (error) =>
+              resolve(
+                error.code === error.PERMISSION_DENIED
+                  ? "denied"
+                  : `unavailable (${error.code})`,
+              ),
+          ),
+        ),
+        clipboard: await navigator.clipboard.readText().then(
           () => "granted",
           () => "denied",
         ),
-    }));
+      };
+    });
+    // What the page is told it may do, which a machine without a camera or
+    // a microphone answers the same as one with them.
+    const checked = await window.evaluate(async () => {
+      const state = (name: string) =>
+        navigator.permissions
+          .query({ name: name as PermissionName })
+          .then((status) => status.state);
+      return {
+        notifications: await state("notifications"),
+        microphone: await state("microphone"),
+        camera: await state("camera"),
+        location: await state("geolocation"),
+        clipboard: await state("clipboard-read"),
+      };
+    });
 
-    expect(answers).toEqual({ notifications: "denied", microphone: "denied" });
+    expect(answers).toEqual({
+      notifications: "denied",
+      microphone: "denied",
+      camera: "denied",
+      location: "denied",
+      clipboard: "denied",
+    });
+    expect(checked).toEqual({
+      notifications: "denied",
+      microphone: "denied",
+      camera: "denied",
+      location: "denied",
+      clipboard: "denied",
+    });
   });
 
   it("runs sandboxed, with no Node or Electron within reach of its page", async () => {
@@ -151,14 +198,51 @@ describe("the running app's window", () => {
     });
   });
 
-  it("stays on its own page when told to go to another", async () => {
+  it("draws no picture from the web", async () => {
     const { window } = await launch();
+
+    const outcome = await window.evaluate(
+      () =>
+        new Promise<{ shown: string; refused: string }>((resolve) => {
+          // Refused by the window's own rules, before any network is asked.
+          document.addEventListener(
+            "securitypolicyviolation",
+            (event) =>
+              resolve({ shown: "refused", refused: event.effectiveDirective }),
+            { once: true },
+          );
+          const image = document.createElement("img");
+          image.onload = () => resolve({ shown: "loaded", refused: "" });
+          image.src = "https://example.com/picture.png";
+          document.body.append(image);
+        }),
+    );
+
+    expect(outcome).toEqual({ shown: "refused", refused: "img-src" });
+  });
+
+  it("stays on its own page when told to go to another", async () => {
+    const { app, window } = await launch();
     const own = window.url();
+    // Heard after the window's own guard, which is the first to hear it.
+    await app.evaluate(({ BrowserWindow }) => {
+      const page = globalThis as unknown as { leaving?: boolean };
+      BrowserWindow.getAllWindows()[0]!.webContents.on(
+        "will-navigate",
+        (event) => (page.leaving = !event.defaultPrevented),
+      );
+    });
 
     await window.evaluate(() => {
       globalThis.location.href = "https://example.com/";
     });
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await expect
+      .poll(() =>
+        app.evaluate(
+          () => (globalThis as unknown as { leaving?: boolean }).leaving,
+        ),
+      )
+      .toBe(false);
 
     expect(window.url()).toBe(own);
     await expect(
@@ -169,10 +253,10 @@ describe("the running app's window", () => {
   it("opens no other window", async () => {
     const { app, window } = await launch();
 
+    // Refused as it is asked: no window is made to be closed later.
     const opened = await window.evaluate(
       () => globalThis.open("https://example.com/") === null,
     );
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
 
     expect(opened).toBe(true);
     expect(

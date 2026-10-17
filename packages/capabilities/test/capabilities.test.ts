@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   CommandFileChanges,
+  McpCredentialState,
   McpServerState,
   OfferedConnection,
   ToolchainState,
@@ -1368,6 +1369,31 @@ describe("what a person has set up", () => {
       ),
     ).toMatchObject({ status: "setup-required" });
     expect(researchState?.status).not.toBe("ready");
+  });
+
+  it("presents an unchecked connector signed in instead of given a key as unchecked, and one whose key cannot be read as failed", async () => {
+    const statusWith = async (credential: McpCredentialState) => {
+      const { capabilities } = membersRecording({
+        connections: [
+          connection("deep-research/tavily", {
+            status: "unchecked",
+            credential,
+          }),
+        ],
+      });
+      const [, researchState] = await capabilities.pluginStates();
+      return researchState?.components.find(
+        (component) => component.id === "deep-research/tavily",
+      )?.status;
+    };
+
+    expect(await statusWith({ status: "signed-in" })).toBe("unchecked");
+    expect(
+      await statusWith({
+        status: "unavailable",
+        reason: "Windows' secure storage is unavailable.",
+      }),
+    ).toBe("failed");
   });
 
   it("tells the window what key a connector needs and where its package says it is made", async () => {

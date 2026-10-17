@@ -13,6 +13,7 @@ import {
   ManagedMcpServers,
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
   connectHttpMcpServer,
   type McpConnection,
   type McpConnectionFactory,
@@ -1437,11 +1438,10 @@ describe("ManagedMcpServers", () => {
     ],
     [
       "an answer that does not match the tool's declared output",
-      new ProtocolError(
-        -32602,
+      new McpUndeclaredAnswerError(
         "Structured content does not match the tool's output schema: data/count must be number",
       ),
-      "does not match the tool's output schema",
+      "The MCP server ran the call, but its answer does not match the output the tool declares, so it is not used. The action may already have taken effect: check before calling it again.",
     ],
   ])(
     "reports %s as a failed call, and keeps the connection",

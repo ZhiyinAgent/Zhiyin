@@ -133,13 +133,14 @@ export function containedSessionLaunch(
         stderr,
         environment: {
           // Blender's own variables can point it at scripts it runs on
-          // start, and USD's at plugins it loads and folders it reads
-          // models from; only the ones Zhiyin sets reach it.
+          // start, and USD's and MaterialX's at plugins it loads and
+          // folders it reads models from; only the ones Zhiyin sets reach it.
           ...Object.fromEntries(
             Object.entries(process.env).filter(
               ([name]) =>
                 !name.toUpperCase().startsWith("BLENDER_") &&
                 !name.toUpperCase().startsWith("PXR_") &&
+                !name.toUpperCase().startsWith("MATERIALX_") &&
                 !set.includes(name.toUpperCase()),
             ),
           ),

@@ -88,10 +88,10 @@ export async function recoverLongThought(options: {
 }
 
 /**
- * What a model whose request was stopped for reasoning at length is told
- * when it is asked again, in a turn or a specialist alike.
+ * What a turn's model whose request was stopped for reasoning at length is
+ * told when it is asked again.
  */
-export const decideNow =
+const decideNow =
   "Your last request was stopped: you reasoned at length without answering, calling a tool or asking anything, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, give your answer, or ask the person one question.";
 
 /** Why work ends whose model was stopped so twice in a row. */

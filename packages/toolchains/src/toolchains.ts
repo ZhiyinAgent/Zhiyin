@@ -129,6 +129,8 @@ export class DownloadedToolchains implements Toolchains {
   readonly #unpack: Unpack;
   readonly #ready: Readonly<Record<string, Ready>>;
   readonly #installing = new Map<string, Promise<void>>();
+  /** What stops each install under way. */
+  readonly #stoppedBy = new Map<string, AbortSignal | undefined>();
   /** How many bytes of each download under way have arrived. */
   readonly #received = new Map<string, number>();
   readonly #failures = new Map<string, string>();
@@ -196,6 +198,12 @@ export class DownloadedToolchains implements Toolchains {
   install(id: string, signal?: AbortSignal): Promise<void> {
     const spec = this.#spec(id);
     const running = this.#installing.get(id);
+    // One being stopped is not joined: this one starts once it has ended.
+    if (running && this.#stoppedBy.get(id)?.aborted)
+      return running.then(
+        () => this.install(id, signal),
+        () => this.install(id, signal),
+      );
     if (running) return running;
     const installation = this.#install(spec, signal)
       .then(() => {
@@ -209,9 +217,11 @@ export class DownloadedToolchains implements Toolchains {
       })
       .finally(() => {
         this.#installing.delete(id);
+        this.#stoppedBy.delete(id);
         this.#received.delete(id);
       });
     this.#installing.set(id, installation);
+    this.#stoppedBy.set(id, signal);
     return installation;
   }
 

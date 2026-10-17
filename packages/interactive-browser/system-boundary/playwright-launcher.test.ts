@@ -15,7 +15,7 @@ import { playwrightBrowserLauncher } from "../src/playwright-launcher.js";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -78,6 +78,10 @@ const fixtures: Record<string, string> = {
   Smooth:
     "<title>Smooth</title><style>html { scroll-behavior: smooth } section { height: 900px }</style>" +
     "<section></section><section></section><section></section><section></section>",
+  // Changes on its own, with nothing done to it.
+  Ticking:
+    "<title>Ticking</title><p id='count'>0</p>" +
+    "<script>let n = 0; setInterval(() => { document.getElementById('count').textContent = String(++n); }, 100);</script>",
 };
 const fixtureServer = createServer((request, response) => {
   const body = fixtures[(request.url ?? "/").slice(1)];
@@ -619,6 +623,36 @@ describe.runIf(availability.available)("a real browser session", () => {
    * screen's density instead, while every frame still reports the page's own
    * size, which is what clicks are mapped against.
    */
+  /**
+   * Between actions the panel is kept current by the frames the browser
+   * streams, not by a picture taken after each action: a page that changes
+   * on its own is seen changing, at its first size and after a resize.
+   */
+  it("streams a page that changes on its own, before and after a resize", async () => {
+    const session = new BrowserSession({
+      launcher,
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session);
+    let frames = 0;
+    session.onFrame(() => {
+      frames += 1;
+    });
+    try {
+      await automation.callTool("browser_navigate", { url: served("Ticking") });
+      await waitFor(() => session.state().title === "Ticking");
+      const navigated = frames;
+      await waitFor(() => frames >= navigated + 5);
+
+      await automation.callTool("browser_resize", { width: 390, height: 844 });
+      const resized = frames;
+      await waitFor(() => frames >= resized + 5);
+    } finally {
+      await automation.close();
+      await session.close();
+    }
+  }, 180_000);
+
   it("draws the page at the screen's pixel density, still sized as the page", async () => {
     const dense = playwrightBrowserLauncher(
       { open: openProcessContainer },
@@ -766,6 +800,82 @@ describe.runIf(availability.available)("a real browser session", () => {
     }
   }, 180_000);
 
+  it("holds a download once on disk: the browser's own copy goes once the conversation's is kept", async () => {
+    const started = Date.now();
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    const server = createServer((request, response) => {
+      if (request.url === "/file") {
+        response.writeHead(200, {
+          "Content-Disposition": 'attachment; filename="once.bin"',
+          "Content-Type": "application/octet-stream",
+        });
+        response.end(Buffer.alloc(1024 * 1024, 7));
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end('<title>File</title><a href="/file">Get it</a>');
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher,
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const text = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    /** The folders this browser's downloads arrive in, before they are kept. */
+    const arrivals = async () => {
+      const folders: string[] = [];
+      for (const entry of await readdir(tmpdir()))
+        if (entry.startsWith(`zhiyin-browser-${process.pid}-`)) {
+          const downloads = join(tmpdir(), entry, "downloads");
+          const made = await stat(downloads).catch(() => undefined);
+          if (made && made.birthtimeMs >= started - 1_000)
+            folders.push(downloads);
+        }
+      return folders;
+    };
+    const arrived = async () =>
+      (
+        await Promise.all(
+          (await arrivals()).map((folder) =>
+            readdir(folder).catch((): string[] => []),
+          ),
+        )
+      ).flat();
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = text(await automation.callTool("browser_snapshot", {}));
+      await automation.callTool("browser_click", {
+        element: "Get it",
+        target: snapshot.match(/"Get it"[^\n]*\[ref=(e\d+)\]/)?.[1],
+      });
+      const kept = async () =>
+        (await readdir(output)).filter((name) => name.includes("once"));
+      await waitFor(async () => (await kept()).length === 1);
+      // Each answer says what the automation server kept since the last.
+      await automation.callTool("browser_snapshot", {});
+
+      await waitFor(async () => (await arrived()).length === 0, 5_000);
+      expect(await arrivals()).toHaveLength(1);
+      expect((await stat(join(output, (await kept())[0]!))).size).toBe(
+        1024 * 1024,
+      );
+    } finally {
+      await automation.close();
+      await session.close();
+      server.close();
+    }
+  }, 180_000);
+
   /**
    * The browser writes a download to disk as it arrives, so a page sending a
    * file with no end would fill it. One past the most a download may be is
@@ -830,7 +940,7 @@ describe.runIf(availability.available)("a real browser session", () => {
       // after: the first answer from then on says so.
       const next = said(await automation.callTool("browser_snapshot", {}));
       const sentence =
-        "The download of endless.bin was stopped at 5 MB, the most a download may be.";
+        "The download of endless.bin was stopped: this browser's downloads may come to 5 MB in all.";
 
       expect(
         (await readdir(output).catch((): string[] => [])).filter((name) =>
@@ -838,6 +948,343 @@ describe.runIf(availability.available)("a real browser session", () => {
         ),
       ).toEqual([]);
       expect(`${clicked}\n${next}`.split(sentence)).toHaveLength(2);
+    } finally {
+      await automation.close();
+      await session.close();
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 120_000);
+
+  /**
+   * A frame from another site reports a download to itself, not to the page
+   * around it, and a download goes on after a popup closes. Wherever it
+   * started, a download past the most a download may be is stopped, and an
+   * ordinary one is not.
+   */
+  it("stops a download past the most a download may be that a frame from another site started", async () => {
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    let stopped = false;
+    let port = 0;
+    const server = createServer((request, response) => {
+      if (request.url === "/file") {
+        response.writeHead(200, {
+          "Content-Disposition": 'attachment; filename="endless.bin"',
+          "Content-Type": "application/octet-stream",
+        });
+        const chunk = Buffer.alloc(1024 * 1024);
+        const timer = setInterval(() => response.write(chunk), 10);
+        response.on("close", () => {
+          clearInterval(timer);
+          stopped = true;
+        });
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      // The page is on 127.0.0.1 and the frame on localhost: another site.
+      response.end(
+        request.url === "/frame"
+          ? `<title>Frame</title><a href="/file">Get it</a>`
+          : `<title>Files</title><iframe src="http://localhost:${port}/frame"></iframe>`,
+      );
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    port = address.port;
+    const session = new BrowserSession({
+      launcher: playwrightBrowserLauncher(
+        { open: openProcessContainer },
+        { maximumDownloadBytes: 5 * 1024 * 1024 },
+      ),
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const said = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${port}/`,
+      });
+      let reference: string | undefined;
+      await waitFor(async () => {
+        const snapshot = said(
+          await automation.callTool("browser_snapshot", {}),
+        );
+        reference = snapshot.match(/"Get it"[^\n]*\[ref=([a-z0-9]+)\]/)?.[1];
+        return reference !== undefined;
+      });
+
+      const clicked = said(
+        await automation.callTool("browser_click", {
+          element: "Get it",
+          target: reference,
+        }),
+      );
+      await waitFor(() => stopped, 30_000);
+      const next = said(await automation.callTool("browser_snapshot", {}));
+
+      expect(`${clicked}\n${next}`).toContain(
+        "was stopped: this browser's downloads may come to 5 MB in all.",
+      );
+      expect(
+        (await readdir(output).catch((): string[] => [])).filter((name) =>
+          name.includes("endless"),
+        ),
+      ).toEqual([]);
+    } finally {
+      await automation.close();
+      await session.close();
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 120_000);
+
+  /**
+   * Many downloads, each under the limit, fill a disk as surely as one with
+   * no end. The limit is on what one browser's downloads come to together.
+   */
+  it("stops downloads once together they pass the most a browser's downloads may come to", async () => {
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    let ended = 0;
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/file/")) {
+        const name = `part${request.url.slice(6)}.bin`;
+        response.writeHead(200, {
+          "Content-Disposition": `attachment; filename="${name}"`,
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(2 * 1024 * 1024),
+        });
+        // Each 2 MB, sent over about a second.
+        const chunk = Buffer.alloc(256 * 1024);
+        let left = 8;
+        const timer = setInterval(() => {
+          response.write(chunk);
+          if (--left === 0) {
+            clearInterval(timer);
+            response.end();
+          }
+        }, 120);
+        response.on("close", () => {
+          clearInterval(timer);
+          ended += 1;
+        });
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        "<title>Files</title>" +
+          [0, 1, 2, 3, 4, 5]
+            .map(
+              (index) =>
+                `<a download id="f${index}" href="/file/${index}">${index}</a>`,
+            )
+            .join("") +
+          "<button onclick=\"for (const link of document.querySelectorAll('a')) link.click()\">Get all</button>",
+      );
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher: playwrightBrowserLauncher(
+        { open: openProcessContainer },
+        { maximumDownloadBytes: 5 * 1024 * 1024 },
+      ),
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const said = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = said(await automation.callTool("browser_snapshot", {}));
+      const reference = snapshot.match(/"Get all"[^\n]*\[ref=(e\d+)\]/)?.[1];
+
+      const clicked = said(
+        await automation.callTool("browser_click", {
+          element: "Get all",
+          target: reference,
+        }),
+      );
+      await waitFor(() => ended === 6, 60_000);
+      // Every download that finished has been kept by now.
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      const next = said(await automation.callTool("browser_snapshot", {}));
+
+      let kept = 0;
+      for (const name of await readdir(output).catch((): string[] => []))
+        kept += (await stat(join(output, name))).size;
+      expect(kept).toBeLessThanOrEqual(5 * 1024 * 1024);
+      expect(`${clicked}\n${next}`).toContain(
+        "was stopped: this browser's downloads may come to 5 MB in all.",
+      );
+    } finally {
+      await automation.close();
+      await session.close();
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 120_000);
+
+  it("counts the downloads that finished toward what a browser's downloads may come to", async () => {
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    let finished = 0;
+    let cut = 0;
+    const server = createServer((request, response) => {
+      if (request.url?.startsWith("/file/")) {
+        response.writeHead(200, {
+          "Content-Disposition": `attachment; filename="part${request.url.slice(6)}.bin"`,
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(2 * 1024 * 1024),
+        });
+        // Each 2 MB, sent over under a second.
+        const chunk = Buffer.alloc(256 * 1024);
+        let left = 8;
+        let done = false;
+        const timer = setInterval(() => {
+          response.write(chunk);
+          if (--left === 0) {
+            clearInterval(timer);
+            done = true;
+            response.end();
+          }
+        }, 100);
+        response.on("close", () => {
+          clearInterval(timer);
+          if (done) finished += 1;
+          else cut += 1;
+        });
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      // One after another, each once the one before has finished.
+      response.end(
+        "<title>Files</title>" +
+          [0, 1, 2]
+            .map((index) => `<a download href="/file/${index}">${index}</a>`)
+            .join("") +
+          "<button onclick=\"[...document.querySelectorAll('a')].forEach((link, index) => setTimeout(() => link.click(), index * 4000))\">Get all</button>",
+      );
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher: playwrightBrowserLauncher(
+        { open: openProcessContainer },
+        { maximumDownloadBytes: 5 * 1024 * 1024 },
+      ),
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const said = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = said(await automation.callTool("browser_snapshot", {}));
+      const reference = snapshot.match(/"Get all"[^\n]*\[ref=(e\d+)\]/)?.[1];
+
+      await automation.callTool("browser_click", {
+        element: "Get all",
+        target: reference,
+      });
+      await waitFor(() => finished + cut === 3, 60_000);
+      // Every download that finished has been kept by now.
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+
+      let kept = 0;
+      for (const name of await readdir(output).catch((): string[] => []))
+        kept += (await stat(join(output, name))).size;
+      expect(finished).toBe(2);
+      expect(cut).toBe(1);
+      expect(kept).toBeLessThanOrEqual(5 * 1024 * 1024);
+    } finally {
+      await automation.close();
+      await session.close();
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 120_000);
+
+  it("lets a download through a popup that closes at once run to its end", async () => {
+    const output = await mkdtemp(join(tmpdir(), "zhiyin-browser-output-"));
+    let sent = false;
+    let cut = false;
+    const server = createServer((request, response) => {
+      if (request.url === "/file") {
+        response.writeHead(200, {
+          "Content-Disposition": 'attachment; filename="report.bin"',
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(3 * 1024 * 1024),
+        });
+        // Under the most a download may be, and still arriving well after
+        // the popup the link opened has closed.
+        const chunk = Buffer.alloc(1024 * 1024);
+        let left = 3;
+        const timer = setInterval(() => {
+          response.write(chunk);
+          left -= 1;
+          if (left === 0) {
+            clearInterval(timer);
+            response.end();
+          }
+        }, 400);
+        response.on("finish", () => (sent = true));
+        response.on("close", () => {
+          clearInterval(timer);
+          if (!sent) cut = true;
+        });
+        return;
+      }
+      response.writeHead(200, { "Content-Type": "text/html" });
+      response.end(
+        `<title>Files</title><a href="/file" target="_blank">Get it</a>`,
+      );
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("No port");
+    const session = new BrowserSession({
+      launcher: playwrightBrowserLauncher(
+        { open: openProcessContainer },
+        { maximumDownloadBytes: 5 * 1024 * 1024 },
+      ),
+      viewport: { width: 800, height: 600 },
+    });
+    const automation = browserAutomation(session, { outputDirectory: output });
+    const said = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+    try {
+      await automation.callTool("browser_navigate", {
+        url: `http://127.0.0.1:${address.port}/`,
+      });
+      const snapshot = said(await automation.callTool("browser_snapshot", {}));
+      const reference = snapshot.match(/"Get it"[^\n]*\[ref=(e\d+)\]/)?.[1];
+
+      const clicked = said(
+        await automation.callTool("browser_click", {
+          element: "Get it",
+          target: reference,
+        }),
+      );
+      await waitFor(() => sent || cut, 30_000);
+      const next = said(await automation.callTool("browser_snapshot", {}));
+
+      expect(cut).toBe(false);
+      expect(`${clicked}\n${next}`).not.toContain("was stopped");
     } finally {
       await automation.close();
       await session.close();

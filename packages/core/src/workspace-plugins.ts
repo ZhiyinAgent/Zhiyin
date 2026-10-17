@@ -108,7 +108,10 @@ export class WorkspacePlugins {
    * whichever way. One the person stopped ends without a failure.
    */
   async installToolchain(id: string): Promise<void> {
-    const controller = this.#installs.get(id) ?? new AbortController();
+    // One asked for again while the last is still being stopped starts anew.
+    const running = this.#installs.get(id);
+    const controller =
+      running && !running.signal.aborted ? running : new AbortController();
     this.#installs.set(id, controller);
     const installing = this.#capabilities.installToolchain(
       id,

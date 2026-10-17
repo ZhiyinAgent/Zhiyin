@@ -117,10 +117,14 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
   tests that did not run, how many, and what they need. A file may skip only
   where the reporter's list expects it to: a skip in any other file, or one
   where what the file needs is present, fails the run.
-- With `ZHIYIN_TEST_TOOLS` naming a short folder (Blender's own paths add up to
-  142 characters), the run first installs Typst, Tectonic, uv and Blender
-  there from their pinned downloads, verified as the app verifies them, so the
-  tests that need them run. CI sets it, so there those tests may not skip.
+- With `ZHIYIN_TEST_TOOLS` naming a folder, the run first installs Typst,
+  Tectonic and uv there from their pinned downloads, verified as the app
+  verifies them, fetching again a kept download that fails that, and downloads
+  Blender's archive for the test that installs it, so the tests that need them
+  run. CI sets it, so there those tests may not skip. No Blender is installed
+  for the tests that run scenes in one: they need a graphics card, which CI's
+  machine lacks, and run where `ZHIYIN_BLENDER` names a Blender on a PC that
+  has one.
 - `system-boundary` tests drive real browsers, Windows processes and file
   replacement. They run one file at a time, after the parallel projects, so
   shared machine resources do not skew them. Each scope has its own test
@@ -205,8 +209,9 @@ runs plain `pnpm audit` and each exception has one home.
 theme check, knip, `pnpm audit`, Prettier, the typecheck, the test suite, the
 build and the installed-app suite, which is not run when the build failed:
 there would be no app to start. `-Full` adds packaging; a check that the
-packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE` and
-`--inspect` (ADR 0001), give a page loaded from `file:` nothing beyond what a
+packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE`,
+`NODE_OPTIONS` and `--inspect` (ADR 0001), give a page loaded from `file:`
+nothing beyond what a
 browser gives one, load the app only from its archive and check the
 archive against the hash in the executable; the packaged executable itself,
 started on a saved conversation and read from outside through UI Automation
@@ -215,8 +220,9 @@ refuse to start with Chromium's debugging switches; a check
 that the packaged app holds every spelling dictionary unchanged; and the
 installed documents test run against the packed
 `app.asar` (named by `ZHIYIN_APP_ARCHIVE`), so a packaging change that stops
-document drawing fails it. Packaging is slow, so it sits behind the flag and
-runs before a release.
+document drawing fails it. Packaging is slow, so it sits behind the flag. The
+packaging workflow runs it on GitHub when how the package is made changes, and
+on request; the release workflow runs it on a release tag.
 
 The pre-commit hook and the CI workflow both call the script rather than
 restating its checks, so they cannot drift apart. The CI job keeps temporary

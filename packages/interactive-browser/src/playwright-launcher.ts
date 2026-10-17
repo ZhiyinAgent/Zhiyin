@@ -8,7 +8,7 @@
  */
 
 import { accessSync, constants } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -143,6 +143,7 @@ function targetFrom({
   page,
   cdp,
   takeStoppedDownloads,
+  downloadsKept,
   channel,
   pid,
   viewport,
@@ -154,6 +155,7 @@ function targetFrom({
   readonly page: Page;
   readonly cdp: CDPSession;
   readonly takeStoppedDownloads: () => readonly StoppedDownload[];
+  readonly downloadsKept: (names: readonly string[]) => void;
   readonly channel: string;
   readonly pid: number | undefined;
   readonly viewport: BrowserViewport;
@@ -166,6 +168,7 @@ function targetFrom({
     browserName: channelName(channel),
     automation: () => context,
     takeStoppedDownloads,
+    downloadsKept,
     url: () => page.url(),
     title: () => page.title(),
     goto: async (url) => {
@@ -260,53 +263,166 @@ function targetFrom({
   };
 }
 
-/** The most one download may be: a page can send a file of any size. */
+/**
+ * The most one browser's downloads may come to, together: a page can send a
+ * file of any size, and any number of them.
+ */
 const defaultMaximumDownloadBytes = 1024 ** 3;
 
+/** How often the folder downloads arrive in is looked at. */
+const downloadCheckMs = 1_000;
+
 /**
- * Stops any download, on any of the context's pages, once it is larger than
- * the most a download may be. The browser writes a download to disk as it
- * arrives, so one with no end would fill it. Answers the downloads it stopped
- * since it was last asked.
+ * A download as the browser names it in its folder: by its id, and with
+ * `.crdownload` while it is still arriving.
+ */
+const download =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\.crdownload)?$/i;
+
+/**
+ * Stops every download still arriving once the browser's downloads together
+ * come to more than the most they may. The browser writes a download to disk
+ * as it arrives, so one with no end, or many with an end, would fill it. A
+ * finished download stays in `folder`, where the automation server copies it
+ * from, until that copy is complete; then it is removed, and counts on as the
+ * copy. One that cannot be told apart from another of its name still being
+ * copied stays, and counts, until the browser closes. Every download arrives in
+ * `folder` under its id, whichever page, frame or closed popup started it,
+ * and is stopped within about a second of passing the limit; at once where
+ * the page that started it reports its progress, which a frame from another
+ * site or a popup opened by a download does not. Answers the downloads it
+ * stopped since it was last asked, and stops looking once ended.
  */
 async function capDownloads(
   browser: Browser,
   context: BrowserContext,
+  folder: string,
   maximumBytes: number,
-): Promise<() => readonly StoppedDownload[]> {
+): Promise<{
+  readonly take: () => readonly StoppedDownload[];
+  readonly kept: (names: readonly string[]) => void;
+  readonly end: () => void;
+}> {
   const control = await browser.newBrowserCDPSession();
   const names = new Map<string, string>();
   const cancelled = new Set<string>();
+  /** The bytes of each download still arriving, as last seen. */
+  const arriving = new Map<string, number>();
+  /** The bytes of the finished downloads, as last seen in the folder. */
+  let finished = 0;
+  /** How many downloads of each name the automation server has kept. */
+  const keptByName = new Map<string, number>();
+  /** How many of each name were removed once kept, and their bytes. */
+  const removedByName = new Map<string, number>();
+  const removed = new Set<string>();
+  let removedBytes = 0;
+  const overLimit = () => {
+    let total = finished + removedBytes;
+    for (const bytes of arriving.values()) total += bytes;
+    return total > maximumBytes;
+  };
   let stopped: StoppedDownload[] = [];
+  const stop = (guid: string) => {
+    arriving.delete(guid);
+    if (cancelled.has(guid)) return;
+    cancelled.add(guid);
+    stopped.push({
+      name: names.get(guid) ?? "a file",
+      limitBytes: maximumBytes,
+    });
+    void control
+      .send("Browser.cancelDownload", { guid })
+      .catch(() => undefined);
+  };
   const watch = async (page: Page) => {
     const session = await context.newCDPSession(page);
     session.on("Page.downloadWillBegin", (event) => {
       names.set(event.guid, event.suggestedFilename);
     });
     session.on("Page.downloadProgress", (event) => {
-      if (
-        event.state !== "inProgress" ||
-        Math.max(event.receivedBytes, event.totalBytes) <= maximumBytes ||
-        cancelled.has(event.guid)
-      )
-        return;
-      cancelled.add(event.guid);
-      stopped.push({
-        name: names.get(event.guid) ?? "a file",
-        limitBytes: maximumBytes,
-      });
-      void control
-        .send("Browser.cancelDownload", { guid: event.guid })
-        .catch(() => undefined);
+      if (event.state !== "inProgress" || cancelled.has(event.guid)) return;
+      arriving.set(event.guid, Math.max(event.receivedBytes, event.totalBytes));
+      if (overLimit()) stopAll();
     });
     await session.send("Page.enable");
   };
+  const stopAll = () => {
+    for (const guid of [...arriving.keys()]) stop(guid);
+  };
   context.on("page", (page) => void watch(page).catch(() => undefined));
   await Promise.all(context.pages().map(watch));
-  return () => {
-    const taken = stopped;
-    stopped = [];
-    return taken;
+  let looking = false;
+  const look = async () => {
+    if (looking) return;
+    looking = true;
+    try {
+      let finishedNow = 0;
+      const arrivingNow = new Set<string>();
+      /** The finished downloads still here, by the name their page gave. */
+      const finishedByName = new Map<
+        string,
+        { guid: string; size: number }[]
+      >();
+      for (const entry of await readdir(folder).catch((): string[] => [])) {
+        const named = download.exec(entry);
+        const guid = named?.[1];
+        if (!guid || cancelled.has(guid) || removed.has(guid)) continue;
+        const size = await stat(join(folder, entry)).then(
+          (found) => found.size,
+          () => 0,
+        );
+        if (!named[2]) {
+          finishedNow += size;
+          const name = names.get(guid);
+          if (name !== undefined)
+            finishedByName.set(name, [
+              ...(finishedByName.get(name) ?? []),
+              { guid, size },
+            ]);
+        } else {
+          arrivingNow.add(guid);
+          arriving.set(guid, Math.max(arriving.get(guid) ?? 0, size));
+        }
+      }
+      // Each finished download of a name whose copies are all complete goes;
+      // which of several is still being copied cannot be told, so they stay.
+      for (const [name, here] of finishedByName) {
+        const waiting =
+          (keptByName.get(name) ?? 0) - (removedByName.get(name) ?? 0);
+        if (here.length > waiting) continue;
+        for (const { guid, size } of here) {
+          const gone = await rm(join(folder, guid)).then(
+            () => true,
+            () => false,
+          );
+          if (!gone) continue;
+          removed.add(guid);
+          removedBytes += size;
+          finishedNow -= size;
+          removedByName.set(name, (removedByName.get(name) ?? 0) + 1);
+        }
+      }
+      finished = finishedNow;
+      for (const guid of [...arriving.keys()])
+        if (!arrivingNow.has(guid)) arriving.delete(guid);
+      if (overLimit()) stopAll();
+    } finally {
+      looking = false;
+    }
+  };
+  const timer = setInterval(() => void look(), downloadCheckMs);
+  return {
+    take: () => {
+      const taken = stopped;
+      stopped = [];
+      return taken;
+    },
+    kept: (kept) => {
+      for (const name of kept)
+        keptByName.set(name, (keptByName.get(name) ?? 0) + 1);
+      if (kept.length) void look();
+    },
+    end: () => clearInterval(timer),
   };
 }
 
@@ -317,31 +433,43 @@ async function connectedTarget(
   viewport: BrowserViewport,
   pixelDensity: number,
   maximumDownloadBytes: number,
+  downloads: string,
   closeOwner: () => Promise<void>,
 ): Promise<BrowserTarget> {
   const context =
     browser.contexts()[0] ?? (await browser.newContext({ viewport }));
   const page = context.pages()[0] ?? (await context.newPage());
   await page.setViewportSize(viewport);
-  const takeStoppedDownloads = await capDownloads(
+  const capped = await capDownloads(
     browser,
     context,
+    downloads,
     maximumDownloadBytes,
   );
-  const cdp = await context.newCDPSession(page);
-  await cdp.send("Page.enable");
-  return targetFrom({
-    browser,
-    context,
-    page,
-    cdp,
-    takeStoppedDownloads,
-    channel,
-    pid,
-    viewport,
-    pixelDensity,
-    closeOwner,
-  });
+  // Until a target owns it, the watch on downloads is ended here.
+  try {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Page.enable");
+    return targetFrom({
+      browser,
+      context,
+      page,
+      cdp,
+      takeStoppedDownloads: capped.take,
+      downloadsKept: capped.kept,
+      channel,
+      pid,
+      viewport,
+      pixelDensity,
+      closeOwner: async () => {
+        capped.end();
+        await closeOwner();
+      },
+    });
+  } catch (error) {
+    capped.end();
+    throw error;
+  }
 }
 
 async function atomicLaunch(
@@ -355,6 +483,9 @@ async function atomicLaunch(
     join(tmpdir(), `zhiyin-browser-${process.pid}-`),
   );
   const profile = join(directory, "profile");
+  // Where downloads arrive, before the automation server keeps them in the
+  // conversation's folder.
+  const downloads = join(directory, "downloads");
   const stdout = join(directory, "stdout.txt");
   const stderr = join(directory, "stderr.txt");
   const selected = installedBrowser();
@@ -395,7 +526,9 @@ async function atomicLaunch(
     });
     const exited = owned.wait();
     if (!owned.pipes) throw new Error("The browser was started without pipes.");
-    browser = await chromium.connectOverCDP(pipeTransport(owned.pipes));
+    browser = await chromium.connectOverCDP(pipeTransport(owned.pipes), {
+      artifactsDir: downloads,
+    });
     return await connectedTarget(
       browser,
       selected.channel,
@@ -403,6 +536,7 @@ async function atomicLaunch(
       viewport,
       pixelDensity,
       maximumDownloadBytes,
+      downloads,
       async () => {
         container.close();
         await exited.catch(() => undefined);
@@ -466,7 +600,7 @@ export function playwrightBrowserLauncher(
   options: {
     /** Device pixels per CSS pixel of the screen the panel is shown on. */
     readonly pixelDensity?: () => number;
-    /** The most one download may be before it is stopped. */
+    /** The most one browser's downloads may come to, together. */
     readonly maximumDownloadBytes?: number;
   } = {},
 ): BrowserLauncher {

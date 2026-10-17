@@ -262,7 +262,8 @@ function validSpecialistRun(value: unknown): boolean {
     !validIsoDate(value.startedAt) ||
     !stringArray(value.actionIds) ||
     !validSequence(value.sequence) ||
-    !optionalText(value.reason)
+    !optionalText(value.reason) ||
+    (value.quiet !== undefined && value.quiet !== true)
   )
     return false;
   if (status === "running")

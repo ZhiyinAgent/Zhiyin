@@ -39,6 +39,13 @@ export type RunProcess = (options: {
   readonly signal?: AbortSignal;
   readonly containment?: ProcessContainment;
   /**
+   * At low integrity, Windows refuses the program, and what it starts, every
+   * write outside the folders opened to low integrity. Only a contained run
+   * can be lowered, so a run asked for at low integrity without containment
+   * is refused.
+   */
+  readonly integrity?: "low";
+  /**
    * Everything the program is given; absent, it inherits Zhiyin's own. Either
    * way, without a model key Zhiyin was given.
    */
@@ -147,7 +154,10 @@ export const runProcess: RunProcess = async (options) => {
       failure: "containment",
     };
   }
-  return container ? runContained(container, options) : runUncontained(options);
+  if (container) return runContained(container, options);
+  if (options.integrity)
+    return { exitCode: null, stdout: "", stderr: "", failure: "containment" };
+  return runUncontained(options);
 };
 
 async function runContained(
@@ -168,6 +178,7 @@ async function runContained(
         stdout: stdoutFile,
         stderr: stderrFile,
         ...(options.environment ? { environment: options.environment } : {}),
+        ...(options.integrity ? { integrity: options.integrity } : {}),
       });
     } catch {
       return {

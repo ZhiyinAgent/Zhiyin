@@ -10,6 +10,7 @@ export { routedName } from "./action-title.js";
 export {
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
 } from "./connection-problems.js";
 export { connectHttpMcpServer } from "./http-connection.js";
 export type { SignInOptions } from "./sign-in.js";

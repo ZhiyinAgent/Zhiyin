@@ -35,7 +35,7 @@ import {
   win32,
 } from "./kernel32.js";
 import type { Win32 } from "./kernel32.js";
-import { ProcessEnds } from "./process-ends.js";
+import { ProcessEnds, tooManyProcesses } from "./process-ends.js";
 
 /** The ends of every process this module launched, told as they happen. */
 let processEnds: ProcessEnds | undefined;
@@ -206,6 +206,34 @@ export function oemText(bytes: Buffer): string | undefined {
 }
 
 /**
+ * Bytes in Windows' own code page for text that says no encoding, the ANSI
+ * code page, as text: Windows-1252 on most Western PCs, GBK on Chinese ones.
+ * Undefined where there is no such conversion to ask.
+ */
+export function ansiText(bytes: Buffer): string | undefined {
+  if (process.platform !== "win32") return undefined;
+  if (!bytes.length) return "";
+  try {
+    const api = win32();
+    const wide = Buffer.alloc(bytes.length * 2);
+    const written = api.ansiToWide(bytes, wide);
+    return written > 0 ? wide.toString("utf16le", 0, written * 2) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The number of that code page, such as 1252 or 936. */
+export function ansiCodePage(): number | undefined {
+  if (process.platform !== "win32") return undefined;
+  try {
+    return win32().ansiCodePage();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Whether processes can be contained here. A caller that starts subprocesses
  * asks this first and stays unavailable when the answer is no, rather than
  * running work it cannot clean up.
@@ -334,6 +362,9 @@ export function openProcessContainer(
     },
     launch(options: ContainedProcessOptions): ContainedProcess {
       if (closed) throw new Error("This process container is already closed.");
+      // Past the most waited on, the waits would take every thread file work
+      // shares, so the process is not started.
+      if (processEnds?.full) throw new Error(tooManyProcesses);
       refuseNul(options);
       const security = {
         nLength: api.securityAttributesSize,
@@ -503,7 +534,13 @@ export function openProcessContainer(
               else resolve(code[0]);
             };
             processEnds ??= new ProcessEnds(api);
-            processEnds.watch(processHandle, settle);
+            try {
+              processEnds.watch(processHandle, settle);
+            } catch (error) {
+              // Nothing will settle it, so nothing else lets the handle go.
+              api.closeHandle(processHandle);
+              throw error;
+            }
           });
           return waited;
         },

@@ -100,8 +100,9 @@ for its launch; nothing listens on a port.
   Python, taking nothing from the person's, compiles Blender's scripts and
   library, and the compiled files name their sources where they are installed.
 - **Blender starts on its own settings.** It ignores the person's Blender
-  startup file, preferences and add-ons, and Blender's and USD's own variables
-  in Zhiyin's environment, keeps its own settings in Zhiyin's data, and never
+  startup file, preferences and add-ons, Blender's own variables in Zhiyin's
+  environment, and USD's and MaterialX's, which name the plugins it loads and
+  the folders it reads models and materials from; it keeps its own settings in Zhiyin's data, and never
   runs a script saved in a scene file.
 - **Nothing changes before a scene is open.** The scene file is a
   workspace-relative `.blend` that stays inside the workspace, and creating
@@ -119,11 +120,14 @@ for its launch; nothing listens on a port.
   pictures, geometry, materials or parts lie outside is refused and leaves the
   scene as it was; what an importer would read itself is refused before it is
   read. USD comes as text, binary or a package (`.usd`, `.usda`, `.usdc` and
-  `.usdz`): text is checked by the paths it writes as files and its clip
-  patterns, binary USD by every string it holds, and a package by each scene
-  in it, whose pictures are kept in the scene named as the package holds
-  them. Binary USD that cannot be read that way is refused. A scene file that
-  uses files kept elsewhere opens, and the answer names them.
+  `.usdz`): text is checked by the paths it writes as files, binary USD by
+  every string it holds, and a package by each scene in it, read as USD reads
+  them; its pictures are kept in the scene named as the package holds them.
+  Each path is checked from every folder USD would look in, the workspace
+  being the folder Blender reads from while it imports. USD that names a file
+  in a way the check reads differently from USD, binary USD or a package that
+  cannot be read that way, and USD text that plays clips are refused. A scene
+  file that uses files kept elsewhere opens, and the answer names them.
 - **An export writes the one file it names.** No materials, pictures or data
   are written beside it, and objects it names are exported even when hidden.
 - **A change is saved, answered, then previewed.** After every command that

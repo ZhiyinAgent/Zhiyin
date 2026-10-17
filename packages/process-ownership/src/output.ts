@@ -23,7 +23,7 @@ export const defaultOutputBytes = 64 * 1024 * 1024;
 export const outputCheckMs = 250;
 
 /** Stands where the middle of a long output was left out. */
-const shortenedMarker = "\n… output shortened …\n";
+export const shortenedOutput = "\n… output shortened …\n";
 
 /** The first `edge` bytes and the last `edge` bytes of a stream. */
 export class OutputEnds {
@@ -96,7 +96,7 @@ function joined(head: Buffer, tail: Buffer, total: number): string {
   const start = withoutPartialEnd(head);
   const end = withoutPartialStart(tail);
   const utf8 = isUtf8(start) && isUtf8(end);
-  return `${decoded(start, utf8)}${shortenedMarker}${decoded(end, utf8)}`;
+  return `${decoded(start, utf8)}${shortenedOutput}${decoded(end, utf8)}`;
 }
 
 function isUtf8(bytes: Buffer): boolean {

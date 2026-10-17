@@ -13,7 +13,7 @@
  */
 
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, stat } from "node:fs/promises";
+import { mkdir, rename, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -35,10 +35,7 @@ const variables = {
  * verifies it, and the Blender install test reads Blender's.
  */
 async function archive(folder, url, signal) {
-  const kept = join(
-    folder,
-    decodeURIComponent(basename(new URL(url).pathname)),
-  );
+  const kept = keptAt(folder, url);
   if (
     await stat(kept).then(
       () => true,
@@ -55,6 +52,11 @@ async function archive(folder, url, signal) {
   return kept;
 }
 
+/** Where the archive at a pinned address is kept. */
+function keptAt(folder, url) {
+  return join(folder, decodeURIComponent(basename(new URL(url).pathname)));
+}
+
 export default async function setup() {
   const folder = process.env.ZHIYIN_TEST_TOOLS;
   if (!folder) return;
@@ -68,7 +70,13 @@ export default async function setup() {
   });
   for (const [id, variable] of Object.entries(variables)) {
     if (process.env[variable]) continue;
-    await toolchains.install(id);
+    await toolchains.install(id).catch(async () => {
+      // A kept archive the install refused, such as one an older pin left
+      // under the same name, is fetched again once.
+      const { url } = pinnedToolchains.find((spec) => spec.id === id);
+      await rm(keptAt(archives, url), { force: true });
+      await toolchains.install(id);
+    });
     process.env[variable] = await toolchains.executable(id);
   }
   if (!process.env.ZHIYIN_BLENDER_ARCHIVE) {

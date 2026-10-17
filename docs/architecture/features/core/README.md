@@ -85,7 +85,8 @@ answers every other command:
   availability, the person's own browsing, and `lookAtScene`, the person
   turning, zooming or switching the 3D view. A program a connector needs is
   shown about every second while it installs, so its progress moves, and
-  `cancelToolchainInstall` stops it; a stopped install ends without a failure.
+  `cancelToolchainInstall` stops it; a stopped install ends without a failure,
+  and one asked for again at once starts anew.
 - **Turns:** `turns` forwards to the agent loop starting, stopping and
   condensing a turn, the person's answers to approvals and questions, and
   revoking a permission granted for the conversation.

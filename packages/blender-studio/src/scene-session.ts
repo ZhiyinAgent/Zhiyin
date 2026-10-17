@@ -494,11 +494,16 @@ export class SceneSession {
       throw new Error(reason, { cause: error });
     }
     const startMs = this.#options.startTimeoutMs ?? 180_000;
-    let first = await this.#race(process, process.next(), startMs);
-    // A line sent just before the end may be read after it.
-    if (first === "ended") first = (await process.next()) ?? "ended";
+    // A line sent just before the end may be read after the end is seen:
+    // the read already asked for is the one that gets it.
+    const read = async () => {
+      const reading = process.next();
+      const line = await this.#race(process, reading, startMs);
+      return line === "ended" ? ((await reading) ?? "ended") : line;
+    };
+    let first = await read();
     const warming = startLine(first, "warming");
-    if (warming) first = await this.#race(process, process.next(), startMs);
+    if (warming) first = await read();
     if (!startLine(first, "ready")) {
       process.end();
       // Ended while drawing on the graphics card: the 3D tools cannot work here.

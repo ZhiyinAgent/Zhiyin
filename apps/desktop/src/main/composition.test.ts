@@ -3,7 +3,15 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 import {
   CHANNEL,
   emptyConversationLists,
@@ -70,12 +78,20 @@ const environment = [
   "ZHIYIN_REGION",
 ] as const;
 
+/**
+ * Goes on once the check holds. What the composition does crosses real
+ * processes and files, so it is looked at again every 10 ms; a check that
+ * never holds ends at the test's own timeout, which names the test. Looking
+ * stops once the test has ended, so what follows, such as shutting the core
+ * down, still runs.
+ */
 async function eventually(check: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (check()) return;
+  let ended = false;
+  onTestFinished(() => {
+    ended = true;
+  });
+  while (!ended && !check())
     await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error("The condition was never met.");
 }
 
 describe("the application's composition", () => {

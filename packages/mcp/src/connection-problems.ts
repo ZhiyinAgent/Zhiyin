@@ -37,6 +37,17 @@ export class McpRateRefusedError extends Error {
   }
 }
 
+/**
+ * A server ran a call and answered it unlike the output its tool declares:
+ * the answer is not used, but the call took place. Not a refusal.
+ */
+export class McpUndeclaredAnswerError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "McpUndeclaredAnswerError";
+  }
+}
+
 export type Failure = {
   readonly status: "failed" | "unauthorized";
   readonly reason: string;

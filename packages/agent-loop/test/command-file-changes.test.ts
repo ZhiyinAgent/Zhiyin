@@ -41,7 +41,10 @@ function callsBashOnce() {
   };
 }
 
-function running(result: ToolInvocationResult) {
+function running(
+  result: ToolInvocationResult,
+  send: AgentLoopDependencies["model"]["send"] = callsBashOnce(),
+) {
   let announce: JobChanges | undefined;
   const deps = stubDependencies(() => {});
   const { host } = loopAndHost({
@@ -69,7 +72,7 @@ function running(result: ToolInvocationResult) {
     permissions: {
       decide: async () => ({ outcome: "allow" as const, reason: "Approved" }),
     },
-    model: { ...deps.model, send: callsBashOnce() },
+    model: { ...deps.model, send },
   });
   return {
     loop: host.app,
@@ -152,6 +155,58 @@ describe("what changed while a command ran", () => {
     expect(loop.snapshot().tasks[0]?.actions?.[0]?.commandChanges).toEqual(
       ended,
     );
+  });
+
+  it("arrives when the job ends while another turn is saved, though the person stops that turn", async () => {
+    const bashOnce = callsBashOnce();
+    let turns = 0;
+    let waiting = false;
+    const { loop, host, announce } = running(
+      {
+        ok: true,
+        value: { job: "J1", status: "running" },
+        commandChanges: { status: "running", job: "J1" },
+      },
+      async function* (request) {
+        turns += 1;
+        // The first turn starts the job; the next is out when it ends.
+        if (turns <= 2) {
+          yield* bashOnce(request);
+          return;
+        }
+        waiting = true;
+        await until(() => request.signal?.aborted === true);
+      },
+    );
+    const taskId = await loop.createTask();
+    await loop.start(taskId, "Convert the data");
+    const next = loop.start(taskId, "Now summarise it");
+    await until(() => waiting);
+
+    let release = () => {};
+    let held = false;
+    host.holdsSave = (task) => {
+      if (held || task.actions[0]?.commandChanges?.status !== "checked")
+        return undefined;
+      held = true;
+      return new Promise<void>((resolve) => (release = resolve));
+    };
+    const ended: CommandFileChanges = { ...converted, job: "J1" };
+    announce(taskId, "J1", ended);
+    await until(() => held);
+    await loop.cancel(taskId);
+    release();
+    await next;
+
+    await until(
+      () =>
+        loop.snapshot().tasks[0]?.actions?.[0]?.commandChanges?.status ===
+        "checked",
+    );
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.commandChanges).toEqual(
+      ended,
+    );
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
   });
 
   it("tells the app around the turn which files it created or changed, so a document among them is shown", async () => {

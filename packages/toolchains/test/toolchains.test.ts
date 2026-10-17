@@ -294,6 +294,24 @@ describe("installing a pinned program", () => {
     );
   });
 
+  it("installs when asked again while a stopped install is still ending", async () => {
+    const download = serving(program);
+    const toolchains = new DownloadedToolchains({
+      directory: await temporaryRoot(),
+      specs: [specFor(program)],
+      download,
+    });
+    const stopping = new AbortController();
+
+    const stopped = toolchains.install("typst", stopping.signal);
+    stopping.abort();
+    const again = toolchains.install("typst", new AbortController().signal);
+
+    await expect(stopped).rejects.toThrow();
+    await expect(again).resolves.toBeUndefined();
+    expect(await toolchains.state("typst")).toEqual({ status: "ready" });
+  });
+
   it("clears what an install cut short by Zhiyin closing left, the next time it installs", async () => {
     const directory = await temporaryRoot();
     const abandoned = join(directory, "toolchains", ".staging", "a1b2c3d4");

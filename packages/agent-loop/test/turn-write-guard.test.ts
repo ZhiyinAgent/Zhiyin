@@ -40,7 +40,11 @@ function conversation() {
   /** Writes what the conversation says now, with a note of who wrote it. */
   const write = (note: string) =>
     records.replaceTask({ ...records.task("conversation"), title: note });
-  return { ownership, records, write, title: () => saved.title };
+  /** Saves a conversation as the store does once a write commits. */
+  const put = (task: WorkspaceTask) => {
+    saved = task;
+  };
+  return { ownership, records, write, put, title: () => saved.title };
 }
 
 /** A promise and the function that settles it. */
@@ -95,7 +99,7 @@ describe("a write a turn makes", () => {
   });
 
   it("stays out when its turn is stopped while the write is being saved", async () => {
-    const { ownership, records, title } = conversation();
+    const { ownership, records, put, title } = conversation();
     const turn = ownership.start("conversation");
     const saving = gate();
     // A save that is slow to finish: the stop arrives before it commits.
@@ -108,7 +112,7 @@ describe("a write a turn makes", () => {
             options: { readonly commit: () => boolean },
           ) => {
             await saving.opened;
-            if (options.commit()) await records.replaceTask(task);
+            if (options.commit()) put(task);
           },
         },
       } as unknown as AgentLoopDependencies,
@@ -126,6 +130,95 @@ describe("a write a turn makes", () => {
     await writing;
 
     expect(title()).toBe("Conversation");
+  });
+
+  it.each([
+    ["its own turn", false],
+    ["a specialist, whose parent turn", true],
+  ])(
+    "from %s finishing on its own while the write is being saved still lands",
+    async (_who, bySpecialist) => {
+      const { ownership, records, title } = conversation();
+      const turn = ownership.start("conversation");
+      const author = bySpecialist
+        ? ownership.start("conversation:specialist:one", "conversation")
+        : turn;
+      const saving = gate();
+      const slow = new TurnRecords(
+        {
+          host: {
+            find: () => records.task("conversation"),
+            store: async (
+              task: WorkspaceTask,
+              options: { readonly commit: () => boolean },
+            ) => {
+              await saving.opened;
+              if (options.commit()) await records.replaceTask(task);
+            },
+          },
+        } as unknown as AgentLoopDependencies,
+        turnWriteGuard(ownership),
+      );
+      const writing = ownership.within(author, () =>
+        slow.replaceTask({
+          ...records.task("conversation"),
+          title: "while finishing",
+        }),
+      );
+
+      ownership.finish("conversation", turn);
+      saving.open();
+      await writing;
+
+      expect(title()).toBe("while finishing");
+    },
+  );
+
+  it("made on no turn's behalf is made again when the stop, begun from the conversation as saved, lands over it", async () => {
+    let saved: WorkspaceTask = {
+      id: "conversation",
+      title: "Conversation",
+      titleSource: "generated",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-16T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [],
+      phase: { kind: "working", steps: [] },
+    };
+    // Saves commit in the order they began, the first only once let go.
+    const first = gate();
+    let begun = 0;
+    let previous: Promise<void> = Promise.resolve();
+    const records = new TurnRecords(
+      {
+        host: {
+          find: (id: string) => (id === saved.id ? saved : undefined),
+          store: (
+            task: WorkspaceTask,
+            options: { readonly commit: () => boolean },
+          ) => {
+            const waitFor = begun++ === 0 ? first.opened : Promise.resolve();
+            const committed = previous.then(async () => {
+              await waitFor;
+              if (options.commit()) saved = task;
+            });
+            previous = committed;
+            return committed;
+          },
+        },
+      } as unknown as AgentLoopDependencies,
+      turnWriteGuard(new TurnOwnership()),
+    );
+
+    const ending = records.changeOutsideTurns("conversation", (task) =>
+      task.title === "ended" ? undefined : { ...task, title: "ended" },
+    );
+    const stopping = records.interrupt("conversation");
+    first.open();
+    await Promise.all([ending, stopping]);
+
+    expect(saved.title).toBe("ended");
+    expect(saved.phase.kind).toBe("interrupted");
   });
 
   it("from a turn that finished on its own still lands while the next turn runs", async () => {

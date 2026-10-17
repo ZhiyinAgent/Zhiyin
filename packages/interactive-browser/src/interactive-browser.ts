@@ -24,7 +24,10 @@ export type BrowserAvailability =
   | { readonly available: true; readonly browserName: string }
   | { readonly available: false; readonly reason: string };
 
-/** A download the browser stopped because it grew past the most it may be. */
+/**
+ * A download the browser stopped because the browser's downloads together
+ * grew past the most they may come to.
+ */
 export type StoppedDownload = {
   readonly name: string;
   readonly limitBytes: number;
@@ -69,6 +72,11 @@ export type BrowserTarget = {
   automation(): unknown;
   /** The downloads stopped for their size since this was last asked. */
   takeStoppedDownloads(): readonly StoppedDownload[];
+  /**
+   * Downloads the automation server has finished keeping in the
+   * conversation's folder, by the names their pages gave them.
+   */
+  downloadsKept?(names: readonly string[]): void;
   close(): Promise<void>;
 };
 
@@ -115,6 +123,11 @@ export interface InteractiveBrowser {
   automation(): unknown;
   /** The downloads stopped for their size since this was last asked. */
   takeStoppedDownloads(): readonly StoppedDownload[];
+  /**
+   * Downloads the automation server has finished keeping in the
+   * conversation's folder, by the names their pages gave them.
+   */
+  downloadsKept?(names: readonly string[]): void;
   close(): Promise<void>;
 }
 
@@ -203,6 +216,8 @@ export class BrowserSession implements InteractiveBrowser {
   readonly #actionListeners = new Set<() => void>();
   #state: BrowserSessionState = closedState;
   #target: BrowserTarget | undefined;
+  /** The browser being opened, before it is the session's. */
+  #launching: BrowserTarget | undefined;
   #frame: BrowserFrame | undefined;
   #opening: Promise<void> | undefined;
   #epoch = 0;
@@ -236,6 +251,10 @@ export class BrowserSession implements InteractiveBrowser {
 
   takeStoppedDownloads(): readonly StoppedDownload[] {
     return this.#target?.takeStoppedDownloads() ?? [];
+  }
+
+  downloadsKept(names: readonly string[]): void {
+    this.#target?.downloadsKept?.(names);
   }
 
   onFrame(listener: (frame: BrowserFrame) => void): () => void {
@@ -289,7 +308,9 @@ export class BrowserSession implements InteractiveBrowser {
         return;
       }
       target.onNavigated(() => void this.refresh());
-      target.onLost(() => void this.#lost());
+      const launched = target;
+      this.#launching = launched;
+      target.onLost(() => void this.#lost(launched));
       await target.startFrames((frame) => {
         if (epoch === this.#epoch) this.#emitFrame(frame);
       });
@@ -308,6 +329,8 @@ export class BrowserSession implements InteractiveBrowser {
         this.#frame = undefined;
         this.#fail("The browser could not be opened.", error);
       }
+    } finally {
+      if (this.#launching === target) this.#launching = undefined;
     }
   }
 
@@ -402,21 +425,26 @@ export class BrowserSession implements InteractiveBrowser {
     }
   }
 
-  async #lost(): Promise<void> {
-    const target = this.#target;
-    if (!target) return;
+  async #lost(target: BrowserTarget): Promise<void> {
+    // A browser already replaced, or closed, has nothing left to say; one
+    // still being opened is lost as an open one is.
+    if (this.#target !== target && this.#launching !== target) return;
     ++this.#epoch;
     this.#target = undefined;
+    this.#launching = undefined;
     this.#frame = undefined;
-    // A page can go while its browser runs on; what is left of it is ended
-    // rather than left running unseen.
-    await target.close().catch(() => undefined);
-    await this.preview?.close();
+    // Said at once, and the preview closed before what is left of the
+    // browser ends, so a browser or preview opened meanwhile is left alone.
     this.#publish({
       ...closedState,
       status: "failed",
       reason: "The browser closed unexpectedly.",
     });
+    // A preview that fails to close does not keep the browser running.
+    await this.preview?.close().catch(() => undefined);
+    // A page can go while its browser runs on; what is left of it is ended
+    // rather than left running unseen.
+    await target.close().catch(() => undefined);
   }
 
   #fail(reason: string, cause: unknown): void {

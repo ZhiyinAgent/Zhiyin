@@ -68,6 +68,16 @@ jobs:
           path: ${{ runner.temp }}\zt\archives
           key: test-tools-${{ hashFiles('packages/toolchains/src/toolchains.ts') }}
 
+      # The build fetches the spelling dictionaries from Chromium's server,
+      # which this machine sometimes cannot reach for a minute. Kept between
+      # runs until the list changes; the build checks each kept file's
+      # SHA-256 before using it, and fetches only what is missing or differs.
+      - name: Keep the spelling dictionaries between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\dictionaries
+          key: dictionaries-${{ hashFiles('packages/spelling/dictionaries.json') }}
+
       - name: Run the repository gate
         shell: powershell
         env:

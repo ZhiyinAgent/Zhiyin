@@ -35,6 +35,8 @@ at no other.
   and it has no deadline of its own: one whose condition never holds ends at
   the test's timeout, which names the test.
 - After a wake it looks once what is under way has run its course, so a test
-  goes on between two steps of the code under test, never inside one.
+  goes on between two steps of the code under test, never inside one whose
+  rest only awaits promises. A step that waits on the disk or the network in
+  between is two steps to it.
 - A watched object answers, refuses and keeps its own state as the object it
   watches does, private state included.

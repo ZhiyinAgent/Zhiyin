@@ -15,7 +15,9 @@ export function useDimmedWindowControls(
     told.current = dim;
   });
   useEffect(() => {
-    let dimmed = false;
+    // Unknown until the first look, which is always told: the window may
+    // still have them dimmed for a page loaded before this one.
+    let dimmed: boolean | undefined;
     const look = () => {
       const now = covered();
       if (now === dimmed) return;

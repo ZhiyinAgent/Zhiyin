@@ -13,6 +13,7 @@ import {
   pluginOffering,
   pluginsOffering,
   stubDependencies,
+  queuedWorkRun,
   until as eventually,
   type TurnTestApp,
 } from "./support.js";
@@ -187,7 +188,7 @@ describe("an approval beside a specialist", () => {
     await loop.cancel(taskId);
     await running;
     await eventually(() => !specialistIs(loop, "running"));
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queuedWorkRun();
 
     expect(conversation(loop).phase.kind).toBe("interrupted");
   });

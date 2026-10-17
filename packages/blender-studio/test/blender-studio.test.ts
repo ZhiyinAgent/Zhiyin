@@ -44,6 +44,8 @@ async function setUp(
     installed?: boolean;
     ready?: boolean;
     cannotDraw?: boolean;
+    endsAtOnce?: boolean;
+    slowPipe?: boolean;
     previewTimeoutMs?: number;
   } = {},
 ) {
@@ -56,6 +58,8 @@ async function setUp(
   const blender = standInBlender(behaviour, {
     ...(options.ready === false ? { ready: false } : {}),
     ...(options.cannotDraw ? { cannotDraw: true } : {}),
+    ...(options.endsAtOnce ? { endsAtOnce: true } : {}),
+    ...(options.slowPipe ? { slowPipe: true } : {}),
   });
   const installed = async () =>
     options.installed === false ? undefined : "C:/Blender/blender.exe";
@@ -1065,38 +1069,45 @@ describe("a conversation's session", () => {
     });
   });
 
-  it("says the 3D tools cannot work when Blender ends while drawing its warm-up picture, and offers them in no conversation after", async () => {
-    const { tools, scenes, blender } = await setUp(undefined, {
-      cannotDraw: true,
-    });
-    const why = "Blender cannot draw on this PC's graphics card";
+  it.each([
+    ["", false],
+    [", its end seen before its last words", true],
+  ])(
+    "says the 3D tools cannot work when Blender ends while drawing its warm-up picture%s, and offers them in no conversation after",
+    async (_when, slowPipe) => {
+      const { tools, scenes, blender } = await setUp(undefined, {
+        cannotDraw: true,
+        slowPipe,
+      });
+      const why = "Blender cannot draw on this PC's graphics card";
 
-    const opened = await call(tools(), "blender_open_scene", {
-      path: "scene.blend",
-      create: true,
-    });
-
-    expect(opened.isError).toBe(true);
-    expect(said(opened)).toContain(why);
-    expect(scenes.scene("first").state()).toMatchObject({
-      status: "failed",
-      reason: expect.stringContaining(why),
-    });
-    await expect(tools("second").listTools()).rejects.toThrow(why);
-    await expect(
-      tools("second").inspect("blender_open_scene", {
-        path: "other.blend",
+      const opened = await call(tools(), "blender_open_scene", {
+        path: "scene.blend",
         create: true,
-      }),
-    ).resolves.toMatchObject({
-      ok: false,
-      reason: expect.stringContaining(why),
-    });
-    expect(blender.launches).toHaveLength(1);
-  });
+      });
+
+      expect(opened.isError).toBe(true);
+      expect(said(opened)).toContain(why);
+      expect(scenes.scene("first").state()).toMatchObject({
+        status: "failed",
+        reason: expect.stringContaining(why),
+      });
+      await expect(tools("second").listTools()).rejects.toThrow(why);
+      await expect(
+        tools("second").inspect("blender_open_scene", {
+          path: "other.blend",
+          create: true,
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        reason: expect.stringContaining(why),
+      });
+      expect(blender.launches).toHaveLength(1);
+    },
+  );
 
   it("says only that Blender did not start, and keeps offering the tools, when it ends before drawing anything", async () => {
-    const { tools, blender } = await setUp(undefined, { ready: false });
+    const { tools, blender } = await setUp(undefined, { endsAtOnce: true });
 
     const result = await call(tools(), "blender_open_scene", {
       path: "scene.blend",

@@ -180,6 +180,21 @@ describe("a picture a person attached", () => {
     );
   });
 
+  it("lets the first two go too when the newest message leaves them no room", async () => {
+    const newest = Array.from({ length: 7 }, (_, index) => `n${index}`);
+    const { loop, requests } = loopSeeing(true, storing("p1", "p2", ...newest));
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "What is in p1?", undefined, ["p1"]);
+    await loop.start(taskId, "What is in p2?", undefined, ["p2"]);
+    await loop.start(taskId, "What is in these?", undefined, newest);
+
+    const pictures = personal(requests.at(-1)).map((message) =>
+      JSON.stringify(message.content).includes('"kind":"image"'),
+    );
+    expect(pictures).toEqual([false, false, true]);
+  });
+
   it("refuses more than one request can hold in one message", async () => {
     const { loop, requests } = loopSeeing(true, storing());
     const taskId = await loop.createTask();

@@ -1,4 +1,6 @@
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdtemp, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { pipeline } from "node:stream/promises";
 import {
   basename,
   dirname,
@@ -19,6 +21,12 @@ import {
   type RunProcess as RunProgram,
 } from "@zhiyin/process-ownership";
 import { staysBelow } from "@zhiyin/workspace-containment";
+import {
+  tectonicReadOutside,
+  typstReadOutside,
+  type ReadOutside,
+} from "./compilation-reads.js";
+import { latexPackages } from "./latex-packages.js";
 
 /** The engines this connector can run, and where each comes from. */
 export type CompilerPrograms = {
@@ -33,6 +41,11 @@ export type DocumentCompilerOptions = {
   readonly workspaceRoot: () => string | undefined;
   /** Where each engine is, asked again every time so an install is noticed. */
   readonly programs: () => Promise<CompilerPrograms>;
+  /**
+   * Where Tectonic keeps the TeX packages it downloads. It runs at low
+   * integrity, so this folder is opened to it, as the one it writes in is.
+   */
+  readonly tectonicCache: string;
   readonly containment?: ProgramContainment;
   readonly run?: RunProgram;
   /** How long one compilation may take. LaTeX fetches packages on first use. */
@@ -131,6 +144,9 @@ async function requestFrom(
     !staysBelow(realRoot, output)
   )
     return { reason: outsideFolder };
+  // The file replaced is the one the output really is.
+  if (!output.toLowerCase().endsWith(".pdf"))
+    return { reason: "The compiled document is a PDF." };
   return {
     ...written,
     root: realRoot,
@@ -189,12 +205,25 @@ function writtenRequest(
 /** The command that writes the PDF at `into`, which is named as the output is. */
 function argumentsFor(request: Request, into: string): readonly string[] {
   const root = request.root;
-  // Typst is told the project root, so a document can only read from the
-  // workspace. Tectonic is run untrusted, which disables shell escape, and
-  // names its PDF after the source, as the output is named.
+  // Typst is told the project root, so a document names files in the
+  // workspace only, and lists the files it read, which a link can carry out
+  // of it. Tectonic is run untrusted, which disables shell escape, names its
+  // PDF after the source, as the output is named, and lists the files it read
+  // from disk. It goes on past a document's errors, so that list is written
+  // even when the document fails.
   return request.engine === "typst"
-    ? ["compile", "--root", root, request.source, into]
+    ? [
+        "compile",
+        "--root",
+        root,
+        "--deps",
+        readsListIn(request.engine, into),
+        request.source,
+        into,
+      ]
     : [
+        "-Z",
+        "continue-on-errors",
         "--untrusted",
         "--chatter",
         "minimal",
@@ -202,8 +231,39 @@ function argumentsFor(request: Request, into: string): readonly string[] {
         "pdf",
         "--outdir",
         dirname(into),
+        "--makefile-rules",
+        readsListIn(request.engine, into),
         request.source,
       ];
+}
+
+/** Where a compiler lists the files it read: beside the staged PDF. */
+function readsListIn(engine: Engine, into: string): string {
+  return join(dirname(into), engine === "typst" ? "reads.json" : "reads.mk");
+}
+
+/** The first file a compilation read outside the workspace, if any. */
+function readOutside(
+  request: Request,
+  into: string,
+): Promise<ReadOutside | "unknown" | undefined> {
+  const list = readsListIn(request.engine, into);
+  return request.engine === "typst"
+    ? typstReadOutside(list, request.root)
+    : tectonicReadOutside(list, {
+        root: request.root,
+        pdf: into,
+        outdir: dirname(into),
+        sourceFolder: dirname(request.source),
+      });
+}
+
+/**
+ * Whether Tectonic, gone on past a document's errors, met any: it then
+ * reports success, says each error, and warns that it ignored them.
+ */
+function tectonicErrors(output: string): boolean {
+  return /^error:|errors were issued by the TeX engine/m.test(output);
 }
 
 /**
@@ -281,6 +341,16 @@ export function documentCompiler(
   options: DocumentCompilerOptions,
 ): WritingConnection {
   const run = options.run ?? runProgram;
+  // Tectonic runs at low integrity, so it writes nowhere the person's own
+  // programs do: only in a folder of this compile's own, outside the
+  // workspace, which holds its copy of the package cache, its temporary files
+  // and its PDF. A workspace on a drive that keeps no integrity labels
+  // compiles too.
+  const packages = latexPackages({
+    cache: options.tectonicCache,
+    run,
+    ...(options.containment ? { containment: options.containment } : {}),
+  });
   const timeoutMs = options.timeoutMs ?? 180_000;
   // Which file each successful result wrote, kept beside the result rather
   // than inside it, so nothing the model reads changes.
@@ -390,19 +460,70 @@ export function documentCompiler(
           true,
         );
       }
+      /** Where Tectonic writes, opened to low integrity, outside the workspace. */
+      let lowFolder: string | undefined;
       try {
-        const staged = join(staging, basename(request.output));
-        const { exitCode, stdout, stderr, ending } = await run({
+        // Tectonic names the PDF after the source it really reads, which a
+        // link can name otherwise, and writes it in a folder of its own.
+        const tectonic = request.engine === "tectonic";
+        const kept = join(
+          staging,
+          tectonic
+            ? `${basename(request.source, extname(request.source))}.pdf`
+            : basename(request.output),
+        );
+        let low;
+        try {
+          low = tectonic ? await packages.prepare() : undefined;
+          lowFolder = low?.folder;
+        } catch (error) {
+          return textResult(
+            `Zhiyin could not prepare the folders LaTeX writes in: ${error instanceof Error ? error.message : String(error)}`,
+            true,
+          );
+        }
+        const staged = low ? join(low.folder, basename(kept)) : kept;
+        const environment = low?.environment;
+        const { exitCode, stdout, stderr, ending, failure } = await run({
           executable,
           arguments: argumentsFor(request, staged),
           cwd: request.root,
           timeoutMs,
           ...(signal ? { signal } : {}),
           ...(options.containment ? { containment: options.containment } : {}),
+          ...(environment ? { environment, integrity: "low" as const } : {}),
         });
-        const output = `${stdout}\n${stderr}`;
-        const diagnostics = diagnosticsFrom(output, request.root);
-        if (exitCode !== 0)
+        if (failure === "containment")
+          return textResult(
+            "Zhiyin could not start the compiler inside the limits it runs within, so it did not run.",
+            true,
+          );
+        // What a document read outside the workspace is neither kept nor
+        // shown, since an error can quote it.
+        const outside = await readOutside(request, staged);
+        if (outside !== undefined && outside !== "unknown")
+          return textResult(
+            outside.throughLink
+              ? `The document reads ${outside.path}, which a link carries outside the workspace folder, so nothing the compiler made or said is kept or shown.`
+              : `The document reads ${outside.path}, outside the workspace folder, so nothing the compiler made or said is kept or shown.`,
+            true,
+          );
+        const unknown = outside === "unknown";
+        const output = unknown
+          ? tectonic
+            ? "Its output is not shown, because Zhiyin could not tell which files LaTeX read. LaTeX stops before saying when a document names a file that is not there, writes one where it may not, has no pages, or reaches a hundred errors."
+            : "Its output is not shown, because Zhiyin could not tell which files it read."
+          : `${stdout}\n${stderr}`;
+        const diagnostics = unknown
+          ? []
+          : diagnosticsFrom(output, request.root);
+        const failed = exitCode !== 0 || (tectonic && tectonicErrors(output));
+        if (unknown && !failed)
+          return textResult(
+            `The compiler did not say which files it read, so ${request.relativeOutput} is not kept.`,
+            true,
+          );
+        if (failed)
           return textResult(
             shortened(
               [
@@ -414,7 +535,9 @@ export function documentCompiler(
                       ? "The compiler printed more than Zhiyin keeps, so it was stopped."
                       : exitCode === null
                         ? "The compiler did not finish."
-                        : `The compiler reported errors (exit code ${exitCode}).`,
+                        : exitCode === 0
+                          ? "The compiler reported errors."
+                          : `The compiler reported errors (exit code ${exitCode}).`,
                 ...(diagnostics.length ? diagnostics : [output]),
               ].join("\n"),
             ),
@@ -426,8 +549,12 @@ export function documentCompiler(
             `The compiler reported success but wrote no ${request.relativeOutput}.`,
             true,
           );
+        // A file a low-integrity program wrote stays open to low integrity,
+        // so the PDF kept is a copy, made at the person's own level.
+        if (staged !== kept)
+          await pipeline(createReadStream(staged), createWriteStream(kept));
         try {
-          await rename(staged, request.output);
+          await rename(kept, request.output);
         } catch {
           return textResult(
             `The compiler wrote ${request.relativeOutput}, but the one in the workspace could not be replaced. Another program, such as a PDF viewer, may have it open: close it, then compile again.`,
@@ -452,6 +579,14 @@ export function documentCompiler(
         await rm(staging, { recursive: true, force: true }).catch(
           () => undefined,
         );
+        if (lowFolder) {
+          await packages
+            .adopt(lowFolder, executable, signal)
+            .catch(() => undefined);
+          await rm(lowFolder, { recursive: true, force: true }).catch(
+            () => undefined,
+          );
+        }
       }
     },
     produced(_name, _args, value) {

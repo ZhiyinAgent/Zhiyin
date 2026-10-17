@@ -15,6 +15,7 @@ import { asArguments } from "./call-arguments.js";
 import {
   McpRateRefusedError,
   McpUnauthorizedError,
+  McpUndeclaredAnswerError,
   UNAUTHORIZED,
   SIGN_IN,
   RETRY_AFTER_MS,
@@ -693,9 +694,13 @@ export class ManagedMcpServers implements McpServers {
               ? error.message
               : "The built-in connection could not complete this action.",
         });
-      // The server answered, with an error or with an answer that does not
-      // match the tool's declared output: the call failed, and the
-      // connection is as sound as it was.
+      // The server answered, so the connection is as sound as it was. An
+      // answer unlike the tool's declared output comes from a call that ran.
+      if (error instanceof McpUndeclaredAnswerError)
+        return {
+          ok: false,
+          reason: `The MCP server ran the call, but its answer does not match the output the tool declares, so it is not used. The action may already have taken effect: check before calling it again. ${error.message.trim().slice(0, 1_000)}`,
+        };
       if (ProtocolError.isInstance(error))
         return {
           ok: false,

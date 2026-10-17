@@ -12,7 +12,13 @@ export type {
   ContainmentAvailability,
   ProcessContainer,
 } from "./windows.js";
-export { containmentAvailability, openProcessContainer } from "./windows.js";
+export {
+  ansiCodePage,
+  ansiText,
+  containmentAvailability,
+  openProcessContainer,
+} from "./windows.js";
 export { openToLowIntegrity } from "./integrity.js";
 export type { HeldFile, HoldAttempt } from "./file-lock.js";
 export { holdExclusively } from "./file-lock.js";
+export { shortenedOutput } from "./output.js";

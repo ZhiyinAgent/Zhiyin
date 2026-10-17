@@ -58,8 +58,11 @@ editing and deleting files is refused outside it; reading or listing outside
 it asks first. Each path is checked when the request is inspected and again,
 with links resolved, when it runs. That check holds for the moment it is
 made: a file replaced by a link after it, while the operation runs, is not
-checked again. Git's tools that only read a repository start none of the
-programs it names, such as its hooks, filters or file monitor.
+checked again. A hard link is a file's second name, as real as its first, so
+a file the folder holds through one counts as part of the folder; package
+managers such as pnpm fill `node_modules` with them. Git's tools that only read a repository start none of the
+programs it names, such as its hooks, filters or file monitor; they need Git
+2.31 or newer, and refuse an older one.
 
 Before a file changes, Zhiyin keeps a copy, so going back in a conversation or
 undoing a turn can restore it. Copies are bounded: 10 MiB per file and
@@ -94,7 +97,8 @@ projects. That separation keeps packages apart; it is not a security
 boundary, and a script has the same access as a shell command. Python and its
 package installer are given only Windows' own variables and your proxy and
 certificate settings, so a variable left in your environment does not point
-them elsewhere, and a key kept in a variable does not reach a script.
+them elsewhere, and a key kept in a variable does not reach a script, apart
+from a password written into a proxy's address.
 
 ### 3D scenes
 
@@ -106,9 +110,24 @@ it, and every program it starts, any write outside the folder you chose and
 its own folder in Zhiyin's data. It still reads whatever your account can read,
 and it can use the network. A model file is brought in only when the files it
 names, such as its pictures, geometry and parts, are inside the folder you
-chose; a binary USD file, whose references cannot be checked, is refused. A whole drive, or a folder that holds your user
-folder, is never opened to it. A Blender script asks every time, and its
+chose, read as the importer reads them; a USD file that names one in a way
+that cannot be read the same way, or USD text that plays clips, is refused. A whole drive,
+or a folder that holds your user folder, is never opened to it. A Blender script asks every time, and its
 approval says what it can reach; going back restores only the scene file.
+
+### Documents
+
+The document compiler builds a PDF from a Typst or LaTeX file in the folder
+you chose, and asks each time. A Typst document can name files in that folder
+only. LaTeX never runs a program a document names, and it runs at Windows' low
+integrity level, so Windows refuses it any write outside a folder of that
+compile's own in Zhiyin's data, on drives that keep integrity labels, as NTFS
+drives do, and except in a folder the 3D studio has opened to Blender. It
+reads LaTeX's packages there through links it cannot write through, so no
+document changes the packages a later one reads. Each compiler lists the files it
+read; when a document read one outside the folder, by name or through a link,
+or the list is missing, nothing the compiler made or printed is kept or shown.
+Both compilers download the packages a document needs.
 
 ### Processes Zhiyin starts
 
@@ -131,8 +150,9 @@ on a temporary profile that is removed when the browser closes. It never uses
 your own browser profile, cookies or sign-ins. Zhiyin drives it over pipes
 only Zhiyin holds, and the browser listens on no network port. It opens only
 web pages, at `https:` or `http:` addresses, whether the model or you send
-it there, and stops a download larger than 1 GB. While it runs,
-its profile is on disk and readable by programs running as your account.
+it there, and stops its downloads once together they pass 1 GB. While it
+runs, its profile is on disk and readable by programs running as your
+account.
 
 Web pages are untrusted. What they say reaches the model marked as untrusted
 tool output, and it grants nothing. A specialist's report reaches the main

@@ -371,6 +371,7 @@ export function buildCore({
                 ...(await executable("typst")),
                 ...(await executable("tectonic")),
               }),
+              tectonicCache: join(dataDirectory, "tectonic"),
               containment,
             }),
           ),

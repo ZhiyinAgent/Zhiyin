@@ -127,6 +127,43 @@ function sizeOf(bytes: number): string {
 }
 
 /**
+ * The downloads an answer says the automation server kept, by their names:
+ * it says so once its copy in the conversation's folder is complete.
+ */
+function keptDownloads(result: unknown): readonly string[] {
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return [];
+  return content.flatMap((item: { text?: unknown }) =>
+    typeof item.text === "string"
+      ? [...item.text.matchAll(/^- Downloaded file (.+) to "/gm)].map(
+          (said) => said[1]!,
+        )
+      : [],
+  );
+}
+
+/**
+ * A tab Edge opens on its own page of downloads, which ignores being closed
+ * and holds nothing the agent can use.
+ */
+const downloadsTab =
+  /^- \d+:(?: \(current\))? \[[^\n]*\]\(edge:\/\/downloads-hub\/?\)(?: \[crashed\])?(?:\r?\n|$)/gm;
+
+/** The answer without Edge's tab of downloads among the tabs it lists. */
+function withoutDownloadsTab<T>(result: T): T {
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return result;
+  return {
+    ...result,
+    content: content.map((item: { text?: unknown }) =>
+      typeof item.text === "string"
+        ? { ...item, text: item.text.replace(downloadsTab, "") }
+        : item,
+    ),
+  };
+}
+
+/**
  * The answer, telling the agent of each download stopped for its size: the
  * automation server says a download began, and never that it ended.
  */
@@ -142,7 +179,7 @@ function withStoppedDownloads<T>(
       ...content,
       ...stopped.map((download) => ({
         type: "text",
-        text: `The download of ${download.name} was stopped at ${sizeOf(download.limitBytes)}, the most a download may be.`,
+        text: `The download of ${download.name} was stopped: this browser's downloads may come to ${sizeOf(download.limitBytes)} in all.`,
       })),
     ],
   };
@@ -486,8 +523,12 @@ export function browserAutomation(
         { name, arguments: given },
         { ...(signal ? { signal } : {}), timeout: 120_000 },
       );
+      browser.downloadsKept?.(keptDownloads(result));
       await browser.refresh();
-      return withStoppedDownloads(result, browser.takeStoppedDownloads());
+      return withStoppedDownloads(
+        withoutDownloadsTab(result),
+        browser.takeStoppedDownloads(),
+      );
     },
     close: reset,
   };

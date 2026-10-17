@@ -221,6 +221,57 @@ describe("a turn stopped inside a round", () => {
     expect(requests.count).toBe(1);
   });
 
+  it("hands no specialist the round's later work once the person stops while the plan is saved", async () => {
+    let stopped = false;
+    const { loop, asked, requests } = setup({
+      round: [
+        call(0, "plan-1", "update_plan", {
+          items: [{ title: "Check the site", status: "in_progress" }],
+        }),
+        delegate(1, "delegate-1", "Check the site."),
+      ],
+      onSave: (task, stop) => {
+        if (stopped) return;
+        stopped = (task.plan?.length ?? 0) > 0;
+        if (stopped) stop();
+      },
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Plan the check, then have the site checked");
+    await until(() => settled(loop, taskId));
+
+    expect(stopped).toBe(true);
+    expect(asked).toEqual([]);
+    expect(loop.snapshot().tasks[0]?.specialistRuns).toEqual([]);
+    expect(requests.count).toBe(1);
+  });
+
+  it("runs none of the round's later tools once the person stops while the plan is saved", async () => {
+    let stopped = false;
+    const { loop, ran, requests } = setup({
+      round: [
+        call(0, "plan-1", "update_plan", {
+          items: [{ title: "Do the step", status: "in_progress" }],
+        }),
+        call(1, "call-1", "second"),
+      ],
+      onSave: (task, stop) => {
+        if (stopped) return;
+        stopped = (task.plan?.length ?? 0) > 0;
+        if (stopped) stop();
+      },
+    });
+    const taskId = await loop.createTask(["engineering"]);
+
+    await loop.start(taskId, "Plan the step, then do it");
+    await until(() => settled(loop, taskId));
+
+    expect(stopped).toBe(true);
+    expect(ran).toEqual([]);
+    expect(requests.count).toBe(1);
+  });
+
   it("answers none of the round's calls once the person stops at the work-budget checkpoint", async () => {
     let now = new Date("2026-09-13T10:00:00.000Z");
     const { loop, ran, asked, requests } = setup({

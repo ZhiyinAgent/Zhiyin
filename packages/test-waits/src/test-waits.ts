@@ -16,7 +16,8 @@ export function changed(): void {
 /**
  * Goes on once the condition holds, looking again each time something
  * changes. It looks once what is under way has run its course, so a test
- * goes on between two steps of the code under test, never inside one.
+ * goes on between two steps of the code under test, never inside one whose
+ * rest only awaits promises; a wait on the disk between is another step.
  */
 export async function until(holds: () => boolean): Promise<void> {
   while (!holds()) {

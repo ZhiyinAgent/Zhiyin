@@ -35,6 +35,14 @@ export { pluginsOffering, stubDependencies } from "./stubs.js";
 export { until } from "@zhiyin/test-waits";
 
 /**
+ * Goes on once all the work already queued has run, so a test can say that
+ * something late did not happen: what a late answer sets off is either
+ * awaited by the turn it came to, or queued behind it.
+ */
+export const queuedWorkRun = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
  * Each of a turn's dependencies, watched: a turn changes nothing but by
  * calling one of them or hearing back from one, so each such moment wakes
  * the waits of the test.
@@ -79,6 +87,8 @@ export class TestHost implements TurnHost {
    * the save throws.
    */
   refusesSave: ((task: WorkspaceTask) => boolean) | undefined;
+  /** A save held until what it returns settles, as a slow disk holds one. */
+  holdsSave: ((task: WorkspaceTask) => Promise<void> | undefined) | undefined;
   /** What the turn asked the app around it to do, in order. */
   readonly enteredFolders: string[] = [];
   readonly watchedBrowsers: string[] = [];
@@ -198,6 +208,7 @@ export class TestHost implements TurnHost {
     if (!this.tasks.some((item) => item.id === task.id)) return;
     if (this.savesSlowly)
       await new Promise((resolve) => setTimeout(resolve, 1));
+    await this.holdsSave?.(task);
     // As the app does: a write whose author lost the conversation while it
     // was being saved is dropped.
     if (!options.commit()) return;

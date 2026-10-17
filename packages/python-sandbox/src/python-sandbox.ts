@@ -230,7 +230,16 @@ export function pythonSandbox(
       await mkdir(options.directory, { recursive: true });
       const created = await invoke(
         uv,
-        ["venv", "--python", pythonVersion, venv],
+        // Python as uv downloads it, as the approval says, never one already
+        // on the PC.
+        [
+          "venv",
+          "--no-config",
+          "--python",
+          pythonVersion,
+          "--managed-python",
+          venv,
+        ],
         options.directory,
         prepareTimeoutMs,
         signal,
@@ -243,7 +252,7 @@ export function pythonSandbox(
     }
     const installed = await invoke(
       uv,
-      ["pip", "install", "--python", interpreter, ...packages],
+      ["pip", "install", "--no-config", "--python", interpreter, ...packages],
       options.directory,
       prepareTimeoutMs,
       signal,
@@ -314,7 +323,7 @@ export function pythonSandbox(
           ok: true,
           action: "Add packages to the Python environment",
           target: asked.join(", "),
-          command: `uv pip install ${asked.join(" ")}`,
+          command: `uv pip install --no-config ${asked.join(" ")}`,
           destination: "Packages are downloaded from pypi.org.",
         };
       }
@@ -323,7 +332,7 @@ export function pythonSandbox(
           ok: true,
           action: "Rebuild the Python environment",
           target: "Zhiyin's Python environment",
-          command: `uv venv --python ${pythonVersion}\nuv pip install ${packages.join(" ")}`,
+          command: `uv venv --no-config --python ${pythonVersion} --managed-python\nuv pip install --no-config ${packages.join(" ")}`,
           detail: "Packages added to it are removed.",
           destination: "Packages are downloaded from pypi.org.",
         };
@@ -366,7 +375,14 @@ export function pythonSandbox(
           return textResult("Name packages by name and version only.", true);
         const installed = await invoke(
           uv,
-          ["pip", "install", "--python", interpreter, ...(asked as string[])],
+          [
+            "pip",
+            "install",
+            "--no-config",
+            "--python",
+            interpreter,
+            ...(asked as string[]),
+          ],
           options.directory,
           prepareTimeoutMs,
           signal,

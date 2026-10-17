@@ -134,14 +134,19 @@ that name is marked the same way once it arrives.
   turn is stopped, nothing it writes lands, whoever holds the conversation by
   then, a question it was about to ask included: one about a folder's
   instructions, or a specialist's approval waiting behind the turn's own. The
-  stop itself, and the end a stopped specialist records, are written
-  on no turn's behalf. A write begun while a turn owns the conversation is
-  committed only if that turn still owns it, so a stopped turn's late answer
-  cannot overwrite the turn that replaced it or reach a deleted conversation.
-  Work a turn left running after it finished on its own, such as naming an
-  action, still lands. Nothing resumes a stopped turn: a specialist it
-  stopped is reported to the next turn the person starts, after a restart
-  too.
+  stop itself, the end a specialist records, and a job's end and what it
+  changed are written on no turn's behalf. A write begun while a turn owns
+  the conversation is committed unless that turn is stopped by then, so a
+  stopped turn's late answer cannot overwrite the turn that replaced it or
+  reach a deleted conversation, and what was being saved as a turn finished
+  on its own lands. A change made on no turn's behalf that a stop refuses
+  that way, or that the stop's own save lands over, is made again on what
+  the stop left, so it still lands. Work a turn left running after it
+  finished on its own, such as naming an action, still lands. Nothing
+  resumes a stopped turn: a specialist it stopped, a handoff or a job's end
+  that was waiting when it was stopped, and a specialist that finished as it
+  was stopped are told to the next turn the person starts, never waking the
+  conversation, after a restart too.
 - A turn that fails before it starts, such as one whose folder cannot be
   entered, gives its conversation back, so the next message starts a turn.
 - Stopped while one call of a round is answered, or at the work-budget
@@ -259,13 +264,15 @@ that name is marked the same way once it arrives.
   as pictures, fitted to what the model accepts, and a model that cannot see
   them gets a line saying one was there. When a request would carry more than
   8 pictures, those in the middle are dropped: the first 2 stay, and the
-  newest make up 4 kept in all. Eight is the fewest any lab Zhiyin reaches
-  accepts in one request (Mistral; the others accept 50 or more), and the same
-  limit is kept for all of them. Several go at once, and never the first,
-  because dropping a picture changes the conversation from where it stood and
-  the provider's cache is written again from that point: it happens once every
-  few pictures rather than with each one, and only from the oldest picture
-  dropped.
+  newest make up 4 kept in all. The first are kept by whole messages, so a
+  first message with more than 2 keeps none, and the newest message always
+  stays whole, so one that leaves the first no room within 8 drops them too.
+  Eight is the fewest any lab Zhiyin reaches accepts in one request (Mistral;
+  the others accept 50 or more), and the same limit is kept for all of them.
+  Several go at once, and the first only in those two cases, because dropping
+  a picture changes the conversation from where it stood and the provider's
+  cache is written again from that point: it happens once every few pictures
+  rather than with each one, and only from the oldest picture dropped.
 
 ### Context budget
 
@@ -340,7 +347,8 @@ that name is marked the same way once it arrives.
   person added meanwhile goes with the new request. Stopped twice in a row,
   the turn ends and says why. Reasoning that continues once an answer or a
   call has begun is never cut. A specialist's own rounds are held to the same
-  limit and asked again the same way; stopped twice in a row, the specialist
+  limit and asked again the same way, though told to call a tool or finish,
+  since it has no person to ask; stopped twice in a row, the specialist
   settles as failed with that reason, which the conversation is told in its
   handoff.
 - A person can ask for the answer while the turn's request has only reasoned.

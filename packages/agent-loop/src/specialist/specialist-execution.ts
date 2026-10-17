@@ -17,7 +17,7 @@ import {
   ThoughtTooLong,
   withLeastReasoning,
 } from "../turn/model-round.js";
-import type { TurnOwnership } from "../turn/turn-ownership.js";
+import { ParentTurnEnded, type TurnOwnership } from "../turn/turn-ownership.js";
 import type { TurnRecords } from "../turn/turn-records.js";
 import { readToolInput } from "../tools/tool-input.js";
 import {
@@ -34,7 +34,6 @@ import {
 import { RoundResults } from "../context/result-size.js";
 import { harnessNotice, toolOutput } from "../turn/notices.js";
 import {
-  decideNow,
   isOwnDefect,
   stoppedTwiceForReasoning,
 } from "../turn/turn-recovery.js";
@@ -165,6 +164,8 @@ export type SpecialistExecutionResult =
       readonly runId: string;
       readonly specialist: SpecialistDefinition;
       readonly handoff: SpecialistHandoff;
+      /** Its turn was stopped as it finished: told, and wakes nothing. */
+      readonly stopped?: true;
     }
   | {
       readonly ok: false;
@@ -234,6 +235,14 @@ export function completeHandoffMessage(
   const timeline = handoffTimeline(actions);
   return `${handoffReport(result)}Tool timeline (${timeline.length} calls, in order; recorded details are in the conversation):\n${timeline.map((line) => JSON.stringify(line)).join("\n")}`;
 }
+
+/**
+ * What a specialist whose request was stopped for reasoning at length is told
+ * when it is asked again. It has no person to ask: a round that neither acts
+ * nor finishes fails it.
+ */
+const specialistDecidesNow =
+  "Your last request was stopped: you reasoned at length without calling a tool, and that reasoning is gone. Do not start the analysis over. Decide with what you know now: call a tool, or call finish_specialist with what you have found.";
 
 /** The handoff notice: Zhiyin's words, and the report fenced after them. */
 export function handoffMessage(
@@ -402,7 +411,7 @@ export class SpecialistExecution {
               overthought = true;
               messages.push({
                 role: "user",
-                content: harnessNotice("thinking", decideNow),
+                content: harnessNotice("thinking", specialistDecidesNow),
               });
               return undefined;
             });
@@ -424,17 +433,23 @@ export class SpecialistExecution {
                 "The specialist returned an invalid structured handoff.",
               );
             const actionIds = ownActionIds();
-            await this.#finishRun(options.taskId, runId, {
-              status: "completed",
-              handoff: result,
-              actionIds,
-            });
+            await this.#finishRun(
+              options.taskId,
+              runId,
+              {
+                status: "completed",
+                handoff: result,
+                actionIds,
+              },
+              controller.signal,
+            );
             this.#ownership.finish(childTurnId, controller);
             return {
               ok: true,
               runId,
               specialist: options.specialist,
               handoff: result,
+              ...(controller.signal.aborted ? { stopped: true as const } : {}),
             };
           }
           if (wrappingUp) {
@@ -606,12 +621,17 @@ export class SpecialistExecution {
         // Let go even when the end cannot be saved, or the conversation would
         // count a specialist as running for good.
         try {
-          await this.#finishRun(options.taskId, runId, {
-            status:
-              controller.signal.aborted || spent ? "interrupted" : "failed",
-            reason,
-            actionIds: ownActionIds(),
-          });
+          await this.#finishRun(
+            options.taskId,
+            runId,
+            {
+              status:
+                controller.signal.aborted || spent ? "interrupted" : "failed",
+              reason,
+              actionIds: ownActionIds(),
+            },
+            controller.signal,
+          );
         } finally {
           this.#ownership.finish(childTurnId, controller);
         }
@@ -692,6 +712,11 @@ export class SpecialistExecution {
             error instanceof Error
               ? error.message
               : "The specialist failed before returning a handoff.",
+          // Asked after its turn ended, as when the person stopped it: it
+          // settles that turn rather than waking the conversation.
+          ...(error instanceof ParentTurnEnded
+            ? { stopped: true as const }
+            : {}),
         }),
     );
     return {
@@ -734,24 +759,45 @@ export class SpecialistExecution {
           readonly reason: string;
           readonly actionIds: readonly string[];
         },
+    stopped: AbortSignal,
   ): Promise<void> {
     // The run's end is recorded on no turn's behalf: a stopped specialist
     // settles its run rather than carrying on with it.
+    const finishedAt = this.#deps.now().toISOString();
     await this.#ownership.outside(async () => {
-      const task = this.#records.task(taskId);
-      await this.#records.replaceTask({
-        ...task,
-        specialistRuns: task.specialistRuns.map((run) =>
-          run.id === runId
+      await this.#records.changeOutsideTurns(taskId, (task) =>
+        task.specialistRuns.some(
+          (run) => run.id === runId && run.finishedAt !== finishedAt,
+        )
+          ? {
+              ...task,
+              specialistRuns: task.specialistRuns.map((run) =>
+                run.id === runId
+                  ? {
+                      ...run,
+                      ...finish,
+                      handoffDelivered: false,
+                      finishedAt,
+                      ...(stopped.aborted ? { quiet: true as const } : {}),
+                    }
+                  : run,
+              ),
+            }
+          : undefined,
+      );
+      // Stopped while its end was being saved: the stop found it running,
+      // so it is marked here, to wake nothing after a restart either.
+      if (stopped.aborted)
+        await this.#records.changeOutsideTurns(taskId, (task) =>
+          task.specialistRuns.some((run) => run.id === runId && !run.quiet)
             ? {
-                ...run,
-                ...finish,
-                handoffDelivered: false,
-                finishedAt: this.#deps.now().toISOString(),
+                ...task,
+                specialistRuns: task.specialistRuns.map((run) =>
+                  run.id === runId ? { ...run, quiet: true as const } : run,
+                ),
               }
-            : run,
-        ),
-      });
+            : undefined,
+        );
     });
   }
 }

@@ -14,8 +14,11 @@ afterEach(async () => {
   await Promise.all(closing.splice(0).map((close) => close()));
 });
 
-/** A token endpoint that answers a refresh only when told to. */
-async function slowTokenService() {
+/**
+ * A token endpoint that answers a refresh only when told to: with a new
+ * token, or, when it `refuses`, with the refresh token refused.
+ */
+async function slowTokenService(refuses = false) {
   const waiting: (() => void)[] = [];
   const asked: Promise<void>[] = [];
   let arrived: () => void = () => undefined;
@@ -23,6 +26,11 @@ async function slowTokenService() {
   const server = createServer((_request, response) => {
     arrived();
     waiting.push(() => {
+      if (refuses) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ error: "invalid_grant" }));
+        return;
+      }
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(
         JSON.stringify({
@@ -82,6 +90,21 @@ describe("a refresh still under way", () => {
     expect(await tokens.state("docs")).toEqual({ status: "none" });
   });
 
+  it("does not bring back a sign-in the person ended just before it was asked for", async () => {
+    const service = await slowTokenService();
+    const tokens = new ConnectionTokens(new InMemoryMcpCredentials());
+    await tokens.saveSignIn("docs", signedIn(service.base, "first"));
+    void service.asked.then(service.answer);
+
+    // Asked for while the sign-out is still being written.
+    const forgetting = tokens.forget("docs");
+    const refreshing = tokens.refresh("docs");
+    await Promise.all([forgetting, refreshing]);
+
+    expect(await tokens.token("docs")).toBeUndefined();
+    expect(await tokens.state("docs")).toEqual({ status: "none" });
+  });
+
   it("does not replace a sign-in the person made meanwhile", async () => {
     const service = await slowTokenService();
     const tokens = new ConnectionTokens(new InMemoryMcpCredentials());
@@ -95,6 +118,64 @@ describe("a refresh still under way", () => {
     });
     service.answer();
     await refreshing;
+
+    expect(await tokens.token("docs")).toBe("second");
+  });
+
+  it("answers a call that joins it after a new sign-in with that sign-in's token, though the service refuses it", async () => {
+    const service = await slowTokenService(true);
+    const tokens = new ConnectionTokens(new InMemoryMcpCredentials());
+    await tokens.saveSignIn("docs", signedIn(service.base, "first"));
+
+    const refreshing = tokens.refresh("docs");
+    await service.asked;
+    await tokens.saveSignIn("docs", {
+      ...signedIn(service.base, "second"),
+      issuedAt: Date.now(),
+    });
+    const joining = tokens.refresh("docs");
+    service.answer();
+
+    expect(await joining).toBe("second");
+    await refreshing;
+    expect(await tokens.token("docs")).toBe("second");
+  });
+
+  it("does not mix into a sign-in the person makes while its own answer is being written", async () => {
+    const service = await slowTokenService();
+    const memory = new InMemoryMcpCredentials();
+    // Holds the first write asked for once armed, as a slow store would.
+    let armed = false;
+    let release = () => {};
+    let reached = () => {};
+    const holding = new Promise<void>((resolve) => (reached = resolve));
+    const tokens = new ConnectionTokens({
+      get: (id) => memory.get(id),
+      delete: (id) => memory.delete(id),
+      set: async (id, token) => {
+        if (armed) {
+          armed = false;
+          reached();
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        await memory.set(id, token);
+      },
+    });
+    await tokens.saveSignIn("docs", signedIn(service.base, "first"));
+
+    const refreshing = tokens.refresh("docs");
+    await service.asked;
+    armed = true;
+    service.answer();
+    await holding;
+    const signingIn = tokens.saveSignIn("docs", {
+      ...signedIn(service.base, "second"),
+      issuedAt: Date.now(),
+    });
+    // All the new sign-in may write while the refresh's write is held.
+    await new Promise((resolve) => setImmediate(resolve));
+    release();
+    await Promise.all([refreshing, signingIn]);
 
     expect(await tokens.token("docs")).toBe("second");
   });

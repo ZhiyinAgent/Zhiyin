@@ -52,13 +52,24 @@ function namesCredential(name: string): boolean {
 /** Not already removed, so removing again changes nothing. */
 const notOmitted = String.raw`(?!\[credential omitted\])`;
 
+/**
+ * Line breaks inside a private key: written out, or as `\n` in a JSON
+ * string, with the indentation of a YAML block. Each break reads one way
+ * only, so text that is not a key is rejected without retrying.
+ */
+const keyBreak = String.raw`[ \t]*(?:(?:\\[rn]|\r\n|\r(?!\n)|\n)[ \t]*)+`;
+/** What names a private key's block: PEM's, or OpenPGP's. */
+const keyName = "[A-Z ]*PRIVATE KEY(?: BLOCK)?";
+/** One line of a private key: its base64, or a header an encrypted one has. */
+const keyLine = String.raw`(?:[A-Za-z0-9+/=]{16,}|[A-Za-z][A-Za-z-]*: [^\r\n\\]*)`;
+
 /** Known formats in free text, each keeping what names the credential. */
 const credentialText: readonly [RegExp, string][] = [
   [/\b(Authorization\s*:\s*)[^\r\n"']+/gi, `$1${credentialOmitted}`],
   [/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{6,}/gi, `$1${credentialOmitted}`],
   [
     new RegExp(
-      String.raw`\b((?:[a-z0-9]+-)*(?:api-key|auth-token|access-token)\s*:\s*)${notOmitted}[^\s"',;]+`,
+      String.raw`\b((?:[a-z0-9]+-){0,6}(?:api-key|auth-token|access-token)\s*:\s*)${notOmitted}[^\s"',;]+`,
       "gi",
     ),
     `$1${credentialOmitted}`,
@@ -89,9 +100,23 @@ const credentialText: readonly [RegExp, string][] = [
     ),
     `$1${credentialOmitted}`,
   ],
+  // A key's body holds no run of dashes, so a start without an end is given
+  // up at the next marker rather than at the end of the text.
   [
-    /(-----BEGIN [A-Z ]*PRIVATE KEY-----)[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----)/g,
+    new RegExp(
+      String.raw`(-----BEGIN ${keyName}-----)(?:(?!-----)[\s\S])*(-----END ${keyName}-----)`,
+      "g",
+    ),
     `$1\n${credentialOmitted}\n$2`,
+  ],
+  // A key cut short, before its end line or after its start, as a shortened
+  // output cuts its middle.
+  [
+    new RegExp(
+      String.raw`(-----BEGIN ${keyName}-----)(?:${keyBreak}${keyLine})+`,
+      "g",
+    ),
+    `$1\n${credentialOmitted}`,
   ],
   [
     /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
@@ -101,7 +126,7 @@ const credentialText: readonly [RegExp, string][] = [
   // Zhipu's keys: an id and a secret, joined by a dot.
   [/\b[0-9a-f]{32}\.[A-Za-z0-9]{16}\b/g, credentialOmitted],
   [
-    /(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+(@)/gi,
+    /(\b[a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/@]+:)[^\s@/]+(@)/gi,
     `$1${credentialOmitted}$2`,
   ],
   [/\bsk-[A-Za-z0-9_-]{16,}/g, credentialOmitted],
@@ -169,10 +194,66 @@ export function textWithoutCredentials(text: string): string {
     .replace(assignment, (set: string, name: string, between: string) =>
       namesCredential(name) ? `${name}${between}${credentialOmitted}` : set,
     );
-  return credentialText.reduce(
-    (current, [pattern, replacement]) => current.replace(pattern, replacement),
-    named,
+  return withoutKeyEnds(
+    credentialText.reduce(
+      (current, [pattern, replacement]) =>
+        current.replace(pattern, replacement),
+      named,
+    ),
   );
+}
+
+const keyEnd = new RegExp(String.raw`-----END ${keyName}-----`, "g");
+const base64Character = /[A-Za-z0-9+/=]/;
+
+/**
+ * Where the lines of a private key just before `at` begin, or `at` when
+ * there are none: read back a line at a time, so a long text is read once.
+ */
+function keyLinesBefore(text: string, at: number): number {
+  let begin = at;
+  for (;;) {
+    // The line break before what follows, with the spaces around it.
+    let end = begin;
+    let broke = false;
+    for (;;) {
+      const last = text[end - 1];
+      if (last === " " || last === "\t") end -= 1;
+      else if (last === "\n" || last === "\r") {
+        end -= 1;
+        broke = true;
+      } else if ((last === "n" || last === "r") && text[end - 2] === "\\") {
+        end -= 2;
+        broke = true;
+      } else break;
+    }
+    if (!broke) return begin;
+    let start = end;
+    while (start > 0 && base64Character.test(text[start - 1]!)) start -= 1;
+    // The letter of an escaped line break before the line is not part of it.
+    if (
+      text[start - 1] === "\\" &&
+      (text[start] === "n" || text[start] === "r")
+    )
+      start += 1;
+    // An OpenPGP key's last line is its checksum: "=" and four characters.
+    const checksum = begin === at && end - start === 5 && text[start] === "=";
+    if (end - start < 16 && !checksum) return begin;
+    begin = start;
+  }
+}
+
+/** The lines of a key whose start a shortened output left out. */
+function withoutKeyEnds(text: string): string {
+  let kept = "";
+  let from = 0;
+  for (const end of text.matchAll(keyEnd)) {
+    const begin = keyLinesBefore(text, end.index);
+    if (begin === end.index || begin < from) continue;
+    kept += `${text.slice(from, begin)}${credentialOmitted}\n`;
+    from = end.index;
+  }
+  return kept + text.slice(from);
 }
 
 /**

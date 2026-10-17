@@ -32,7 +32,9 @@ and every call needs the person's approval.
   `reset_python_environment`.
 - `defaultPackages` is what a fresh environment holds: pandas, polars, NumPy,
   SciPy, Matplotlib, seaborn, statsmodels, and openpyxl for Excel workbooks.
-  The default Python is 3.13.
+  The default Python is 3.13 as uv manages it, downloaded or one uv already
+  keeps, never another Python on the PC, and no uv settings file around the
+  sandbox's folder applies.
 - Programs run through the process-ownership mechanism (ADR 0004). A script
   may run for five minutes, and building the environment for fifteen. Tests
   may replace the runner.
@@ -66,7 +68,8 @@ and every call needs the person's approval.
   `uv` are given only the variables Windows programs expect and those that
   say how to reach the network (proxies and certificates), so no variable
   points them at another environment, package index or startup script, and
-  no credential kept in a variable reaches a script.
+  no credential kept in a variable reaches a script, apart from one written
+  into a proxy's address.
 - With no `uv` installed the connector offers no tool, and it offers all three
   as soon as `uv` is installed.
 - The approval says what a call will do and where anything is downloaded

@@ -1,5 +1,9 @@
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   runProcess,
+  shortenedOutput,
   type ProcessContainment,
   type ProcessRun,
 } from "@zhiyin/process-ownership";
@@ -56,6 +60,7 @@ export async function runGit(
   signal?: AbortSignal,
   containment?: GitContainment,
   settings: readonly (readonly [string, string])[] = [],
+  variables: Readonly<Record<string, string>> = {},
 ): Promise<GitInvocation> {
   const result = await runProcess({
     executable: git,
@@ -74,6 +79,7 @@ export async function runGit(
       GIT_EDITOR: "true",
       GIT_PAGER: "cat",
       ...configuredBy(settings),
+      ...variables,
     },
   });
   if (result.failure === "containment")
@@ -110,12 +116,56 @@ function configuredBy(
 }
 
 /**
+ * Where reads look for hooks: a folder no one can know of, never made, so it
+ * holds none whichever git looks.
+ */
+const noHooks = join(tmpdir(), `zhiyin-no-hooks-${randomUUID()}`);
+
+const tooOld =
+  "Reading a repository needs Git 2.31 or newer, which takes the settings that keep a read from starting a program the repository brings. Update Git, then try again.";
+
+/** Whether each git takes settings through its environment, asked once. */
+const checkedGits = new Map<string, Promise<boolean>>();
+
+/**
+ * Git takes settings through its environment from 2.31 on; an older one
+ * ignores them, and would start the programs they turn off.
+ */
+function takesSettings(
+  git: string,
+  cwd: string,
+  signal?: AbortSignal,
+  containment?: GitContainment,
+): Promise<boolean> {
+  const known = checkedGits.get(git);
+  if (known) return known;
+  const checking = runGit(git, cwd, ["--version"], signal, containment).then(
+    ({ stdout }) => {
+      const found = /^git version (\d+)\.(\d+)/.exec(stdout.trim());
+      if (!found) return false;
+      const [major, minor] = [Number(found[1]), Number(found[2])];
+      return major > 2 || (major === 2 && minor >= 31);
+    },
+  );
+  // A check that could not run is asked again next time.
+  checkedGits.set(git, checking);
+  void checking.then((trusted) => {
+    if (!trusted) checkedGits.delete(git);
+  });
+  return checking;
+}
+
+/**
  * A git call that only reads, run so it starts no program the repository
  * brings. A folder can arrive with its `.git`, from an archive or a shared
  * drive, and its settings can name a file monitor, a signature checker and
- * filters, each a program git would otherwise start. Its hooks run when a
- * read refreshes the index, which a read without optional locks never
- * writes. Diff tools and converters are left out by the calls that show
+ * filters, each a program git would otherwise start. A diff that finds a
+ * file touched but unchanged writes the index, which runs a hook, so reads
+ * look for hooks where there are none, and turn off each hook the
+ * repository's settings define. A partial clone fetches what it is missing
+ * through a program its settings can name, so reads allow no transport, even
+ * one the repository allows itself, and fetch nothing.
+ * Diff tools and converters are left out by the calls that show
  * changes, and a submodule's work tree, whose own settings this never reads,
  * by the calls that look at work trees.
  */
@@ -126,28 +176,80 @@ export async function readGit(
   signal?: AbortSignal,
   containment?: GitContainment,
 ): Promise<GitInvocation> {
-  // Reading settings starts nothing.
-  const filters = await runGit(
+  if (!(await takesSettings(git, cwd, signal, containment)))
+    return {
+      exitCode: null,
+      stdout: "",
+      stderr: tooOld,
+    };
+  // Reading settings starts nothing. Each name after the scope it is set
+  // in, each ended by a NUL, so a value cannot read as part of a name. Only
+  // the repository's own filters and hooks are turned off: the person's, as
+  // Git LFS is, are theirs, and a file stored through one would read as
+  // changed.
+  const configured = await runGit(
     git,
     cwd,
-    ["config", "--get-regexp", "^filter\\..+\\.(clean|smudge|process)$"],
+    [
+      "config",
+      "-z",
+      "--show-scope",
+      "--name-only",
+      "--get-regexp",
+      "^(filter\\..+\\.(clean|smudge|process)|hook\\..+\\.[^.]+)$",
+    ],
     signal,
     containment,
   );
-  const drivers = new Set(
-    filters.stdout
-      .split(/\r?\n/)
-      .map((line) => /^filter\.(.+)\.(?:clean|smudge|process) /.exec(line)?.[1])
-      .filter((name): name is string => name !== undefined),
-  );
+  // A stopped listing is told as stopped. Listing nothing ends with 1. A list
+  // cut short or failed would leave a filter or hook on, so nothing is read.
+  if (configured.ending !== undefined) return configured;
+  if (
+    (configured.exitCode !== 0 && configured.exitCode !== 1) ||
+    configured.stdout.includes(shortenedOutput)
+  )
+    return {
+      exitCode: null,
+      stdout: "",
+      stderr:
+        `Zhiyin could not read this repository's settings whole, so it read nothing from it. ${configured.stderr}`.trim(),
+    };
+  const listed = configured.stdout.split("\0");
+  const repositorys = (pattern: RegExp) =>
+    new Set(
+      listed.flatMap((scope, at) => {
+        if (at % 2 !== 0 || (scope !== "local" && scope !== "worktree"))
+          return [];
+        const named = pattern.exec(listed[at + 1] ?? "")?.[1];
+        return named === undefined ? [] : [named];
+      }),
+    );
+  const drivers = repositorys(/^filter\.(.+)\.(?:clean|smudge|process)$/s);
+  // Git 2.54 and later run hooks named in settings, wherever hooks are
+  // looked for.
+  const hooks = repositorys(/^hook\.(.+)\.[^.]+$/s);
   const settings: [string, string][] = [
-    ["core.fsmonitor", "false"],
+    // No transport at all: a read has nothing to fetch, and a fetch can run
+    // a program the repository's settings name.
+    ["protocol.allow", "never"],
+    ["core.hooksPath", noHooks],
+    // Empty: no file monitor, read as false from Git 2.36 on, and before it
+    // no program, where "false" would name one.
+    ["core.fsmonitor", ""],
     ["log.showSignature", "false"],
+    // Looking inside a submodule starts a git of its own there, which reads
+    // the submodule's settings. Status, read in its porcelain form, never
+    // shows a submodule's summary.
+    ["diff.submodule", "short"],
     ...[...drivers].flatMap((driver): [string, string][] => [
       [`filter.${driver}.clean`, ""],
       [`filter.${driver}.smudge`, ""],
       [`filter.${driver}.process`, ""],
       [`filter.${driver}.required`, "false"],
+    ]),
+    ...[...hooks].map((hook): [string, string] => [
+      `hook.${hook}.enabled`,
+      "false",
     ]),
   ];
   return runGit(
@@ -157,5 +259,9 @@ export async function readGit(
     signal,
     containment,
     settings,
+    // A variable, which a git too old to know it ignores, where the flag
+    // --no-lazy-fetch would fail the call. An empty list of transports
+    // allows none, whatever the repository's settings allow.
+    { GIT_NO_LAZY_FETCH: "1", GIT_ALLOW_PROTOCOL: "" },
   );
 }

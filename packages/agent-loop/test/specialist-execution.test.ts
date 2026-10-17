@@ -1196,9 +1196,11 @@ describe("specialist child execution", () => {
     expect(requests[1]?.reasoning).toEqual({ enabled: false });
     const told = notices(requests[1], "thinking");
     expect(told).toHaveLength(1);
+    // It has no person to ask: it is told its own ways out.
     expect(told[0]?.content).toContain(
-      "call a tool, give your answer, or ask the person one question",
+      "call a tool, or call finish_specialist with what you have found",
     );
+    expect(told[0]?.content).not.toContain("ask the person");
   });
 
   it("settles a specialist stopped twice in a row for reasoning at length as failed, saying why", async () => {

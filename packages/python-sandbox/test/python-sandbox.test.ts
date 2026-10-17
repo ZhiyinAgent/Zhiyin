@@ -114,7 +114,16 @@ describe("running Python in the sandbox", () => {
     expect(calls.slice(0, 2)).toEqual([
       {
         executable: "C:/programs/uv.exe",
-        arguments: ["venv", "--python", "3.13", join(directory, ".venv")],
+        // Python as uv manages it, never one already on the PC, and no
+        // uv settings found around the folder.
+        arguments: [
+          "venv",
+          "--no-config",
+          "--python",
+          "3.13",
+          "--managed-python",
+          join(directory, ".venv"),
+        ],
         cwd: directory,
       },
       {
@@ -122,6 +131,7 @@ describe("running Python in the sandbox", () => {
         arguments: [
           "pip",
           "install",
+          "--no-config",
           "--python",
           interpreter,
           ...defaultPackages,
@@ -287,6 +297,7 @@ describe("the sandbox's own packages", () => {
       arguments: [
         "pip",
         "install",
+        "--no-config",
         "--python",
         interpreter,
         "httpx",
@@ -464,7 +475,7 @@ describe("what the sandbox offers", () => {
 
     expect(await sandbox.inspect("reset_python_environment", {})).toMatchObject(
       {
-        command: `uv venv --python 3.13\nuv pip install ${defaultPackages.join(" ")}`,
+        command: `uv venv --no-config --python 3.13 --managed-python\nuv pip install --no-config ${defaultPackages.join(" ")}`,
       },
     );
   });

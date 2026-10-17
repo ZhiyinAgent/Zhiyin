@@ -50,34 +50,87 @@ type Result = {
   content: { type: string; text?: string; data?: string }[];
 };
 
-/** A zip holding one file, stored as USD packages store theirs. */
-function storedZip(name: string, data: Buffer): Buffer {
-  const file = Buffer.from(name);
-  const crc = crc32(data);
-  const local = Buffer.alloc(30);
-  local.writeUInt32LE(0x04034b50, 0);
-  local.writeUInt16LE(20, 4);
-  local.writeUInt16LE(0x21, 12);
-  local.writeUInt32LE(crc, 14);
-  local.writeUInt32LE(data.length, 18);
-  local.writeUInt32LE(data.length, 22);
-  local.writeUInt16LE(file.length, 26);
-  const central = Buffer.alloc(46);
-  central.writeUInt32LE(0x02014b50, 0);
-  central.writeUInt16LE(20, 4);
-  central.writeUInt16LE(20, 6);
-  central.writeUInt16LE(0x21, 14);
-  central.writeUInt32LE(crc, 16);
-  central.writeUInt32LE(data.length, 20);
-  central.writeUInt32LE(data.length, 24);
-  central.writeUInt16LE(file.length, 28);
+/**
+ * A zip of files stored as USD packages store theirs, one after another. Its
+ * directory at the end lists the files named in `listed`, all by default.
+ */
+function storedZip(
+  files: readonly (readonly [string, Buffer])[],
+  listed: readonly string[] = files.map(([name]) => name),
+): Buffer {
+  const parts: Buffer[] = [];
+  const directory: Buffer[] = [];
+  let offset = 0;
+  for (const [name, data] of files) {
+    const file = Buffer.from(name);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x21, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(file.length, 26);
+    if (listed.includes(name)) {
+      const central = Buffer.alloc(46);
+      central.writeUInt32LE(0x02014b50, 0);
+      central.writeUInt16LE(20, 4);
+      central.writeUInt16LE(20, 6);
+      central.writeUInt16LE(0x21, 14);
+      central.writeUInt32LE(crc, 16);
+      central.writeUInt32LE(data.length, 20);
+      central.writeUInt32LE(data.length, 24);
+      central.writeUInt16LE(file.length, 28);
+      central.writeUInt32LE(offset, 42);
+      directory.push(central, file);
+    }
+    parts.push(local, file, data);
+    offset += local.length + file.length + data.length;
+  }
+  const size = directory.reduce((total, part) => total + part.length, 0);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(1, 8);
-  end.writeUInt16LE(1, 10);
-  end.writeUInt32LE(central.length + file.length, 12);
-  end.writeUInt32LE(local.length + file.length + data.length, 16);
-  return Buffer.concat([local, file, data, central, file, end]);
+  end.writeUInt16LE(directory.length / 2, 8);
+  end.writeUInt16LE(directory.length / 2, 10);
+  end.writeUInt32LE(size, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, ...directory, end]);
+}
+
+/**
+ * Binary USD as USD itself writes it: one prim, Root, that references /Tri
+ * in ../outside.usda.
+ */
+const reachingUsdc = Buffer.from(
+  "UFhSLVVTREMACAAAAAAAAMIBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAgAAACABAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAADwPwAAAAAAAAAACAAAAAAAAABAAAAAAAAAAEMAAAAAAAAAAPAxOy0pAABSb290AHByaW1DaGlsZHJlbgBzcGVjaWZpZXIALi4vb3V0c2lkZS51c2RhAFRyaQByZWZlcmVuY2VzAAEAAAAAAAAABQAAAAMAAAAAAAAACAAAAAAAAAAAYAMAAAAEARgAAAAAAAAAACBYAAEAECkFANAAAAAqQGQAAAAAACMABQAAAAAAAAAMAAAAAAAAAACgAgAAAEUBAP8B/QMAAAAAAAAAAwAAAAAAAAAJAAAAAAAAAABwAgAAABEA/wgAAAAAAAAAAGABAAAAEAQJAAAAAAAAAABwAQAAABH//gIAAAAAAAAACAAAAAAAAAAAYAIAAAABAAgAAAAAAAAAAGACAAAAAQAIAAAAAAAAAABgBwAAAAT/BgAAAAAAAABUT0tFTlMAAAAAAAAAAAAAjQAAAAAAAABbAAAAAAAAAFNUUklOR1MAAAAAAAAAAADoAAAAAAAAAAwAAAAAAAAARklFTERTAAAAAAAAAAAAAPQAAAAAAAAAOAAAAAAAAABGSUVMRFNFVFMAAAAAAAAALAEAAAAAAAAcAAAAAAAAAFBBVEhTAAAAAAAAAAAAAABIAQAAAAAAAEIAAAAAAAAAU1BFQ1MAAAAAAAAAAAAAAIoBAAAAAAAAOAAAAAAAAAA=",
+  "base64",
+);
+
+/**
+ * A binary USD file whose list of sections names its strings twice: first
+ * the file's own, which USD reads, then a table of one harmless name.
+ */
+function withSecondStrings(crate: Buffer): Buffer {
+  const contents = Number(crate.readBigInt64LE(16));
+  const count = Number(crate.readBigUInt64LE(contents));
+  const sections = crate.subarray(contents + 8, contents + 8 + 32 * count);
+  // One string, "a", packed as USD packs strings: one LZ4 block of literals.
+  const harmless = Buffer.alloc(24 + 4);
+  harmless.writeBigUInt64LE(1n, 0);
+  harmless.writeBigUInt64LE(2n, 8);
+  harmless.writeBigUInt64LE(4n, 16);
+  Buffer.from([0x00, 0x20, 0x61, 0x00]).copy(harmless, 24);
+  const at = contents;
+  const second = Buffer.alloc(32);
+  second.write("TOKENS", 0, "latin1");
+  second.writeBigInt64LE(BigInt(at), 16);
+  second.writeBigInt64LE(BigInt(harmless.length), 24);
+  const list = Buffer.alloc(8);
+  list.writeBigUInt64LE(BigInt(count + 1), 0);
+  const head = Buffer.from(crate.subarray(0, contents));
+  head.writeBigInt64LE(BigInt(at + harmless.length), 16);
+  return Buffer.concat([head, harmless, list, sections, second]);
 }
 
 describe.runIf(blender)("a real Blender", () => {
@@ -444,10 +497,9 @@ describe.runIf(blender)("a real Blender", () => {
 
   /**
    * A model file can name other files for its importer to read: a glTF its
-   * geometry, an OBJ its materials, a USD file other scenes and the clips it
-   * plays. Those reads leave no picture behind to find afterwards, so they
-   * are refused as they would happen, before the importer reads outside the
-   * folder.
+   * geometry, an OBJ its materials, a USD file other scenes. Those reads
+   * leave no picture behind to find afterwards, so they are refused as they
+   * would happen, before the importer reads outside the folder.
    */
   it("refuses a model whose geometry, materials or parts are read from outside the workspace", async () => {
     const triangle = Buffer.from(
@@ -489,24 +541,10 @@ describe.runIf(blender)("a real Blender", () => {
       join(workspace, "parts.usda"),
       '#usda 1.0\ndef Xform "Root" (\n  references = @../outside.usda@</Tri>\n) {\n}\n',
     );
-    // Clips name their scenes by a pattern written as a plain string.
-    await writeFile(
-      join(root, "outside.1.usda"),
-      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points.timeSamples = { 1: [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)] }\n}\n',
-    );
-    await writeFile(
-      join(workspace, "clips.usda"),
-      '#usda 1.0\ndef Mesh "Tri" (\n  clips = {\n    dictionary default = {\n      string templateAssetPath = "../outside.#.usda"\n      double templateStartTime = 1\n      double templateEndTime = 1\n      double templateStride = 1\n      string primPath = "/Tri"\n    }\n  }\n) {\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
-    );
     const before = await call("blender_describe_scene", {});
 
     const refused = [];
-    for (const path of [
-      "geometry.gltf",
-      "materials.obj",
-      "parts.usda",
-      "clips.usda",
-    ])
+    for (const path of ["geometry.gltf", "materials.obj", "parts.usda"])
       refused.push(
         await call("blender_add_objects", {
           objects: [{ name: "Reaching", kind: "model", path }],
@@ -664,7 +702,7 @@ describe.runIf(blender)("a real Blender", () => {
     await writeFile(join(workspace, "moved.usdc"), binary);
     await writeFile(
       join(workspace, "moved.usdz"),
-      storedZip("plate.usdc", binary),
+      storedZip([["plate.usdc", binary]]),
     );
     await writeFile(join(workspace, "damaged.usd"), "PXR-USDC\0\0\0\0");
     const before = await call("blender_describe_scene", {});
@@ -682,6 +720,203 @@ describe.runIf(blender)("a real Blender", () => {
     }
     expect(answers["damaged.usd"]?.isError).toBe(true);
     expect(answers["damaged.usd"]?.said).toMatch(/cannot be read/);
+    expect(after.said).toBe(before.said);
+  });
+
+  /**
+   * A scene can be named so the check and USD would read different files:
+   * USD reads the first of two string tables and a package's files as they
+   * follow one another, looks for a path not written from ./ or ../ from the
+   * folder Blender runs in, reads a drive without a folder from that folder
+   * too, and drops what follows :SDF_FORMAT_ARGS:. Each is refused before
+   * anything outside is read, as is a clip, whose pattern is a string USD
+   * text may spell in many ways.
+   */
+  it("refuses USD that names a scene outside the workspace in a way USD reads differently from what it says", async () => {
+    // A scene beside the folder Blender runs in, which is one of the
+    // conversation folders in the data folder.
+    await writeFile(
+      join(root, "data", "far.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
+    await writeFile(
+      join(root, "outside.1.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points.timeSamples = { 1: [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)] }\n}\n',
+    );
+    const deep = join(workspace, "a", "b");
+    await mkdir(deep, { recursive: true });
+    const referencing = (path: string) =>
+      `#usda 1.0\ndef "Root" (\n  references = @${path}@</Tri>\n) {\n}\n`;
+    const clip = (key: string) =>
+      `#usda 1.0\ndef Mesh "Tri" (\n  clips = {\n    dictionary default = {\n      string ${key} = "../outside.#.usda"\n      double templateStartTime = 1\n      double templateEndTime = 1\n      double templateStride = 1\n      string primPath = "/Tri"\n    }\n  }\n) {\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n`;
+    const drive = root.slice(0, 2);
+    await writeFile(join(workspace, "reaching.usdc"), reachingUsdc);
+    await writeFile(
+      join(workspace, "twice.usdc"),
+      withSecondStrings(reachingUsdc),
+    );
+    await writeFile(
+      join(workspace, "hidden.usdz"),
+      storedZip(
+        [
+          ["reaching.usdc", reachingUsdc],
+          ["plain.usda", Buffer.from("#usda 1.0\n")],
+        ],
+        ["plain.usda"],
+      ),
+    );
+    await writeFile(
+      join(deep, "searched.usda"),
+      referencing("q/../../far.usda"),
+    );
+    await writeFile(
+      join(deep, "drive.usda"),
+      referencing(`${drive}q/../../far.usda`),
+    );
+    await writeFile(
+      join(workspace, "inner.usda"),
+      referencing("../outside.usda"),
+    );
+    await writeFile(
+      join(workspace, "formatted.usda"),
+      referencing("./inner.usda:SDF_FORMAT_ARGS:a=b"),
+    );
+    // USD also looks for such a path in the folder of the scene it opened
+    // first, here a/, from a scene in a/sub/.
+    await mkdir(join(workspace, "a", "sub"), { recursive: true });
+    await writeFile(
+      join(workspace, "a", "root.usda"),
+      referencing("./sub/mid.usda"),
+    );
+    await writeFile(
+      join(workspace, "a", "sub", "mid.usda"),
+      referencing("evil.usda"),
+    );
+    await writeFile(
+      join(workspace, "a", "evil.usda"),
+      referencing("../../outside.usda"),
+    );
+    await writeFile(join(workspace, "clips.usda"), clip("templateAssetPath"));
+    await writeFile(
+      join(workspace, "commented.usda"),
+      clip("templateAssetPath").replace("clips =", "clips /* x */ ="),
+    );
+    await writeFile(
+      join(workspace, "quoted.usda"),
+      clip('"templateAssetPath"'),
+    );
+    const before = await call("blender_describe_scene", {});
+
+    const answers: Record<string, Awaited<ReturnType<typeof call>>> = {};
+    const paths = [
+      "reaching.usdc",
+      "twice.usdc",
+      "hidden.usdz",
+      "a/b/searched.usda",
+      "a/b/drive.usda",
+      "formatted.usda",
+      "a/root.usda",
+      "clips.usda",
+      "quoted.usda",
+      "commented.usda",
+    ];
+    for (const [at, path] of paths.entries())
+      answers[path] = await call("blender_add_objects", {
+        objects: [{ name: `Reaching ${at}`, kind: "model", path }],
+      });
+    const after = await call("blender_describe_scene", {});
+    const brought = paths.flatMap((path, at) =>
+      answers[path]?.isError
+        ? []
+        : [{ object: `Reaching ${at}`, delete: true }],
+    );
+    if (brought.length) await call("blender_edit_objects", { edits: brought });
+
+    const said = Object.fromEntries(
+      Object.entries(answers).map(([path, answer]) => [
+        path,
+        answer.isError ? answer.said : "brought in",
+      ]),
+    );
+    expect(said).toEqual({
+      "reaching.usdc": expect.stringMatching(/outside the workspace/),
+      "twice.usdc": expect.stringMatching(/cannot be read/),
+      "hidden.usdz": expect.stringMatching(/outside the workspace/),
+      "a/b/searched.usda": expect.stringMatching(/outside the workspace/),
+      "a/b/drive.usda": expect.stringMatching(/cannot be checked/),
+      "formatted.usda": expect.stringMatching(/outside the workspace/),
+      "a/root.usda": expect.stringMatching(/outside the workspace/),
+      "clips.usda": expect.stringMatching(/clips/),
+      "quoted.usda": expect.stringMatching(/clips/),
+      "commented.usda": expect.stringMatching(/clips/),
+    });
+    expect(after.said).toBe(before.said);
+  });
+
+  it("refuses a model that names a file outside the workspace in the forms its importer reads", async () => {
+    await writeFile(join(root, "outside.mtl"), "newmtl Red\nKd 1 0 0\n");
+    await writeFile(
+      join(root, "outside.usda"),
+      '#usda 1.0\ndef Mesh "Tri" {\n  point3f[] points = [(0, 0, 0), (0.1, 0, 0), (0, 0.1, 0)]\n  int[] faceVertexCounts = [3]\n  int[] faceVertexIndices = [0, 1, 2]\n}\n',
+    );
+    const triangle = "v 0 0 0\nv 0.1 0 0\nv 0 0.1 0\nusemtl Red\nf 1 2 3\n";
+    const layer = (metadata: string) => `#usda 1.0\n(\n  ${metadata}\n)\n`;
+    await mkdir(join(workspace, "inside"), { recursive: true });
+    const files: Record<string, string> = {
+      // OBJ: a quoted name, a name after a control character, and a name
+      // continued on the next line, each as Blender's importer reads them.
+      "quoted.obj": `mtllib "../outside.mtl"\n${triangle}`,
+      "control.obj": `mtllib\u0001../outside.mtl\n${triangle}`,
+      "continued.obj": `mtllib \\\n../outside.mtl\n${triangle}`,
+      // USD text: "[" that is not a package path, "@@@" escaped inside a
+      // path, an "@" in a string before a path, and a MaterialX scene.
+      "bracket.usda": layer("subLayers = [@inside[/../../outside.usda@]"),
+      "escaped.usda": layer(
+        "subLayers = [@@@inside\\@@@/../../outside.usda@@@]",
+      ),
+      "after-at.usda": layer('doc = "a@b"; subLayers = [@../outside.usda@]'),
+      "material.usda": layer("subLayers = [@./near.mtlx@]"),
+    };
+    for (const [name, text] of Object.entries(files))
+      await writeFile(join(workspace, name), text);
+    await writeFile(
+      join(workspace, "near.mtlx"),
+      '<?xml version="1.0"?>\n<materialx version="1.38"/>\n',
+    );
+    // Blender also reads the material file named after the model, here a
+    // link to one outside.
+    await writeFile(join(workspace, "linked.obj"), triangle);
+    await symlink(join(root, "outside.mtl"), join(workspace, "linked.mtl"));
+    const before = await call("blender_describe_scene", {});
+
+    const paths = [...Object.keys(files), "linked.obj"];
+    const answers: Record<string, Awaited<ReturnType<typeof call>>> = {};
+    for (const [at, path] of paths.entries())
+      answers[path] = await call("blender_add_objects", {
+        objects: [{ name: `Named ${at}`, kind: "model", path }],
+      });
+    const after = await call("blender_describe_scene", {});
+    const brought = paths.flatMap((path, at) =>
+      answers[path]?.isError ? [] : [{ object: `Named ${at}`, delete: true }],
+    );
+    if (brought.length) await call("blender_edit_objects", { edits: brought });
+
+    const said = Object.fromEntries(
+      Object.entries(answers).map(([path, answer]) => [
+        path,
+        answer.isError ? answer.said : "brought in",
+      ]),
+    );
+    expect(said).toEqual({
+      "quoted.obj": expect.stringMatching(/outside the workspace/),
+      "control.obj": expect.stringMatching(/outside the workspace/),
+      "continued.obj": expect.stringMatching(/outside the workspace/),
+      "bracket.usda": expect.stringMatching(/outside the workspace/),
+      "escaped.usda": expect.stringMatching(/cannot be checked/),
+      "after-at.usda": expect.stringMatching(/outside the workspace/),
+      "material.usda": expect.stringMatching(/MaterialX/),
+      "linked.obj": expect.stringMatching(/outside the workspace/),
+    });
     expect(after.said).toBe(before.said);
   });
 

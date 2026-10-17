@@ -2,9 +2,10 @@ name: Packaging
 
 # The full gate builds the installer and checks what only the packaged app
 # shows: its fuses, its dictionaries, the documents drawn from its archive, and
-# the executable opened on a saved conversation. It runs when what goes into
-# the package changes, and whenever it is asked for, rather than first on a
-# release tag.
+# the executable opened on a saved conversation. It runs when how the package
+# is made changes, or what it takes in as files rather than as built code, and
+# whenever it is asked for. A change to the app's own code alone meets these
+# checks when this is asked for, or on a release tag.
 on:
   pull_request:
     paths: &packaging
@@ -20,6 +21,7 @@ on:
       - "packages/blender-studio/src/session/**"
       - "scripts/check-packaged.mjs"
       - "scripts/dictionaries.mjs"
+      - "packages/spelling/dictionaries.json"
       - "scripts/gate.ps1"
       - "pnpm-lock.yaml"
       - "LICENSE"
@@ -82,6 +84,14 @@ jobs:
         with:
           path: ${{ runner.temp }}\zt\archives
           key: test-tools-${{ hashFiles('packages/toolchains/src/toolchains.ts') }}
+
+      # As in CI: kept until the list changes, and each file's SHA-256 is
+      # checked before the build uses it.
+      - name: Keep the spelling dictionaries between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\dictionaries
+          key: dictionaries-${{ hashFiles('packages/spelling/dictionaries.json') }}
 
       - name: Run the full repository gate
         shell: powershell

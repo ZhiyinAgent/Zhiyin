@@ -12,7 +12,13 @@
 import { describe, expect, it } from "vitest";
 import type { ModelEvent } from "@zhiyin/model-client";
 import { VisibleError, type ToolInvocationResult } from "@zhiyin/contract";
-import { loopAndHost, loopFrom, stubDependencies, until } from "./support.js";
+import {
+  loopAndHost,
+  loopFrom,
+  queuedWorkRun,
+  stubDependencies,
+  until,
+} from "./support.js";
 
 /** A promise a test opens and closes by hand. */
 function gate() {
@@ -350,7 +356,7 @@ describe("AgentLoop turn ownership", () => {
     await until(() => rounds === 2);
     toolHeld.release();
     await first;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queuedWorkRun();
     secondHeld.release();
     await second;
 

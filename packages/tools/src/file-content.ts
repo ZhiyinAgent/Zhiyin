@@ -126,6 +126,8 @@ export async function firstLineNotUtf8(
   bytes: AsyncIterable<Uint8Array>,
 ): Promise<number | undefined> {
   let line = 1;
+  // A line ends at a line feed, a carriage return, or the two together.
+  let afterReturn = false;
   // Continuation bytes still owed by the character under way, and the range
   // the next one must fall in, which the first byte narrows.
   let owed = 0;
@@ -140,7 +142,8 @@ export async function firstLineNotUtf8(
         owed -= 1;
         continue;
       }
-      if (byte === 0x0a) line += 1;
+      if (byte === 0x0d || (byte === 0x0a && !afterReturn)) line += 1;
+      afterReturn = byte === 0x0d;
       if (byte < 0x80) continue;
       if (byte >= 0xc2 && byte <= 0xdf) owed = 1;
       else if (byte === 0xe0) [owed, lowest] = [2, 0xa0];

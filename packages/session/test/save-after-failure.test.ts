@@ -65,12 +65,17 @@ describe("a save one conversation's write fails in", () => {
     const landed = new Promise<void>((resolve) => {
       secondLanded = resolve;
     });
+    let firstFailed = () => {};
+    const failing = new Promise<void>((resolve) => {
+      firstFailed = resolve;
+    });
     const sessions = new FileSessions(root, {
       historyFiles: {
         ...historyFiles,
         append: async (path, text) => {
           if (path.includes("c-first") && failFirst) {
             failFirst = false;
+            firstFailed();
             throw new Error("Disk busy");
           }
           if (path.includes("c-second") && holdSecond) {
@@ -92,8 +97,15 @@ describe("a save one conversation's write fails in", () => {
     );
 
     const failed = sessions.saveWorkspace(edited);
+    let failedSettled = false;
+    void failed.catch(() => (failedSettled = true));
     const retried = sessions.saveWorkspace(edited);
-    setTimeout(letSecondFinish, 50);
+    // Once the first write has failed and all that follows from it has run,
+    // the save still waits for the second, so the retry cannot start beside it.
+    await failing;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(failedSettled).toBe(false);
+    letSecondFinish();
     await expect(failed).rejects.toThrow("Task history could not be saved.");
     await retried;
     await landed;

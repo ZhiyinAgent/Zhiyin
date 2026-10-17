@@ -58,7 +58,8 @@ download, and only a complete, verified install is ever used (ADR 0016).
   before it is in place, so what the step makes is installed with it. A step
   that fails does not fail the install, since the program works without it; an
   install stopped during the step leaves nothing.
-- A program is installed once, however many ask at the same time.
+- A program is installed once, however many ask at the same time. One
+  asked for while a stopped install is still ending starts once it has ended.
 - Only the pinned version is kept; installing it removes any other.
 - A program is verified when it is installed. After that it is found through a
   marker naming the pinned version and digest, so a new pin makes an older

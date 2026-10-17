@@ -5,6 +5,13 @@ type OwnedTurn = {
   readonly parentId?: string;
 };
 
+/** Work asked to start for a turn that has already ended, by a stop or otherwise. */
+export class ParentTurnEnded extends Error {
+  constructor() {
+    super("The parent turn is not running.");
+  }
+}
+
 /** The lifecycle tree for root turns and any work they delegate. */
 export class TurnOwnership {
   readonly #turns = new Map<string, OwnedTurn>();
@@ -35,8 +42,7 @@ export class TurnOwnership {
 
   start(id: string, parentId?: string): AbortController {
     if (this.#turns.has(id)) throw new Error("The turn is already running.");
-    if (parentId && !this.#turns.has(parentId))
-      throw new Error("The parent turn is not running.");
+    if (parentId && !this.#turns.has(parentId)) throw new ParentTurnEnded();
     const controller = new AbortController();
     this.#turns.set(id, { controller, ...(parentId ? { parentId } : {}) });
     return controller;

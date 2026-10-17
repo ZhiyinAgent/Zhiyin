@@ -329,6 +329,8 @@ export class TurnLoop {
    */
   async #ask(turn: Turn): Promise<RoundResult | undefined> {
     const { taskId, controller, ledger, offering } = turn;
+    // A stopped turn takes nothing more from what waits for the next one.
+    controller.signal.throwIfAborted();
     await this.#plan.remind(taskId, turn.history);
     await turn.standing.send(turn.history);
     await deliverBackgroundWork(taskId, turn.history, {
@@ -336,6 +338,7 @@ export class TurnLoop {
       pendingHandoffs: this.#pendingHandoffs,
       commandEndings: this.#commandEndings,
       sessions: this.#deps.sessions,
+      signal: controller.signal,
     });
     if (await deliverGuidance(taskId, this.#records, turn.history))
       turn.guard.reset();
@@ -586,6 +589,12 @@ export class TurnLoop {
     let declinedInBatch = false;
     const quietBefore = quiet.total();
     for (const call of answerable) {
+      // A stop while an earlier call was answered ends the round there,
+      // whichever call it was.
+      if (turn.controller.signal.aborted) {
+        await this.#interruptIfCurrent(taskId, turn.controller);
+        return "stopped";
+      }
       if (declinedInBatch) {
         await answerDeclinedCall(call, history);
         continue;
@@ -642,6 +651,11 @@ export class TurnLoop {
       const answer = JSON.stringify({ ...own.answered, ...note });
       await history.result(call, toolOutput(call.name, answer), false);
       return "answered";
+    }
+    // A stop while this call's input was read hands nothing on.
+    if (controller.signal.aborted) {
+      await this.#interruptIfCurrent(taskId, controller);
+      return "stopped";
     }
     if (call.name === delegateSpecialistToolName)
       return this.#delegate(turn, call, parsed, note);
