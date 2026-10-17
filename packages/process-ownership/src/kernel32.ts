@@ -76,6 +76,18 @@ export type Win32 = {
   /** Asks whether a process has ended, without waiting for it. */
   readonly ended: (process: unknown) => number;
   readonly exitCode: (process: unknown, code: unknown[]) => boolean;
+  /** A manual-reset event, not set. */
+  readonly createEvent: () => unknown;
+  readonly setEvent: (event: unknown) => boolean;
+  readonly resetEvent: (event: unknown) => boolean;
+  /**
+   * Waits, off the calling thread, until any of the handles is signalled,
+   * then calls `done` on it with what the wait returned.
+   */
+  readonly waitForAny: (
+    handles: readonly unknown[],
+    done: (error: unknown, result: number) => void,
+  ) => void;
   readonly oemToWide: (bytes: Buffer, wide: Buffer | null) => number;
 };
 
@@ -177,6 +189,14 @@ export function win32(): Win32 {
     );
     const GetExitCodeProcess = kernel32.func(
       "bool GetExitCodeProcess(void*, _Out_ uint32*)",
+    );
+    const CreateEventW = kernel32.func(
+      "void* CreateEventW(void*, bool, bool, const char16_t*)",
+    );
+    const SetEvent = kernel32.func("bool SetEvent(void*)");
+    const ResetEvent = kernel32.func("bool ResetEvent(void*)");
+    const WaitForMultipleObjects = kernel32.func(
+      "uint32 WaitForMultipleObjects(uint32, void**, bool, uint32)",
     );
     const MultiByteToWideChar = kernel32.func(
       "int MultiByteToWideChar(uint32, uint32, void*, int, void*, int)",
@@ -324,6 +344,17 @@ export function win32(): Win32 {
         TerminateProcess(process, exitCode),
       ended: (process) => WaitForSingleObject(process, 0),
       exitCode: (process, code) => GetExitCodeProcess(process, code),
+      createEvent: () => CreateEventW(null, true, false, null),
+      setEvent: (event) => SetEvent(event),
+      resetEvent: (event) => ResetEvent(event),
+      waitForAny: (handles, done) =>
+        WaitForMultipleObjects.async(
+          handles.length,
+          [...handles],
+          false,
+          INFINITE,
+          done,
+        ),
       oemToWide: (bytes, wide) =>
         MultiByteToWideChar(
           CP_OEMCP,

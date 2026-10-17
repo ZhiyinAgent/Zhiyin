@@ -30,20 +30,15 @@ import {
   PIPE_ACCESS_OUTBOUND,
   STARTF_USESTDHANDLES,
   STILL_ACTIVE,
-  WAIT_TIMEOUT,
   closeEach,
   invalid,
   win32,
 } from "./kernel32.js";
 import type { Win32 } from "./kernel32.js";
+import { ProcessEnds } from "./process-ends.js";
 
-/**
- * The longest a running process goes between two looks at whether it has
- * ended. It is asked, never waited on: a wait would hold, for as long as the
- * process lives, one of the few threads all of Zhiyin's file work shares. The
- * looks start a millisecond apart, so a short run is not kept waiting.
- */
-const exitCheckMs = 50;
+/** The ends of every process this module launched, told as they happen. */
+let processEnds: ProcessEnds | undefined;
 
 export type ContainmentAvailability =
   | { readonly available: true }
@@ -489,12 +484,8 @@ export function openProcessContainer(
         ...(pipes ? { pipes } : {}),
         wait() {
           waited ??= new Promise<number>((resolve, reject) => {
-            const look = (nextMs: number) => {
+            const settle = () => {
               const state = api.ended(processHandle);
-              if (state === WAIT_TIMEOUT) {
-                setTimeout(look, nextMs, Math.min(nextMs * 2, exitCheckMs));
-                return;
-              }
               if (state !== 0) {
                 api.closeHandle(processHandle);
                 reject(new Error("Waiting for the process failed."));
@@ -511,7 +502,8 @@ export function openProcessContainer(
                 reject(new Error("The process exit code was unavailable."));
               else resolve(code[0]);
             };
-            look(1);
+            processEnds ??= new ProcessEnds(api);
+            processEnds.watch(processHandle, settle);
           });
           return waited;
         },

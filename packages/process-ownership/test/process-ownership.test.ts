@@ -4,7 +4,7 @@ import { constants, getPriority } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import koffi from "koffi";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
 import {
   containmentAvailability,
@@ -382,6 +382,61 @@ describe.runIf(process.platform === "win32")("process containment", () => {
       } finally {
         container.close();
       }
+    },
+  );
+
+  it(
+    "tells a process's end as it happens, with no timer asking whether it has",
+    { timeout: 20_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const container = openProcessContainer();
+      // Timers stand still: an end found by asking on one is never told.
+      vi.useFakeTimers({ toFake: ["setTimeout", "setInterval"] });
+      try {
+        const child = container.launch({
+          executable: process.execPath,
+          arguments: [join(fixtures, "sleeper.mjs")],
+          cwd: directory,
+          stdout: join(directory, "stdout.txt"),
+          stderr: join(directory, "stderr.txt"),
+        });
+        const ended = child.wait();
+        container.close();
+
+        expect(typeof (await ended)).toBe("number");
+      } finally {
+        vi.useRealTimers();
+        container.close();
+      }
+    },
+  );
+
+  it(
+    "lets Zhiyin quit while it waits for many processes to end",
+    { timeout: 60_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const quitter = spawn(
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          "--no-warnings",
+          join(fixtures, "quitter.mts"),
+          directory,
+        ],
+        { stdio: "ignore", windowsHide: true },
+      );
+      const code = await new Promise<number | null>((resolve) =>
+        quitter.once("exit", resolve),
+      );
+      const sleepers = JSON.parse(
+        await readFile(join(directory, "sleepers.json"), "utf8"),
+      ) as number[];
+
+      expect(code).toBe(0);
+      expect(sleepers).toHaveLength(8);
+      await allGone(sleepers);
     },
   );
 
