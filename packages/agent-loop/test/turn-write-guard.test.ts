@@ -35,7 +35,7 @@ function conversation() {
   };
   const records = new TurnRecords(
     { host } as unknown as AgentLoopDependencies,
-    turnWriteGuard(ownership, host.find),
+    turnWriteGuard(ownership),
   );
   /** Writes what the conversation says now, with a note of who wrote it. */
   const write = (note: string) =>
@@ -112,7 +112,7 @@ describe("a write a turn makes", () => {
           },
         },
       } as unknown as AgentLoopDependencies,
-      turnWriteGuard(ownership, () => records.task("conversation")),
+      turnWriteGuard(ownership),
     );
     const writing = ownership.within(turn, () =>
       slow.replaceTask({

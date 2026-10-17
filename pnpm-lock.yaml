@@ -456,6 +456,9 @@ importers:
       '@zhiyin/temporary-folders':
         specifier: workspace:*
         version: link:../temporary-folders
+      '@zhiyin/test-waits':
+        specifier: workspace:*
+        version: link:../test-waits
 
   packages/git-connector:
     dependencies:

@@ -34,13 +34,16 @@ import { withdrawCalls } from "../tools/quiet-failures.js";
 
 /**
  * How many pictures one request may hold, and how many are kept when that is
- * passed, counting whole messages from the newest. Eight is the fewest any lab
- * Zhiyin reaches accepts in one request (Mistral), and every lab is held to
- * it. Letting go of several at once breaks the cached start once for the next
- * few pictures instead of once for each of them.
+ * passed, counting whole messages. Eight is the fewest any lab Zhiyin reaches
+ * accepts in one request (Mistral), and every lab is held to it. Letting go of
+ * several at once breaks the cached conversation once for the next few
+ * pictures instead of once for each of them. The first pictures stay, so
+ * what goes is always from the middle and the conversation's start never
+ * changes: only what follows the oldest picture that went is sent anew.
  */
 const picturesKeptInOneRequest = 8;
 const picturesKeptAfterLettingGo = 4;
+const picturesKeptFromTheStart = 2;
 
 type Item = {
   message: ModelMessage;
@@ -95,6 +98,18 @@ function picturesIn(message: ModelMessage): number {
   return message.role === "user" && typeof message.content !== "string"
     ? message.content.filter((part) => part.kind === "image").length
     : 0;
+}
+
+/** The first messages with pictures, whole, while they fit in those kept from the start. */
+function fromTheStart(carrying: readonly Item[]): Item[] {
+  const first: Item[] = [];
+  let count = 0;
+  for (const item of carrying) {
+    count += picturesIn(item.message);
+    if (count > picturesKeptFromTheStart) break;
+    first.push(item);
+  }
+  return first;
 }
 
 export class ModelHistory {
@@ -448,6 +463,18 @@ export class ModelHistory {
     await this.#letGoOfOlderPictures();
   }
 
+  /**
+   * Where in `messages()` the oldest picture that can still go is, the first
+   * after those kept from the start: up to there, a later letting go changes
+   * nothing, so a request can mark it for the provider to cache.
+   */
+  firstPictureThatCanGo(): number | undefined {
+    const carrying = this.#items.filter((item) => picturesIn(item.message));
+    const first = new Set(fromTheStart(carrying));
+    const goes = carrying.find((item) => !first.has(item));
+    return goes ? this.#items.indexOf(goes) : undefined;
+  }
+
   async #letGoOfOlderPictures(): Promise<void> {
     const carrying = this.#items.filter((item) => picturesIn(item.message));
     const total = carrying.reduce(
@@ -455,16 +482,26 @@ export class ModelHistory {
       0,
     );
     if (total <= picturesKeptInOneRequest) return;
-    // The newest message stays whole, whatever it carries; older ones stay
-    // while they fit in what is kept after letting go.
+    // The first pictures stay. The newest message stays whole, whatever it
+    // carries; older ones stay while they fit in what is kept after letting
+    // go. The first go too when the newest leave them no room.
+    let first = fromTheStart(carrying);
+    const start = first.reduce(
+      (sum, item) => sum + picturesIn(item.message),
+      0,
+    );
     let kept = 0;
-    const staying = new Set<Item>();
+    const newest = new Set<Item>();
     for (const item of [...carrying].reverse()) {
+      if (first.includes(item)) break;
       const count = picturesIn(item.message);
-      if (staying.size && kept + count > picturesKeptAfterLettingGo) break;
-      staying.add(item);
+      if (newest.size && start + kept + count > picturesKeptAfterLettingGo)
+        break;
+      newest.add(item);
       kept += count;
     }
+    if (start + kept > picturesKeptInOneRequest) first = [];
+    const staying = new Set([...first, ...newest]);
     for (const item of carrying.filter((entry) => !staying.has(entry))) {
       const index = this.#entries.findIndex(
         (entry) => entry.id === item.entryId,

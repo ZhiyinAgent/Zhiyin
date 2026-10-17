@@ -322,7 +322,7 @@ describe("earlier tool work in later requests", () => {
 });
 
 describe("pictures in later requests", () => {
-  it("changes the start of the request once when pictures 9 to 12 arrive, at picture 9", async () => {
+  it("lets go of pictures once when pictures 9 to 12 arrive, at picture 9", async () => {
     const requests: ModelMessage[][] = [];
     const loop = loopFrom(
       withTools(
@@ -357,6 +357,63 @@ describe("pictures in later requests", () => {
     expect(carried(requests[8] ?? [])).toBe(8);
     expect(carried(requests[9] ?? [])).toBe(4);
     expect(carried(requests[12] ?? [])).toBe(7);
+  });
+
+  it("lets go from the middle: the first two pictures stay, and each request repeats the one before up to where its cache was marked", async () => {
+    const requests: ModelMessage[][] = [];
+    const marks: (readonly number[])[] = [];
+    const answers = callsThenAnswers("capture", 16);
+    const loop = loopFrom(
+      withTools(
+        stubDependencies(() => {}),
+        {
+          capture: {
+            execute: (call) => ({
+              ok: true,
+              value: "[image 1, shown separately]",
+              images: [{ mediaType: "image/png", data: `PICTURE${call}` }],
+            }),
+          },
+        },
+        (request) => {
+          marks.push(request.cacheAfter ?? []);
+          return answers(request);
+        },
+        requests,
+        { acceptsImages: true },
+      ),
+    );
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Watch the page change");
+
+    const pictures = (messages: readonly ModelMessage[]) =>
+      messages.flatMap((message) =>
+        message.role === "user" && typeof message.content !== "string"
+          ? message.content.flatMap((part) =>
+              part.kind === "image" ? [part.data] : [],
+            )
+          : [],
+      );
+    const breaks = prefixBreaks(requests);
+    // Two lettings go in sixteen pictures, and never more than eight sent.
+    expect(breaks).toHaveLength(2);
+    for (const request of requests)
+      expect(pictures(request).length).toBeLessThanOrEqual(8);
+    // The first two pictures are in every request after they arrived:
+    // request n is sent after picture n.
+    const firstTwo = pictures(requests[2] ?? []);
+    expect(firstTwo).toHaveLength(2);
+    expect(pictures(requests.at(-1) ?? []).slice(0, 2)).toEqual(firstTwo);
+    for (const { request, at } of breaks) {
+      const before = requests[request - 1] ?? [];
+      // What changed is a picture that went, never anything before the third.
+      expect(pictures(before.slice(at, at + 1))).toHaveLength(1);
+      expect(pictures(before.slice(0, at))).toEqual(firstTwo);
+      // The request before marked its cache just before it, so the provider
+      // reads everything up to there.
+      expect(marks[request - 1]).toContain(at - 1);
+    }
   });
 
   it("sends a saved picture again after the app restarts, and says so when it is gone", async () => {

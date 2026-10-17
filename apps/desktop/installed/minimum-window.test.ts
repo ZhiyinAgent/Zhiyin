@@ -16,6 +16,7 @@ import {
   shows,
   temporaryDataDirectory,
 } from "./launch.js";
+import { settled } from "../system-boundary/settled.js";
 
 afterEach(closeEverything);
 
@@ -60,7 +61,11 @@ async function atMinimumSize() {
   await launched.app.evaluate(async ({ BrowserWindow }, size) => {
     BrowserWindow.getAllWindows()[0]?.setContentSize(size.width, size.height);
   }, minimum);
-  await new Promise((resolve) => setTimeout(resolve, 600));
+  await launched.window.waitForFunction(
+    (size) => innerWidth === size.width && innerHeight === size.height,
+    minimum,
+  );
+  await settled(launched.window);
   return launched;
 }
 
@@ -77,7 +82,7 @@ async function withDrawerOpen() {
   await launched.window
     .getByRole("complementary", { name: "Primary navigation" })
     .waitFor({ state: "visible", timeout: 10_000 });
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await settled(launched.window);
   return launched;
 }
 
@@ -99,7 +104,7 @@ async function openSettings(
   await window
     .getByRole("region", { name: "Model", exact: true })
     .waitFor({ state: "visible", timeout: 10_000 });
-  await new Promise((resolve) => setTimeout(resolve, 500));
+  await settled(window);
 }
 
 /** The app's own settings, reached from the keyboard alone. */

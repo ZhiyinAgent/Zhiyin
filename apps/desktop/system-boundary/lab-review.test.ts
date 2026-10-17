@@ -22,6 +22,7 @@ import { build } from "vite";
 import { playwrightBrowserLauncher } from "@zhiyin/interactive-browser";
 import { openProcessContainer } from "@zhiyin/process-ownership";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { settled } from "./settled.js";
 
 const launcher = playwrightBrowserLauncher({ open: openProcessContainer });
 const availability = await launcher.available();
@@ -418,7 +419,7 @@ describe.runIf(availability.available)(
 
         const before = await appearance();
         await option.click();
-        await page.waitForTimeout(200);
+        await settled(page);
         const after = await appearance();
 
         expect(before.display).toBe("grid");
@@ -1167,8 +1168,18 @@ describe.runIf(availability.available)(
         const box = await thread.boundingBox();
         if (!box) throw new Error("No conversation box");
         await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        const fromTop = await thread.evaluate((node) => node.scrollTop);
         await page.mouse.wheel(0, -1500);
-        await page.waitForTimeout(600);
+        await thread.evaluate(
+          (node, top) =>
+            new Promise<void>((resolve) => {
+              const look = () =>
+                node.scrollTop < top ? resolve() : requestAnimationFrame(look);
+              look();
+            }),
+          fromTop,
+        );
+        await settled(page);
 
         // The message at the top of the view, and how far below the top of
         // the view it starts.
@@ -1199,7 +1210,11 @@ describe.runIf(availability.available)(
           height: minimum.height,
         });
         // Let the reflow and whatever restores the position both finish.
-        await page.waitForTimeout(600);
+        await page.waitForFunction(
+          (width) => innerWidth === width,
+          desktop.width,
+        );
+        await settled(page);
         expect(
           await thread.evaluate(
             (node) => node.scrollHeight > node.clientHeight + 40,
@@ -1213,7 +1228,11 @@ describe.runIf(availability.available)(
 
         // And back, as when the browser opens beside the conversation.
         await page.setViewportSize(minimum);
-        await page.waitForTimeout(600);
+        await page.waitForFunction(
+          (width) => innerWidth === width,
+          minimum.width,
+        );
+        await settled(page);
         const narrowed = await placeOf();
         expect(
           Math.abs((narrowed?.offset ?? Infinity) - (before?.offset ?? 0)),
@@ -1295,7 +1314,8 @@ describe.runIf(availability.available)(
 
         // Still anchored to its button after the window changes under it.
         await page.setViewportSize({ width: 900, height: 600 });
-        await page.waitForTimeout(300);
+        await page.waitForFunction(() => innerWidth === 900);
+        await settled(page);
         const moved = await withinWindow();
         expect({
           insideLeft: moved.left >= 0,
@@ -1537,8 +1557,22 @@ describe.runIf(availability.available)(
           });
 
         const before = await gap();
+        const trigger =
+          '#reasoning-controls button[aria-label="Reasoning settings"]';
+        const fromTop = await page.evaluate(
+          (selector) =>
+            document.querySelector(selector)?.getBoundingClientRect().top,
+          trigger,
+        );
         await page.mouse.wheel(0, 180);
-        await page.waitForTimeout(300);
+        // The page has to move under the panel for its following to show.
+        await page.waitForFunction(
+          ([selector, top]) =>
+            document.querySelector(selector)?.getBoundingClientRect().top !==
+            top,
+          [trigger, fromTop] as const,
+        );
+        await settled(page);
         const after = await gap();
 
         expect({

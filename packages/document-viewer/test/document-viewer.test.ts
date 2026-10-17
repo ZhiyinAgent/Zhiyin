@@ -9,10 +9,11 @@ import {
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFailed } from "vitest";
 import type { DocumentPanelState } from "@zhiyin/contract";
 import { loadCanvas } from "@zhiyin/pdf-engine";
 import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import { changed, until } from "@zhiyin/test-waits";
 import {
   DocumentViewer,
   mayOpenInItsOwnApp,
@@ -48,6 +49,7 @@ function viewer(_root: string, options: { redrawIntervalMs?: number } = {}) {
   });
   documents.onChange((conversation, state) => {
     if (conversation === "c1") changes.push(state);
+    changed();
   });
   return { documents, started, changes };
 }
@@ -64,13 +66,6 @@ function png(width: number, height: number): Buffer {
  * What the viewer is expected to reach is waited for with `until`.
  */
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Waits for the viewer to catch up, however busy the computer is. */
-async function until(condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 20_000;
-  while (!condition() && Date.now() < deadline) await pause(10);
-  expect(condition()).toBe(true);
-}
 
 describe("the documents a conversation shows", () => {
   it("shows a workspace PDF with its name, its folder and the size of each page", async () => {
@@ -415,17 +410,31 @@ describe("the documents a conversation shows", () => {
     // changes were reported: two loads of the same bytes, one revision. Which
     // finishes first varies, so both orders are tried, several times.
     const drawn: boolean[] = [];
+    // A test that runs out of time says where it was, and what the panel went
+    // through on the way.
+    let waitingFor = "";
+    let seen: readonly DocumentPanelState[] = [];
+    onTestFailed(({ task }) => {
+      task.result?.errors?.push({
+        name: "Where it stopped",
+        message: `Attempt ${drawn.length + 1} was waiting for ${waitingFor}; the panel went through ${seen.map((state) => state.status).join(", ") || "nothing"}.`,
+      });
+    });
     for (let attempt = 0; attempt < 8; attempt++) {
-      const { documents } = viewer(root);
+      const { documents, changes } = viewer(root);
+      seen = changes;
       const show = () => documents.show("c1", root, "logo.png");
       const written = () => documents.written("c1", root, ["logo.png"]);
+      waitingFor = "both loads to answer";
       await Promise.all(
         attempt % 2 ? [show(), written()] : [written(), show()],
       );
       // The written file's load may still be on its way.
+      waitingFor = "the panel to leave opening";
       await until(() => documents.state("c1").status !== "opening");
       const state = documents.state("c1");
       if (state.status !== "shown") throw new Error(state.status);
+      waitingFor = "page 1 to be drawn";
       drawn.push((await documents.drawPage("c1", state.revision, 1, 400)).ok);
       documents.shutdown();
     }

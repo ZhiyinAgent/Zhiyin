@@ -48,12 +48,7 @@ export class AgentLoop {
 
   constructor(deps: AgentLoopDependencies) {
     this.#deps = deps;
-    this.#records = new TurnRecords(
-      deps,
-      turnWriteGuard(this.#activeTurns, (id) =>
-        this.#deps.host.find(id) ? this.#records.task(id) : undefined,
-      ),
-    );
+    this.#records = new TurnRecords(deps, turnWriteGuard(this.#activeTurns));
     this.#auxiliary = new AuxiliaryWork(deps, { records: this.#records });
     this.#waits = new TurnWaits(deps, { records: this.#records });
     this.#toolCalls = new ToolCalls(deps, {

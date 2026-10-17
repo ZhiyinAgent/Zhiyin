@@ -139,10 +139,9 @@ that name is marked the same way once it arrives.
   committed only if that turn still owns it, so a stopped turn's late answer
   cannot overwrite the turn that replaced it or reach a deleted conversation.
   Work a turn left running after it finished on its own, such as naming an
-  action, still lands. While nothing runs in the conversation, no
-  write starts work in it: none puts it back to working or to a question, or
-  records an action or specialist as running. Nothing resumes a stopped turn: a specialist it stopped is
-  reported to the next turn the person starts, after a restart too.
+  action, still lands. Nothing resumes a stopped turn: a specialist it
+  stopped is reported to the next turn the person starts, after a restart
+  too.
 - A turn that fails before it starts, such as one whose folder cannot be
   entered, gives its conversation back, so the next message starts a turn.
 - Stopped while one call of a round is answered, or at the work-budget
@@ -246,7 +245,8 @@ that name is marked the same way once it arrives.
   the model's settings say it goes back; the replay record is never counted.
 - Each request names its conversation as the session, so it stays with the
   provider holding its cache, and marks where the fixed start, the previous
-  request and the newest message end.
+  request and the newest message end, and the last message before the oldest
+  picture that can still be dropped.
 - What happened outside the turn reaches the model as a notice at its next
   request: a job's end (`job`; a job that ended by itself wakes a conversation
   with no turn running) and files the person put back with undo (`undo`, told
@@ -258,12 +258,14 @@ that name is marked the same way once it arrives.
 - A long paste reaches the model as an `attachment://` address. Pictures travel
   as pictures, fitted to what the model accepts, and a model that cannot see
   them gets a line saying one was there. When a request would carry more than
-  8 pictures, all but the newest 4 are dropped. Eight is the fewest any lab
-  Zhiyin reaches accepts in one request (Mistral; the others accept 50 or
-  more), and the same limit is kept for all of them. Four go at once because
-  dropping a picture changes the conversation from where it stood, and the
-  provider's cache is written again from that point: it happens once every few
-  pictures rather than with each one.
+  8 pictures, those in the middle are dropped: the first 2 stay, and the
+  newest make up 4 kept in all. Eight is the fewest any lab Zhiyin reaches
+  accepts in one request (Mistral; the others accept 50 or more), and the same
+  limit is kept for all of them. Several go at once, and never the first,
+  because dropping a picture changes the conversation from where it stood and
+  the provider's cache is written again from that point: it happens once every
+  few pictures rather than with each one, and only from the oldest picture
+  dropped.
 
 ### Context budget
 

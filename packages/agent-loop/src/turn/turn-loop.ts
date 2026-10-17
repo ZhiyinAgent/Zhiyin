@@ -359,6 +359,7 @@ export class TurnLoop {
       plan.tools,
       fixed.length,
       this.#lastRequestLength,
+      turn.history.firstPictureThatCanGo(),
     );
     const request =
       turn.answerNow || turn.overthought

@@ -22,18 +22,25 @@ import type { ContextGuard, RequestPlan } from "../context/context-guard.js";
 import type { TurnRecords } from "../turn/turn-records.js";
 import type { AgentLoopDependencies } from "../dependencies.js";
 
-/** The places the next request can reuse unchanged from this one. */
+/**
+ * The places the next request can reuse unchanged from this one: the fixed
+ * start, the end of the request before, the end of this one, and the last
+ * message before the oldest picture that can still go, which stays the same
+ * when pictures after it are let go.
+ */
 function cacheBoundaries(
   previousLengths: Map<string, number>,
   taskId: string,
   fixed: number,
   length: number,
+  beforePictures: number | undefined,
 ): number[] {
   const previous = previousLengths.get(taskId);
   previousLengths.set(taskId, length);
   return [
     ...new Set([
       fixed - 1,
+      ...(beforePictures === undefined ? [] : [beforePictures]),
       ...(previous === undefined ? [] : [previous - 1]),
       length - 1,
     ]),
@@ -49,6 +56,8 @@ export function modelRoundRequest(
   tools: readonly ToolSpec[],
   fixedMessageCount: number,
   previousLengths: Map<string, number>,
+  /** Where in the history the oldest picture that can still go is. */
+  firstPictureThatCanGo?: number,
 ) {
   return {
     messages,
@@ -60,6 +69,9 @@ export function modelRoundRequest(
       task.id,
       fixedMessageCount,
       messages.length,
+      firstPictureThatCanGo === undefined
+        ? undefined
+        : fixedMessageCount + firstPictureThatCanGo - 1,
     ),
   };
 }
