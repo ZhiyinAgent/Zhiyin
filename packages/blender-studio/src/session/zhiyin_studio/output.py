@@ -16,6 +16,7 @@ import mathutils
 import numpy
 
 from .common import (
+    CUT_OF,
     LIGHTING,
     PREVIEW,
     SHAPE_TYPES,
@@ -175,8 +176,9 @@ def footprint(obj):
 def filled_cut(level, made):
     """
     Fills what a plan's cut passes through: the inside of each closed shape
-    where it crosses the level, as one object just under the cut, added to
-    what was made for the picture. A shape as high as the highest of them is
+    where it crosses the level, as an object of its own just under the cut
+    that names the shape it was cut from, added to what was made for the
+    picture. A shape as high as the highest of them is
     filled dark, as a drawn plan fills its walls. A lower one, as a door's
     leaf, a window or a wardrobe is, is filled with its own material, so it
     shows as it would from above and is not taken for a wall. Returns the
@@ -240,37 +242,27 @@ def filled_cut(level, made):
         surface.inputs["Base Color"].default_value = CUT_FILL
         surface.inputs["Roughness"].default_value = 1
         surface.inputs["Specular IOR Level"].default_value = 0
-        materials = [dark]
         walled, lower = [], []
-        fill = bmesh.new()
-        try:
-            for obj, top, material, crossing in crossings:
-                as_walls = top >= highest - AS_HIGH
-                (walled if as_walls else lower).append(obj)
-                wanted = dark if as_walls else material
-                if not any(m == wanted for m in materials):
-                    materials.append(wanted)
-                index = next(i for i, m in enumerate(materials) if m == wanted)
-                before = len(fill.faces)
-                fill.from_mesh(crossing)
-                fill.faces.ensure_lookup_table()
-                for face in fill.faces[before:]:
-                    face.material_index = index
-            mesh = bpy.data.meshes.new(PREVIEW)
-            fill.to_mesh(mesh)
-        finally:
-            fill.free()
-        for material in materials:
-            mesh.materials.append(material)
-        filled = bpy.data.objects.new(PREVIEW, mesh)
-        made.append(filled)
-        filled.location.z = -UNDER_THE_CUT
-        scene().collection.objects.link(filled)
+        for obj, top, material, crossing in crossings:
+            as_walls = top >= highest - AS_HIGH
+            (walled if as_walls else lower).append(obj)
+            crossing.materials.append(dark if as_walls else material)
+            for face in crossing.polygons:
+                face.material_index = 0
+            # Its own object, so the colours read from the picture can name
+            # what its fill shows as the shape it was cut from.
+            filled = bpy.data.objects.new(PREVIEW, crossing)
+            filled[CUT_OF] = obj.name
+            made.append(filled)
+            filled.location.z = -UNDER_THE_CUT
+            scene().collection.objects.link(filled)
         by_cover = lambda objs: [o.name for o in sorted(objs, key=footprint, reverse=True)]
         return by_cover(walled), by_cover(lower)
     finally:
+        # What became a fill is removed with what was made; the rest now.
         for _, _, _, crossing in crossings:
-            bpy.data.meshes.remove(crossing)
+            if not crossing.users:
+                bpy.data.meshes.remove(crossing)
 
 
 def plan_from_above(aside, cut=None):

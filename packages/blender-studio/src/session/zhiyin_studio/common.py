@@ -14,6 +14,8 @@ import numpy
 CUTTERS = "Cutters"
 LIGHTING = "Lighting"
 PREVIEW = "Zhiyin preview"
+# Kept on what fills a plan's cut: the name of the shape it was cut from.
+CUT_OF = "zhiyin_cut_of"
 
 
 class Refused(Exception):

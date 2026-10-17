@@ -269,6 +269,75 @@ export const conversationEntries: ComponentCatalogEntry[] = [
     ),
   },
   {
+    id: "waiting-message-attachments",
+    className: "lab-section--thread",
+    title: "Waiting message with a paste and a picture",
+    description:
+      "A message sent while the model reasons waits for its next step with what it carries; taken back, its words, paste and picture are in the message box again.",
+    render: () => (
+      <div className="lab-stack">
+        <ConversationTimeline
+          task={{
+            id: "catalog-waiting-attachments",
+            ...emptyConversationLists,
+            messages: [
+              {
+                sequence: 0,
+                id: "waiting-attachments-user",
+                role: "user",
+                text: "Redraw the sales chart for the board.",
+              },
+            ],
+            guidance: [
+              {
+                id: "waiting-attachments-guidance",
+                text: "Match the colours of last year's chart, and use these figures.",
+                status: "pending",
+                attachments: [
+                  {
+                    kind: "pastedText",
+                    id: "figures-2026.txt",
+                    bytes: 3_200,
+                    lines: 48,
+                  },
+                  pictureAttachment("chart-2025.png"),
+                ],
+              },
+            ],
+            phase: { kind: "working", steps: [], note: "Thinking" },
+          }}
+          pieces={{
+            actions: () => null,
+            view: () => null,
+            interaction: () => null,
+            readPicture: samplePicture,
+            waitingMessage: {
+              sendNow: async () => false,
+              takeBack: async () => {},
+            },
+          }}
+        />
+        <Composer
+          seesPictures
+          readPicture={samplePicture}
+          draft={{
+            id: "waiting-attachments-guidance",
+            text: "Match the colours of last year's chart, and use these figures.",
+            attachments: [
+              {
+                kind: "pastedText",
+                id: "figures-2026.txt",
+                bytes: 3_200,
+                lines: 48,
+              },
+              pictureAttachment("chart-2025.png"),
+            ],
+          }}
+        />
+      </div>
+    ),
+  },
+  {
     id: "new-conversation",
     title: "New conversation",
     description:

@@ -20,7 +20,7 @@ import tempfile
 import bpy
 import numpy
 
-from .common import lets_light_through, scene, subjects, wood_of
+from .common import CUT_OF, lets_light_through, scene, subjects, wood_of
 
 DRAWN = {"MESH", "CURVE", "FONT", "SURFACE", "META", "CURVES", "POINTCLOUD", "VOLUME", "GREASEPENCIL"}
 # Each channel of the flat colours takes one of four levels, so 63 objects
@@ -60,20 +60,27 @@ def colours(picture, metered=False):
     objects = [o for o in subjects() if o.type in DRAWN][: (LEVELS + 1) ** 3 - 1]
     if not objects:
         return ""
+    # What fills a plan's cut is drawn as the shape it was cut from.
+    sources = {o.name: o for o in objects}
+    fills = {o: sources[o[CUT_OF]] for o in s.objects if o.get(CUT_OF) in sources and not o.hide_render}
     folder = tempfile.mkdtemp(prefix="zhiyin-seen-")
     exposure = s.view_settings.exposure
     # Kept before the drawings, which are renders and take the picture's place.
     light = light_kept(os.path.join(folder, "light.exr")) if metered else None
-    put_back = setting_aside(s, objects)
+    put_back = setting_aside(s, [*objects, *fills])
     try:
         for number, obj in enumerate(objects, start=1):
             r, g, b = number // 16, number // 4 % 4, number % 4
             obj.color = (linear(r), linear(g), linear(b), 1)
+        for fill, source in fills.items():
+            fill.color = source.color
         hidden = set()
         layers = []
         for depth in range(LAYERS):
             for obj in objects:
                 obj.hide_render = obj in hidden
+            for fill, source in fills.items():
+                fill.hide_render = source in hidden
             layers.append(drawing(os.path.join(folder, f"{depth}.png")))
             found = {objects[n - 1] for n in numpy.unique(layers[-1]) if n}
             newly = {o for o in found if lets_light_through(o)} - hidden

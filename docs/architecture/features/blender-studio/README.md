@@ -334,7 +334,8 @@ for its launch; nothing listens on a port.
   in the picture and the background around it is clear.
 - **A render says the colours it shows.** Its answer gives the colour each
   object shows in the picture, what is inside glass or a liquid told apart
-  from it, and the background's; reading them leaves the scene as it was. It
+  from it, and the background's; in a plan, what fills a cut is said as the
+  object it was cut from. Reading them leaves the scene as it was. It
   also gives the tone and exposure the picture was made with, which decide
   how those colours stand against the ones given.
 - **Thick glass has no dark bands.** With something see-through in the scene,

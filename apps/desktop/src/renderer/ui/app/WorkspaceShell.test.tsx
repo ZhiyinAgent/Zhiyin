@@ -13,6 +13,7 @@ import {
   type BrowserPanelState,
   type CoreApi,
   type DocumentPanelState,
+  type MessageAttachment,
   type TurnRemedy,
   type WorkspaceTask as CoreWorkspaceTask,
 } from "@zhiyin/contract";
@@ -258,6 +259,89 @@ describe("WorkspaceShell", () => {
     await waitFor(() =>
       expect(takeBackMessage).toHaveBeenCalledWith("reasoning", "g1"),
     );
+  });
+
+  it("shows the paste and the picture a waiting message carries, and puts both back in the message box once it is taken back", async () => {
+    const carried: MessageAttachment[] = [
+      { kind: "pastedText", id: "paste-1", bytes: 1200, lines: 40 },
+      {
+        kind: "picture",
+        id: "shot-1",
+        name: "pasted-1.png",
+        mediaType: "image/png",
+        bytes: 5000,
+        // Claimed into the conversation as the message was sent.
+        source: "pasted-pictures/reasoning/shot-1",
+      },
+    ];
+    const conversation = (status: "pending" | "draft"): WorkspaceTask => ({
+      id: "reasoning",
+      title: "Phone stand",
+      updatedLabel: "Now",
+      updatedAt: "2026-10-14T09:00:00.000Z",
+      ...emptyConversationLists,
+      messages: [
+        { sequence: 0, id: "u", role: "user", text: "Design a phone stand" },
+      ],
+      guidance: [
+        {
+          id: "g1",
+          text: "Compare it with this",
+          status,
+          attachments: carried,
+        },
+      ],
+      phase:
+        status === "pending"
+          ? { kind: "working", steps: [], note: "Thinking" }
+          : { kind: "interrupted" },
+    });
+    const shell = (task: WorkspaceTask) => (
+      <WorkspaceShell
+        state={createWorkspaceState({
+          connection: "ready",
+          tasks: [task],
+          selectedTaskId: task.id,
+        })}
+        dispatch={() => undefined}
+        commands={{
+          ...stubCommands,
+          readPicture: async () => ({
+            status: "ready" as const,
+            mediaType: "image/png",
+            data: "iVBORw0KGgo=",
+          }),
+        }}
+      />
+    );
+    const { rerender } = render(shell(conversation("pending")));
+    const waiting = screen.getByRole("group", {
+      name: "Message waiting to be read",
+    });
+    expect(
+      within(waiting).getByRole("button", { name: "Open pasted text paste-1" }),
+    ).toBeInTheDocument();
+    expect(
+      await within(waiting).findByRole("button", {
+        name: "Open picture pasted-1.png",
+      }),
+    ).toBeInTheDocument();
+
+    // Taken back, it is a draft: its words and what it carried are in the box.
+    rerender(shell(conversation("draft")));
+
+    expect(
+      screen.queryByRole("group", { name: "Message waiting to be read" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /message/i })).toHaveValue(
+      "Compare it with this",
+    );
+    expect(
+      screen.getByRole("button", { name: "Remove pasted text" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove picture pasted-1.png" }),
+    ).toBeInTheDocument();
   });
 
   it("shows task activity and lets the user stop work from the browser workspace", async () => {

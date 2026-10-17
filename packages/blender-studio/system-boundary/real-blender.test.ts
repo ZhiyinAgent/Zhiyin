@@ -3500,6 +3500,52 @@ describe.runIf(blender)("a real Blender", () => {
     expect(throughCamera.said).toMatch(/cut is a plan's/);
   });
 
+  it("says the dark of a plan's cut walls is the walls', not the slab's they stand on", async () => {
+    await call("blender_open_scene", { path: "cut-slab.blend", create: true });
+    const box = (name: string, size: number[], location: number[]) => ({
+      name,
+      kind: "cube",
+      size,
+      location,
+    });
+    await call("blender_add_objects", {
+      objects: [
+        box("Slab", [4.4, 3.4, 0.2], [2, 1.5, -0.1]),
+        box("Wall south", [4.4, 0.2, 2.5], [2, -0.1, 1.25]),
+        box("Wall north", [4.4, 0.2, 2.5], [2, 3.1, 1.25]),
+        box("Wall west", [0.2, 3, 2.5], [-0.1, 1.5, 1.25]),
+        box("Wall east", [0.2, 3, 2.5], [4.1, 1.5, 1.25]),
+      ],
+    });
+    await call("blender_set_material", {
+      objects: ["Slab"],
+      material: { name: "Oak", color: "#b98a5a", roughness: 0.8 },
+    });
+    await call("blender_set_material", {
+      objects: ["Wall south", "Wall north", "Wall west", "Wall east"],
+      material: { name: "Plaster", color: "#f0f0f0", roughness: 0.8 },
+    });
+
+    const plan = await call("blender_render", {
+      output: "renders/cut-slab.png",
+      view: "plan",
+      resolution: [440, 340],
+    });
+    // The colour each object is said to show, as levels.
+    const said = (name: string) => {
+      const hex = new RegExp(`${name} #([0-9a-f]{6})`).exec(plan.said)?.[1];
+      return hex
+        ? [0, 2, 4].map((at) => parseInt(hex.slice(at, at + 2), 16))
+        : [];
+    };
+
+    expect(plan.isError).toBeUndefined();
+    expect({
+      wall: dark(said("Wall south")),
+      slab: near(said("Slab"), oak),
+    }).toEqual({ wall: true, slab: true });
+  });
+
   it("fills walls drawn as one outline with openings cut into it, a window's sill at the very height of the cut, and draws nothing that starts there", async () => {
     await call("blender_open_scene", {
       path: "cut-outline.blend",
