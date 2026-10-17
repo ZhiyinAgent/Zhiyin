@@ -672,6 +672,50 @@ describe("FileRecovery", { timeout: 30_000 }, () => {
     ]);
   });
 
+  it("leaves alone the copies of an action still being prepared when it cleans up", async () => {
+    const root = await mkdtemp(join(tmpdir(), "zhiyin-recovery-workspace-"));
+    const storage = await mkdtemp(join(tmpdir(), "zhiyin-recovery-store-"));
+    let copied!: () => void;
+    const copiesTaken = new Promise<void>((resolve) => (copied = resolve));
+    let write!: () => void;
+    const manifestHeld = new Promise<void>((resolve) => (write = resolve));
+    const recovery = new FileRecovery(storage, {
+      now: () => new Date("2026-09-07T10:00:00.000Z"),
+      beforeManifest: async () => {
+        copied();
+        await manifestHeld;
+      },
+    });
+    await writeFile(join(root, "notes.txt"), "before");
+
+    const preparing = recovery.prepare(
+      "action-1",
+      root,
+      [{ path: "notes.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await copiesTaken;
+    await recovery.cleanup();
+    write();
+    await preparing;
+    await writeFile(join(root, "notes.txt"), "after");
+    await recovery.commit("action-1");
+    const review = await recovery.review("review-1", root, [
+      {
+        id: "action-1",
+        action: "Edit notes",
+        target: "notes.txt",
+        status: "completed",
+        sequence: 0,
+        changes: [{ path: "notes.txt", change: "updated" }],
+      },
+    ]);
+    const result = await recovery.restore(review);
+
+    expect(result.files).toEqual([{ path: "notes.txt", status: "restored" }]);
+    expect(await readFile(join(root, "notes.txt"), "utf8")).toBe("before");
+  });
+
   it("removes a folder left without its record", async () => {
     const { storage, recovery } = await fixture();
     const leftBehind = join(storage, "recovery", "left-behind");

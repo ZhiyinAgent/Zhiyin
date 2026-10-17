@@ -123,6 +123,10 @@ says about itself is shown as its claim.
   endpoint is displayed and kept as the connection's identity.
 - A tool description longer than 4,000 characters is cut there, so no server
   can fill the model's window with its own words.
+- A tool whose input schema is larger than 64 KB is never offered to the
+  model, whatever its switch says, since a schema is sent whole with every
+  request and means something only whole. Its summary says so, and the
+  server's other tools are offered as before.
 
 ### Built-in connections
 

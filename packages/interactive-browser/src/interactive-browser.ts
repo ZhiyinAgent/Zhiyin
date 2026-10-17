@@ -24,6 +24,12 @@ export type BrowserAvailability =
   | { readonly available: true; readonly browserName: string }
   | { readonly available: false; readonly reason: string };
 
+/** A download the browser stopped because it grew past the most it may be. */
+export type StoppedDownload = {
+  readonly name: string;
+  readonly limitBytes: number;
+};
+
 export type BrowserViewport = {
   readonly width: number;
   readonly height: number;
@@ -61,6 +67,8 @@ export type BrowserTarget = {
   onLost(listener: () => void): void;
   /** What an automation server attaches to. Opaque here on purpose. */
   automation(): unknown;
+  /** The downloads stopped for their size since this was last asked. */
+  takeStoppedDownloads(): readonly StoppedDownload[];
   close(): Promise<void>;
 };
 
@@ -105,6 +113,8 @@ export interface InteractiveBrowser {
    * running. The agent drives the page the person is watching.
    */
   automation(): unknown;
+  /** The downloads stopped for their size since this was last asked. */
+  takeStoppedDownloads(): readonly StoppedDownload[];
   close(): Promise<void>;
 }
 
@@ -222,6 +232,10 @@ export class BrowserSession implements InteractiveBrowser {
 
   automation(): unknown {
     return this.#target?.automation();
+  }
+
+  takeStoppedDownloads(): readonly StoppedDownload[] {
+    return this.#target?.takeStoppedDownloads() ?? [];
   }
 
   onFrame(listener: (frame: BrowserFrame) => void): () => void {

@@ -153,6 +153,7 @@ function makeBrowser(taskId: string, opened: string[]) {
     state: () => state,
     lastFrame: () => undefined,
     automation: () => undefined,
+    takeStoppedDownloads: () => [],
     onState: (listener: (next: BrowserPanelState) => void) => {
       listeners.add(listener);
       return () => {

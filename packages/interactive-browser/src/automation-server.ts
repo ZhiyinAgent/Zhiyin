@@ -15,6 +15,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import type {
   BrowserLauncher,
   InteractiveBrowser,
+  StoppedDownload,
 } from "./interactive-browser.js";
 import type { ConnectionTool, OfferedConnection } from "@zhiyin/contract";
 import {
@@ -116,6 +117,36 @@ const hiddenInputs = new Set([
   ...pathInputs,
   ...Object.values(decidedInputs).flatMap((inputs) => Object.keys(inputs)),
 ]);
+
+/** A size as a person reads it: in gigabytes from one up, else megabytes. */
+function sizeOf(bytes: number): string {
+  const gigabytes = bytes / 1024 ** 3;
+  return gigabytes >= 1
+    ? `${Number(gigabytes.toFixed(1))} GB`
+    : `${Number((bytes / 1024 ** 2).toFixed(1))} MB`;
+}
+
+/**
+ * The answer, telling the agent of each download stopped for its size: the
+ * automation server says a download began, and never that it ended.
+ */
+function withStoppedDownloads<T>(
+  result: T,
+  stopped: readonly StoppedDownload[],
+): T {
+  const content = (result as { content?: unknown }).content;
+  if (!stopped.length || !Array.isArray(content)) return result;
+  return {
+    ...result,
+    content: [
+      ...content,
+      ...stopped.map((download) => ({
+        type: "text",
+        text: `The download of ${download.name} was stopped at ${sizeOf(download.limitBytes)}, the most a download may be.`,
+      })),
+    ],
+  };
+}
 
 function modelArguments(
   name: string,
@@ -456,7 +487,7 @@ export function browserAutomation(
         { ...(signal ? { signal } : {}), timeout: 120_000 },
       );
       await browser.refresh();
-      return result;
+      return withStoppedDownloads(result, browser.takeStoppedDownloads());
     },
     close: reset,
   };

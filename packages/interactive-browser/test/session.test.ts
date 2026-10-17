@@ -40,6 +40,7 @@ function fakeBrowser(
     pid: "pid" in overrides ? overrides.pid : 4242,
     browserName: "Microsoft Edge",
     automation: () => context,
+    takeStoppedDownloads: () => [],
     url: () => url,
     title: async () => title,
     goto: async (next) => {

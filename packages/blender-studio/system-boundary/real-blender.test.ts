@@ -4602,4 +4602,29 @@ describe.runIf(blender)("a real Blender", () => {
       "is outside the workspace, and Blender may write only inside it",
     );
   });
+
+  it("keeps in its log why the scene could not be put back after a change that failed", async () => {
+    await call("blender_open_scene", { path: "damaged.blend", create: true });
+
+    // The scene file is damaged on disk before the script fails, so the
+    // scene cannot be loaded again from it.
+    const failed = await call("blender_run_script", {
+      code: [
+        "open('damaged.blend', 'wb').write(b'not a scene')",
+        "raise ValueError('stop here')",
+      ].join("\n"),
+    });
+    const logs = join(scenes.directory("live"), "logs");
+    const kept = await Promise.all(
+      (await readdir(logs))
+        .filter((name) => name.endsWith(".err.txt"))
+        .map((name) => readFile(join(logs, name), "utf8")),
+    );
+
+    expect(failed.isError).toBe(true);
+    expect(failed.said).toContain("ValueError: stop here");
+    expect(kept.join("\n")).toMatch(
+      /The scene could not be put back after a change that failed:\s+Traceback/,
+    );
+  });
 });

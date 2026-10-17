@@ -208,6 +208,7 @@ export class FileRecovery implements Recovery {
   readonly #root: string;
   readonly #limits: RecoveryLimits;
   readonly #now: () => Date;
+  readonly #beforeManifest: (() => Promise<void>) | undefined;
   readonly #prepared = new Map<string, Manifest>();
   /** Folders whose copies are being taken, before they have a manifest. */
   readonly #preparing = new Set<string>();
@@ -217,11 +218,18 @@ export class FileRecovery implements Recovery {
     options: {
       readonly limits?: Partial<RecoveryLimits>;
       readonly now?: () => Date;
+      /**
+       * Tests only: waited for once an action's copies are written and before
+       * its manifest is, so a test can act in between. It cannot leave the
+       * manifest out.
+       */
+      readonly beforeManifest?: () => Promise<void>;
     } = {},
   ) {
     this.#root = join(dataDirectory, "recovery");
     this.#limits = { ...defaults, ...options.limits };
     this.#now = options.now ?? (() => new Date());
+    this.#beforeManifest = options.beforeManifest;
   }
 
   async prepare(
@@ -341,6 +349,7 @@ export class FileRecovery implements Recovery {
       phase: "prepared",
       files,
     };
+    await this.#beforeManifest?.();
     await this.#writeManifest(folder, manifest);
     this.#prepared.set(actionId, manifest);
     return {

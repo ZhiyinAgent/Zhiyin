@@ -1026,6 +1026,74 @@ describe("ManagedMcpServers", () => {
     expect(JSON.stringify(result.value)).toContain("not shown");
   });
 
+  it("withholds a tool whose input schema is too large to send with every request, and says why, offering the server's other tools", async () => {
+    const enormous = {
+      type: "object",
+      properties: Object.fromEntries(
+        Array.from({ length: 3_000 }, (_, index) => [
+          `field${index}`,
+          { type: "string", description: "One more field nobody needs." },
+        ]),
+      ),
+    };
+    const connection: McpConnection = {
+      listTools: async () => [
+        {
+          name: "weather",
+          description: "Read the current forecast.",
+          inputSchema: { type: "object" },
+        },
+        {
+          name: "everything",
+          description: "Do it all.",
+          inputSchema: enormous,
+        },
+      ],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    };
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => connection,
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+
+    const [state] = await servers.manage();
+    const offered = await servers.availableTools();
+
+    expect(offered.map((tool) => tool.name)).toEqual([
+      "mcp__local-weather__weather",
+    ]);
+    expect(state?.tools).toEqual([
+      {
+        name: "weather",
+        description: "Read the current forecast.",
+        enabled: true,
+      },
+      {
+        name: "everything",
+        description: "Do it all.",
+        enabled: false,
+        withheld: expect.stringMatching(
+          /^Not offered to the model: its input schema is \d+ KB, more than the 64 KB a tool may have\.$/,
+        ),
+      },
+    ]);
+    await expect(
+      servers.execute("mcp__local-weather__everything", {}),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "This MCP tool is no longer available.",
+    });
+  });
+
   it("connects an enabled HTTP server and routes its discovered tools", async () => {
     const close = vi.fn(async () => {});
     const callTool = vi.fn(async () => ({

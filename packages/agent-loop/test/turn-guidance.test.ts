@@ -88,6 +88,7 @@ describe("guidance during a turn", () => {
     ).toBe(true);
     const third =
       requests[2]?.messages.map((item) => JSON.stringify(item)) ?? [];
+    expect(third.some((item) => item.includes("Initial answer."))).toBe(true);
     expect(
       third.findIndex((item) => item.includes("Initial answer.")),
     ).toBeLessThan(

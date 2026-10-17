@@ -104,6 +104,7 @@ function controllableBrowser() {
     state: () => state,
     lastFrame: () => undefined,
     automation: () => undefined,
+    takeStoppedDownloads: () => [],
     onState: (listener: (next: BrowserPanelState) => void) => {
       states.add(listener);
       return () => void states.delete(listener);

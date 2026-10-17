@@ -131,6 +131,48 @@ describe("a turn stopped while a connector is still connecting", () => {
   });
 });
 
+describe("a turn stopped before its folder's instructions were decided", () => {
+  it("asks nothing about them once the connector answers after the stop", async () => {
+    let connect = () => {};
+    const connected = new Promise<void>((resolve) => (connect = resolve));
+    let connecting = false;
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      workspace: {
+        ...deps.workspace,
+        workspaceRoot: () => "/work/reports",
+        folderInstructions: async () => ({
+          path: "AGENTS.md",
+          text: "Invoices live in /finance.",
+          bytes: 26,
+          truncated: false,
+          hash: "never-seen",
+        }),
+      },
+      mcp: {
+        ...deps.mcp,
+        availableTools: async (_scope, _withheld, onConnecting) => {
+          onConnecting?.("Mail");
+          connecting = true;
+          await connected;
+          return [];
+        },
+      },
+    });
+    const taskId = await loop.createTask();
+    const running = loop.start(taskId, "Read my mail").catch(() => undefined);
+    await until(() => connecting);
+
+    await loop.cancel(taskId);
+    connect();
+    await running;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(loop.snapshot().tasks[0]?.phase.kind).toBe("interrupted");
+  });
+});
+
 describe("a turn stopped while a conversation permission is being saved", () => {
   it("records no action as running, and runs none", async () => {
     const root = await folders.make("zhiyin-late-write-");

@@ -57,7 +57,8 @@ permission or execution.
 - `send(taskId, text, reasoning?, attachments?, delivery?)` takes the person's
   message and is settled once it is in the conversation. It opens a turn, which
   then runs on. While a turn already runs, the message is saved and delivered
-  at that turn's next round boundary as a `guidance` notice; one that misses
+  at that turn's next round boundary as a `guidance` notice, after the answer
+  it arrived beside when that answer would have ended the turn; one that misses
   the turn comes back as a draft and starts nothing on its own. `start` does
   the same and waits for the turn it opened to end.
 - `cancel(taskId)` stops the conversation's turn and its specialists.
@@ -131,7 +132,9 @@ that name is marked the same way once it arrives.
 - Stopping gives the conversation back at once. Every write is its author's:
   the turn whose work made it, known however the write was reached. Once that
   turn is stopped, nothing it writes lands, whoever holds the conversation by
-  then; the stop itself, and the end a stopped specialist records, are written
+  then, a question it was about to ask included: one about a folder's
+  instructions, or a specialist's approval waiting behind the turn's own. The
+  stop itself, and the end a stopped specialist records, are written
   on no turn's behalf. A write begun while a turn owns the conversation is
   committed only if that turn still owns it, so a stopped turn's late answer
   cannot overwrite the turn that replaced it or reach a deleted conversation.
@@ -142,6 +145,9 @@ that name is marked the same way once it arrives.
   reported to the next turn the person starts, after a restart too.
 - A turn that fails before it starts, such as one whose folder cannot be
   entered, gives its conversation back, so the next message starts a turn.
+- Stopped while one call of a round is answered, or at the work-budget
+  checkpoint before it, a turn answers none of the round's other calls: no
+  tool runs, no specialist is handed work, and the model is not asked again.
 - An approved action not yet dispatched does not run once the turn is stopped.
   A connector action already dispatched is recorded as one that may already
   have taken effect.

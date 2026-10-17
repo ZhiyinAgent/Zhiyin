@@ -11,6 +11,7 @@ import type {
 import { McpUnauthorizedError, UNAUTHORIZED } from "./connection-problems.js";
 import type { McpConnection } from "./connection-types.js";
 import { validateDefinition } from "./endpoint.js";
+import { toolSummary } from "./schema-limit.js";
 
 export async function testConnection(
   definition: McpServerDefinition,
@@ -37,11 +38,7 @@ export async function testConnection(
     const tools = await connection.listTools();
     return {
       ok: true,
-      tools: tools.map(({ name, description }) => ({
-        name,
-        enabled: true,
-        ...(description ? { description } : {}),
-      })),
+      tools: tools.map((tool) => toolSummary(tool, true)),
     };
   } catch (error) {
     // A service refusing anyone without a credential still answered: the

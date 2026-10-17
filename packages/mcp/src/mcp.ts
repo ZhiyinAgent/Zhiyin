@@ -38,6 +38,7 @@ import {
 import { BuiltInDescriptions } from "./built-in-descriptions.js";
 import { testConnection } from "./connection-test.js";
 import { validateDefinition } from "./endpoint.js";
+import { toolSummary, withheldReason } from "./schema-limit.js";
 
 /**
  * `token` is asked for the current credential rather than handed one, so a
@@ -414,11 +415,9 @@ export class ManagedMcpServers implements McpServers {
           status,
           toolCount: connected?.tools.length ?? 0,
           tools:
-            connected?.tools.map(({ name, description }) => ({
-              name,
-              enabled: !disabledTools.has(name),
-              ...(description ? { description } : {}),
-            })) ?? [],
+            connected?.tools.map((tool) =>
+              toolSummary(tool, !disabledTools.has(tool.name)),
+            ) ?? [],
           ...(failure ? { reason: failure.reason } : {}),
           ...(checkedAt === undefined ? {} : { checkedAt }),
           ...(this.#signIns.offered(server.id)
@@ -969,6 +968,7 @@ export class ManagedMcpServers implements McpServers {
       const connected = this.#connected.get(connectionKey);
       if (!connected) continue;
       for (const tool of connected.tools) {
+        if (withheldReason(tool)) continue;
         route(routedName(server.id, tool.name), {
           server: { id: server.id, name: server.name, url: "", enabled: true },
           tool,
@@ -983,7 +983,7 @@ export class ManagedMcpServers implements McpServers {
       if (!server.enabled || !connected) continue;
       const disabledTools = new Set(server.disabledTools ?? []);
       for (const tool of connected.tools) {
-        if (disabledTools.has(tool.name)) continue;
+        if (disabledTools.has(tool.name) || withheldReason(tool)) continue;
         route(routedName(server.id, tool.name), {
           server,
           tool,

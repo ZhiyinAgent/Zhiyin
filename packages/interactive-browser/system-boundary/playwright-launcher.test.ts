@@ -815,17 +815,29 @@ describe.runIf(availability.available)("a real browser session", () => {
         .join("\n");
       const reference = snapshot.match(/"Get it"[^\n]*\[ref=(e\d+)\]/)?.[1];
 
-      await automation.callTool("browser_click", {
-        element: "Get it",
-        target: reference,
-      });
+      const said = (result: unknown) =>
+        (result as { content: { text?: string }[] }).content
+          .map((item) => item.text ?? "")
+          .join("\n");
+      const clicked = said(
+        await automation.callTool("browser_click", {
+          element: "Get it",
+          target: reference,
+        }),
+      );
       await waitFor(() => stopped, 30_000);
+      // The download may be stopped while the click is still answering, or
+      // after: the first answer from then on says so.
+      const next = said(await automation.callTool("browser_snapshot", {}));
+      const sentence =
+        "The download of endless.bin was stopped at 5 MB, the most a download may be.";
 
       expect(
         (await readdir(output).catch((): string[] => [])).filter((name) =>
           name.includes("endless"),
         ),
       ).toEqual([]);
+      expect(`${clicked}\n${next}`.split(sentence)).toHaveLength(2);
     } finally {
       await automation.close();
       await session.close();

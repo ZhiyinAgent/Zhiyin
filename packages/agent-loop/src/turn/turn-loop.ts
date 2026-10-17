@@ -472,13 +472,6 @@ export class TurnLoop {
         reasoning,
         ...(replay ? { replay } : {}),
       });
-    if (
-      this.#records
-        .task(taskId)
-        .guidance.some((item) => item.status === "pending")
-    ) {
-      turn.history = await this.#openHistory(taskId);
-    }
     if (await deliverGuidance(taskId, this.#records, turn.history)) {
       guard.reset();
       return "resumed";

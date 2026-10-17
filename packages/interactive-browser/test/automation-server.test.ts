@@ -147,6 +147,7 @@ function fakeBrowser(context: unknown = { marker: "context" }) {
       opened.push(url ?? "");
     }),
     automation: () => context,
+    takeStoppedDownloads: () => [],
     state: (): BrowserSessionState => ({
       status: "open" as const,
       url: "",
@@ -260,6 +261,33 @@ describe("browser automation", () => {
 
     expect(again).not.toMatchObject({ isError: true });
     expect(browser.open).toHaveBeenCalledTimes(2);
+  });
+
+  it("tells the agent, once, of each download the browser stopped for its size", async () => {
+    const server = fakeAutomationServer();
+    const stopped = [{ name: "endless.bin", limitBytes: 1024 ** 3 }];
+    const browser = Object.assign(fakeBrowser(), {
+      takeStoppedDownloads: () => stopped.splice(0),
+    });
+    const automation = browserAutomation(browser, {
+      createConnection: server.createConnection,
+    });
+    const text = (result: unknown) =>
+      (result as { content: { text?: string }[] }).content
+        .map((item) => item.text ?? "")
+        .join("\n");
+
+    const told = await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+    const after = await automation.callTool("browser_navigate", {
+      url: "https://example.com/",
+    });
+
+    expect(text(told)).toContain(
+      "The download of endless.bin was stopped at 1 GB, the most a download may be.",
+    );
+    expect(text(after)).not.toContain("endless.bin");
   });
 
   it("refuses a tool with the reason the browser gave, rather than acting", async () => {

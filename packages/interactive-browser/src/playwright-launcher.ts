@@ -21,6 +21,7 @@ import type {
 import type { ProcessPipes } from "@zhiyin/process-ownership";
 import { chromium } from "playwright-core";
 import { clearAbandonedProfiles } from "./abandoned-profiles.js";
+import { drawnAtScale } from "./frame-scale.js";
 import type {
   BrowserAvailability,
   BrowserContainment,
@@ -28,6 +29,7 @@ import type {
   BrowserLauncher,
   BrowserTarget,
   BrowserViewport,
+  StoppedDownload,
 } from "./interactive-browser.js";
 
 const channels = ["msedge", "chrome"] as const;
@@ -140,18 +142,22 @@ function targetFrom({
   context,
   page,
   cdp,
+  takeStoppedDownloads,
   channel,
   pid,
   viewport,
+  pixelDensity,
   closeOwner,
 }: {
   readonly browser: Browser;
   readonly context: BrowserContext;
   readonly page: Page;
   readonly cdp: CDPSession;
+  readonly takeStoppedDownloads: () => readonly StoppedDownload[];
   readonly channel: string;
   readonly pid: number | undefined;
   readonly viewport: BrowserViewport;
+  readonly pixelDensity: number;
   readonly closeOwner: () => Promise<void>;
 }): BrowserTarget {
   let closed = false;
@@ -159,6 +165,7 @@ function targetFrom({
     pid,
     browserName: channelName(channel),
     automation: () => context,
+    takeStoppedDownloads,
     url: () => page.url(),
     title: () => page.title(),
     goto: async (url) => {
@@ -213,11 +220,14 @@ function targetFrom({
         void cdp
           .send("Page.screencastFrameAck", { sessionId: frame.sessionId })
           .catch(() => undefined);
-        onFrame({
+        const shown = {
           data: frame.data,
           width: frame.metadata.deviceWidth ?? 0,
           height: frame.metadata.deviceHeight ?? 0,
-        });
+        };
+        // One drawn for the size before a resize is left out; the capture
+        // taken after each action stands in for it.
+        if (drawnAtScale(shown.data, shown, pixelDensity)) onFrame(shown);
       });
       // Uncapped, so a streamed frame is the same picture size as a captured
       // one. Capped at the launch size, a page resized past it would stream
@@ -256,29 +266,48 @@ const defaultMaximumDownloadBytes = 1024 ** 3;
 /**
  * Stops any download, on any of the context's pages, once it is larger than
  * the most a download may be. The browser writes a download to disk as it
- * arrives, so one with no end would fill it.
+ * arrives, so one with no end would fill it. Answers the downloads it stopped
+ * since it was last asked.
  */
 async function capDownloads(
   browser: Browser,
   context: BrowserContext,
   maximumBytes: number,
-): Promise<void> {
+): Promise<() => readonly StoppedDownload[]> {
   const control = await browser.newBrowserCDPSession();
+  const names = new Map<string, string>();
+  const cancelled = new Set<string>();
+  let stopped: StoppedDownload[] = [];
   const watch = async (page: Page) => {
     const session = await context.newCDPSession(page);
+    session.on("Page.downloadWillBegin", (event) => {
+      names.set(event.guid, event.suggestedFilename);
+    });
     session.on("Page.downloadProgress", (event) => {
       if (
-        event.state === "inProgress" &&
-        Math.max(event.receivedBytes, event.totalBytes) > maximumBytes
+        event.state !== "inProgress" ||
+        Math.max(event.receivedBytes, event.totalBytes) <= maximumBytes ||
+        cancelled.has(event.guid)
       )
-        void control
-          .send("Browser.cancelDownload", { guid: event.guid })
-          .catch(() => undefined);
+        return;
+      cancelled.add(event.guid);
+      stopped.push({
+        name: names.get(event.guid) ?? "a file",
+        limitBytes: maximumBytes,
+      });
+      void control
+        .send("Browser.cancelDownload", { guid: event.guid })
+        .catch(() => undefined);
     });
     await session.send("Page.enable");
   };
   context.on("page", (page) => void watch(page).catch(() => undefined));
   await Promise.all(context.pages().map(watch));
+  return () => {
+    const taken = stopped;
+    stopped = [];
+    return taken;
+  };
 }
 
 async function connectedTarget(
@@ -286,6 +315,7 @@ async function connectedTarget(
   channel: string,
   pid: number | undefined,
   viewport: BrowserViewport,
+  pixelDensity: number,
   maximumDownloadBytes: number,
   closeOwner: () => Promise<void>,
 ): Promise<BrowserTarget> {
@@ -293,7 +323,11 @@ async function connectedTarget(
     browser.contexts()[0] ?? (await browser.newContext({ viewport }));
   const page = context.pages()[0] ?? (await context.newPage());
   await page.setViewportSize(viewport);
-  await capDownloads(browser, context, maximumDownloadBytes);
+  const takeStoppedDownloads = await capDownloads(
+    browser,
+    context,
+    maximumDownloadBytes,
+  );
   const cdp = await context.newCDPSession(page);
   await cdp.send("Page.enable");
   return targetFrom({
@@ -301,9 +335,11 @@ async function connectedTarget(
     context,
     page,
     cdp,
+    takeStoppedDownloads,
     channel,
     pid,
     viewport,
+    pixelDensity,
     closeOwner,
   });
 }
@@ -365,6 +401,7 @@ async function atomicLaunch(
       selected.channel,
       owned.pid,
       viewport,
+      pixelDensity,
       maximumDownloadBytes,
       async () => {
         container.close();

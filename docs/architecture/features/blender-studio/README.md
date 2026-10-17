@@ -128,6 +128,10 @@ for its launch; nothing listens on a port.
   follows, so stopping a preview never takes back a saved change. A command
   that fails, a render included, reloads the saved file, so a half-made change
   reaches neither the file nor the preview.
+- **An error the session carries on past is kept.** Where the session goes on
+  past an error, such as a saved file that cannot be loaded again after a
+  failed change, it writes the reason and its trace to the session's log in
+  the conversation's 3D folder.
 - **The file is the truth.** When the scene file changed on disk since the
   session saved or loaded it, the session loads it before the next command.
 - **A command that does not finish ends the session.** Past its time limit,

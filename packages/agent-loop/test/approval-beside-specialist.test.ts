@@ -13,17 +13,9 @@ import {
   pluginOffering,
   pluginsOffering,
   stubDependencies,
+  until as eventually,
   type TurnTestApp,
 } from "./support.js";
-
-/** Waits longer than `until`: a specialist and its parent take several rounds. */
-async function eventually(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  throw new Error("Condition was not reached.");
-}
 
 function call(callId: string, name: string, args: object): ModelEvent {
   return {
@@ -128,6 +120,78 @@ const specialistIs = (loop: TurnTestApp, status: string): boolean =>
   conversation(loop).specialistRuns[0]?.status === status;
 
 describe("an approval beside a specialist", () => {
+  it("shows no specialist's approval waiting behind the turn's once the person stops", async () => {
+    let specialistAsked = false;
+    const deps = dependencies(async function* () {
+      yield done;
+    });
+    const loop: TurnTestApp = loopFrom({
+      ...deps,
+      plugins: pluginsOffering([
+        pluginOffering({
+          name: "engineering",
+          specialists: [
+            {
+              id: "checker",
+              name: "Checker",
+              description: "Runs the checks.",
+              instructions: "Run the checks you are asked for and report.",
+              access: "change",
+            },
+          ],
+        }),
+      ]),
+      permissions: {
+        decide: async (request) => {
+          if (request.name === "read_file")
+            return { outcome: "allow" as const, reason: "Read only" };
+          if (JSON.stringify(request).includes("npm test"))
+            specialistAsked = true;
+          return { outcome: "ask" as const, reason: "Commands are asked for." };
+        },
+      },
+      model: {
+        ...deps.model,
+        send: async function* (request) {
+          const text = JSON.stringify(request.messages);
+          if (text.includes("You are the Checker specialist")) {
+            if (!text.includes("spec-command")) {
+              await eventually(() => asking(loop, "npm run build"));
+              yield call("spec-command", "run_command", {
+                command: "npm test",
+              });
+            } else yield finish;
+            yield done;
+            return;
+          }
+          if (!text.includes("Check the site.")) {
+            yield call("delegate-1", "delegate_specialist", {
+              id: "engineering/checker",
+              task: "Check the site.",
+            });
+          } else if (!text.includes("parent-command")) {
+            yield call("parent-command", "run_command", {
+              command: "npm run build",
+            });
+          } else {
+            yield { kind: "textDelta", text: "Built and checked." };
+          }
+          yield done;
+        },
+      },
+    });
+    const taskId = await loop.createTask(["engineering"]);
+    const running = loop.start(taskId, "Build the site and have it checked");
+    await eventually(() => specialistAsked && asking(loop, "npm run build"));
+
+    await loop.cancel(taskId);
+    await running;
+    await eventually(() => !specialistIs(loop, "running"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(conversation(loop).phase.kind).toBe("interrupted");
+  });
+
   it("keeps a specialist's approval on screen while its parent works on and finishes", async () => {
     // Read by the model stand-in, which runs only after the loop exists.
     const loop: TurnTestApp = loopFrom(

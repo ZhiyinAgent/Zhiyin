@@ -54,6 +54,8 @@ some sites refuse headless browsers.
     surface the agent used last.
   - `automation()`: the browser context the automation server attaches to, or
     nothing when no browser is running.
+  - `takeStoppedDownloads()`: the downloads stopped for their size since it
+    was last asked.
   - `preview`: the conversation's workspace preview.
   - `uploads`: the open folder's files a page's file chooser may be given.
 - `BrowserSessions(create, { outputDirectory })` implements
@@ -111,7 +113,8 @@ some sites refuse headless browsers.
   own browser folder, never the person's Downloads folder, and the answer
   names it. That folder, with the copies of what was uploaded, is deleted
   with the conversation. A download larger than 1 GB, on any of the
-  browser's pages, is stopped and nothing of it is kept.
+  browser's pages, is stopped and nothing of it is kept, and the agent's next
+  answer from the browser says which download was stopped and at what size.
 - **A browser that goes away is reported.** When the page or the connection
   is lost, the session becomes `failed` with a reason, the automation
   context is withdrawn, and what is left of the browser is ended. A closed
@@ -125,7 +128,9 @@ some sites refuse headless browsers.
   fails keeps the previous frame.
 - **Every frame has one size, the page's own**, including after the agent
   resizes the page, so the panel never alternates between scales and clicks
-  are mapped against the right size.
+  are mapped against the right size. A streamed frame whose picture was drawn
+  for the size before a resize is left out, and the capture after the action
+  stands in for it.
 - **The page is drawn at the density of the screen** the window is on when
   the browser starts, so text is sharp at 200%.
 - **A scroll lands at once.** Smooth scrolling is off, so a position read or a
