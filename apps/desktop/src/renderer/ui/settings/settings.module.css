@@ -1,0 +1,281 @@
+/*
+ * The app's settings: groups of rows, each group a card resting on the
+ * ground. A row reads left to right as what it is, what it changes, and its
+ * control.
+ */
+/* A column of groups, under the title as on every page. */
+.app-settings__body {
+  display: grid;
+  gap: 24px;
+  width: min(100%, 720px);
+}
+
+/*
+ * Where the window is wide enough, two columns of equal height: the long
+ * group alone on the right, so both columns end on the same line. The groups
+ * keep their order for the keyboard and a screen reader.
+ */
+@media (min-width: 1180px) {
+  .app-settings__body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "screen long"
+      "writing long"
+      "data away";
+    gap: 24px 28px;
+    width: min(100%, 1180px);
+  }
+
+  /* A failure to save stands above the groups, across both columns. */
+  .app-settings__body:has(> .app-settings__failure) {
+    grid-template-areas:
+      "failure failure"
+      "screen long"
+      "writing long"
+      "data away";
+  }
+
+  .app-settings__failure {
+    grid-area: failure;
+  }
+
+  .settings-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .settings-group__rows {
+    flex: 1;
+  }
+
+  .settings-group--screen {
+    grid-area: screen;
+  }
+
+  .settings-group--writing {
+    grid-area: writing;
+  }
+
+  .settings-group--long {
+    grid-area: long;
+  }
+
+  .settings-group--away {
+    grid-area: away;
+  }
+
+  .settings-group--data {
+    grid-area: data;
+  }
+}
+
+.app-settings__failure {
+  margin: 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.settings-group {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-group h2 {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-group__rows {
+  border: 1px solid var(--zy-card-line);
+  border-radius: 14px;
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 16px;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.setting-row strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The words run up to the control, so no gap opens between them. */
+.setting-row p {
+  margin: 4px 0 0;
+  text-wrap: pretty;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.setting-row__action {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* A row whose control needs the width: the words above, the control below. */
+.setting-row--stacked {
+  display: grid;
+  justify-content: stretch;
+  gap: 12px;
+}
+
+/* The chosen languages as removable chips, then the list to add one from. */
+.spelling-languages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.spelling-languages__list {
+  display: contents;
+}
+
+.spelling-languages__list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 999px;
+  background: var(--zy-panel-soft);
+  font-size: 13px;
+}
+
+.spelling-languages__list li[data-status="unavailable"] {
+  border-color: var(--zy-danger);
+}
+
+.spelling-languages__note {
+  color: var(--zy-danger);
+  font-size: 12px;
+}
+
+.spelling-languages__list button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.spelling-languages__list button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.spelling-languages__list button:hover:enabled {
+  background: var(--zy-line);
+  color: var(--zy-text);
+}
+
+.spelling-languages__list button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* As wide as what it says, not as its longest language. */
+.spelling-languages__add {
+  field-sizing: content;
+  min-height: 32px;
+  max-width: 100%;
+  padding: 0 32px 0 12px;
+  border: 1px dashed var(--zy-line-strong);
+  border-radius: 999px;
+  background-color: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  background-image: var(--zy-select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.spelling-languages__add:hover {
+  border-color: var(--zy-text-soft);
+}
+
+/* The open list is drawn by the system; give it the panel's colours. */
+.spelling-languages__add option {
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+}
+
+/* A limit typed in, with its sign or unit; the range under it when refused. */
+.limit-field {
+  display: grid;
+  flex: none;
+  justify-items: end;
+  gap: 4px;
+}
+
+.limit-field__entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.limit-field__entry input {
+  width: 9ch;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  appearance: textfield;
+}
+
+/* No spinner beside the number: the arrow keys still step it. */
+.limit-field__entry input::-webkit-inner-spin-button,
+.limit-field__entry input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+/* One width for every unit, so the numbers line up row under row. */
+.limit-field__unit {
+  min-width: 7ch;
+}
+
+.limit-field__entry input[aria-invalid="true"] {
+  border-color: var(--zy-danger);
+}
+
+.limit-field__range {
+  color: var(--zy-danger);
+  font-size: 12px;
+  white-space: nowrap;
+}

@@ -1,0 +1,126 @@
+import { createHash } from "node:crypto";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import { fetchDictionaries, misplacedDictionaries } from "./dictionaries.mjs";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const french = Buffer.from("French dictionary");
+const german = Buffer.from("German dictionary");
+
+const manifest = {
+  source: { download: "https://dictionaries.example/" },
+  dictionaries: [
+    {
+      language: "fr",
+      file: "fr-FR-3-0.bdic",
+      sha256: sha256(french),
+      bytes: french.length,
+    },
+    {
+      language: "de",
+      file: "de-DE-3-0.bdic",
+      sha256: sha256(german),
+      bytes: german.length,
+    },
+  ],
+};
+
+function folder() {
+  return folders.make("zhiyin-dictionaries-");
+}
+
+describe("the dictionaries bundled with the app", () => {
+  it("are fetched by the name Chromium asks for and kept only as listed, and one already there is not fetched again", async () => {
+    const target = await folder();
+    await writeFile(join(target, "fr-FR-3-0.bdic"), french);
+    const asked = [];
+
+    await fetchDictionaries({
+      manifest,
+      folder: target,
+      download: async (url) => {
+        asked.push(url);
+        return german;
+      },
+    });
+
+    expect(asked).toEqual(["https://dictionaries.example/de-de-3-0.bdic"]);
+    expect(await readFile(join(target, "de-DE-3-0.bdic"))).toEqual(german);
+    expect((await readdir(target)).sort()).toEqual([
+      "de-DE-3-0.bdic",
+      "fr-FR-3-0.bdic",
+    ]);
+  });
+
+  it("refuses a download that is not the dictionary listed, and writes nothing for it", async () => {
+    const target = await folder();
+
+    await expect(
+      fetchDictionaries({
+        manifest,
+        folder: target,
+        download: async () => Buffer.from("something else"),
+      }),
+    ).rejects.toThrow(/fr-FR-3-0\.bdic.*SHA-256/);
+    expect(await readdir(target)).toEqual([]);
+  });
+
+  it("asks again for a download the server failed, waiting longer each time, and gives up after the fourth", async () => {
+    const target = await folder();
+    const waited = [];
+    let failing = 2;
+
+    await fetchDictionaries({
+      manifest,
+      folder: target,
+      wait: async (ms) => void waited.push(ms),
+      download: async (url) => {
+        if (failing-- > 0) throw new Error(`${url} answered 503.`);
+        return url.endsWith("fr-fr-3-0.bdic") ? french : german;
+      },
+    });
+
+    expect(waited).toEqual([1_000, 2_000]);
+    expect((await readdir(target)).sort()).toEqual([
+      "de-DE-3-0.bdic",
+      "fr-FR-3-0.bdic",
+    ]);
+
+    const never = await folder();
+    let asked = 0;
+    await expect(
+      fetchDictionaries({
+        manifest,
+        folder: never,
+        wait: async () => {},
+        download: async (url) => {
+          asked += 1;
+          throw new Error(`${url} answered 503.`);
+        },
+      }),
+    ).rejects.toThrow("answered 503");
+    expect(asked).toBe(4);
+  });
+
+  it("are each named when a folder lacks one or holds it damaged, and none are when all are there", async () => {
+    const target = await folder();
+    await writeFile(join(target, "fr-FR-3-0.bdic"), Buffer.from("damaged"));
+
+    expect(await misplacedDictionaries({ manifest, folder: target })).toEqual([
+      "fr-FR-3-0.bdic",
+      "de-DE-3-0.bdic",
+    ]);
+
+    await writeFile(join(target, "fr-FR-3-0.bdic"), french);
+    await writeFile(join(target, "de-DE-3-0.bdic"), german);
+    expect(await misplacedDictionaries({ manifest, folder: target })).toEqual(
+      [],
+    );
+  });
+});

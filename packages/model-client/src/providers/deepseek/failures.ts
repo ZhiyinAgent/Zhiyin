@@ -1,0 +1,86 @@
+/**
+ * What a DeepSeek failure means. DeepSeek documents its failures by status
+ * alone (error codes page, checked 2026-10-09) and not the body's shape, so
+ * the status decides and the body's sentence, where there is one, is passed
+ * on. Only a sentence about the context length makes a 400 a size problem.
+ */
+
+import {
+  ModelClientError,
+  retryAfterMs,
+  saysTooLong,
+  type FailureReport,
+  said,
+  tooLarge,
+  overloaded,
+} from "../../failures.js";
+
+/**
+ * The failures DeepSeek names as the reason an answer stopped, besides the
+ * content filter every Chat Completions provider may name (API reference,
+ * create chat completion, checked 2026-10-14).
+ */
+export function failedFinish(reason: string): ModelClientError | undefined {
+  switch (reason) {
+    case "insufficient_system_resource":
+      return new ModelClientError(
+        "modelUnavailable",
+        "DeepSeek ran out of capacity partway through the answer.",
+        { retryable: true },
+      );
+    case "aborted":
+      return new ModelClientError(
+        "networkFailure",
+        "DeepSeek interrupted the answer partway through.",
+      );
+    default:
+      return undefined;
+  }
+}
+
+export function classifyFailure(failure: FailureReport): ModelClientError {
+  const sentence = said(failure);
+  const wait = retryAfterMs(failure.headers);
+  switch (failure.status) {
+    case 400:
+    case 422: {
+      if (saysTooLong(sentence)) return tooLarge(sentence);
+      return new ModelClientError(
+        "requestRejected",
+        sentence
+          ? `DeepSeek refused the request: ${sentence}`
+          : `DeepSeek refused the request (HTTP ${failure.status}).`,
+      );
+    }
+    case 401:
+      return new ModelClientError(
+        "unauthorized",
+        "DeepSeek rejected the API key. Check it on the Model page.",
+      );
+    case 402:
+      return new ModelClientError(
+        "outOfCredits",
+        "The DeepSeek account has run out of balance. Top it up at platform.deepseek.com, then try again.",
+      );
+    case 429:
+      return new ModelClientError(
+        "rateLimited",
+        "DeepSeek is limiting how fast requests are sent. Trying again shortly.",
+        wait === undefined ? {} : { retryAfterMs: wait },
+      );
+    case 503:
+      return overloaded("DeepSeek is overloaded right now.", wait);
+    default:
+      return failure.status >= 500 || failure.status === 0
+        ? new ModelClientError(
+            "unexplainedError",
+            "DeepSeek's server failed without saying why.",
+          )
+        : new ModelClientError(
+            "requestRejected",
+            sentence
+              ? `DeepSeek refused the request: ${sentence}`
+              : `DeepSeek refused the request (HTTP ${failure.status}).`,
+          );
+  }
+}

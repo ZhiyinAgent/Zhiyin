@@ -1,0 +1,139 @@
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { replaceFile } from "@zhiyin/file-replacement";
+import { join } from "node:path";
+
+/** Why a proposed repair was thrown away. Each is a distinct finding. */
+export type RepairRejection =
+  | "handover"
+  | "content-changed"
+  | "no-progress"
+  | "still-refused"
+  | "unusable-answer"
+  | "too-large"
+  | "out-of-room"
+  /** The refusal named no input a repair could change. */
+  | "no-fields"
+  /** A value it put in came neither from the call nor from the model's words. */
+  | "not-in-evidence"
+  /** A value it re-shaped lost text the model wrote there. */
+  | "text-dropped";
+
+export type AuditEntry = {
+  /** ISO timestamp, supplied by the caller so tests are not time-dependent. */
+  readonly at: string;
+  readonly taskId: string;
+  readonly toolName: string;
+  readonly kind: "quiet-retry" | "repair-applied" | "repair-rejected";
+  /** The tool's refusal, already bounded and redacted by the caller. */
+  readonly reason: string;
+  readonly cause?: RepairRejection;
+  /** Arguments as refused, and as repaired. Bounded by the caller. */
+  readonly before?: string;
+  readonly after?: string;
+};
+
+export interface AuditLog {
+  record(entry: AuditEntry): Promise<void>;
+  /** Most recent last, so the file reads in the order things happened. */
+  read(): Promise<readonly AuditEntry[]>;
+}
+
+export const maximumAuditEntries = 5_000;
+
+function isEntry(value: unknown): value is AuditEntry {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  return (
+    typeof entry["at"] === "string" &&
+    typeof entry["taskId"] === "string" &&
+    typeof entry["toolName"] === "string" &&
+    typeof entry["reason"] === "string" &&
+    (entry["kind"] === "quiet-retry" ||
+      entry["kind"] === "repair-applied" ||
+      entry["kind"] === "repair-rejected")
+  );
+}
+
+/**
+ * One line of JSON per entry, appended.
+ *
+ * Append is the whole point: an audit record that is rewritten on every write
+ * can lose earlier entries to a single bad write, and the earlier entries are
+ * the ones being kept. Trimming happens rarely and separately.
+ */
+export class FileAuditLog implements AuditLog {
+  readonly #directory: string;
+  readonly #file: string;
+  #writes: Promise<unknown> = Promise.resolve();
+  #sinceTrim = 0;
+  /** Whether this run has looked at what earlier runs left. */
+  #checked = false;
+
+  constructor(directory: string) {
+    this.#directory = directory;
+    this.#file = join(directory, "corrections.log");
+  }
+
+  async record(entry: AuditEntry): Promise<void> {
+    const write = this.#writes.then(() => this.#append(entry));
+    this.#writes = write.catch(() => undefined);
+    return write;
+  }
+
+  async #append(entry: AuditEntry): Promise<void> {
+    await mkdir(this.#directory, { recursive: true });
+    // The first record of a run checks what earlier runs left: a last line
+    // cut short by a crash is ended, so it costs only itself, and a log past
+    // its limit is trimmed, however few entries each run adds.
+    const first = !this.#checked;
+    this.#checked = true;
+    const source = first
+      ? await readFile(this.#file, "utf8").catch(() => "")
+      : "";
+    const opening = source && !source.endsWith("\n") ? "\n" : "";
+    await appendFile(
+      this.#file,
+      `${opening}${JSON.stringify(entry)}\n`,
+      "utf8",
+    );
+    this.#sinceTrim += 1;
+    // Checked occasionally rather than on every write: reading the whole file
+    // back to count lines on each append would make the common case expensive.
+    if (this.#sinceTrim >= 500) {
+      this.#sinceTrim = 0;
+      await this.#trim();
+    } else if (first) await this.#trim();
+  }
+
+  /** Keeps the newest entries and drops the oldest (ADR 0027). */
+  async #trim(): Promise<void> {
+    const entries = await this.read();
+    if (entries.length <= maximumAuditEntries) return;
+    const kept = entries.slice(-maximumAuditEntries);
+    await replaceFile(
+      this.#file,
+      `${kept.map((entry) => JSON.stringify(entry)).join("\n")}\n`,
+    );
+  }
+
+  async read(): Promise<readonly AuditEntry[]> {
+    let source: string;
+    try {
+      source = await readFile(this.#file, "utf8");
+    } catch {
+      return [];
+    }
+    const entries: AuditEntry[] = [];
+    for (const line of source.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        const parsed: unknown = JSON.parse(line);
+        // A damaged line is skipped rather than discarding the whole record.
+        if (isEntry(parsed)) entries.push(parsed);
+      } catch {
+        continue;
+      }
+    }
+    return entries;
+  }
+}

@@ -1,0 +1,305 @@
+/**
+ * How the history sits on disk: a folder per conversation holding a small
+ * summary and the conversation itself, and the settings beside them. The list
+ * of conversations is not stored anywhere; it is the folders, read through
+ * their summaries and ordered by when each conversation last changed.
+ */
+
+import {
+  open,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { emptyConversationLists } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import { FileSessions } from "../src/index.js";
+import {
+  conversationFolder,
+  historyFolder,
+  plantHistory,
+} from "./planted-history.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
+async function temporaryRoot(): Promise<string> {
+  return folders.make("zhiyin-history-layout-");
+}
+
+function task(id: string, updatedAt: string) {
+  return {
+    id,
+    title: `Conversation ${id}`,
+    titleSource: "manual",
+    updatedAt,
+    updatedLabel: "Earlier",
+    messages: [{ id: `${id}-m1`, role: "user", text: "Hello", sequence: 0 }],
+    ...emptyConversationLists,
+    phase: { kind: "completed", outcome: { title: "Done", summary: "Done." } },
+  };
+}
+
+const history = {
+  preferences: { onboarded: true, interests: ["writing"] },
+  selectedTaskId: "b",
+  recentWorkspaces: [],
+  tasks: [
+    task("a", "2026-09-20T10:00:00.000Z"),
+    task("b", "2026-09-22T10:00:00.000Z"),
+    task("c", "2026-09-21T10:00:00.000Z"),
+  ],
+};
+
+async function listed(root: string) {
+  return (await new FileSessions(root).loadIndex())?.conversations.map(
+    (item) => [item.id, item.title],
+  );
+}
+
+describe("the history on disk", () => {
+  it("keeps a conversation whose id is not safe as a folder name inside the history, under a name of its own", async () => {
+    const root = await temporaryRoot();
+    const ids = ["../../outside", "a:b", "C:\\Windows"];
+    await plantHistory(root, {
+      ...history,
+      selectedTaskId: ids[0],
+      tasks: ids.map((id) => task(id, "2026-09-20T10:00:00.000Z")),
+    });
+
+    expect(await readdir(root)).not.toContain("outside");
+    const names = await readdir(join(historyFolder(root), "conversations"));
+    expect(names).toHaveLength(3);
+    for (const name of names) expect(name).toMatch(/^[\w-]+$/);
+    const sessions = new FileSessions(root);
+    await sessions.loadIndex();
+    for (const id of ids)
+      await expect(sessions.openConversation(id)).resolves.toMatchObject({
+        task: { id },
+      });
+    await sessions.release();
+  });
+
+  it("keeps each conversation in its own folder, as a summary and the conversation, with the settings beside them", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+
+    expect((await readdir(historyFolder(root))).sort()).toEqual([
+      "conversations",
+      "settings.json",
+    ]);
+    expect((await readdir(conversationFolder(root, "a"))).sort()).toEqual([
+      "conversation.jsonl",
+      "meta.json",
+    ]);
+    expect(
+      JSON.parse(
+        await readFile(
+          join(conversationFolder(root, "a"), "meta.json"),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({
+      id: "a",
+      title: "Conversation a",
+      updatedAt: "2026-09-20T10:00:00.000Z",
+    });
+    const settings = JSON.parse(
+      await readFile(join(historyFolder(root), "settings.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(settings).toMatchObject({
+      preferences: history.preferences,
+      selectedTaskId: "b",
+    });
+    expect(JSON.stringify(settings)).not.toContain("Conversation");
+  });
+
+  it("keeps the folders named at launch that nobody chose, beside the folders worked in", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, {
+      ...history,
+      recentWorkspaces: [{ path: "C:\\Projects\\notes", name: "notes" }],
+      launchFolders: ["C:\\src\\zhiyin", "C:\\src\\earlier"],
+    });
+
+    const saved = await new FileSessions(root).loadWorkspace();
+
+    expect(saved?.launchFolders).toEqual([
+      "C:\\src\\zhiyin",
+      "C:\\src\\earlier",
+    ]);
+    expect(saved?.recentWorkspaces).toEqual([
+      { path: "C:\\Projects\\notes", name: "notes" },
+    ]);
+  });
+
+  it("lists conversations by when each last changed, newest first", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+
+    expect((await listed(root))?.map(([id]) => id)).toEqual(["b", "c", "a"]);
+  });
+
+  it("lists a conversation whose summary is missing or broken from the conversation itself", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    await rm(join(conversationFolder(root, "a"), "meta.json"));
+    await writeFile(
+      join(conversationFolder(root, "c"), "meta.json"),
+      '{"id":"c","ti',
+      "utf8",
+    );
+
+    expect(await listed(root)).toEqual([
+      ["b", "Conversation b"],
+      ["c", "Conversation c"],
+      ["a", "Conversation a"],
+    ]);
+  });
+
+  it("lists a conversation whose summary is older than the conversation as the conversation is now", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    const meta = join(conversationFolder(root, "a"), "meta.json");
+    const before = await readFile(meta, "utf8");
+    const sessions = new FileSessions(root);
+    await sessions.loadIndex();
+    await sessions.saveWorkspace({
+      ...history,
+      tasks: [
+        {
+          ...history.tasks[0]!,
+          title: "Renamed",
+          updatedAt: "2026-09-23T10:00:00.000Z",
+        },
+        ...history.tasks.slice(1),
+      ],
+    } as never);
+    await sessions.release();
+    // As if the app closed after saving the conversation and before its summary.
+    await writeFile(meta, before, "utf8");
+
+    expect(await listed(root)).toEqual([
+      ["a", "Renamed"],
+      ["b", "Conversation b"],
+      ["c", "Conversation c"],
+    ]);
+  });
+
+  it("sets aside a conversation whose summary and file are both damaged, and says where it was kept", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    const folder = conversationFolder(root, "c");
+    await writeFile(join(folder, "meta.json"), "not json", "utf8");
+    await writeFile(join(folder, "conversation.jsonl"), "not json", "utf8");
+
+    const index = await new FileSessions(root).loadIndex();
+
+    expect(index?.conversations.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(index?.setAside?.count).toBe(1);
+    const kept = index!.setAside!.keptAt;
+    expect(
+      await readFile(join(kept, "c-c", "conversation.jsonl"), "utf8"),
+    ).toBe("not json");
+    await expect(readdir(folder)).rejects.toMatchObject({ code: "ENOENT" });
+    // Said once: the next launch finds nothing left to set aside.
+    expect(
+      (await new FileSessions(root).loadIndex())?.setAside,
+    ).toBeUndefined();
+  });
+
+  it("removes a conversation's folder once it is no longer listed", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    const sessions = new FileSessions(root);
+    await sessions.loadIndex();
+
+    await sessions.saveWorkspace({
+      ...history,
+      tasks: history.tasks.filter((item) => item.id !== "c"),
+    } as never);
+
+    expect(
+      (await readdir(join(historyFolder(root), "conversations"))).sort(),
+    ).toEqual(["c-a", "c-b"]);
+  });
+
+  it("finishes at the next launch a deletion a crash cut short", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    // Where a crash between the two steps of a deletion leaves it: the folder
+    // set aside under its deleting name, not yet removed.
+    await rename(
+      conversationFolder(root, "c"),
+      `${conversationFolder(root, "c")}.deleting`,
+    );
+
+    expect((await listed(root))?.map(([id]) => id)).toEqual(["b", "a"]);
+    expect(
+      (await readdir(join(historyFolder(root), "conversations"))).sort(),
+    ).toEqual(["c-a", "c-b"]);
+  });
+
+  /**
+   * Windows will not move a folder while another program has a file in it
+   * open. Until the folder goes, the conversation is still on disk, and what it
+   * kept beside itself stays with it, so a launch before then finds it whole.
+   */
+  it("keeps what a deleted conversation kept until its folder can be removed", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    const sessions = new FileSessions(root);
+    await sessions.loadIndex();
+    const output = await sessions.keep("output", "c", { text: "its output" });
+    if (output.status !== "kept") throw new Error(output.reason);
+    const without = {
+      ...history,
+      tasks: history.tasks.filter((item) => item.id !== "c"),
+    } as never;
+
+    const held = await open(
+      join(conversationFolder(root, "c"), "meta.json"),
+      "r",
+    );
+    try {
+      await sessions.saveWorkspace(without);
+      await sessions.forgetConversation("c");
+
+      expect((await sessions.locate("output", "c", output.id)).status).toBe(
+        "ready",
+      );
+      expect((await listed(root))?.map(([id]) => id)).toContain("c");
+    } finally {
+      await held.close();
+    }
+
+    await sessions.saveWorkspace(without);
+
+    expect(
+      (await readdir(join(historyFolder(root), "conversations"))).sort(),
+    ).toEqual(["c-a", "c-b"]);
+    expect((await sessions.locate("output", "c", output.id)).status).toBe(
+      "missing",
+    );
+  });
+
+  it("keeps the conversations when the settings were never written", async () => {
+    const root = await temporaryRoot();
+    await plantHistory(root, history);
+    await rm(join(historyFolder(root), "settings.json"));
+
+    const index = await new FileSessions(root).loadIndex();
+
+    expect(index?.conversations.map((item) => item.id)).toEqual([
+      "b",
+      "c",
+      "a",
+    ]);
+    expect(index?.selectedTaskId).toBeNull();
+  });
+});

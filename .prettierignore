@@ -1,0 +1,6 @@
+# Prettier also reads .gitignore, so what git ignores is not repeated here.
+pnpm-lock.yaml
+
+# Prose is hand-wrapped and reviewed by people. Prettier reflows it and
+# rewrites emphasis markers, which makes doc diffs unreadable.
+*.md

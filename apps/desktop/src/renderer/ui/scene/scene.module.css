@@ -1,0 +1,295 @@
+/* Styles owned by the 3D view. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.scene-workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.scene-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-md);
+  background: var(--zy-panel-soft);
+}
+
+/* One row: the scene's name and the ways to look. */
+.scene-panel__chrome {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+}
+
+.scene-panel__chrome h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A hairline that travels while Blender works, as the browser's does. */
+.scene-panel__chrome[data-working="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 32%;
+  height: 1px;
+  background: var(--zy-accent-line);
+  animation: global(zy-progress) 1.4s ease-in-out infinite;
+}
+
+.scene-panel__views {
+  flex: none;
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--zy-line);
+  border-radius: 8px;
+  background: var(--zy-wash);
+}
+
+.scene-panel__views button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--zy-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.scene-panel__views button[aria-pressed="true"] {
+  background: var(--zy-panel);
+  color: var(--zy-text);
+  box-shadow: 0 0 0 1px var(--zy-line);
+}
+
+.scene-panel__views button:focus-visible,
+.scene-panel__reset:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: 1px;
+}
+
+.scene-panel__reset {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.scene-panel__reset:hover:not(:disabled) {
+  border-color: var(--zy-line);
+  color: var(--zy-text-soft);
+}
+
+.scene-panel__reset:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.scene-panel__reset svg {
+  width: 14px;
+}
+
+/* The view and what is said over it. */
+.scene-panel__stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The picture fills the view in its own proportions; Blender renders it in
+   the view's shape, so there is little or no band around it. The hand shows
+   only when there is something to turn, and closes while it turns it. */
+.scene-panel__viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  /* Beyond the picture, its own background, once the picture is read. */
+  background: var(--scene-edges, var(--zy-panel-soft));
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+}
+
+.scene-panel__viewport[data-turnable="true"] {
+  cursor: grab;
+}
+
+.scene-panel__viewport[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.scene-panel__viewport:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: -2px;
+}
+
+.scene-panel__picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* A new picture settles over the last one rather than replacing it. */
+.scene-panel__picture--new {
+  animation: scene-panel-arrive 140ms ease-out;
+}
+
+/* Said over the view, never in the way of a drag. */
+.scene-panel__waiting,
+.scene-panel__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Over a picture, what Blender is doing sits in a corner, out of the way. */
+.scene-panel__status--over {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 10px;
+}
+
+.scene-panel__saying {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid var(--zy-line);
+  border-radius: 999px;
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.scene-panel__spinner {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--zy-line-strong);
+  border-top-color: var(--zy-running);
+  border-radius: 50%;
+  animation: global(zy-spin) 0.9s linear infinite;
+}
+
+.scene-panel__note {
+  flex: none;
+  margin: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+/* The icon sits on the first line of the text beside it, not in its middle. */
+.scene-panel__notice {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 9px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-muted);
+}
+
+.scene-panel__notice svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  color: var(--zy-danger);
+}
+
+.scene-panel__notice > div {
+  display: grid;
+  gap: 6px;
+}
+
+.scene-panel__notice strong {
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scene-panel__notice p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.scene-workspace__return {
+  flex: none;
+  align-self: center;
+  margin: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-panel__chrome[data-working="true"]::after {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+  }
+
+  .scene-panel__picture--new,
+  .scene-panel__spinner {
+    animation: none;
+  }
+}
+
+@keyframes scene-panel-arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

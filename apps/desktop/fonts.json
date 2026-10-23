@@ -1,0 +1,12 @@
+{
+  "fallback": {
+    "name": "Noto Sans CJK SC",
+    "version": "2.004",
+    "repository": "https://github.com/notofonts/noto-cjk",
+    "commit": "165c01b46ea533872e002e0785ff17e44f6d97d8",
+    "file": "NotoSansCJKsc-Regular.otf",
+    "url": "https://raw.githubusercontent.com/notofonts/noto-cjk/165c01b46ea533872e002e0785ff17e44f6d97d8/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+    "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+    "bytes": 16437364
+  }
+}

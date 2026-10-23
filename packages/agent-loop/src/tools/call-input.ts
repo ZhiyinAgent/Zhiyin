@@ -1,0 +1,132 @@
+/**
+ * A proposed call's input, from what the model streamed to the arguments a
+ * tool is handed, or to a refusal the model can act on.
+ *
+ * Input that is not valid JSON is a refusal like any a tool makes, and the rest
+ * of its batch runs. It is reached only after the fixes that cannot change a
+ * value have failed; no repair writes the call out again (ADR 0010). Either
+ * way, `call.arguments` is left holding what the conversation should keep: the
+ * corrected input, or an empty object in place of text no request can carry.
+ * The raw text goes to the audit log, and a bounded copy to the failed action's
+ * record; never back to the model.
+ */
+
+import type { AuditRepair, RoundEvidence } from "./tool-repair.js";
+import { readEncodedValues, readToolInput } from "./tool-input.js";
+import { type Refusal, unreadableInput } from "./refusals.js";
+import type { AssembledToolCall } from "../turn/turn-shared.js";
+
+export type CallInput =
+  | {
+      readonly ok: true;
+      readonly arguments: Record<string, unknown>;
+      /** Told to the model with the call's result when the input was fixed. */
+      readonly note?: string;
+    }
+  | {
+      readonly ok: false;
+      readonly result: Refusal;
+      /** Answered to the model alone, as a quiet correction. */
+      readonly quiet: boolean;
+    };
+
+/** How a correction is written down, which the turn's record keeper owns. */
+type AuditCorrection = (
+  taskId: string,
+  toolName: string,
+  kind: "quiet-retry" | Parameters<AuditRepair>[2],
+  reason: string,
+  extra?: Parameters<AuditRepair>[4],
+) => Promise<void>;
+
+/** Shows the person a call that failed before it could run. */
+type RecordFailure = (
+  taskId: string,
+  call: AssembledToolCall,
+  reason: string,
+  signal: AbortSignal,
+  specialistRunId?: string,
+) => Promise<void>;
+
+/** What reading a call's input needs beside the call itself. */
+export type InputReading = {
+  readonly round: RoundEvidence;
+  readonly quietRetriesLeft: number;
+  readonly signal: AbortSignal;
+  readonly specialistRunId?: string;
+};
+
+export class CallInputs {
+  readonly #audit: AuditCorrection;
+  readonly #fail: RecordFailure;
+
+  constructor(parts: {
+    readonly audit: AuditCorrection;
+    readonly fail: RecordFailure;
+  }) {
+    this.#audit = parts.audit;
+    this.#fail = parts.fail;
+  }
+
+  async read(
+    taskId: string,
+    call: AssembledToolCall,
+    { round, quietRetriesLeft, signal, specialistRunId }: InputReading,
+  ): Promise<CallInput> {
+    const raw = call.arguments;
+    const input = readToolInput(raw);
+    if (input.ok) {
+      const values = readEncodedValues(
+        input.arguments,
+        round.tools.find((tool) => tool.name === call.name)?.inputSchema,
+      );
+      const corrections = [...input.corrections, ...values.corrections];
+      if (!corrections.length) return { ok: true, arguments: input.arguments };
+      const fixed = corrections.join(", ");
+      await this.#audit(
+        taskId,
+        call.name,
+        "repair-applied",
+        `Fixed ${fixed}.`,
+        {
+          before: raw,
+          after: values.arguments,
+        },
+      );
+      call.arguments = JSON.stringify(values.arguments);
+      return {
+        ok: true,
+        arguments: values.arguments,
+        note: `Zhiyin corrected this call's input (${fixed}).`,
+      };
+    }
+
+    call.arguments = "{}";
+    const result = unreadableInput(input.reason, input.cutOff, raw.length);
+    if (quietRetriesLeft > 0) {
+      await this.#audit(taskId, call.name, "quiet-retry", input.reason, {
+        before: raw,
+      });
+      return { ok: false, result, quiet: true };
+    }
+    // The person's record keeps what arrived, bounded, so a cut-off or garbled
+    // call can be seen for what it was; the conversation keeps `{}`.
+    await this.#fail(
+      taskId,
+      { ...call, arguments: received(raw) },
+      result.reason,
+      signal,
+      specialistRunId,
+    );
+    return { ok: false, result, quiet: false };
+  }
+}
+
+/** Characters of refused input kept from each end. */
+const receivedEnds = 1_500;
+
+/** Refused input as the record keeps it: its start, and where it stopped. */
+function received(raw: string): string {
+  if (raw.length <= receivedEnds * 2) return raw;
+  return `${raw.slice(0, receivedEnds)} … ${raw.length - receivedEnds * 2} characters left out … ${raw.slice(-receivedEnds)}`;
+}

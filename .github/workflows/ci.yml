@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  # Weekly, so an advisory published while nobody commits still fails the
+  # gate's audit step and is reported.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Repository gate
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Enable the pinned pnpm version
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+
+      # A fresh machine's system disk is kept busy by Windows' own work for
+      # its first minutes, and a browser whose profile is there can wait half
+      # a minute on it. The runner's work disk is idle.
+      - name: Keep temporary files on the runner's work disk
+        shell: powershell
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 't'
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          "TEMP=$temp" >> $env:GITHUB_ENV
+          "TMP=$temp" >> $env:GITHUB_ENV
+
+      - name: Install dependencies
+        shell: powershell
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Electron runtime after the clean install
+        shell: powershell
+        run: pnpm --filter desktop install:electron
+
+      # The gate installs the programs some tests need (Typst, Tectonic and
+      # uv) into ZHIYIN_TEST_TOOLS, each verified against its pinned digest,
+      # so those tests run here, and keeps Blender's archive for the test that
+      # installs it. A Blender running scenes needs a graphics card, which
+      # this machine lacks. Only the downloads are kept between runs, and only
+      # until a pin changes.
+      - name: Keep the downloaded programs between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\zt\archives
+          key: test-tools-${{ hashFiles('packages/toolchains/src/toolchains.ts') }}
+
+      # The build fetches the spelling dictionaries from Chromium's server,
+      # which this machine sometimes cannot reach for a minute. Kept between
+      # runs until the list changes; the build checks each kept file's
+      # SHA-256 before using it, and fetches only what is missing or differs.
+      - name: Keep the spelling dictionaries between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\dictionaries
+          key: dictionaries-${{ hashFiles('packages/spelling/dictionaries.json') }}
+
+      # The build also fetches the fallback font from GitHub, kept the same way.
+      - name: Keep the fallback font between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\fonts
+          key: fonts-${{ hashFiles('apps/desktop/fonts.json') }}
+
+      - name: Run the repository gate
+        shell: powershell
+        env:
+          ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1

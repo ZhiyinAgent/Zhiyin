@@ -1,0 +1,223 @@
+/**
+ * Putting one file back, or removing it, while nothing else can write to it.
+ *
+ * The file is opened so that others may still read it but no one may write
+ * to it; its digest is checked on that handle, and the retained copy is
+ * swapped in (or the file deleted) while the handle is still held. A file
+ * changed after the review, or held open for writing by another program, is
+ * left exactly as it is. A file the work deleted is made again, folder and
+ * all, only while nothing has taken its place.
+ *
+ * The Windows calls are made from Zhiyin's own process. A PowerShell script
+ * would often take longer to start on an ordinary laptop than a restore is
+ * allowed, and rewind would report restorable files as unrestorable.
+ */
+
+import koffi from "koffi";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { copyFile, mkdir, open, rm } from "node:fs/promises";
+import { dirname } from "node:path";
+
+const GENERIC_READ = 0x80000000;
+const FILE_SHARE_READ = 0x00000001;
+const FILE_SHARE_DELETE = 0x00000004;
+const OPEN_EXISTING = 3;
+const FILE_ATTRIBUTE_NORMAL = 0x00000080;
+const MOVEFILE_WRITE_THROUGH = 0x00000008;
+const chunkBytes = 1024 * 1024;
+
+export type ExclusiveRestore = {
+  readonly absolute: string;
+  /** The digest the file must still have, or the restore is refused. */
+  readonly expected: string;
+  readonly action: "restore" | "remove";
+  readonly backup?: string;
+  /** The digest the kept copy had when it was made. */
+  readonly retained?: string;
+};
+
+/** A kept copy that no longer matches what was kept, and is never put back. */
+export class DamagedCopyError extends Error {
+  constructor() {
+    super("The kept copy no longer matches what was kept.");
+    this.name = "DamagedCopyError";
+  }
+}
+
+/** The file operations a restore takes, besides copying and reading. */
+export type RecoveryFiles = {
+  readonly openShared: (path: string) => unknown;
+  readonly read: (handle: unknown, buffer: Buffer) => number;
+  readonly close: (handle: unknown) => void;
+  readonly replace: (
+    target: string,
+    replacement: string,
+    previous: string,
+  ) => boolean;
+  readonly remove: (path: string) => boolean;
+  /** Moves a file into place, and fails if anything is already there. */
+  readonly moveIntoPlace: (from: string, to: string) => boolean;
+  /** Puts what was written to a file on disk. */
+  readonly flush: (path: string) => Promise<void>;
+};
+
+let files: RecoveryFiles | undefined;
+
+function win32(): RecoveryFiles {
+  if (files) return files;
+  const kernel32 = koffi.load("kernel32.dll");
+  const CreateFileW = kernel32.func(
+    "void* CreateFileW(const char16_t*, uint32, uint32, void*, uint32, uint32, void*)",
+  );
+  const ReadFile = kernel32.func(
+    "bool ReadFile(void*, void*, uint32, _Out_ uint32*, void*)",
+  );
+  const CloseHandle = kernel32.func("bool CloseHandle(void*)");
+  const ReplaceFileW = kernel32.func(
+    "bool ReplaceFileW(const char16_t*, const char16_t*, const char16_t*, uint32, void*, void*)",
+  );
+  const DeleteFileW = kernel32.func("bool DeleteFileW(const char16_t*)");
+  const MoveFileExW = kernel32.func(
+    "bool MoveFileExW(const char16_t*, const char16_t*, uint32)",
+  );
+  files = {
+    openShared: (path) => {
+      const handle: unknown = CreateFileW(
+        path,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_DELETE,
+        null,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        null,
+      );
+      const invalid =
+        !handle || koffi.address(handle) === BigInt.asUintN(64, -1n);
+      return invalid ? undefined : handle;
+    },
+    read: (handle, buffer) => {
+      const read = [0];
+      if (!ReadFile(handle, buffer, buffer.length, read, null))
+        throw new Error("The file could not be read.");
+      return read[0] ?? 0;
+    },
+    close: (handle) => {
+      CloseHandle(handle);
+    },
+    replace: (target, replacement, previous) =>
+      ReplaceFileW(target, replacement, previous, 0, null, null),
+    remove: (path) => DeleteFileW(path),
+    moveIntoPlace: (from, to) => MoveFileExW(from, to, MOVEFILE_WRITE_THROUGH),
+    flush: async (path) => {
+      const handle = await open(path, "r+");
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    },
+  };
+  return files;
+}
+
+function digestOf(api: RecoveryFiles, handle: unknown): string {
+  const hash = createHash("sha256");
+  const buffer = Buffer.alloc(chunkBytes);
+  for (;;) {
+    const read = api.read(handle, buffer);
+    if (!read) break;
+    hash.update(buffer.subarray(0, read));
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Copies the kept bytes beside the file, refuses a copy that changed, and puts
+ * the copy on disk, so a power cut once it has taken the file's place cannot
+ * leave the file empty.
+ */
+async function copyIntact(
+  api: RecoveryFiles,
+  backup: string,
+  temporary: string,
+  retained: string | undefined,
+): Promise<void> {
+  await copyFile(backup, temporary);
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(temporary))
+    hash.update(chunk as Buffer);
+  if (retained !== undefined && hash.digest("hex") !== retained)
+    throw new DamagedCopyError();
+  await api.flush(temporary);
+}
+
+/** Putting a file back and making one again, through the given operations. */
+export function exclusiveRecovery(filesOf: () => RecoveryFiles) {
+  async function restoreExclusively(target: ExclusiveRestore): Promise<void> {
+    if (process.platform !== "win32")
+      throw new Error("Exclusive recovery is unavailable on this platform.");
+    const api = filesOf();
+    let temporary: string | undefined;
+    let previous: string | undefined;
+    try {
+      if (target.action === "restore") {
+        if (!target.backup)
+          throw new Error("The retained bytes are unavailable.");
+        temporary = `${target.absolute}.${randomUUID().replaceAll("-", "")}.restore`;
+        await copyIntact(api, target.backup, temporary, target.retained);
+      }
+      const handle = api.openShared(target.absolute);
+      if (!handle)
+        throw new Error(
+          "The file is in use and could not be held for recovery.",
+        );
+      try {
+        if (digestOf(api, handle) !== target.expected)
+          throw new Error("The file changed while recovery was being applied.");
+        if (target.action === "remove") {
+          if (!api.remove(target.absolute))
+            throw new Error("The file could not be removed.");
+        } else {
+          previous = `${target.absolute}.${randomUUID().replaceAll("-", "")}.previous`;
+          if (!api.replace(target.absolute, temporary as string, previous))
+            throw new Error("The retained bytes could not be put in place.");
+          temporary = undefined;
+        }
+      } finally {
+        api.close(handle);
+      }
+    } finally {
+      if (temporary) await rm(temporary, { force: true });
+      if (previous) await rm(previous, { force: true });
+    }
+  }
+
+  /** Makes a deleted file again from its retained copy, unless one is back. */
+  async function recreateExclusively(target: {
+    readonly absolute: string;
+    readonly backup: string;
+    /** The digest the kept copy had when it was made. */
+    readonly retained?: string;
+  }): Promise<void> {
+    if (process.platform !== "win32")
+      throw new Error("Exclusive recovery is unavailable on this platform.");
+    const api = filesOf();
+    await mkdir(dirname(target.absolute), { recursive: true });
+    let temporary: string | undefined =
+      `${target.absolute}.${randomUUID().replaceAll("-", "")}.restore`;
+    try {
+      await copyIntact(api, target.backup, temporary, target.retained);
+      if (!api.moveIntoPlace(temporary, target.absolute))
+        throw new Error("Something took the deleted file's place.");
+      temporary = undefined;
+    } finally {
+      if (temporary) await rm(temporary, { force: true });
+    }
+  }
+
+  return { restoreExclusively, recreateExclusively };
+}
+
+export const { restoreExclusively, recreateExclusively } =
+  exclusiveRecovery(win32);

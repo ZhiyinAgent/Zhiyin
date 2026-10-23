@@ -1,0 +1,725 @@
+/**
+ * What the model has been sent of a conversation, kept so every request starts
+ * with the whole of the one before it.
+ *
+ * A provider reuses its cached copy of a request's start only while the start
+ * is the same, byte for byte. So the conversation is sent as it was first
+ * sent — the person's messages, the model's words and tool calls, each result
+ * as the model received it, Zhiyin's notices — in the order it happened, turn
+ * after turn and after the app restarts, and new material only ever goes at
+ * the end.
+ *
+ * Four things change what was already sent, each on purpose: a condensing
+ * replaces what it condenses with its summary; older tool results are
+ * cleared to a receipt many at a time once they pile up; pictures past the
+ * most one request carries are let go of several at a time, so the start
+ * changes once rather than with every new picture; and a proposal a tool
+ * refused quietly is taken back out once the tool succeeds. That last kind is
+ * never stored at all: it was a correction between the model and a tool, not
+ * part of the conversation.
+ */
+
+import type {
+  ModelHistoryEntry,
+  ModelReplay,
+  StoredPicture,
+  WorkspaceTask,
+} from "@zhiyin/contract";
+import type { ModelMessage, ModelToolCall } from "@zhiyin/model-client";
+import { modelText } from "./attachments.js";
+import { compactedSummaryMessage } from "./conversation-context.js";
+import { harnessNotice, type NoticeKind } from "../turn/notices.js";
+import { attachedPicturesLetGo, picturesLetGo } from "../turn/turn-pictures.js";
+import { withdrawCalls } from "../tools/quiet-failures.js";
+
+/**
+ * How many pictures one request may hold, and how many are kept when that is
+ * passed, counting whole messages. Eight is the fewest any lab Zhiyin reaches
+ * accepts in one request (Mistral), and every lab is held to it. Letting go of
+ * several at once breaks the cached conversation once for the next few
+ * pictures instead of once for each of them. The first pictures stay, so
+ * what goes is always from the middle and the conversation's start never
+ * changes: only what follows the oldest picture that went is sent anew.
+ */
+const picturesKeptInOneRequest = 8;
+const picturesKeptAfterLettingGo = 4;
+const picturesKeptFromTheStart = 2;
+
+type Item = {
+  message: ModelMessage;
+  /** The stored entry this is sent from; none for a quiet correction. */
+  entryId?: string;
+};
+
+type Round = {
+  readonly entryId: string;
+  readonly item: Item;
+  readonly messageId: string | undefined;
+  stored: boolean;
+};
+
+export type SentPicture = {
+  readonly mediaType: string;
+  readonly data: string;
+  /** Where the picture is stored; empty when it could not be. */
+  readonly source: string;
+};
+
+/**
+ * What a model's turn keeps beside its words (ADR 0015): its reasoning, and
+ * what its provider needs back to continue from it.
+ */
+export type TurnKept = {
+  readonly reasoning?: string;
+  readonly replay?: ModelReplay;
+};
+
+/** The kept parts that are there, as fields beside the turn's words. */
+function keptWith(kept: TurnKept): TurnKept {
+  return {
+    ...(kept.reasoning ? { reasoning: kept.reasoning } : {}),
+    ...(kept.replay ? { replay: kept.replay } : {}),
+  };
+}
+
+export type HistoryOptions = {
+  readonly newId: () => string;
+  readonly readPicture: (source: string) => Promise<StoredPicture>;
+  readonly save: (entries: readonly ModelHistoryEntry[]) => Promise<void>;
+};
+
+function isStoredMessage(
+  entry: ModelHistoryEntry,
+): entry is Extract<ModelHistoryEntry, { kind: "message" | "calls" }> {
+  return entry.kind === "message" || entry.kind === "calls";
+}
+
+function picturesIn(message: ModelMessage): number {
+  return message.role === "user" && typeof message.content !== "string"
+    ? message.content.filter((part) => part.kind === "image").length
+    : 0;
+}
+
+/** The first messages with pictures, whole, while they fit in those kept from the start. */
+function fromTheStart(carrying: readonly Item[]): Item[] {
+  const first: Item[] = [];
+  let count = 0;
+  for (const item of carrying) {
+    count += picturesIn(item.message);
+    if (count > picturesKeptFromTheStart) break;
+    first.push(item);
+  }
+  return first;
+}
+
+export class ModelHistory {
+  readonly #entries: ModelHistoryEntry[];
+  readonly #items: Item[];
+  readonly #options: HistoryOptions;
+  /** The conversation's messages as they were when this was opened. */
+  readonly #messages: ReadonlyMap<string, WorkspaceTask["messages"][number]>;
+  /** Calls whose results are stored, and so are stored themselves. */
+  readonly #kept = new Set<string>();
+  #round: Round | undefined;
+
+  private constructor(
+    entries: ModelHistoryEntry[],
+    items: Item[],
+    options: HistoryOptions,
+    messages: ReadonlyMap<string, WorkspaceTask["messages"][number]>,
+  ) {
+    this.#entries = entries;
+    this.#items = items;
+    this.#options = options;
+    this.#messages = messages;
+  }
+
+  /**
+   * The conversation as it was sent, with any message written since added at
+   * the end: the person's new message, or an answer that ended a turn.
+   */
+  static async open(
+    task: WorkspaceTask,
+    options: HistoryOptions,
+  ): Promise<ModelHistory> {
+    const entries = [...task.modelHistory];
+    const sent = new Set(
+      entries.flatMap((entry) =>
+        "messageId" in entry && entry.messageId ? [entry.messageId] : [],
+      ),
+    );
+    const unsent = task.messages.filter(
+      (message) =>
+        !sent.has(message.id) &&
+        (message.role !== "assistant" || message.text.trim()),
+    );
+    for (const message of unsent)
+      entries.push({
+        id: options.newId(),
+        kind: "message",
+        messageId: message.id,
+      });
+    if (unsent.length) await options.save([...entries]);
+
+    const messages = new Map(
+      task.messages.map((message) => [message.id, message]),
+    );
+    const items: Item[] = [];
+    const summary = compactedSummaryMessage(task);
+    if (summary) items.push({ message: summary });
+    for (const entry of entries.slice(firstAfterCondensing(task, entries))) {
+      const message = await sentMessage(entry, messages, options.readPicture);
+      if (message) items.push({ message, entryId: entry.id });
+    }
+    const history = new ModelHistory(entries, items, options, messages);
+    // A message the person just sent may carry pictures of its own.
+    if (unsent.length) await history.#letGoOfOlderPictures();
+    return history;
+  }
+
+  /** What follows the fixed start of every request. */
+  messages(): readonly ModelMessage[] {
+    return this.#items.map((item) => item.message);
+  }
+
+  /**
+   * Where a kept tail may begin: before a message, a notice or a round's
+   * calls, never between a call and its result or a result and its pictures.
+   */
+  boundaries(): number[] {
+    const kinds = new Map(this.#entries.map((entry) => [entry.id, entry.kind]));
+    return this.#items.flatMap((item, index) => {
+      const kind = item.entryId && kinds.get(item.entryId);
+      return kind === "message" || kind === "notice" || kind === "calls"
+        ? [index]
+        : [];
+    });
+  }
+
+  /**
+   * The last stored entry before the item at `index`, and the last message
+   * entry at or before that: the condensing checkpoint for a tail from there.
+   */
+  checkpointBefore(
+    index: number,
+  ): { readonly entryId: string; readonly messageId?: string } | undefined {
+    const entryId = this.#items
+      .slice(0, index)
+      .findLast((item) => item.entryId)?.entryId;
+    if (!entryId) return undefined;
+    const through = this.#entries.findIndex((entry) => entry.id === entryId);
+    const message = this.#entries
+      .slice(0, through + 1)
+      .findLast(
+        (entry) => isStoredMessage(entry) && entry.messageId !== undefined,
+      );
+    return {
+      entryId,
+      ...(message && isStoredMessage(message) && message.messageId
+        ? { messageId: message.messageId }
+        : {}),
+    };
+  }
+
+  /**
+   * Stored results, each with how many complete rounds came after the round
+   * it answered; a quiet one is never stored and never listed.
+   */
+  results(): {
+    readonly entryId: string;
+    readonly content: string;
+    readonly roundsAfter: number;
+  }[] {
+    const rounds = this.#items.flatMap((item, index) =>
+      item.message.role === "assistant" && item.message.toolCalls?.length
+        ? [index]
+        : [],
+    );
+    return this.#items.flatMap((item, index) => {
+      if (item.message.role !== "tool" || !item.entryId) return [];
+      const round = rounds.findLastIndex((start) => start < index);
+      return [
+        {
+          entryId: item.entryId,
+          content: item.message.content,
+          roundsAfter: rounds.length - 1 - round,
+        },
+      ];
+    });
+  }
+
+  /** Results replaced by what stands for them, stored in one write. */
+  async replaceResults(
+    replacements: ReadonlyMap<string, string>,
+  ): Promise<void> {
+    if (!replacements.size) return;
+    for (const item of this.#items) {
+      const content = item.entryId && replacements.get(item.entryId);
+      if (
+        content === undefined ||
+        content === "" ||
+        item.message.role !== "tool"
+      )
+        continue;
+      item.message = { ...item.message, content };
+    }
+    for (const [index, entry] of this.#entries.entries()) {
+      const content = replacements.get(entry.id);
+      if (entry.kind === "result" && content)
+        this.#entries[index] = { ...entry, content };
+    }
+    await this.#save();
+  }
+
+  async notice(
+    kind: NoticeKind,
+    text: string,
+    options: {
+      readonly messageId?: string;
+      readonly output?: { readonly tool: string; readonly content: string };
+    } = {},
+  ): Promise<void> {
+    const { messageId, output } = options;
+    const content = harnessNotice(kind, text, output);
+    await this.#add({ role: "user", content }, (id) => ({
+      id,
+      kind: "notice",
+      content,
+      ...(messageId ? { messageId } : {}),
+    }));
+  }
+
+  /** The content of the latest notice of this kind still being sent. */
+  latestNotice(kind: NoticeKind): string | undefined {
+    const opening = harnessNotice(kind, "").replace(/<\/zhiyin-notice>$/, "");
+    return this.#items
+      .map((item) => item.message)
+      .findLast(
+        (message) =>
+          message.role === "user" &&
+          typeof message.content === "string" &&
+          message.content.startsWith(opening),
+      )?.content as string | undefined;
+  }
+
+  /**
+   * The model's words and calls in one round, with what it kept beside them.
+   * Stored with the first result that is, so a call is never kept without its
+   * answer.
+   */
+  round(
+    text: string,
+    calls: readonly ModelToolCall[],
+    messageId?: string,
+    kept: TurnKept = {},
+  ) {
+    const item: Item = {
+      message: {
+        role: "assistant",
+        content: text,
+        toolCalls: [...calls],
+        ...keptWith(kept),
+      },
+    };
+    this.#items.push(item);
+    this.#round = {
+      entryId: this.#options.newId(),
+      item,
+      messageId,
+      stored: false,
+    };
+  }
+
+  /**
+   * The model's answer, sent from now on as a reopened conversation sends it:
+   * kept when it is given, so whatever follows in the same turn comes after
+   * it, with the reasoning and replay record that only this moment knows.
+   */
+  async answer(
+    message: WorkspaceTask["messages"][number],
+    kept: TurnKept,
+  ): Promise<void> {
+    if (message.role !== "assistant" || !message.text.trim()) return;
+    if (
+      this.#entries.some(
+        (entry) => "messageId" in entry && entry.messageId === message.id,
+      )
+    )
+      return;
+    await this.#add(
+      {
+        role: "assistant",
+        content: modelText(message),
+        ...keptWith(kept),
+      },
+      (id) => ({
+        id,
+        kind: "message",
+        messageId: message.id,
+        ...keptWith(kept),
+      }),
+    );
+  }
+
+  /** The arguments that ran, in place of the draft the model wrote. */
+  async rewriteCall(callId: string, args: string): Promise<void> {
+    for (const item of this.#items) {
+      const message = item.message;
+      if (message.role !== "assistant" || !message.toolCalls) continue;
+      if (
+        !message.toolCalls.some(
+          (call) => call.id === callId && call.arguments !== args,
+        )
+      )
+        continue;
+      item.message = {
+        ...message,
+        toolCalls: message.toolCalls.map((call) =>
+          call.id === callId ? { ...call, arguments: args } : call,
+        ),
+      };
+      if (this.#kept.has(callId)) await this.#storeRound();
+    }
+  }
+
+  /** A tool's answer. A quiet one is sent until taken back, and never stored. */
+  async result(
+    call: { readonly callId: string; readonly name: string },
+    content: string,
+    quiet: boolean,
+  ): Promise<void> {
+    const message: ModelMessage = {
+      role: "tool",
+      toolCallId: call.callId,
+      name: call.name,
+      content,
+    };
+    if (quiet) {
+      this.#items.push({ message });
+      return;
+    }
+    this.#kept.add(call.callId);
+    const entryId = this.#options.newId();
+    this.#items.push({ message, entryId });
+    this.#upsertRound();
+    this.#entries.push({
+      id: entryId,
+      kind: "result",
+      callId: call.callId,
+      name: call.name,
+      content,
+    });
+    await this.#save();
+  }
+
+  /** Keeps the round's words when none of its calls were kept. */
+  async endRound(): Promise<void> {
+    const round = this.#round;
+    if (round && !round.stored && round.item.message.content.length)
+      await this.#storeRound();
+    this.#round = undefined;
+  }
+
+  /** Takes quietly refused proposals back out of what is sent. */
+  forget(callIds: ReadonlySet<string>): void {
+    withdrawCalls(
+      this.#items,
+      callIds,
+      (item) => item.message,
+      (item, message) => {
+        item.message = message;
+        return item;
+      },
+    );
+  }
+
+  /** Pictures sent as themselves, after the result that produced them. */
+  async pictures(
+    text: string,
+    pictures: readonly SentPicture[],
+  ): Promise<void> {
+    await this.#add(
+      {
+        role: "user",
+        content: [
+          { kind: "text", text },
+          ...pictures.map((picture) => ({
+            kind: "image" as const,
+            mediaType: picture.mediaType,
+            data: picture.data,
+          })),
+        ],
+      },
+      (id) => ({
+        id,
+        kind: "pictures",
+        text,
+        pictures: pictures.map(({ mediaType, source }) => ({
+          mediaType,
+          source,
+        })),
+      }),
+    );
+    await this.#letGoOfOlderPictures();
+  }
+
+  /**
+   * Where in `messages()` the oldest picture that can still go is, the first
+   * after those kept from the start: up to there, a later letting go changes
+   * nothing, so a request can mark it for the provider to cache.
+   */
+  firstPictureThatCanGo(): number | undefined {
+    const carrying = this.#items.filter((item) => picturesIn(item.message));
+    const first = new Set(fromTheStart(carrying));
+    const goes = carrying.find((item) => !first.has(item));
+    return goes ? this.#items.indexOf(goes) : undefined;
+  }
+
+  async #letGoOfOlderPictures(): Promise<void> {
+    const carrying = this.#items.filter((item) => picturesIn(item.message));
+    const total = carrying.reduce(
+      (sum, item) => sum + picturesIn(item.message),
+      0,
+    );
+    if (total <= picturesKeptInOneRequest) return;
+    // The first pictures stay. The newest message stays whole, whatever it
+    // carries; older ones stay while they fit in what is kept after letting
+    // go. The first go too when the newest leave them no room.
+    let first = fromTheStart(carrying);
+    const start = first.reduce(
+      (sum, item) => sum + picturesIn(item.message),
+      0,
+    );
+    let kept = 0;
+    const newest = new Set<Item>();
+    for (const item of [...carrying].reverse()) {
+      if (first.includes(item)) break;
+      const count = picturesIn(item.message);
+      if (newest.size && start + kept + count > picturesKeptAfterLettingGo)
+        break;
+      newest.add(item);
+      kept += count;
+    }
+    if (start + kept > picturesKeptInOneRequest) first = [];
+    const staying = new Set([...first, ...newest]);
+    for (const item of carrying.filter((entry) => !staying.has(entry))) {
+      const index = this.#entries.findIndex(
+        (entry) => entry.id === item.entryId,
+      );
+      const entry = this.#entries[index];
+      // The person's own message keeps their words; only its pictures go.
+      if (entry?.kind === "message") {
+        const message = this.#messages.get(entry.messageId);
+        this.#entries[index] = { ...entry, picturesLetGo: true };
+        if (message)
+          item.message = {
+            role: "user",
+            content: [personalLetGo(message)],
+          };
+        continue;
+      }
+      const content = item.message.content;
+      const gone =
+        typeof content === "string"
+          ? 0
+          : content.filter((part) => part.kind === "image").length;
+      const text = picturesLetGo(gone);
+      item.message = { role: "user", content: [{ kind: "text", text }] };
+      if (index >= 0)
+        this.#entries[index] = {
+          id: item.entryId as string,
+          kind: "pictures",
+          text,
+          pictures: [],
+        };
+    }
+    await this.#save();
+  }
+
+  async #add(
+    message: ModelMessage,
+    entry: (id: string) => ModelHistoryEntry,
+  ): Promise<void> {
+    const entryId = this.#options.newId();
+    this.#items.push({ message, entryId });
+    this.#entries.push(entry(entryId));
+    await this.#save();
+  }
+
+  /** Writes the round's entry as its message now stands, keeping only kept calls. */
+  #upsertRound(): void {
+    const round = this.#round;
+    if (!round) return;
+    const message = round.item.message;
+    if (message.role !== "assistant") return;
+    round.item.entryId = round.entryId;
+    const entry: ModelHistoryEntry = {
+      id: round.entryId,
+      kind: "calls",
+      ...(round.messageId ? { messageId: round.messageId } : {}),
+      text: message.content,
+      calls: (message.toolCalls ?? []).filter((call) =>
+        this.#kept.has(call.id),
+      ),
+      ...keptWith(message),
+    };
+    const index = this.#entries.findIndex((item) => item.id === round.entryId);
+    if (index >= 0) this.#entries[index] = entry;
+    else this.#entries.push(entry);
+    round.stored = true;
+  }
+
+  async #storeRound(): Promise<void> {
+    this.#upsertRound();
+    await this.#save();
+  }
+
+  async #save(): Promise<void> {
+    await this.#options.save([...this.#entries]);
+  }
+}
+
+/**
+ * Where the conversation resumes after its condensed part: the first entry
+ * that sends a message the condensing did not cover.
+ */
+function firstAfterCondensing(
+  task: WorkspaceTask,
+  entries: readonly ModelHistoryEntry[],
+): number {
+  if (!task.compaction) return 0;
+  const throughEntry = task.compaction.throughEntryId
+    ? entries.findIndex((entry) => entry.id === task.compaction?.throughEntryId)
+    : -1;
+  if (throughEntry >= 0) return throughEntry + 1;
+  const through = task.messages.findIndex(
+    (message) => message.id === task.compaction?.throughMessageId,
+  );
+  if (through < 0) return 0;
+  const kept = new Set(task.messages.slice(through + 1).map(({ id }) => id));
+  const first = entries.findIndex(
+    (entry) =>
+      isStoredMessage(entry) &&
+      entry.messageId !== undefined &&
+      kept.has(entry.messageId),
+  );
+  return first < 0 ? entries.length : first;
+}
+
+function attachedPictures(message: WorkspaceTask["messages"][number]) {
+  return (message.attachments ?? []).filter(
+    (attachment) => attachment.kind === "picture",
+  );
+}
+
+/** A person's message whose pictures were let go: their words, and a note. */
+function personalLetGo(message: WorkspaceTask["messages"][number]) {
+  return {
+    kind: "text" as const,
+    text: [
+      modelText(message),
+      attachedPicturesLetGo(attachedPictures(message).map(({ id }) => id)),
+    ].join("\n\n"),
+  };
+}
+
+/** One entry as it is sent, or nothing when what it sends is gone. */
+async function sentMessage(
+  entry: ModelHistoryEntry,
+  messages: ReadonlyMap<string, WorkspaceTask["messages"][number]>,
+  readPicture: HistoryOptions["readPicture"],
+): Promise<ModelMessage | undefined> {
+  switch (entry.kind) {
+    case "message": {
+      const message = messages.get(entry.messageId);
+      if (!message) return undefined;
+      const pictures = attachedPictures(message);
+      if (message.role === "assistant")
+        return {
+          role: "assistant",
+          content: modelText(message),
+          ...keptWith(entry),
+        };
+      if (!pictures.length)
+        return { role: "user", content: modelText(message) };
+      if (entry.picturesLetGo)
+        return { role: "user", content: [personalLetGo(message)] };
+      return {
+        role: "user",
+        content: [
+          { kind: "text", text: modelText(message) },
+          ...(await Promise.all(
+            pictures.map(async (picture) => {
+              const stored = await readPicture(picture.source ?? "").catch(
+                () => ({
+                  status: "missing" as const,
+                  reason: "It could not be read.",
+                }),
+              );
+              return stored.status === "ready"
+                ? {
+                    kind: "image" as const,
+                    mediaType: stored.mediaType,
+                    data: stored.data,
+                  }
+                : {
+                    kind: "text" as const,
+                    text: harnessNotice(
+                      "picture",
+                      `A picture the person attached is no longer stored. ${stored.reason}`,
+                    ),
+                  };
+            }),
+          )),
+        ],
+      };
+    }
+    case "calls":
+      return {
+        role: "assistant",
+        content: entry.text,
+        toolCalls: entry.calls.map(({ id, name, arguments: args }) => ({
+          id,
+          name,
+          arguments: args,
+        })),
+        ...keptWith(entry),
+      };
+    case "result":
+      return {
+        role: "tool",
+        toolCallId: entry.callId,
+        name: entry.name,
+        content: entry.content,
+      };
+    case "notice":
+      return { role: "user", content: entry.content };
+    case "pictures": {
+      const parts = await Promise.all(
+        entry.pictures.map(async (picture) => {
+          const stored = await readPicture(picture.source).catch(() => ({
+            status: "missing" as const,
+            reason: "It could not be read.",
+          }));
+          return stored.status === "ready"
+            ? {
+                kind: "image" as const,
+                mediaType: picture.mediaType,
+                data: stored.data,
+              }
+            : {
+                kind: "text" as const,
+                text: harnessNotice(
+                  "picture",
+                  `A picture shown here is no longer stored. ${stored.reason}`,
+                ),
+              };
+        }),
+      );
+      return {
+        role: "user",
+        content: [{ kind: "text", text: entry.text }, ...parts],
+      };
+    }
+  }
+}

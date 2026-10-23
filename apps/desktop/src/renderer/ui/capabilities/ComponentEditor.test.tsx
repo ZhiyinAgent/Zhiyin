@@ -1,0 +1,785 @@
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { ComponentEditor } from "./ComponentEditor.js";
+
+describe("ComponentEditor", () => {
+  it("validates required fields before saving a skill", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "",
+          name: "",
+          description: "",
+          instructions: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("Enter a name.")).toBeVisible();
+    expect(screen.getByText("Describe when to use it.")).toBeVisible();
+    expect(screen.getByText("Add instructions.")).toBeVisible();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      kind: "skill",
+      id: "",
+      name: "",
+      description: "Mine.",
+      instructions: "Do it.",
+    },
+    {
+      kind: "specialist",
+      id: "",
+      name: "",
+      description: "Mine.",
+      instructions: "Do it.",
+    },
+    {
+      kind: "connection",
+      id: "",
+      name: "",
+      url: "https://example.com/mcp",
+      access: "",
+      dataDestination: "",
+    },
+  ] as const)("asks for a name without emoji, for a $kind", (draft) => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={draft}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    const name = screen.getByLabelText("Name");
+    fireEvent.change(name, { target: { value: "Charts 📊" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByText("A name can't contain emoji.")).toBeVisible();
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("saves a filled-in skill, slugifying a new name", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "",
+          name: "",
+          description: "",
+          instructions: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Fetch Forecast" },
+    });
+    fireEvent.change(screen.getByLabelText("When should Zhiyin use it?"), {
+      target: { value: "Look up a forecast." },
+    });
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "Call the forecast tool." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        kind: "skill",
+        id: "fetch-forecast",
+        name: "Fetch Forecast",
+        description: "Look up a forecast.",
+        instructions: "Call the forecast tool.",
+      }),
+    );
+  });
+
+  it("saves a skill named in Chinese under a portable id, keeping its name", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "",
+          name: "",
+          description: "",
+          instructions: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "季度报告" },
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Name").value).toBe(
+      "季度报告",
+    );
+    fireEvent.change(screen.getByLabelText("When should Zhiyin use it?"), {
+      target: { value: "汇总季度数据。" },
+    });
+    fireEvent.change(screen.getByLabelText("Instructions"), {
+      target: { value: "读取数据。" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "季度报告",
+          id: expect.stringMatching(/^skill-[a-z0-9]+$/),
+        }),
+      ),
+    );
+  });
+
+  it("renames a saved skill without moving it", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "fetch-forecast",
+          name: "Fetch forecast",
+          description: "d",
+          instructions: "i",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "天气预报" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "fetch-forecast", name: "天气预报" }),
+      ),
+    );
+  });
+
+  it("takes a name of several words typed one key at a time", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "",
+          name: "",
+          description: "d",
+          instructions: "i",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+    const name = screen.getByLabelText<HTMLInputElement>("Name");
+
+    for (const key of "Fetch forecast ")
+      fireEvent.change(name, { target: { value: name.value + key } });
+
+    expect(name.value).toBe("Fetch forecast ");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "fetch-forecast" }),
+      ),
+    );
+  });
+
+  it("confirms before removing an existing component", async () => {
+    const onRemove = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "fetch-forecast",
+          name: "fetch-forecast",
+          description: "d",
+          instructions: "i",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onRemove={onRemove}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByText("Remove this skill?")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() => expect(onRemove).toHaveBeenCalledTimes(1));
+  });
+
+  it("saves a connector named without Latin letters under a portable id, keeping its name", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "天气",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+        onTest={async () => ({ ok: true, tools: [] })}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Paste an access token/ }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "天气",
+          id: expect.stringMatching(/^connector-[a-z0-9]+$/),
+        }),
+      ),
+    );
+  });
+
+  it("says what a new skill's folder will be named", () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "skill",
+          id: "",
+          name: "",
+          description: "",
+          instructions: "",
+        }}
+        onClose={() => undefined}
+        onSave={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Fetch Forecast" },
+    });
+
+    expect(
+      screen.getByText("Its folder in the plugin is named fetch-forecast."),
+    ).toBeVisible();
+  });
+
+  it("saves a new connector without testing or connecting it first", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={onClose}
+        onSave={onSave}
+        onTest={async () => ({ ok: true, tools: [] })}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Paste an access token/ }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(onSave).toHaveBeenCalledWith({
+        kind: "connection",
+        id: "weather-api",
+        name: "Weather API",
+        url: "https://example.com/mcp",
+        access: "",
+        dataDestination: "",
+      }),
+    );
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("says a connector was saved when only its token could not be kept, and offers no second save", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={onSave}
+        onSaveToken={() => Promise.reject(new Error("store failed"))}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Paste an access token/ }),
+    );
+    fireEvent.change(screen.getByLabelText("Access token"), {
+      target: { value: "t0k3n" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(
+        "Weather API is saved, but its token could not be kept. Open it again to enter the token.",
+      ),
+    ).toBeVisible();
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Done" })).toBeVisible();
+  });
+
+  it("says so when a connection test cannot be run", async () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={() => Promise.reject(new Error("bridge closed"))}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText("The connection could not be tested."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Test connection" }),
+    ).toBeEnabled();
+  });
+
+  it("shows a failed test's reason, and still lets the connector be saved", async () => {
+    const onTest = vi
+      .fn()
+      .mockResolvedValue({ ok: false, reason: "Could not connect." });
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={onTest}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(await screen.findByText("Could not connect.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("lets an already-connected existing connector save without a fresh test", () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "weather-api",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [{ name: "search", description: "Search.", enabled: true }],
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSetToolEnabled={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("toggles a connector's individual tools", async () => {
+    const onSetToolEnabled = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "weather-api",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [
+            { name: "search", description: "Search.", enabled: true },
+            { name: "alerts", description: "Alerts.", enabled: false },
+          ],
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSetToolEnabled={onSetToolEnabled}
+      />,
+    );
+
+    const tools = screen.getByRole("group", { name: "Tools" });
+    fireEvent.click(within(tools).getByLabelText(/Search/));
+
+    await waitFor(() =>
+      expect(onSetToolEnabled).toHaveBeenCalledWith("search", false),
+    );
+  });
+
+  it("shows a withheld tool with its reason, and offers no switch for it", () => {
+    const reason =
+      "Not offered to the model: its input schema is 220 KB, more than the 64 KB a tool may have.";
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "weather-api",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [
+            { name: "search", description: "Search.", enabled: true },
+            {
+              name: "everything",
+              description: "Do it all.",
+              enabled: false,
+              withheld: reason,
+            },
+          ],
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSetToolEnabled={async () => undefined}
+      />,
+    );
+
+    const tools = screen.getByRole("group", { name: "Tools" });
+    const withheld = within(tools).getByLabelText(/Everything/);
+
+    expect(withheld).toBeDisabled();
+    expect(withheld).not.toBeChecked();
+    expect(within(tools).getByText(reason)).toBeVisible();
+    expect(within(tools).getByLabelText(/Search/)).toBeEnabled();
+  });
+
+  it("asks how Zhiyin gets access, and asks for a token only when the person chooses one", () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={async () => ({ ok: true, tools: [] })}
+      />,
+    );
+
+    expect(
+      screen.getByRole("radio", { name: /Sign in with an account/ }),
+    ).toBeChecked();
+    expect(screen.queryByLabelText("Access token")).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Paste an access token/ }),
+    );
+
+    expect(screen.getByLabelText("Access token")).toBeVisible();
+  });
+
+  it("offers to sign in once a new connector is saved, and leaves it for later on Done", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSignIn = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={onClose}
+        onSave={onSave}
+        onSignIn={onSignIn}
+        onCancelSignIn={async () => undefined}
+        onSignOut={async () => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(
+      await screen.findByText(
+        "Tracker is saved. You can sign in now or later.",
+      ),
+    ).toBeVisible();
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "tracker", name: "Tracker" }),
+    );
+    expect(onSignIn).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("signs in right after saving when the person asks, and closes once signed in", async () => {
+    const onSignIn = vi.fn().mockResolvedValue({ status: "signed-in" });
+    const onClose = vi.fn();
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={onClose}
+        onSave={async () => undefined}
+        onSignIn={onSignIn}
+        onCancelSignIn={async () => undefined}
+        onSignOut={async () => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(onSignIn).toHaveBeenCalledWith("tracker"));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("keeps a new connector that was saved when its sign-in is cancelled, and offers to sign in again", async () => {
+    let finish!: (outcome: { status: "cancelled" }) => void;
+    const onSignIn = vi.fn(
+      () =>
+        new Promise<{ status: "cancelled" }>((resolve) => (finish = resolve)),
+    );
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSignIn={onSignIn}
+        onCancelSignIn={async () => finish({ status: "cancelled" })}
+        onSignOut={async () => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Sign in" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Done" })).toBeVisible();
+    expect(screen.queryByLabelText("Name")).toBeNull();
+  });
+
+  it("says when the service has no sign-in Zhiyin can use", async () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "",
+          name: "Weather API",
+          url: "https://example.com/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={async () => ({
+          ok: false,
+          reason: "This service needs an access token.",
+          needs: "token",
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText(
+        "This service has no sign-in Zhiyin can use. Choose Paste an access token.",
+      ),
+    ).toBeVisible();
+  });
+
+  it("signs in to a saved connector whose service has its own sign-in", async () => {
+    const onSignIn = vi.fn().mockResolvedValue({ status: "signed-in" });
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "tracker",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "unauthorized",
+          tokenSaved: false,
+          tools: [],
+          account: "signed-out",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSignIn={onSignIn}
+        onCancelSignIn={async () => undefined}
+        onSignOut={async () => undefined}
+      />,
+    );
+
+    expect(screen.getByText("Sign in to Tracker")).toBeVisible();
+    expect(screen.queryByLabelText("Access token")).toBeNull();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => expect(onSignIn).toHaveBeenCalledWith("tracker"));
+  });
+
+  it("forgets what it knew about the old address once the address changes", () => {
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "tracker",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [],
+          account: "signed-in",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onTest={async () => ({ ok: true, tools: [] })}
+        onSignIn={async () => ({ status: "signed-in" })}
+        onCancelSignIn={async () => undefined}
+        onSignOut={async () => undefined}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("MCP endpoint"), {
+      target: { value: "https://other.example/mcp" },
+    });
+
+    expect(screen.queryByText("Signed in to Tracker")).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: /Sign in with an account/ }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("signs out of a signed-in connector from its form", async () => {
+    const onSignOut = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ComponentEditor
+        draft={{
+          kind: "connection",
+          id: "tracker",
+          name: "Tracker",
+          url: "https://mcp.tracker.example/mcp",
+          access: "",
+          dataDestination: "",
+        }}
+        connectionState={{
+          status: "connected",
+          tokenSaved: false,
+          tools: [],
+          account: "signed-in",
+        }}
+        onClose={() => undefined}
+        onSave={async () => undefined}
+        onSignIn={async () => ({ status: "signed-in" })}
+        onCancelSignIn={async () => undefined}
+        onSignOut={onSignOut}
+      />,
+    );
+
+    expect(screen.getByText("Signed in to Tracker")).toBeVisible();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByLabelText("Access token")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(onSignOut).toHaveBeenCalledWith("tracker"));
+  });
+});

@@ -1,0 +1,187 @@
+.message {
+  display: grid;
+  justify-items: end;
+  gap: 5px;
+}
+
+/* Quiet icons under the message, named on hover and focus. */
+.actions {
+  display: flex;
+  gap: 2px;
+}
+
+.action {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled),
+.action:focus-visible {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.remedies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.error {
+  margin: 8px 0 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.effects {
+  margin-top: 18px;
+}
+
+.effects h3 {
+  margin: 0 0 8px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* One box per kind, its rows divided by rules rather than each boxed. */
+.effects ul {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: 12px;
+  list-style: none;
+}
+
+.effects li {
+  display: grid;
+  gap: 2px;
+  padding: 9px 14px;
+}
+
+.effects li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+.effects strong,
+.path {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.effects span {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+/* The in-place editor: as wide as the conversation lets a message be, its
+   buttons on one row beneath, against its right edge like the message. */
+.editor {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  width: min(100%, 640px);
+}
+
+.editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 46px;
+  max-height: 320px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: 16px;
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.editor textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--zy-accent-veil);
+}
+
+.editorActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.lead {
+  text-wrap: pretty;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.note {
+  margin: 14px 0 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+/* The one choice going back offers, as a card the whole of which is the box. */
+.restore {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.restore:has(input:checked) {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+.restore input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--zy-accent);
+}
+
+.restore > span {
+  display: grid;
+  gap: 3px;
+}
+
+.restore strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.restore span span {
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}

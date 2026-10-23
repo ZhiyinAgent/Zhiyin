@@ -1,0 +1,415 @@
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import {
+  lstat,
+  mkdir,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { pipeline } from "node:stream/promises";
+import type { ToolchainState } from "@zhiyin/contract";
+import { realStaysInside } from "@zhiyin/workspace-containment";
+import { nodeNetwork, type Network } from "./network.js";
+
+/** One pinned release of one program. */
+export type ToolchainSpec = {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly url: string;
+  readonly sha256: string;
+  readonly bytes: number;
+  /** Where the download comes from, as a person would recognise it. */
+  readonly source: string;
+  /** The program's path inside the archive, with forward slashes. */
+  readonly executable: string;
+};
+
+export interface Toolchains {
+  state(id: string): Promise<ToolchainState>;
+  install(id: string, signal?: AbortSignal): Promise<void>;
+  /** The installed program, or nothing when it is not installed. */
+  executable(id: string): Promise<string | undefined>;
+}
+
+/** Streams a download. Replaceable so tests never reach the network. */
+export type Download = (
+  url: string,
+  signal: AbortSignal,
+) => Promise<AsyncIterable<Uint8Array>>;
+
+/**
+ * Makes an unpacked program ready to use, once, before it is moved into
+ * place: `executable` is where the program is now, `installed` where it
+ * will be. What it writes beside the program is installed with it.
+ */
+export type Ready = (
+  program: { readonly executable: string; readonly installed: string },
+  signal: AbortSignal,
+) => Promise<void>;
+
+/** Unpacks a zip archive into an empty directory. */
+export type Unpack = (archive: string, destination: string) => Promise<void>;
+
+/** A download over `network`, following the redirects release sites send. */
+function downloadOver(network: Network): Download {
+  return async (url, signal) => {
+    let response: Response;
+    try {
+      response = await network(url, { signal, redirect: "follow" });
+    } catch (error) {
+      // Before any of it arrived, the site was not reached.
+      const code = chromiumCode(error);
+      if (!code) throw error;
+      throw new Error(
+        code.startsWith("ERR_CERT_")
+          ? "The download site's certificate is not trusted on this computer."
+          : "The download could not be reached. Check the internet connection.",
+        { cause: error },
+      );
+    }
+    if (!response.ok || !response.body)
+      throw new Error(`The download failed (HTTP ${response.status}).`);
+    return response.body;
+  };
+}
+
+/** The same download over Node's own `fetch`, for scripts run outside the app. */
+export const fetchDownload: Download = downloadOver(nodeNetwork);
+
+/**
+ * Windows ships bsdtar, which reads zip archives and by default refuses entry
+ * paths that are absolute or climb out with `..`. It is reached by its full
+ * path so nothing earlier on `PATH` can stand in for it.
+ */
+export const windowsTarUnpack: Unpack = (archive, destination) =>
+  new Promise((resolveUnpack, reject) => {
+    const tar = join(
+      process.env["SystemRoot"] ?? "C:\\Windows",
+      "System32",
+      "tar.exe",
+    );
+    const child = spawn(tar, ["-xf", archive, "-C", destination], {
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let errors = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      errors += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) =>
+      code === 0
+        ? resolveUnpack()
+        : reject(new Error(errors.trim() || `tar exited with ${code}.`)),
+    );
+  });
+
+type Marker = {
+  readonly id: string;
+  readonly version: string;
+  readonly sha256: string;
+};
+
+/** Refuses an unpacked tree holding links or anything outside its root. */
+async function assertPlainTree(root: string): Promise<void> {
+  const canonicalRoot = await realpath(root);
+  const visit = async (directory: string): Promise<void> => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      const status = await lstat(path);
+      if (status.isSymbolicLink())
+        throw new Error("The archive contains a link, which is not allowed.");
+      if (!realStaysInside(canonicalRoot, await realpath(path)))
+        throw new Error("The archive reaches outside its folder.");
+      if (status.isDirectory()) await visit(path);
+    }
+  };
+  await visit(canonicalRoot);
+}
+
+/** How Chromium's network fails (ADR 0004): an error named for its code. */
+function chromiumCode(error: unknown): string | undefined {
+  return error instanceof Error
+    ? /^net::(ERR_[A-Z0-9_]+)$/.exec(error.message)?.[1]
+    : undefined;
+}
+
+function describe(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError")
+    return "The installation was stopped.";
+  // Chromium's network failing once the download had begun.
+  if (chromiumCode(error))
+    return "The download was interrupted. Check the internet connection, then try again.";
+  return error instanceof Error && error.message
+    ? error.message
+    : "The program could not be installed.";
+}
+
+export class DownloadedToolchains implements Toolchains {
+  readonly #root: string;
+  readonly #specs: ReadonlyMap<string, ToolchainSpec>;
+  readonly #download: Download;
+  readonly #unpack: Unpack;
+  readonly #ready: Readonly<Record<string, Ready>>;
+  readonly #installing = new Map<string, Promise<void>>();
+  /** What stops each install under way. */
+  readonly #stoppedBy = new Map<string, AbortSignal | undefined>();
+  /** How many bytes of each download under way have arrived. */
+  readonly #received = new Map<string, number>();
+  readonly #failures = new Map<string, string>();
+  /**
+   * What installs cut short by Zhiyin closing left, cleared once before this
+   * run's first install begins, so no install of this run is under way.
+   */
+  #leftovers: Promise<void> | undefined;
+
+  constructor(options: {
+    readonly directory: string;
+    readonly specs: readonly ToolchainSpec[];
+    /**
+     * How downloads go online: Chromium's in the app (ADR 0004), Node's own
+     * `fetch` when absent.
+     */
+    readonly network?: Network;
+    /** The download itself, in place of `network`. Replaced in tests. */
+    readonly download?: Download;
+    readonly unpack?: Unpack;
+    /** By program id: what readies each one, where its owner has something to. */
+    readonly ready?: Readonly<Record<string, Ready>>;
+  }) {
+    this.#root = join(options.directory, "toolchains");
+    this.#specs = new Map(options.specs.map((spec) => [spec.id, spec]));
+    this.#download =
+      options.download ?? downloadOver(options.network ?? nodeNetwork);
+    this.#unpack = options.unpack ?? windowsTarUnpack;
+    this.#ready = options.ready ?? {};
+  }
+
+  async state(id: string): Promise<ToolchainState> {
+    const spec = this.#spec(id);
+    if (this.#installing.has(id))
+      return {
+        status: "installing",
+        received: this.#received.get(id) ?? 0,
+        bytes: spec.bytes,
+      };
+    if (await this.executable(id)) return { status: "ready" };
+    const failure = this.#failures.get(id);
+    if (failure) return { status: "failed", reason: failure };
+    return {
+      status: "missing",
+      downloads: [
+        {
+          name: spec.name,
+          version: spec.version,
+          bytes: spec.bytes,
+          source: spec.source,
+        },
+      ],
+    };
+  }
+
+  async executable(id: string): Promise<string | undefined> {
+    const spec = this.#spec(id);
+    const directory = this.#installed(spec);
+    try {
+      const marker = JSON.parse(
+        await readFile(join(directory, "installed.json"), "utf8"),
+      ) as Marker;
+      if (marker.version !== spec.version || marker.sha256 !== spec.sha256)
+        return undefined;
+      const program = join(directory, "files", ...spec.executable.split("/"));
+      return (await lstat(program)).isFile() ? program : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  install(id: string, signal?: AbortSignal): Promise<void> {
+    const spec = this.#spec(id);
+    const running = this.#installing.get(id);
+    // One being stopped is not joined: this one starts once it has ended.
+    if (running && this.#stoppedBy.get(id)?.aborted)
+      return running.then(
+        () => this.install(id, signal),
+        () => this.install(id, signal),
+      );
+    if (running) return running;
+    const installation = this.#install(spec, signal)
+      .then(() => {
+        this.#failures.delete(id);
+      })
+      .catch((error: unknown) => {
+        // Stopped on purpose is not a failure: it is offered as before.
+        if (signal?.aborted) this.#failures.delete(id);
+        else this.#failures.set(id, describe(error));
+        throw error;
+      })
+      .finally(() => {
+        this.#installing.delete(id);
+        this.#stoppedBy.delete(id);
+        this.#received.delete(id);
+      });
+    this.#installing.set(id, installation);
+    this.#stoppedBy.set(id, signal);
+    return installation;
+  }
+
+  async #install(spec: ToolchainSpec, signal?: AbortSignal): Promise<void> {
+    if (await this.executable(spec.id)) return;
+    await (this.#leftovers ??= rm(join(this.#root, ".staging"), {
+      recursive: true,
+      force: true,
+    }).catch(() => {}));
+    // Short, so the longest path in a large archive stays within Windows'
+    // 260-character limit where long paths are not enabled.
+    const staging = join(this.#root, ".staging", randomUUID().slice(0, 8));
+    await mkdir(staging, { recursive: true });
+    const stopped = signal ?? new AbortController().signal;
+    try {
+      const archive = join(staging, "download.zip");
+      await this.#fetchVerified(spec, archive, stopped);
+      const files = join(staging, "files");
+      await mkdir(files);
+      await this.#unpack(archive, files);
+      await assertPlainTree(files);
+      const program = join(files, ...spec.executable.split("/"));
+      if (!(await lstat(program).catch(() => undefined))?.isFile())
+        throw new Error(`The download does not contain ${spec.name}.`);
+      await rm(archive);
+      const target = this.#installed(spec);
+      // The program works without it, so a readying that fails costs only
+      // what it would have saved; one that was stopped stops the install.
+      await this.#ready
+        [spec.id]?.(
+          {
+            executable: program,
+            installed: join(target, "files", ...spec.executable.split("/")),
+          },
+          stopped,
+        )
+        .catch(() => {});
+      stopped.throwIfAborted();
+      await writeFile(
+        join(staging, "installed.json"),
+        JSON.stringify({
+          id: spec.id,
+          version: spec.version,
+          sha256: spec.sha256,
+        } satisfies Marker),
+        "utf8",
+      );
+      await rm(target, { recursive: true, force: true });
+      await mkdir(join(this.#root, spec.id), { recursive: true });
+      await rename(staging, target);
+      await this.#removeOtherVersions(spec);
+    } finally {
+      await rm(staging, { recursive: true, force: true });
+    }
+  }
+
+  async #fetchVerified(
+    spec: ToolchainSpec,
+    destination: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const hash = createHash("sha256");
+    const progress = this.#received;
+    let received = 0;
+    // A write that fails, such as on a full disk, fails the download.
+    await pipeline(
+      await this.#download(spec.url, signal),
+      async function* (chunks: AsyncIterable<Uint8Array>) {
+        for await (const chunk of chunks) {
+          signal.throwIfAborted();
+          received += chunk.byteLength;
+          progress.set(spec.id, received);
+          if (received > spec.bytes)
+            throw new Error(
+              `The download of ${spec.name} is larger than expected.`,
+            );
+          hash.update(chunk);
+          yield chunk;
+        }
+      },
+      createWriteStream(destination),
+    );
+    signal.throwIfAborted();
+    if (received !== spec.bytes || hash.digest("hex") !== spec.sha256)
+      throw new Error(
+        `The download of ${spec.name} did not match its published fingerprint, so it was discarded.`,
+      );
+  }
+
+  async #removeOtherVersions(spec: ToolchainSpec): Promise<void> {
+    const directory = join(this.#root, spec.id);
+    for (const entry of await readdir(directory))
+      if (entry !== spec.version)
+        await rm(join(directory, entry), { recursive: true, force: true });
+  }
+
+  #installed(spec: ToolchainSpec): string {
+    return join(this.#root, spec.id, spec.version);
+  }
+
+  #spec(id: string): ToolchainSpec {
+    const spec = this.#specs.get(id);
+    if (!spec) throw new Error(`No program “${id}” is known.`);
+    return spec;
+  }
+}
+
+/**
+ * The pinned releases this build installs. Versions, sizes, and digests are
+ * those each project publishes with its release: on GitHub, and Blender on
+ * its own download site.
+ */
+export const pinnedToolchains: readonly ToolchainSpec[] = [
+  {
+    id: "typst",
+    name: "Typst",
+    version: "0.15.1",
+    url: "https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-pc-windows-msvc.zip",
+    sha256: "19ce3551153c2fe7ee9fa2f95208310c8f4d3209fedb699e0333faf8913f6736",
+    bytes: 22463684,
+    source: "github.com/typst/typst",
+    executable: "typst-x86_64-pc-windows-msvc/typst.exe",
+  },
+  {
+    id: "tectonic",
+    name: "Tectonic",
+    version: "0.17.0",
+    url: "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.17.0/tectonic-0.17.0-x86_64-pc-windows-msvc.zip",
+    sha256: "f61ce51f0b0ade1015b7de7ef368541c5424e9756ecbd0d7af97d6d48030845f",
+    bytes: 21060223,
+    source: "github.com/tectonic-typesetting/tectonic",
+    executable: "tectonic.exe",
+  },
+  {
+    id: "blender",
+    name: "Blender",
+    version: "5.2.2",
+    url: "https://download.blender.org/release/Blender5.2/blender-5.2.2-windows-x64.zip",
+    sha256: "3849d17a682cba006075aaa3f3597ecb5c9c30ec31035b2e092c53e40679b535",
+    bytes: 404453484,
+    source: "download.blender.org",
+    executable: "blender-5.2.2-windows-x64/blender.exe",
+  },
+  {
+    id: "uv",
+    name: "uv",
+    version: "0.12.15",
+    url: "https://github.com/astral-sh/uv/releases/download/0.12.15/uv-x86_64-pc-windows-msvc.zip",
+    sha256: "477bd99a84e34891f2bd4c9152ddeb74e971accccbc59c0f0301f11f08a32d46",
+    bytes: 17578593,
+    source: "github.com/astral-sh/uv",
+    executable: "uv.exe",
+  },
+];

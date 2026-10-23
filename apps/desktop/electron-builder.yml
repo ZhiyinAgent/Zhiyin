@@ -1,0 +1,69 @@
+appId: com.zhiyin.desktop
+productName: Zhiyin
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - third-party-licenses/**/*
+  - package.json
+  # The window sets its own icon, so the mark has to be readable at runtime and
+  # not only by the installer.
+  - build/icon.ico
+  # The font the drawing process falls back on, read from inside the archive
+  # like the rest of the app (ADR 0024).
+  - fonts/*.otf
+  # Source maps serve only debugging, and nothing reads them at runtime.
+  - "!**/*.map"
+# A program cannot be started from inside the packed archive, so the bundled
+# ripgrep is unpacked beside it.
+asarUnpack:
+  - "**/node_modules/@vscode/ripgrep-*/bin/**"
+extraResources:
+  # The plugins shipped with the app are ordinary package folders, read by the
+  # same loader as a person's own.
+  - from: ../../packages/plugins/built-in
+    to: plugins
+  # The script Blender runs for the 3D studio, run where it is (ADR 0025).
+  - from: ../../packages/blender-studio/src/session
+    to: blender-session
+    filter:
+      - "**/*.py"
+  # The spelling dictionaries, fetched and verified against their checksums
+  # before the build, so every bundled language is spellchecked with nothing
+  # downloaded (ADR 0030).
+  - from: dictionaries
+    to: dictionaries
+    filter:
+      - "*.bdic"
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../NOTICE
+    to: NOTICE
+  - from: ../../THIRD_PARTY_LICENSES.md
+    to: THIRD_PARTY_LICENSES.md
+# The installed executable starts only as Zhiyin. Honouring
+# ELECTRON_RUN_AS_NODE, NODE_OPTIONS or --inspect would let another program run
+# its own code as this executable. Nothing in Zhiyin starts itself either way.
+# It also runs
+# only its own code: the app is loaded from its archive alone, and the archive
+# is checked against the hash built into the executable, so code put in the
+# install folder in its place does not run under Zhiyin's name. Its window is
+# served from an address of its own, never from file:, so a page loaded from
+# file: is given nothing beyond what a browser gives one.
+electronFuses:
+  runAsNode: false
+  enableNodeCliInspectArguments: false
+  enableNodeOptionsEnvironmentVariable: false
+  grantFileProtocolExtraPrivileges: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  # No spaces: GitHub turns them into dots in a release asset's name, and the
+  # checksum file must name the installer as it is downloaded.
+  artifactName: ${productName}-Setup-${version}.${ext}
+  oneClick: false
+  allowToChangeInstallationDirectory: true

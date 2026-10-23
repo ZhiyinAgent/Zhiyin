@@ -1,0 +1,120 @@
+.personal-instructions {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: clamp(18px, 2.4vw, 28px);
+  border: 1px solid var(--zy-card-line);
+  border-radius: 14px;
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+/* Under the title as on every page. */
+.instructions-page__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 270px);
+  gap: 20px;
+  align-items: start;
+  width: min(100%, 980px);
+}
+
+.instructions-page__guide {
+  display: grid;
+  gap: 12px;
+}
+
+.instructions-page__guide > div {
+  padding: 18px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-panel-soft);
+}
+
+.instructions-page__guide h2 {
+  margin: 9px 0 0;
+  font-size: 16px;
+}
+
+.instructions-page__guide ul {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding-left: 18px;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.instructions-page__guide p {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.personal-instructions h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.personal-instructions__hint {
+  max-width: 68ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.personal-instructions textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 190px;
+  padding: 14px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-sm);
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.personal-instructions textarea:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.personal-instructions__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.personal-instructions__foot :global(.button) {
+  margin-left: auto;
+}
+
+.personal-instructions__over {
+  color: var(--zy-amber);
+}
+
+@media (max-width: 780px) {
+  .instructions-page__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .instructions-page__guide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .instructions-page__guide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,0 +1,1127 @@
+/* Styles owned by the model module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/*
+ * The model picker reads as part of the settings page rather than as a panel
+ * placed on it: no frame around the columns, no title bar, and the provider
+ * table flows with the page instead of scrolling inside a box. Only the model
+ * list keeps a scroller of its own, because a list of several hundred would
+ * otherwise push everything else off the screen.
+ */
+.model-settings {
+  /*
+   * A bounded height, not a minimum. The surface that holds this hides its own
+   * overflow, so a panel that grows with its content cannot scroll: it would
+   * extend past the bottom of the window with no way to reach the rest.
+   */
+  height: 100%;
+  padding: 0 clamp(24px, 4vw, 64px) 64px;
+  overflow-y: auto;
+  /*
+   * The layout answers to this panel's own width, not the window's. The panel
+   * sits beside the sidebar, so a window wide enough for eight columns says
+   * nothing about whether the panel is.
+   */
+  container-type: inline-size;
+  container-name: model;
+  color: var(--zy-text);
+}
+
+/* The actions drop under the title rather than squeeze their labels. */
+.model-settings__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  /* Page padding lives in the scrolling content so the pinned table header
+     has no gap above it for rows to surface through. */
+  padding-top: 28px;
+}
+
+.model-settings__head h1 {
+  margin: 4px 0 0;
+  font-family: var(--zy-font-display);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.model-settings__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.model-settings__dirty {
+  color: var(--zy-accent);
+  font-size: 12.5px;
+}
+
+.model-settings__failed {
+  color: var(--zy-danger);
+  font-size: 12.5px;
+}
+
+.model-settings__withdrawn {
+  color: var(--zy-danger);
+  font-size: 12.5px;
+}
+
+.model-settings__current {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.model-settings__label,
+.model-settings__routing {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.model-settings__current strong {
+  font-size: 15px;
+  font-weight: 540;
+}
+
+.model-settings__provider {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/*
+ * Provider, then model, then on a provider that routes between upstreams, the
+ * upstreams; on a lab, the chosen model's details.
+ */
+.model-settings__columns {
+  display: grid;
+  grid-template-columns: minmax(0, 168px) minmax(0, 340px) minmax(0, 1fr);
+  /* The tall provider list stretches the second row, never the account's. */
+  grid-template-rows: auto 1fr;
+  gap: 22px 36px;
+  align-items: start;
+  margin-top: 26px;
+}
+
+/*
+ * The chosen provider's account runs above its models and upstreams, the
+ * provider list beside both. Without a key, one card stands where the model
+ * and upstream columns go.
+ */
+.model-settings__columns > .model-column--providers {
+  grid-row: 1 / span 2;
+}
+
+.model-settings__columns > .account-bar,
+.model-settings__columns > .key-card {
+  grid-column: 2 / -1;
+}
+
+/*
+ * Each provider named in the page's ink. Where one is chosen from, a dot in
+ * its own colour from the theme marks it; labs whose own mark is black or
+ * white take the text colour.
+ */
+.provider-name {
+  color: var(--zy-text);
+}
+
+.provider-name[data-provider="openrouter"] {
+  --provider: var(--zy-provider-openrouter);
+}
+.provider-name[data-provider="anthropic"] {
+  --provider: var(--zy-provider-anthropic);
+}
+.provider-name[data-provider="deepseek"] {
+  --provider: var(--zy-provider-deepseek);
+}
+.provider-name[data-provider="moonshot"] {
+  --provider: var(--zy-provider-moonshot);
+}
+.provider-name[data-provider="minimax"] {
+  --provider: var(--zy-provider-minimax);
+}
+.provider-name[data-provider="qwen"] {
+  --provider: var(--zy-provider-qwen);
+}
+.provider-name[data-provider="mistral"] {
+  --provider: var(--zy-provider-mistral);
+}
+
+.model-column--providers {
+  position: sticky;
+  top: 18px;
+}
+
+.provider-list {
+  display: grid;
+  gap: 2px;
+  margin: 0 -10px;
+}
+
+.provider-list__failed {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.provider-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 2px 8px 8px 2px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.provider-option:hover:not([aria-disabled="true"]) {
+  background: var(--zy-wash);
+}
+
+.provider-option::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--provider, var(--zy-muted));
+}
+
+/* The chosen provider carries the red line, as the open conversation does. */
+.provider-option[aria-checked="true"] {
+  background: var(--zy-ink-wash);
+  box-shadow: inset 2px 0 0 var(--zy-accent-fill);
+}
+
+/* Listed so nobody wonders whether it exists, without its colour. */
+.provider-option[aria-disabled="true"] {
+  color: var(--zy-muted);
+  cursor: default;
+}
+
+.provider-option[aria-disabled="true"]::before {
+  background: var(--zy-faint);
+}
+
+.provider-option__note {
+  grid-column: 2;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* As tall as the account bar, so the heading reads level with its name. */
+.model-column--providers > h3 {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  margin: 0 0 10px;
+}
+
+.account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.account-bar__who,
+.account-bar__key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  min-width: 0;
+  min-height: 36px;
+}
+
+.account-bar__name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.account-bar__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.account-bar__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account-bar__status svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A missing key, asked for as Settings asks: the words, then the action. */
+.key-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  max-width: 720px;
+  padding: 14px 16px;
+  border: 1px solid var(--zy-card-line);
+  border-radius: 14px;
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+/* The words give way to the button, never the other way round. */
+.key-card__words {
+  min-width: 0;
+}
+
+.key-card strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.key-card p {
+  margin: 4px 0 0;
+  text-wrap: pretty;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.key-card :global(.button) {
+  flex: none;
+}
+
+.model-column {
+  min-width: 0;
+}
+
+.model-column--models,
+.model-column--details {
+  position: sticky;
+  top: 18px;
+}
+
+/* Held to a width its rows can still be read across. */
+.model-column--details {
+  display: grid;
+  gap: 22px;
+  max-width: 560px;
+}
+
+.model-details__head {
+  display: grid;
+  gap: 6px;
+}
+
+.model-details__head h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.model-details__head code {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.model-details__group {
+  display: grid;
+  gap: 10px;
+}
+
+.model-details__note {
+  margin: 0;
+  text-wrap: pretty;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/*
+ * Where the labs' models and prices come from, under everything it informs:
+ * the sentence on the left, the switch with its words on the right, and the
+ * switch under the sentence where the page is too narrow for both.
+ */
+.model-list-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 28px;
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.model-list-line p {
+  flex: 1 1 320px;
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.model-list-line__switch {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  color: var(--zy-text-soft);
+}
+
+/* A quiet card of rows, as Settings groups its own. */
+.details-card {
+  margin: 0;
+  border: 1px solid var(--zy-card-line);
+  border-radius: 14px;
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+.price-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.price-table th,
+.price-table td {
+  padding: 12px 16px;
+  font-size: 13.5px;
+  text-align: right;
+}
+
+.price-table tbody th {
+  color: var(--zy-text);
+  font-weight: 500;
+  text-align: left;
+}
+
+.price-table thead th {
+  padding-block: 10px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.price-table td {
+  font-family: var(--zy-font-data);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.price-table tr + tr > *,
+.price-table thead + tbody > tr:first-child > * {
+  border-top: 1px solid var(--zy-line);
+}
+
+.model-facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 16px;
+}
+
+.model-facts > div + div {
+  border-top: 1px solid var(--zy-line);
+}
+
+.model-facts dt {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.model-facts dd {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-family: var(--zy-font-data);
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-column__top {
+  padding: 0 0 14px;
+}
+
+.model-column__top h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 540;
+}
+
+.model-search {
+  display: grid;
+  padding: 0 11px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 9px;
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+}
+
+.model-search:focus-within {
+  border-color: var(--zy-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--zy-accent) 12%, transparent);
+}
+
+.model-search input {
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.model-search input::placeholder {
+  color: var(--zy-faint);
+}
+
+.model-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 18px 24px;
+  margin-top: 14px;
+}
+
+.model-control {
+  display: grid;
+  gap: 7px;
+}
+
+.model-control--grow {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.model-control__label {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.model-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.model-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px 7px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: 9px;
+  background: var(--zy-panel);
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.model-check:hover {
+  border-color: var(--zy-line-strong);
+  color: var(--zy-text);
+}
+
+.model-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--zy-accent-fill);
+  cursor: pointer;
+}
+
+.model-check:has(input:checked) {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+  color: var(--zy-text);
+}
+
+.model-checks__note {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.model-select {
+  min-height: 36px;
+  padding: 0 32px 0 11px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 9px;
+  background-color: var(--zy-field);
+  background-image: var(--zy-select-arrow);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 13.5px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.model-select:hover:enabled {
+  border-color: var(--zy-text-soft);
+}
+
+.model-select:disabled,
+.model-check input:disabled,
+.model-search input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* A long list keeps at least 260px to scroll in; a short one is its own height. */
+.model-list {
+  max-height: max(260px, calc(100vh - 400px));
+  margin: 0 -10px;
+  overflow-y: auto;
+}
+
+.model-row {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-row:hover {
+  background: var(--zy-wash);
+}
+
+.model-row[aria-checked="true"] {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+.model-row__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.model-row__title strong {
+  font-size: 14px;
+  font-weight: 540;
+}
+
+.model-row__price {
+  color: var(--zy-text-soft);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.model-row__id {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+}
+
+.model-row__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.model-row mark {
+  background: transparent;
+  color: var(--zy-accent);
+  font-weight: 650;
+}
+
+.model-badge {
+  padding: 3px 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: 999px;
+  background: var(--zy-wash-faint);
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.model-badge--good {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.model-badge--accent {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+  color: var(--zy-accent);
+}
+
+.model-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 72px 40px;
+  text-align: center;
+}
+
+.model-empty strong {
+  font-size: 15px;
+  font-weight: 520;
+}
+
+.model-empty p {
+  max-width: 44ch;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.model-provider-head,
+.model-provider-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) repeat(6, minmax(70px, auto));
+  gap: 16px;
+  align-items: center;
+}
+
+.model-provider-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 6px 10px 9px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-canvas);
+  color: var(--zy-faint);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.model-provider-head > span:not(:nth-child(2)) {
+  text-align: right;
+}
+
+.model-provider-head > span:first-child {
+  text-align: left;
+}
+
+.model-provider-head small {
+  display: block;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.model-provider-row {
+  width: 100%;
+  margin-top: 2px;
+  padding: 12px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-provider-row:hover:enabled {
+  background: var(--zy-wash);
+}
+
+.model-provider-row[aria-checked="true"] {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+/* An upstream that cannot run tools stays readable, saying why it is off. */
+.model-provider-row:disabled {
+  color: var(--zy-muted);
+  cursor: not-allowed;
+}
+
+.model-provider-row:disabled .model-box {
+  border-style: dashed;
+}
+
+.model-box {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 6px;
+  color: transparent;
+  font-size: 12px;
+}
+
+.model-provider-row[aria-checked="true"] .model-box,
+.model-auto-row[aria-checked="true"] .model-box {
+  border-color: var(--zy-accent);
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.model-provider-row__name {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.model-provider-row__name strong {
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.model-provider-row__name > span {
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.model-provider-row__name > span.model-provider-row__why {
+  color: var(--zy-amber);
+}
+
+.model-cell {
+  text-align: right;
+  font-family: var(--zy-font-data);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-cell--absent {
+  color: var(--zy-faint);
+}
+
+.model-auto-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 14px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--zy-wash-faint);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.model-auto-row[aria-checked="true"] {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-veil);
+}
+
+.model-auto-row strong {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+  font-weight: 540;
+}
+
+.model-auto-row p {
+  max-width: 68ch;
+  margin: 4px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.model-key-dialog__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.model-key-status {
+  padding: 6px 9px;
+  border: 1px solid var(--zy-green-line);
+  border-radius: 999px;
+  color: var(--zy-green);
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.model-key-status--missing {
+  border-color: var(--zy-amber-line);
+  color: var(--zy-amber);
+}
+
+.model-key-value {
+  margin: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 7px;
+  background: var(--zy-panel);
+  color: var(--zy-text-soft);
+  font-family: var(--zy-font-data);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.model-key-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.model-key-form label > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+.model-key-form input {
+  width: 100%;
+  padding: 12px 13px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: 7px;
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.model-key-form input:focus {
+  border-color: var(--zy-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--zy-accent) 12%, transparent);
+}
+
+.model-key-note {
+  margin: 0 0 14px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.model-key-note--failed {
+  margin: 14px 0 0;
+  color: var(--zy-danger);
+}
+
+/*
+ * The upstream table answers to its own width, which depends on where the
+ * table sits as much as on the panel. Columns drop by name as it narrows,
+ * cheapest information first: speed and output price go before context
+ * window, and response time and reliability stay longest because they are
+ * what a person is comparing.
+ */
+.model-column--upstreams {
+  container: upstreams / inline-size;
+}
+
+@container upstreams (max-width: 784px) {
+  .model-col--speed {
+    display: none;
+  }
+
+  .model-provider-head,
+  .model-provider-row {
+    grid-template-columns: 26px minmax(0, 1fr) repeat(5, minmax(64px, auto));
+  }
+}
+
+@container upstreams (max-width: 672px) {
+  .model-col--output {
+    display: none;
+  }
+
+  .model-provider-head,
+  .model-provider-row {
+    grid-template-columns: 26px minmax(0, 1fr) repeat(4, minmax(62px, auto));
+  }
+}
+
+@container upstreams (max-width: 492px) {
+  .model-col--context {
+    display: none;
+  }
+
+  .model-provider-head,
+  .model-provider-row {
+    grid-template-columns: 26px minmax(0, 1fr) repeat(3, minmax(60px, auto));
+  }
+}
+
+/*
+ * Below this three columns would squeeze the upstream table, so it moves under
+ * the provider and model columns and takes the full width. Nothing stays
+ * pinned: a pinned column would slide over the table beneath it.
+ */
+@container model (max-width: 1180px) {
+  .model-settings__columns {
+    grid-template-columns: minmax(0, 150px) minmax(0, 300px) minmax(0, 1fr);
+    gap: 22px 28px;
+  }
+
+  .model-settings__columns--routed {
+    grid-template-columns: minmax(0, 150px) minmax(0, 560px);
+  }
+
+  .model-settings__columns--routed > .model-column--upstreams {
+    grid-column: 1 / -1;
+    margin-top: 10px;
+  }
+
+  .model-settings__columns--routed > .model-column {
+    position: static;
+  }
+}
+
+/* Below this the details would be too narrow to read beside the list. */
+@container model (max-width: 880px) {
+  .model-settings__columns {
+    grid-template-columns: minmax(0, 150px) minmax(0, 560px);
+  }
+
+  .model-settings__columns > .model-column--details {
+    grid-column: 2;
+  }
+
+  .model-settings__columns > .model-column {
+    position: static;
+  }
+}
+
+/*
+ * Below this the columns stop being columns. Providers become a grid of two,
+ * then the account, then the models.
+ */
+@container model (max-width: 680px) {
+  .model-settings__columns,
+  .model-settings__columns--routed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    gap: 24px;
+  }
+
+  .model-settings__columns > .model-column {
+    position: static;
+  }
+
+  .model-settings__columns > .model-column--providers {
+    grid-row: auto;
+  }
+
+  .model-settings__columns > .model-column--details {
+    grid-column: auto;
+  }
+
+  .model-settings__columns > .account-bar,
+  .model-settings__columns > .key-card {
+    grid-column: 1 / -1;
+  }
+
+  .key-card {
+    flex-wrap: wrap;
+  }
+
+  .provider-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .model-list {
+    max-height: 320px;
+  }
+}
+
+.model-note {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--zy-amber-line);
+  border-radius: 8px;
+  background: var(--zy-amber-fill);
+  color: var(--zy-amber);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.model-key-label {
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 560;
+}
+
+/* What the key is for, with where to get one beside it. */
+.model-key-intro {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.model-key-intro p {
+  flex: 1 1 32ch;
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.model-key-where {
+  margin: 2px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.model-key-saved {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}

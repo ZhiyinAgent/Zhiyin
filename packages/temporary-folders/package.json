@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/temporary-folders",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Folders tests make in the system's temporary folder, removed after each test.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

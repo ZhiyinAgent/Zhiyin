@@ -1,0 +1,498 @@
+/**
+ * How much of the budget the person chose the conversation already uses,
+ * beside the reasoning control and working the same way. It reads the size
+ * the loop measured for the last request it sent — instructions and tools
+ * included — against the budget's target for the model chosen now, so it
+ * follows a model switch or a budget change at once. Before the first message
+ * nothing is used yet and it reads 0%; the message being written is not
+ * counted until it is sent. When the model's window is not known it says so.
+ */
+
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  contextBudgets,
+  contextTarget,
+  fixedPartFits,
+  type ContextBudgetChoice,
+  type ContextUsage,
+  type ModelWindow,
+  type StandingInstruction,
+} from "@zhiyin/contract";
+import { Dialog, Icon, PointedTip, useDismiss } from "../shared/index.js";
+import { usePanelAbove } from "./usePanelAbove.js";
+import { InstructionSources } from "./InstructionSources.js";
+import styles from "./conversation.module.css";
+
+const names: Record<ContextBudgetChoice, string> = {
+  low: "Low",
+  medium: "Medium",
+  ultra: "Ultra",
+};
+
+function short(tokens: number): string {
+  if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(2))}M`;
+  return `${Math.round(tokens / 1_000)}K`;
+}
+
+/**
+ * The last request's size against the budget chosen, as the ring, its panel
+ * and the breakdown all read it.
+ */
+function contextReading(
+  usage: ContextUsage | undefined,
+  model: ModelWindow,
+  budget: ContextBudgetChoice,
+) {
+  const options = contextBudgets(model);
+  const chosen = contextTarget(budget, model);
+  const known = model.contextWindow !== undefined;
+  const total = usage?.totalTokens ?? 0;
+  const percent = Math.round((total / chosen.targetTokens) * 100);
+  const fixed = usage ? usage.parts.instructions + usage.parts.tools : 0;
+  return { options, chosen, known, total, percent, fixed };
+}
+
+type Reading = ReturnType<typeof contextReading>;
+
+export function ContextRing({
+  usage,
+  model,
+  budget,
+  onChoose,
+  onCondense,
+  instructions,
+  onEditInstructions,
+  compacting = false,
+  disabled,
+}: {
+  /** The last request the loop sent; absent before the first. */
+  usage?: ContextUsage;
+  /** With how large a refused request was, when the window was lowered after it. */
+  model: ModelWindow & {
+    readonly model?: string;
+    readonly refusedTokens?: number;
+  };
+  budget: ContextBudgetChoice;
+  /** A refusal leaves the budget as it was, and the panel says so. */
+  onChoose: (budget: ContextBudgetChoice) => void | Promise<void>;
+  /** Condenses the conversation; absent before there is one. */
+  onCondense?: () => Promise<void>;
+  /** The standing instructions the last turn sent, by source. */
+  instructions?: readonly StandingInstruction[];
+  /** Opens Settings where the person's own instructions are written. */
+  onEditInstructions?: () => void;
+  /** The app is summarising the conversation now, asked here or not. */
+  compacting?: boolean;
+  disabled: boolean;
+}) {
+  const panelId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [breakdown, setBreakdown] = useState(false);
+  const [condensing, setCondensing] = useState(false);
+  /** Why a choice or a compacting asked here did not happen. */
+  const [failure, setFailure] = useState<string>();
+
+  const reading = contextReading(usage, model, budget);
+  const busy = compacting || condensing;
+  const measured = reading.known
+    ? `Context: ${reading.percent}% of the ${names[reading.chosen.budget]} budget`
+    : "Context: size not known yet";
+  const label = busy ? `${measured}, compacting` : measured;
+
+  if (open && disabled) setOpen(false);
+
+  const panel = usePanelAbove<HTMLDivElement>(open, trigger);
+  useLayoutEffect(() => {
+    if (!open) return;
+    // Drawn at the end of the page, so focus is taken to it, or the keyboard
+    // could not reach it.
+    panel.current
+      ?.querySelector<HTMLInputElement>('input[type="radio"]:checked')
+      ?.focus();
+  }, [open, panel]);
+
+  useDismiss(open, [root, panel], () => setOpen(false));
+
+  function condense(run: () => Promise<void>) {
+    // An action, so the panel closes; it opens again to say why if the
+    // action fails.
+    setOpen(false);
+    setCondensing(true);
+    setFailure(undefined);
+    run()
+      .catch((error: unknown) => {
+        setFailure(
+          `Could not compact: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        setOpen(true);
+      })
+      .finally(() => setCondensing(false));
+  }
+
+  function choose(next: ContextBudgetChoice) {
+    setFailure(undefined);
+    void Promise.resolve(onChoose(next)).catch(() => {
+      setFailure("The budget could not be saved, so it stays as it was.");
+      setOpen(true);
+    });
+  }
+
+  return (
+    <div
+      className={styles["reasoning-controls"]}
+      ref={root}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && open && !breakdown) {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(false);
+          trigger.current?.focus();
+        }
+      }}
+    >
+      <button
+        type="button"
+        ref={trigger}
+        className={`${styles["reasoning-controls__bulb"]} ${styles["context-ring"]}`}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        aria-busy={busy || undefined}
+        data-tip={label}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        <Ring reading={reading} />
+      </button>
+      {open &&
+        !disabled &&
+        createPortal(
+          <BudgetPanel
+            panelRef={panel}
+            id={panelId}
+            reading={reading}
+            usage={usage}
+            busy={busy}
+            failure={failure}
+            onChoose={choose}
+            onBreakdown={() => {
+              setOpen(false);
+              setBreakdown(true);
+            }}
+            onCondense={onCondense ? () => condense(onCondense) : undefined}
+          />,
+          document.body,
+        )}
+      {breakdown && usage && (
+        <SpaceBreakdown
+          reading={reading}
+          usage={usage}
+          refusedTokens={model.refusedTokens}
+          instructions={instructions}
+          onEditInstructions={
+            onEditInstructions
+              ? () => {
+                  setBreakdown(false);
+                  onEditInstructions();
+                }
+              : undefined
+          }
+          onClose={() => {
+            setBreakdown(false);
+            trigger.current?.focus();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The ring itself: an arc for how full the budget is, and a point in its
+ * place where the model's window is not known.
+ */
+function Ring({ reading: { known, total, percent } }: { reading: Reading }) {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <circle className={styles["context-ring__track"]} cx="10" cy="10" r="7" />
+      {/* Set on the arc itself, not inherited, so Chromium repaints it on
+          every change; at 0% there is no arc, not a round-capped dot. */}
+      {known && total > 0 && (
+        <circle
+          className={`${styles["context-ring__fill"]}${percent >= 100 ? ` ${styles["context-ring__fill--over"]}` : ""}`}
+          cx="10"
+          cy="10"
+          r="7"
+          pathLength="100"
+          style={{ strokeDasharray: `${Math.min(100, percent)} 100` }}
+        />
+      )}
+      {!known && (
+        <circle
+          className={styles["context-ring__point"]}
+          cx="10"
+          cy="10"
+          r="1.75"
+        />
+      )}
+    </svg>
+  );
+}
+
+/**
+ * What the ring opens: how full the budget is, the budgets to choose from,
+ * and compacting. It is drawn at the end of the page, so the ring is told
+ * which element it is, to place it and to know a click inside it.
+ */
+function BudgetPanel({
+  panelRef,
+  id,
+  reading: { options, chosen, known, total, percent, fixed },
+  usage,
+  busy,
+  failure,
+  onChoose,
+  onBreakdown,
+  onCondense,
+}: {
+  panelRef: RefObject<HTMLDivElement | null>;
+  id: string;
+  reading: Reading;
+  usage: ContextUsage | undefined;
+  /** The conversation is being summarised now. */
+  busy: boolean;
+  /** Why a choice or a compacting asked here did not happen. */
+  failure: string | undefined;
+  onChoose: (budget: ContextBudgetChoice) => void;
+  onBreakdown: () => void;
+  /** Absent before there is a conversation to compact. */
+  onCondense: (() => void) | undefined;
+}) {
+  // Budgets the window caps to one target; the menu says so, not implying
+  // the larger one buys more room.
+  const same = options.filter(
+    (option) =>
+      options.filter((other) => other.targetTokens === option.targetTokens)
+        .length > 1,
+  );
+  return (
+    <div
+      ref={panelRef}
+      id={id}
+      className={`${styles["reasoning-controls__panel"]} ${styles["context-ring__panel"]}`}
+      role="dialog"
+      aria-label="Context"
+    >
+      <div className={styles["reasoning-controls__heading"]}>
+        <button
+          type="button"
+          className={styles["reasoning-controls__reset"]}
+          aria-label="What's using space"
+          disabled={!usage}
+          onClick={onBreakdown}
+        >
+          <Icon name="usage" />
+        </button>
+        <span
+          className={`${styles["reasoning-controls__level"]}${known && percent >= 100 ? ` ${styles["context-ring__level--over"]}` : ""}${known ? "" : ` ${styles["context-ring__level--unknown"]}`}`}
+          aria-live="polite"
+          title={
+            known
+              ? `${short(total)} of ${short(chosen.targetTokens)} tokens`
+              : "This model does not list its context window"
+          }
+        >
+          {known ? `${percent}%` : "Not measured"}
+        </span>
+        <span />
+      </div>
+      <p className={styles["reasoning-controls__caption"]}>
+        How much of this conversation Zhiyin keeps in mind, in tokens. More
+        costs more per request.
+      </p>
+      {same.length > 1 && (
+        <p className={styles["reasoning-controls__caption"]}>
+          {same.map((option) => names[option.budget]).join(" and ")} are the
+          same size on this model.
+        </p>
+      )}
+      <div
+        role="radiogroup"
+        aria-label="Context budget"
+        className={styles["context-ring__choices"]}
+      >
+        {options.map((option) => (
+          <label key={option.budget}>
+            <input
+              type="radio"
+              name={`${id}-budget`}
+              checked={option.budget === chosen.budget}
+              onChange={() => onChoose(option.budget)}
+            />
+            <span>{names[option.budget]}</span>
+            <span>{short(option.targetTokens)}</span>
+          </label>
+        ))}
+      </div>
+      {usage && !fixedPartFits(usage, chosen.targetTokens) && (
+        <p className={styles["context-ring__warning"]} role="note">
+          Instructions and tools take{" "}
+          {Math.round((fixed / chosen.targetTokens) * 100)}% of this budget.
+        </p>
+      )}
+      {onCondense && (
+        <button
+          type="button"
+          className={styles["context-ring__compact"]}
+          data-tip="Summarise older messages so the conversation takes less space"
+          disabled={busy}
+          onClick={onCondense}
+        >
+          {busy ? "Compacting…" : "Compact"}
+        </button>
+      )}
+      {failure && (
+        <p className={styles["context-ring__warning"]} role="alert">
+          {failure}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What the last request was made of, part by part, with the standing
+ * instructions it carried and whether its limit was lowered after a refusal.
+ */
+function SpaceBreakdown({
+  reading: { chosen, total, percent, fixed },
+  usage,
+  refusedTokens,
+  instructions,
+  onEditInstructions,
+  onClose,
+}: {
+  reading: Reading;
+  usage: ContextUsage;
+  refusedTokens: number | undefined;
+  instructions: readonly StandingInstruction[] | undefined;
+  onEditInstructions: (() => void) | undefined;
+  onClose: () => void;
+}) {
+  const rows: readonly (readonly [string, number, string])[] = [
+    [
+      "Setup",
+      fixed,
+      "Zhiyin's instructions and the tools it can use. Sent with every message.",
+    ],
+    ...(usage.parts.summary > 0
+      ? [
+          [
+            "Summary",
+            usage.parts.summary,
+            "A short version of older messages, written when the conversation was compacted.",
+          ] as const,
+        ]
+      : []),
+    [
+      "Conversation",
+      usage.parts.conversation + usage.parts.toolResults,
+      "Your messages, Zhiyin's replies, and what it read or ran along the way.",
+    ],
+    [
+      "Free",
+      Math.max(0, chosen.targetTokens - total),
+      "Room left before Zhiyin compacts older messages on its own.",
+    ],
+  ];
+  return (
+    <Dialog title="What's using space" onClose={onClose}>
+      <p className={styles["context-ring__breakdown-total"]}>
+        {percent}% of the {names[chosen.budget]} budget (
+        {short(chosen.targetTokens)})
+      </p>
+      <table className={styles["context-ring__breakdown"]}>
+        <tbody>
+          {rows.map(([name, tokens, meaning]) => (
+            <BreakdownRow
+              key={name}
+              name={name}
+              tokens={tokens}
+              meaning={meaning}
+            />
+          ))}
+        </tbody>
+      </table>
+      {instructions && instructions.length > 0 && (
+        <InstructionSources
+          sources={instructions}
+          {...(onEditInstructions ? { onEdit: onEditInstructions } : {})}
+        />
+      )}
+      {refusedTokens !== undefined && (
+        <p className={styles["context-ring__lowered"]}>
+          Limit lowered after the provider refused a request of{" "}
+          {short(refusedTokens)} tokens.
+        </p>
+      )}
+    </Dialog>
+  );
+}
+
+/**
+ * One part of the request. What it is, in plain words, shows as a tooltip
+ * while the pointer rests on its icon or the keyboard focuses it. Drawn at the
+ * end of the page above the icon, so the dialog's edges never cut it off.
+ */
+function BreakdownRow({
+  name,
+  tokens,
+  meaning,
+}: {
+  name: string;
+  tokens: number;
+  meaning: string;
+}) {
+  const [at, setAt] = useState<{ x: number; y: number }>();
+  const tipId = useId();
+  const show = (target: HTMLElement) => {
+    const box = target.getBoundingClientRect();
+    setAt({ x: box.left + box.width / 2, y: box.top });
+  };
+  const hide = () => setAt(undefined);
+  return (
+    <tr>
+      <th scope="row">
+        {name}
+        <button
+          type="button"
+          className={styles["context-ring__about"]}
+          aria-label={`What is ${name}?`}
+          aria-describedby={at ? tipId : undefined}
+          onMouseEnter={(event) => show(event.currentTarget)}
+          onMouseLeave={hide}
+          onFocus={(event) => show(event.currentTarget)}
+          onBlur={hide}
+        >
+          <Icon name="info" />
+        </button>
+        {at && (
+          <PointedTip id={tipId} at={at}>
+            {meaning}
+          </PointedTip>
+        )}
+      </th>
+      <td>{tokens < 1_000 ? `${tokens}` : short(tokens)}</td>
+    </tr>
+  );
+}

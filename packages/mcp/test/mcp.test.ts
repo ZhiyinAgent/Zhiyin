@@ -1,0 +1,3226 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { createServer, type ServerResponse } from "node:http";
+import {
+  ProtocolError,
+  SdkError,
+  SdkErrorCode,
+  SdkHttpError,
+} from "@modelcontextprotocol/client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  InMemoryMcpCredentials,
+  ManagedMcpServers,
+  McpRateRefusedError,
+  McpUnauthorizedError,
+  McpUndeclaredAnswerError,
+  connectHttpMcpServer,
+  type McpConnection,
+  type McpConnectionFactory,
+} from "../src/index.js";
+import type { ConnectionTool } from "@zhiyin/contract";
+import { TemporaryFolders } from "@zhiyin/temporary-folders";
+import type { McpCredentialStore } from "../src/credentials.js";
+import { managed } from "./declarations.js";
+
+const folders = new TemporaryFolders();
+
+afterEach(() => folders.removeAll());
+
+/**
+ * Choices about connections are written by reading the whole settings file,
+ * editing it and writing it back. Overlapping changes that each started from
+ * the same bytes would lose all but the last.
+ */
+describe("ManagedMcpServers concurrent choices", () => {
+  it("keeps every tool choice made at the same time", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    const ids = Array.from(
+      { length: 8 },
+      (_, index) => `notes/server-${index}`,
+    );
+    for (const id of ids)
+      await servers.declare({
+        id,
+        name: id,
+        url: `https://${index(id)}.example.test/mcp`,
+        enabled: true,
+      });
+
+    await Promise.all(
+      ids.map((id) => servers.setToolEnabled(id, "read", false)),
+    );
+
+    expect(
+      (await servers.manage()).map((item) => item.tools?.[0]?.enabled),
+    ).toEqual(ids.map(() => false));
+  });
+});
+
+function index(id: string): string {
+  return id.replace(/\W/g, "-");
+}
+
+describe("a pasted key longer than one credential entry holds", () => {
+  it("is kept, sent whole, and forgotten whole", async () => {
+    // Windows' credential store: at most 1,280 characters an entry.
+    const held = new Map<string, string>();
+    const limited: McpCredentialStore = {
+      get: async (id) => held.get(id),
+      set: async (id, value) => {
+        if (value.length > 1280)
+          throw new Error("Longer than the platform limit");
+        held.set(id, value);
+      },
+      delete: async (id) => {
+        held.delete(id);
+      },
+    };
+    const sent: (string | undefined)[] = [];
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async (_definition, token) => {
+        sent.push(await token());
+        return {
+          listTools: async () => [{ name: "search" }],
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        };
+      },
+      limited,
+    );
+    await servers.declare({
+      id: "research/search",
+      name: "Search",
+      url: "https://search.example/mcp",
+      enabled: true,
+    });
+    const key = `eyJ${"k".repeat(2_000)}`;
+
+    await servers.saveToken("research/search", key);
+
+    expect((await servers.manage())[0]).toMatchObject({
+      status: "connected",
+      credential: { status: "saved" },
+    });
+    expect(sent.at(-1)).toBe(key);
+
+    await servers.clearToken("research/search");
+    expect(held.size).toBe(0);
+  });
+});
+
+describe("a token and the endpoint it was given for", () => {
+  /** A connection that records the token each endpoint is sent. */
+  function recording(sent: string[]): McpConnectionFactory {
+    return async (definition, token) => {
+      sent.push(`${definition.url} ${String(await token())}`);
+      return {
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      };
+    };
+  }
+
+  const first = {
+    id: "research/search",
+    name: "Search",
+    url: "https://first.example/mcp",
+    enabled: true,
+  };
+
+  it("never sends the token to another endpoint, though the saved connections are gone", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const before = managed(
+      await folders.make("zhiyin-mcp-"),
+      recording([]),
+      credentials,
+    );
+    await before.declare(first);
+    await before.saveToken(first.id, "issued-for-first");
+
+    // Another data folder, as a development run or a fresh start has, with the
+    // same credential store.
+    const sent: string[] = [];
+    const after = managed(
+      await folders.make("zhiyin-mcp-"),
+      recording(sent),
+      credentials,
+    );
+    await after.declare({ ...first, url: "https://second.example/mcp" });
+
+    expect(sent).toEqual(["https://second.example/mcp undefined"]);
+    expect((await after.manage())[0]).toMatchObject({
+      credential: { status: "none" },
+    });
+  });
+
+  it("never sends the token to a new endpoint when it could not be removed", async () => {
+    const held = new Map<string, string>();
+    let locked = false;
+    const sent: string[] = [];
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      recording(sent),
+      {
+        get: async (id) => held.get(id),
+        set: async (id, value) => void held.set(id, value),
+        delete: async (id) => {
+          if (locked) throw new Error("locked");
+          held.delete(id);
+        },
+      },
+    );
+    await servers.declare(first);
+    await servers.saveToken(first.id, "issued-for-first");
+
+    locked = true;
+    await servers.declare({ ...first, url: "https://second.example/mcp" });
+
+    const toSecond = sent.filter((line) => line.startsWith("https://second."));
+    expect(toSecond.length).toBeGreaterThan(0);
+    expect(new Set(toSecond)).toEqual(
+      new Set(["https://second.example/mcp undefined"]),
+    );
+  });
+
+  it("is still sent to the endpoint it was given for, in another data folder too", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const before = managed(
+      await folders.make("zhiyin-mcp-"),
+      recording([]),
+      credentials,
+    );
+    await before.declare(first);
+    await before.saveToken(first.id, "issued-for-first");
+
+    const sent: string[] = [];
+    const after = managed(
+      await folders.make("zhiyin-mcp-"),
+      recording(sent),
+      credentials,
+    );
+    await after.declare(first);
+
+    expect(sent).toEqual(["https://first.example/mcp issued-for-first"]);
+  });
+});
+
+describe("connections come only from declarations", () => {
+  function engine(
+    credentials: McpCredentialStore = new InMemoryMcpCredentials(),
+  ) {
+    return folders.make("zhiyin-mcp-").then((directory) =>
+      managed(
+        directory,
+        async () => ({
+          listTools: async () => [{ name: "search" }],
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        }),
+        credentials,
+      ),
+    );
+  }
+
+  const search = {
+    id: "research/search",
+    name: "Search",
+    url: "https://search.example/mcp",
+    enabled: true,
+  };
+
+  it("forgets a connection's token and tool choices once nothing declares it", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = await engine(credentials);
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+    await servers.setToolEnabled(search.id, "search", false);
+
+    await servers.undeclare(search.id);
+    expect(await credentials.get(search.id)).toBeUndefined();
+
+    await servers.declare(search);
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "none" },
+      tools: [{ name: "search", enabled: true }],
+    });
+  });
+
+  it("keeps a connection's token and tool choices while its package cannot be read", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = await engine(credentials);
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+    await servers.setToolEnabled(search.id, "search", false);
+
+    await servers.damage("research");
+    expect(await credentials.get(search.id)).toContain("secret");
+
+    await servers.repair("research", [search]);
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "saved" },
+      tools: [{ name: "search", enabled: false }],
+    });
+  });
+
+  it("keeps every token when the declarations cannot be read", async () => {
+    const credentials = new InMemoryMcpCredentials();
+    const servers = await engine(credentials);
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+
+    servers.failDeclarations(true);
+    await expect(servers.manage()).rejects.toThrow(
+      "Connections could not be read.",
+    );
+
+    expect(await credentials.get(search.id)).toContain("secret");
+  });
+
+  it("retries forgetting a token the credential store could not delete", async () => {
+    let locked = false;
+    const tokens = new Map<string, string>();
+    const servers = await engine({
+      get: async (id) => tokens.get(id),
+      set: async (id, token) => {
+        tokens.set(id, token);
+      },
+      delete: async (id) => {
+        if (locked) throw new Error("locked");
+        tokens.delete(id);
+      },
+    });
+    await servers.declare(search);
+    await servers.saveToken(search.id, "secret");
+
+    locked = true;
+    await servers.undeclare(search.id);
+    expect(tokens.get(search.id)).toContain("secret");
+
+    locked = false;
+    await servers.manage();
+    expect(tokens.has(search.id)).toBe(false);
+  });
+
+  it("offers a package connector's tools under a name model APIs accept", async () => {
+    const servers = await engine();
+    await servers.declare(search);
+
+    const [tool] = await servers.availableTools();
+
+    expect(tool?.name).toBe("mcp__research__search__search");
+    expect(tool?.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    expect(await servers.execute(tool!.name, {})).toMatchObject({ ok: true });
+  });
+
+  it("marks as reading only the tools its declaration names, never on the server's own annotation", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [
+          { name: "search" },
+          { name: "publish" },
+          // The server says this one only reads; nobody who declared it did.
+          { name: "delete_index", annotations: { readOnlyHint: true } },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({ ...search, readOnlyTools: ["search"] });
+
+    const access = Object.fromEntries(
+      (await servers.availableTools()).map((tool) => [tool.name, tool.access]),
+    );
+
+    expect(access).toEqual({
+      mcp__research__search__search: "read",
+      mcp__research__search__publish: undefined,
+      mcp__research__search__delete_index: undefined,
+    });
+  });
+
+  it("marks as reading the tools a connection Zhiyin ships says only read, and takes no other server's word for it", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        // A server elsewhere claiming the mark for itself.
+        listTools: async () => [{ name: "wipe", access: "read" as const }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "git",
+          name: "Git",
+          open: async () => ({
+            listTools: async () => [
+              { name: "git_status", access: "read" as const },
+              { name: "git_commit" },
+            ],
+            callTool: async () => ({ content: [] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.declare({ ...search, readOnlyTools: [] });
+
+    const access = Object.fromEntries(
+      (await servers.availableTools()).map((tool) => [tool.name, tool.access]),
+    );
+
+    expect(access).toEqual({
+      mcp__git__git_status: "read",
+      mcp__git__git_commit: undefined,
+      mcp__research__search__wipe: undefined,
+    });
+  });
+
+  it("does not open a withheld application connection for a conversation", async () => {
+    const opened: string[] = [];
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new Error("no package servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async (scope) => {
+            opened.push(scope ?? "");
+            return {
+              listTools: async () => [{ name: "navigate" }],
+              callTool: async () => ({ content: [] }),
+              close: async () => {},
+            };
+          },
+        },
+      ],
+    );
+
+    expect(await servers.availableTools("first", ["browser"])).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+});
+
+describe("ManagedMcpServers", () => {
+  it("does not let remote result metadata claim built-in presentation", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [{ name: "browser_navigate" }],
+        callTool: async () => ({
+          content: [],
+          details: [
+            { kind: "text", label: "Trusted browser", text: "Invented result" },
+          ],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "remote",
+      name: "Remote",
+      url: "https://example.test/mcp",
+      enabled: true,
+    });
+    expect(
+      await servers.inspect("mcp__remote__browser_navigate", {}),
+    ).toMatchObject({ action: "Remote · Browser navigate" });
+    const result = await servers.execute("mcp__remote__browser_navigate", {});
+    expect(result).not.toHaveProperty("details");
+    await servers.shutdownAll();
+  });
+  it("vouches for the files a built-in connection says a call will change, and never for a remote one", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [
+          {
+            name: "compile_document",
+            annotations: { destructiveHint: true },
+          },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "documents",
+          name: "Document compiler",
+          open: async () => ({
+            listTools: async () => [{ name: "compile_document" }],
+            callTool: async () => ({ content: [] }),
+            close: async () => {},
+          }),
+          inspect: async () => ({
+            ok: true,
+            action: "Compile a Typst document",
+            target: "paper.typ",
+            command: "typst paper.typ",
+            access: "change",
+            scope: "workspace",
+            changes: [{ path: "paper.pdf", change: "updated" }],
+          }),
+        },
+      ],
+    );
+    await servers.declare({
+      id: "remote",
+      name: "Remote",
+      url: "https://example.test/mcp",
+      enabled: true,
+    });
+
+    expect(
+      await servers.inspect("mcp__documents__compile_document", {}),
+    ).toMatchObject({
+      ok: true,
+      builtInConnection: true,
+      changes: [{ path: "paper.pdf", change: "updated" }],
+    });
+    const remote = await servers.inspect("mcp__remote__compile_document", {});
+    expect(remote).toMatchObject({ ok: true });
+    expect(remote).not.toHaveProperty("builtInConnection");
+    expect(remote).not.toHaveProperty("changes");
+    await servers.shutdownAll();
+  });
+
+  it("uses trusted built-in presentation while preserving approval identity and result failure", async () => {
+    let root = "workspace-a";
+    let gone = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new Error("No external connection");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Browser",
+          open: async () => ({
+            listTools: async () => [{ name: "navigate" }],
+            callTool: async () => ({
+              isError: true,
+              content: [{ type: "text", text: "Navigation refused" }],
+            }),
+            close: async () => {},
+          }),
+          inspect: async () =>
+            gone
+              ? { ok: false as const, reason: "There is no page to open." }
+              : {
+                  ok: true as const,
+                  boundToCall: true,
+                  allowance: {
+                    key: "pages",
+                    label: "Pages in this conversation",
+                  },
+                  action: "Open page",
+                  target: "https://example.test",
+                  command: "navigate()",
+                  identity: root,
+                  invocation: {
+                    name: "Open page",
+                    arguments: [
+                      { name: "Address", value: "https://example.test" },
+                    ],
+                  },
+                },
+          describeResult: (_name, _args, result) => [
+            {
+              kind: "text",
+              label: "Browser error",
+              text: result.ok ? "Unexpected success" : result.reason,
+            },
+          ],
+        },
+      ],
+    );
+    const inspected = await servers.inspect("mcp__browser__navigate", {});
+    expect(inspected).toMatchObject({
+      ok: true,
+      action: "Open page",
+      invocation: { name: "Open page" },
+      // A built-in connection writes its own calls: it knows which of its
+      // arguments run long and how they should read. Only a server that says
+      // nothing is described from the outside.
+      command: "navigate()",
+      // Which connection this is stays the app's word, whatever page the
+      // built-in names as the call's target.
+      target: "https://example.test",
+      connection: "Browser",
+      // How far the built-in's identity reaches is its own word, and so is
+      // the set of its calls one allowance covers.
+      boundToCall: true,
+      allowance: { key: "pages", label: "Pages in this conversation" },
+    });
+    expect(
+      await servers.execute(
+        "mcp__browser__navigate",
+        {},
+        { expectedIdentity: inspected.ok ? inspected.identity : undefined },
+      ),
+    ).toMatchObject({
+      ok: false,
+      details: [{ label: "Browser error", text: "Navigation refused" }],
+    });
+    root = "workspace-b";
+    expect(
+      await servers.execute(
+        "mcp__browser__navigate",
+        {},
+        { expectedIdentity: inspected.ok ? inspected.identity : undefined },
+      ),
+    ).toMatchObject({
+      ok: false,
+      // The connection is the same; what the call acts on is not.
+      reason: expect.stringContaining(
+        "What this call acts on changed after it was approved",
+      ),
+    });
+    gone = true;
+    expect(
+      await servers.execute(
+        "mcp__browser__navigate",
+        {},
+        { expectedIdentity: inspected.ok ? inspected.identity : undefined },
+      ),
+    ).toMatchObject({ ok: false, reason: "There is no page to open." });
+    await servers.shutdownAll();
+  });
+  it("lets a built-in connection declare the files a successful call produced", async () => {
+    let fails = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new Error("No external connection");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "documents",
+          name: "Document compiler",
+          open: async () => ({
+            listTools: async () => [{ name: "compile_document" }],
+            callTool: async () =>
+              fails
+                ? { isError: true, content: [{ type: "text", text: "No." }] }
+                : { content: [{ type: "text", text: "Wrote paper.pdf." }] },
+            close: async () => {},
+          }),
+          produced: () => [
+            { path: "paper.pdf", change: "created" as const, bytes: 9 },
+          ],
+        },
+      ],
+    );
+
+    expect(
+      await servers.execute("mcp__documents__compile_document", {}),
+    ).toMatchObject({
+      ok: true,
+      produced: [{ path: "paper.pdf", change: "created", bytes: 9 }],
+    });
+    fails = true;
+    expect(
+      await servers.execute("mcp__documents__compile_document", {}),
+    ).not.toHaveProperty("produced");
+    await servers.shutdownAll();
+  });
+  it("connects the production HTTP adapter and receives protocol-shaped errors", async () => {
+    const server = createServer(async (request, response) => {
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : message.method === "tools/list"
+            ? { tools: [{ name: "read", inputSchema: { type: "object" } }] }
+            : {
+                isError: true,
+                content: [{ type: "text", text: "Missing document" }],
+              };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    try {
+      const connection = await connectHttpMcpServer(
+        {
+          id: "fixture",
+          name: "Fixture",
+          enabled: true,
+          url: `http://127.0.0.1:${address.port}/mcp`,
+        },
+        async () => undefined,
+      );
+      try {
+        expect((await connection.listTools())[0]?.name).toBe("read");
+        expect(await connection.callTool("read", {})).toMatchObject({
+          isError: true,
+        });
+      } finally {
+        await connection.close();
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("cuts a tool description too long to be honest, so one server cannot fill the model's window", async () => {
+    const opening = "Searches the catalogue. ";
+    const server = createServer(async (request, response) => {
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : {
+              tools: [
+                {
+                  name: "search",
+                  description: opening + "x".repeat(200_000),
+                  inputSchema: { type: "object" },
+                },
+              ],
+            };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    try {
+      const connection = await connectHttpMcpServer(
+        {
+          id: "fixture",
+          name: "Fixture",
+          enabled: true,
+          url: `http://127.0.0.1:${address.port}/mcp`,
+        },
+        async () => undefined,
+      );
+      try {
+        const [tool] = await connection.listTools();
+        expect(tool?.description?.startsWith(opening)).toBe(true);
+        expect(tool?.description?.endsWith("…")).toBe(true);
+        expect(tool?.description?.length).toBe(4_000);
+      } finally {
+        await connection.close();
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("reads an HTTP 429 from the production adapter as a rate refusal, with the wait the server asks for", async () => {
+    const server = createServer(async (request, response) => {
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      if (message.method === "tools/call") {
+        response.writeHead(429, { "Retry-After": "3" });
+        response.end("Too Many Requests");
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : { tools: [{ name: "read", inputSchema: { type: "object" } }] };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    try {
+      const connection = await connectHttpMcpServer(
+        {
+          id: "fixture",
+          name: "Fixture",
+          enabled: true,
+          url: `http://127.0.0.1:${address.port}/mcp`,
+        },
+        async () => undefined,
+      );
+      try {
+        const refusal = await connection.callTool("read", {}).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(refusal).toBeInstanceOf(McpRateRefusedError);
+        expect((refusal as McpRateRefusedError).retryAfterMs).toBe(3_000);
+      } finally {
+        await connection.close();
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("keeps a tool's approval identity when another tool of its connection is switched off and on", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [
+          { name: "read", inputSchema: { type: "object" } },
+          { name: "write" },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      enabled: true,
+      url: "https://docs.example/mcp",
+    });
+    const identity = async () => {
+      const inspection = await servers.inspect("mcp__docs__read", {});
+      if (!inspection.ok) throw new Error("Missing inspection");
+      return inspection.identity;
+    };
+
+    const before = await identity();
+    await servers.setToolEnabled("docs", "write", false);
+    const switchedOff = await identity();
+    await servers.setToolEnabled("docs", "write", true);
+    const switchedOn = await identity();
+
+    expect(switchedOff).toBe(before);
+    expect(switchedOn).toBe(before);
+    expect(
+      (
+        await servers.execute(
+          "mcp__docs__read",
+          {},
+          { expectedIdentity: before },
+        )
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("refuses a connection changed after its action was approved", async () => {
+    let executed = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => {
+          executed = true;
+          return { content: [] };
+        },
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    const definition = {
+      id: "docs",
+      name: "Documents",
+      enabled: true,
+      url: "https://first.example/mcp",
+    };
+    await servers.declare(definition);
+    const approval = await servers.inspect("mcp__docs__read", {});
+    if (!approval.ok) throw new Error("Missing inspection");
+    await servers.declare({ ...definition, url: "https://second.example/mcp" });
+    expect(
+      await servers.execute(
+        "mcp__docs__read",
+        {},
+        { expectedIdentity: approval.identity },
+      ),
+    ).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining(
+        "The connection or this tool changed after approval",
+      ),
+    });
+    expect(executed).toBe(false);
+  });
+  it("preserves tool execution failures without losing the connection", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "write" }],
+        callTool: async () => ({
+          isError: true,
+          content: [{ type: "text", text: "The document is locked." }],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect(await servers.execute("mcp__docs__write", {})).toEqual({
+      ok: false,
+      reason: "The document is locked.",
+    });
+    expect((await servers.manage())[0]?.status).toBe("connected");
+  });
+  it("keeps the start and the end of a long failure, where a traceback ends", async () => {
+    const printed = Array.from({ length: 1000 }, (_, n) => `row ${n}`).join(
+      "\n",
+    );
+    const traceback =
+      "Traceback (most recent call last):\n  File \"<string>\", line 9\nKeyError: 'amount'";
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "run" }],
+        callTool: async () => ({
+          isError: true,
+          content: [{ type: "text", text: `${printed}\n${traceback}` }],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "python",
+      name: "Python",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const result = await servers.execute("mcp__python__run", {});
+
+    expect(result.ok).toBe(false);
+    const reason = result.ok ? "" : result.reason;
+    expect(reason.length).toBeLessThanOrEqual(4000);
+    expect(reason.startsWith("row 0\nrow 1\n")).toBe(true);
+    expect(reason.endsWith(traceback)).toBe(true);
+    expect(reason).toMatch(/… \d+ characters left out …/);
+  });
+  it("rejects malformed and unsupported result content", async () => {
+    const results: unknown[] = [
+      { content: "not an array" },
+      { content: [{ type: "text", text: 42 }] },
+      { content: [{ type: "audio", data: "AAAA", mimeType: "audio/wav" }] },
+      { content: [], structuredContent: ["not", "an", "object"] },
+      { content: [], isError: "yes" },
+    ];
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => results.shift(),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      await expect(servers.execute("mcp__docs__read", {})).resolves.toEqual({
+        ok: false,
+        reason: "The server returned an invalid result.",
+      });
+    }
+    expect((await servers.manage())[0]?.status).toBe("connected");
+  });
+
+  it("accepts text, image, and structured result content", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => ({
+          content: [
+            { type: "text", text: "Forecast: clear" },
+            { type: "image", data: "AAAA", mimeType: "image/png" },
+          ],
+          structuredContent: { temperature: 21 },
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "weather",
+      name: "Weather",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    await expect(servers.execute("mcp__weather__read", {})).resolves.toEqual({
+      ok: true,
+      value: {
+        content: [
+          { type: "text", text: "Forecast: clear" },
+          { type: "text", text: "[image 1, shown separately]" },
+        ],
+        structuredContent: { temperature: 21 },
+      },
+      images: [{ mediaType: "image/png", data: "AAAA" }],
+    });
+  });
+
+  it("accepts an embedded text resource returned for a repository file", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const result = {
+      content: [
+        { type: "text", text: "successfully downloaded text file" },
+        {
+          type: "resource",
+          resource: {
+            uri: "repo://ZhiyinAgent/Zhiyin/contents/README.md",
+            mimeType: "text/markdown",
+            text: "# Zhiyin",
+          },
+        },
+      ],
+    } as const;
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "get_file_contents" }],
+        callTool: async () => result,
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "github",
+      name: "GitHub",
+      url: "https://api.githubcopilot.com/mcp/",
+      enabled: true,
+    });
+
+    await expect(
+      servers.execute("mcp__github__get_file_contents", {}),
+    ).resolves.toEqual({ ok: true, value: result });
+  });
+
+  it("distinguishes cancellation before dispatch from a late resolved remote result", async () => {
+    let release!: (value: unknown) => void;
+    let dispatched = 0;
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "write" }],
+        callTool: async () => {
+          dispatched += 1;
+          return new Promise((resolve) => {
+            release = resolve;
+          });
+        },
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const before = new AbortController();
+    before.abort();
+    await expect(
+      servers.execute("mcp__docs__write", {}, { signal: before.signal }),
+    ).resolves.toEqual({ ok: false, reason: "The action was stopped." });
+    expect(dispatched).toBe(0);
+
+    const after = new AbortController();
+    const running = servers.execute(
+      "mcp__docs__write",
+      {},
+      { signal: after.signal },
+    );
+    await vi.waitFor(() => expect(dispatched).toBe(1));
+    after.abort();
+    release({ content: [{ type: "text", text: "Written" }] });
+    await expect(running).resolves.toEqual({
+      ok: false,
+      reason:
+        "Stopped. The action may already have taken effect; check what it changes before retrying.",
+    });
+  });
+
+  it("preserves uncertainty when a dispatched remote call throws after cancellation", async () => {
+    let reject!: (error: Error) => void;
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "write" }],
+        callTool: () =>
+          new Promise((_resolve, nextReject) => {
+            reject = nextReject;
+          }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const controller = new AbortController();
+    const running = servers.execute(
+      "mcp__docs__write",
+      {},
+      { signal: controller.signal },
+    );
+    await vi.waitFor(() => expect(reject).toBeTypeOf("function"));
+    controller.abort();
+    reject(new Error("connection lost"));
+
+    await expect(running).resolves.toEqual({
+      ok: false,
+      reason:
+        "Stopped. The action may already have taken effect; check what it changes before retrying.",
+    });
+  });
+  it("shortens an oversized result instead of throwing the whole answer away", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => ({
+          content: [
+            {
+              type: "text",
+              text: "The answer is at the top. " + "x".repeat(8_200_000),
+            },
+          ],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Documents",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const result = await servers.execute("mcp__docs__read", {});
+
+    // A page too long to send is still a page that was read.
+    expect(result.ok).toBe(true);
+    const encoded = JSON.stringify(result.value);
+    expect(encoded.length).toBeLessThanOrEqual(8_000_000);
+    expect(encoded).toContain("The answer is at the top.");
+    // And it says so, rather than letting the end look like the end.
+    expect(encoded).toContain("shortened");
+  });
+
+  it("takes a picture out of the text and carries it as a picture", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const picture = "A".repeat(400_000);
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "capture" }],
+        callTool: async () => ({
+          content: [
+            { type: "text", text: "Captured the page." },
+            { type: "image", data: picture, mimeType: "image/png" },
+          ],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "camera",
+      name: "Camera",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const result = await servers.execute("mcp__camera__capture", {});
+
+    if (!result.ok) throw new Error(result.reason);
+    // The picture travels as a picture...
+    expect(result.images).toEqual([{ mediaType: "image/png", data: picture }]);
+    // ...and not as half a megabyte of text the model cannot see.
+    const encoded = JSON.stringify(result.value);
+    expect(encoded).not.toContain(picture);
+    expect(encoded).toContain("Captured the page.");
+    expect(encoded.length).toBeLessThan(10_000);
+  });
+
+  it("carries only as many pictures as a turn can hold, and says so", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "capture" }],
+        callTool: async () => ({
+          content: [
+            { type: "image", data: "AAAA", mimeType: "image/png" },
+            { type: "image", data: "BBBB", mimeType: "image/png" },
+            { type: "image", data: "CCCC", mimeType: "image/png" },
+          ],
+        }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "camera",
+      name: "Camera",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const result = await servers.execute("mcp__camera__capture", {});
+
+    if (!result.ok) throw new Error(result.reason);
+    expect(result.images?.map((image) => image.data)).toEqual(["AAAA", "BBBB"]);
+    expect(JSON.stringify(result.value)).toContain("not shown");
+  });
+
+  it("withholds a tool whose input schema is too large to send with every request, and says why, offering the server's other tools", async () => {
+    const enormous = {
+      type: "object",
+      properties: Object.fromEntries(
+        Array.from({ length: 3_000 }, (_, index) => [
+          `field${index}`,
+          { type: "string", description: "One more field nobody needs." },
+        ]),
+      ),
+    };
+    const connection: McpConnection = {
+      listTools: async () => [
+        {
+          name: "weather",
+          description: "Read the current forecast.",
+          inputSchema: { type: "object" },
+        },
+        {
+          name: "everything",
+          description: "Do it all.",
+          inputSchema: enormous,
+        },
+      ],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    };
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => connection,
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+
+    const [state] = await servers.manage();
+    const offered = await servers.availableTools();
+
+    expect(offered.map((tool) => tool.name)).toEqual([
+      "mcp__local-weather__weather",
+    ]);
+    expect(state?.tools).toEqual([
+      {
+        name: "weather",
+        description: "Read the current forecast.",
+        enabled: true,
+      },
+      {
+        name: "everything",
+        description: "Do it all.",
+        enabled: false,
+        withheld: expect.stringMatching(
+          /^Not offered to the model: its input schema is \d+ KB, more than the 64 KB a tool may have\.$/,
+        ),
+      },
+    ]);
+    await expect(
+      servers.execute("mcp__local-weather__everything", {}),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "This MCP tool is no longer available.",
+    });
+  });
+
+  it("connects an enabled HTTP server and routes its discovered tools", async () => {
+    const close = vi.fn(async () => {});
+    const callTool = vi.fn(async () => ({
+      content: [{ type: "text", text: "Forecast: clear" }],
+    }));
+    const connection: McpConnection = {
+      listTools: async () => [
+        {
+          name: "weather",
+          description: "Read the current forecast.",
+          inputSchema: { type: "object" },
+        },
+      ],
+      callTool,
+      close,
+    };
+    const connect = vi.fn<McpConnectionFactory>(async () => connection);
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(directory, connect, new InMemoryMcpCredentials());
+
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "local-weather",
+        status: "connected",
+        toolCount: 1,
+        tools: [
+          {
+            name: "weather",
+            description: "Read the current forecast.",
+            enabled: true,
+          },
+        ],
+      }),
+    ]);
+    const [tool] = await servers.availableTools();
+    expect(tool).toMatchObject({
+      name: "mcp__local-weather__weather",
+      description: "Read the current forecast.",
+    });
+    expect(await servers.inspect(tool!.name, { city: "Paris" })).toMatchObject({
+      ok: true,
+      action: "Local weather",
+      target: "Local weather",
+    });
+    expect(await servers.execute(tool!.name, { city: "Paris" })).toEqual({
+      ok: true,
+      value: { content: [{ type: "text", text: "Forecast: clear" }] },
+    });
+    expect(callTool).toHaveBeenCalledWith("weather", { city: "Paris" });
+
+    expect(await servers.availableTools(undefined, ["local-weather"])).toEqual(
+      [],
+    );
+    await expect(
+      servers.inspect(tool!.name, { city: "Paris" }, undefined, [
+        "local-weather",
+      ]),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "This MCP tool is no longer available.",
+    });
+    await expect(
+      servers.execute(
+        tool!.name,
+        { city: "Paris" },
+        { excludedServerIds: ["local-weather"] },
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "This MCP tool is no longer available.",
+    });
+
+    await servers.switchTo("local-weather", false);
+    expect(close).toHaveBeenCalledOnce();
+    expect(await servers.availableTools()).toEqual([]);
+  });
+
+  it("refuses a switched-off connector's tools at once, and reaches it no more until it is switched back on", async () => {
+    const callTool = vi.fn(async () => ({ content: [] }));
+    const connect = vi.fn<McpConnectionFactory>(async () => ({
+      listTools: async () => [{ name: "weather" }],
+      callTool,
+      close: async () => {},
+    }));
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "local-weather",
+      name: "Local weather",
+      url: "http://127.0.0.1:3100/mcp",
+      enabled: true,
+    });
+    const [tool] = await servers.availableTools();
+    const name = tool!.name;
+
+    await servers.switchTo("local-weather", false);
+
+    expect(await servers.inspect(name, { city: "Paris" })).toMatchObject({
+      ok: false,
+    });
+    expect(await servers.execute(name, { city: "Paris" })).toMatchObject({
+      ok: false,
+    });
+    expect(callTool).not.toHaveBeenCalled();
+    await servers.manage();
+    await servers.availableTools();
+    expect(connect).toHaveBeenCalledOnce();
+    expect(await servers.states()).toEqual([
+      expect.objectContaining({ id: "local-weather", enabled: false }),
+    ]);
+  });
+
+  it("reports a failed server's state and tries again when asked or switched back on", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const connect = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const servers = managed(directory, connect, new InMemoryMcpCredentials());
+
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "docs",
+        status: "failed",
+        reason: "Could not connect to this MCP server.",
+      }),
+    ]);
+    expect(connect).toHaveBeenCalledOnce();
+
+    await servers.retryFailed();
+    await servers.manage();
+    expect(connect).toHaveBeenCalledTimes(2);
+
+    await servers.switchTo("docs", false);
+    await servers.switchTo("docs", true);
+    expect(connect).toHaveBeenCalledTimes(3);
+  });
+
+  it("says why a server could not be reached, not only that it could not", async () => {
+    const causes: [unknown, string][] = [
+      [
+        new SdkError(SdkErrorCode.RequestTimeout, "Request timed out"),
+        "The server did not answer in time.",
+      ],
+      [
+        new SdkHttpError(SdkErrorCode.ClientHttpForbidden, "Forbidden", {
+          status: 503,
+        }),
+        "The server answered with HTTP 503.",
+      ],
+      [
+        Object.assign(new TypeError("fetch failed"), {
+          cause: { code: "ENOTFOUND" },
+        }),
+        "The server's address could not be found. Check the internet connection.",
+      ],
+    ];
+    for (const [error, sentence] of causes) {
+      const servers = managed(
+        await folders.make("zhiyin-mcp-"),
+        async () => {
+          throw error;
+        },
+        new InMemoryMcpCredentials(),
+      );
+      await servers.declare({
+        id: "docs",
+        name: "Docs",
+        url: "https://example.com/mcp",
+        enabled: true,
+      });
+
+      expect(await servers.manage()).toEqual([
+        expect.objectContaining({
+          status: "failed",
+          reason: `Could not connect to this MCP server. ${sentence}`,
+        }),
+      ]);
+    }
+  });
+
+  it("says why Chromium's network could not reach a server, as the app goes online", async () => {
+    // How Electron's fetch fails, by the words it rejects with.
+    const causes: [string, string][] = [
+      [
+        "net::ERR_NAME_NOT_RESOLVED",
+        "The server's address could not be found. Check the internet connection.",
+      ],
+      [
+        "net::ERR_CERT_AUTHORITY_INVALID",
+        "The server's certificate is not trusted on this computer.",
+      ],
+      ["net::ERR_CONNECTION_REFUSED", "The server could not be reached."],
+    ];
+    for (const [failure, sentence] of causes) {
+      const servers = managed(
+        await folders.make("zhiyin-mcp-"),
+        (definition, token, refresh) =>
+          connectHttpMcpServer(definition, token, refresh, async () => {
+            throw new Error(failure);
+          }),
+        new InMemoryMcpCredentials(),
+      );
+      await servers.declare({
+        id: "docs",
+        name: "Docs",
+        url: "https://example.com/mcp",
+        enabled: true,
+      });
+
+      expect(await servers.manage()).toEqual([
+        expect.objectContaining({
+          status: "failed",
+          reason: `Could not connect to this MCP server. ${sentence}`,
+        }),
+      ]);
+    }
+  });
+
+  it("names the connection that is down when one of its tools is called", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new SdkError(SdkErrorCode.RequestTimeout, "Request timed out");
+      },
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const reason =
+      "Docs is not connected. Could not connect to this MCP server. The server did not answer in time. The person can retry it from the plugin's page.";
+    expect(await servers.inspect("mcp__docs__lookup", {})).toEqual({
+      ok: false,
+      reason,
+    });
+    expect(await servers.execute("mcp__docs__lookup", {})).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+
+  it("tries a server that failed again once a short wait has passed, and not before", async () => {
+    let clock = 0;
+    let reachable = false;
+    const connect = vi.fn(async () => {
+      if (!reachable) throw new Error("offline");
+      return {
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      };
+    });
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => clock,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    // A blip is not held against the server, but it is not hammered either.
+    clock = 5_000;
+    reachable = true;
+    expect(await servers.availableTools()).toEqual([]);
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    clock = 60_000;
+    expect(await servers.availableTools()).toEqual([
+      expect.objectContaining({ name: "mcp__docs__lookup" }),
+    ]);
+    expect(connect).toHaveBeenCalledTimes(2);
+  });
+
+  it("never retries a refused token on its own", async () => {
+    let clock = 0;
+    const connect = vi.fn(async () => {
+      throw new McpUnauthorizedError("refused");
+    });
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => clock,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    clock = 10 * 60_000;
+    await servers.manage();
+
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("reconnects on the next look after a connection is lost during a call, without repeating the call", async () => {
+    const close = vi.fn(async () => {});
+    let calls = 0;
+    const connect = vi.fn(async () => ({
+      listTools: async () => [
+        { name: "lookup", inputSchema: { type: "object" } },
+      ],
+      callTool: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("connection closed");
+        return { content: [{ type: "text", text: "found" }] };
+      },
+      close,
+    }));
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => 0,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    await expect(servers.execute("mcp__docs__lookup", {})).resolves.toEqual({
+      ok: false,
+      reason:
+        "The connection to the MCP server was lost during the call, so the action may already have taken effect. Check before calling it again.",
+    });
+    expect(close).toHaveBeenCalledOnce();
+    expect(calls).toBe(1);
+
+    // No wait: the server answered a moment ago, so it is dialed again.
+    await expect(servers.execute("mcp__docs__lookup", {})).resolves.toEqual({
+      ok: true,
+      value: { content: [{ type: "text", text: "found" }] },
+    });
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    [
+      "an error answer to the call",
+      new ProtocolError(-32602, "Unknown argument: q"),
+      "Unknown argument: q",
+    ],
+    [
+      "an answer that does not match the tool's declared output",
+      new McpUndeclaredAnswerError(
+        "Structured content does not match the tool's output schema: data/count must be number",
+      ),
+      "The MCP server ran the call, but its answer does not match the output the tool declares, so it is not used. The action may already have taken effect: check before calling it again.",
+    ],
+  ])(
+    "reports %s as a failed call, and keeps the connection",
+    async (_case, error, said) => {
+      const close = vi.fn(async () => {});
+      const connect = vi.fn(async () => ({
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => {
+          throw error;
+        },
+        close,
+      }));
+      const servers = managed(
+        await folders.make("zhiyin-mcp-"),
+        connect,
+        new InMemoryMcpCredentials(),
+        [],
+        () => 0,
+      );
+      await servers.declare({
+        id: "docs",
+        name: "Docs",
+        url: "https://example.com/mcp",
+        enabled: true,
+      });
+
+      const result = await servers.execute("mcp__docs__lookup", {});
+
+      expect(result).toMatchObject({
+        ok: false,
+        reason: expect.stringContaining(said),
+      });
+      expect(result).not.toMatchObject({
+        reason: expect.stringContaining("lost"),
+      });
+      expect(close).not.toHaveBeenCalled();
+      await servers.execute("mcp__docs__lookup", {});
+      expect(connect).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("waits before reconnecting when the server is still down after a lost connection", async () => {
+    let reachable = true;
+    const connect = vi.fn(async () => {
+      if (!reachable) throw new Error("offline");
+      return {
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => {
+          throw new Error("connection closed");
+        },
+        close: async () => {},
+      };
+    });
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      connect,
+      new InMemoryMcpCredentials(),
+      [],
+      () => 0,
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    await servers.execute("mcp__docs__lookup", {});
+    reachable = false;
+    expect(await servers.availableTools()).toEqual([]);
+    expect(await servers.availableTools()).toEqual([]);
+
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(await servers.states()).toEqual([
+      expect.objectContaining({ status: "failed", toolCount: 0 }),
+    ]);
+  });
+
+  it("sends a saved token as a bearer credential and never writes it down", async () => {
+    const seen: (string | undefined)[] = [];
+    const server = createServer(async (request, response) => {
+      seen.push(request.headers.authorization);
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: {} },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : { tools: [{ name: "search", inputSchema: { type: "object" } }] };
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      connectHttpMcpServer,
+      new InMemoryMcpCredentials(),
+    );
+    try {
+      await servers.declare({
+        id: "search",
+        name: "Search",
+        url: `http://127.0.0.1:${address.port}/mcp`,
+        enabled: false,
+      });
+      await servers.saveToken("search", "tvly-secret");
+      await servers.switchTo("search", true);
+
+      expect((await servers.manage())[0]).toMatchObject({
+        status: "connected",
+        credential: { status: "saved" },
+      });
+      expect(seen).toContain("Bearer tvly-secret");
+
+      const saved = await readFile(
+        join(directory, "mcp-connections.json"),
+        "utf8",
+      );
+      expect(saved).not.toContain("tvly-secret");
+      const inspection = await servers.inspect("mcp__search__search", {});
+      expect(JSON.stringify(inspection)).not.toContain("tvly-secret");
+    } finally {
+      await servers.shutdownAll();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("reports a refused sign-in apart from an unreachable server", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => {
+        throw new McpUnauthorizedError("401");
+      },
+      new InMemoryMcpCredentials(),
+    );
+
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        status: "unauthorized",
+        reason:
+          "This server refused the access token. Save a current token to sign in again.",
+        credential: { status: "none" },
+      }),
+    ]);
+  });
+
+  it("withdraws tools and asks for a new token when a call is refused", async () => {
+    const close = vi.fn(async () => {});
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => {
+          throw new McpUnauthorizedError("401");
+        },
+        close,
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    await servers.saveToken("search", "expired");
+
+    expect(await servers.execute("mcp__search__search", {})).toEqual({
+      ok: false,
+      reason:
+        "This server refused the access token. Save a current token to sign in again.",
+    });
+    expect(close).toHaveBeenCalled();
+    expect(await servers.availableTools()).toEqual([]);
+    expect((await servers.manage())[0]).toMatchObject({
+      status: "unauthorized",
+      toolCount: 0,
+    });
+  });
+
+  it("forgets a saved token when the endpoint changes", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const credentials = new InMemoryMcpCredentials();
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      credentials,
+    );
+    const definition = {
+      id: "search",
+      name: "Search",
+      url: "https://first.example/mcp",
+      enabled: true,
+    };
+    await servers.declare(definition);
+    await servers.saveToken("search", "issued-for-first");
+
+    await servers.declare({ ...definition, url: "https://second.example/mcp" });
+
+    expect(await credentials.get("search")).toBeUndefined();
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "none" },
+    });
+  });
+
+  it("forgets a saved token when the server is removed", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const credentials = new InMemoryMcpCredentials();
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      credentials,
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    await servers.saveToken("search", "revoke-me");
+
+    await servers.undeclare("search");
+
+    expect(await credentials.get("search")).toBeUndefined();
+  });
+
+  it("reconnects after a token is saved and after it is cleared", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const credentials = new InMemoryMcpCredentials();
+    const tokens: (string | undefined)[] = [];
+    const servers = managed(
+      directory,
+      async (_definition, token) => {
+        tokens.push(await token());
+        return {
+          listTools: async () => [{ name: "search" }],
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        };
+      },
+      credentials,
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect(tokens).toEqual([undefined]);
+
+    await servers.saveToken("search", "fresh");
+    expect(tokens).toEqual([undefined, "fresh"]);
+    expect((await servers.manage())[0]).toMatchObject({
+      status: "connected",
+      credential: { status: "saved" },
+    });
+
+    await servers.clearToken("search");
+    expect(tokens).toEqual([undefined, "fresh", undefined]);
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "none" },
+    });
+  });
+
+  it("reports unreachable secure storage without claiming a token is absent", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      {
+        get: async () => {
+          throw new Error("locked");
+        },
+        set: async () => {
+          throw new Error("locked");
+        },
+        delete: async () => {
+          throw new Error("locked");
+        },
+      },
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: {
+        status: "unavailable",
+        reason: "Secure storage for access tokens is unavailable.",
+      },
+    });
+    await expect(servers.saveToken("search", "x")).rejects.toThrow(
+      "Secure storage for access tokens is unavailable.",
+    );
+  });
+
+  it("asks secure storage again once it comes back, rather than keeping it unavailable", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let locked = true;
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      {
+        get: async () => {
+          if (locked) throw new Error("locked");
+          // A key kept for the connection's endpoint.
+          return JSON.stringify({
+            endpoint: "https://example.com/mcp",
+            key: "saved-token",
+          });
+        },
+        set: async () => {},
+        delete: async () => {},
+      },
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "unavailable" },
+    });
+
+    locked = false;
+
+    expect((await servers.manage())[0]).toMatchObject({
+      credential: { status: "saved" },
+    });
+  });
+
+  it("refuses to connect to an endpoint that carries its own credentials", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const connect = vi.fn(async () => ({
+      listTools: async () => [],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    }));
+    const servers = managed(directory, connect, new InMemoryMcpCredentials());
+
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp?tavilyApiKey=tvly-secret",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        reason:
+          "Use an endpoint without embedded credentials. Save the access token separately.",
+      }),
+    ]);
+    expect(connect).not.toHaveBeenCalled();
+  });
+
+  it("refuses to send a token across the network over plain http, and connects to this computer over it", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const connect = vi.fn(async () => ({
+      listTools: async () => [],
+      callTool: async () => ({ content: [] }),
+      close: async () => {},
+    }));
+    const servers = managed(directory, connect, new InMemoryMcpCredentials());
+
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "http://search.example/mcp",
+      enabled: true,
+    });
+    await servers.declare({
+      id: "local",
+      name: "Local",
+      url: "http://[::1]:3100/mcp",
+      enabled: true,
+    });
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "search",
+        status: "failed",
+        reason:
+          "MCP endpoints must use HTTPS unless the server runs on this computer.",
+      }),
+      expect.objectContaining({ id: "local", status: "connected" }),
+    ]);
+    expect(connect).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers a built-in connection's tools without any saved definition", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [
+              { name: "navigate", description: "Go to a page." },
+            ],
+            callTool: async () => ({ content: [{ type: "text", text: "ok" }] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+
+    const [tool] = await servers.availableTools();
+    expect(tool).toMatchObject({
+      name: "mcp__browser__navigate",
+      description: "Go to a page.",
+    });
+    expect(await servers.execute("mcp__browser__navigate", {})).toEqual({
+      ok: true,
+      value: { content: [{ type: "text", text: "ok" }] },
+    });
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "browser",
+        name: "Zhiyin's browser",
+        builtIn: true,
+        status: "connected",
+        toolCount: 1,
+      }),
+    ]);
+  });
+
+  it("keeps built-in connections working, and leaves declared ones waiting, when the saved settings are damaged", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const remoteClose = vi.fn(async () => {});
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [
+          { name: "lookup", inputSchema: { type: "object" } },
+        ],
+        callTool: async () => ({ content: [] }),
+        close: remoteClose,
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "navigate" }],
+            callTool: async () => ({ content: [] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    const saved = join(directory, "mcp-connections.json");
+    await writeFile(saved, "{ not json", "utf8");
+
+    const tools = (await servers.availableTools()).map((tool) => tool.name);
+    const states = await servers.states();
+
+    expect(tools).toEqual(["mcp__browser__navigate"]);
+    expect(states.find((state) => state.id === "docs")).toMatchObject({
+      status: "failed",
+      reason: "Saved connection settings are damaged.",
+    });
+    expect(remoteClose).toHaveBeenCalled();
+    expect(await readFile(saved, "utf8")).toBe("{ not json");
+
+    await writeFile(saved, JSON.stringify({ version: 1, connections: {} }));
+    expect((await servers.availableTools()).map((tool) => tool.name)).toEqual([
+      "mcp__browser__navigate",
+      "mcp__docs__lookup",
+    ]);
+  });
+
+  it("keeps a built-in connection available and reports its actual tool error", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const close = vi.fn(async () => {});
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "evaluate" }],
+            callTool: async () => {
+              throw new Error("The page closed before the code could run.");
+            },
+            close,
+          }),
+        },
+      ],
+    );
+
+    await servers.availableTools();
+    await expect(
+      servers.execute("mcp__browser__evaluate", {}),
+    ).resolves.toEqual({
+      ok: false,
+      reason: "The page closed before the code could run.",
+    });
+    expect(close).not.toHaveBeenCalled();
+    await expect(servers.availableTools()).resolves.toHaveLength(1);
+  });
+
+  it("tells a built-in action stopped while it ran that it may already have taken effect", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let finish!: (outcome: "answer" | "throw") => void;
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "python",
+          name: "Python",
+          open: async () => ({
+            listTools: async () => [{ name: "run" }],
+            callTool: () =>
+              new Promise((resolve, reject) => {
+                finish = (outcome) =>
+                  outcome === "answer"
+                    ? resolve({ content: [{ type: "text", text: "Done" }] })
+                    : reject(new Error("The script was stopped."));
+              }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.availableTools();
+
+    for (const outcome of ["answer", "throw"] as const) {
+      const stop = new AbortController();
+      const running = servers.execute(
+        "mcp__python__run",
+        {},
+        { signal: stop.signal },
+      );
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      stop.abort();
+      finish(outcome);
+      finish = undefined as never;
+      await expect(running).resolves.toEqual({
+        ok: false,
+        reason:
+          "Stopped. The action may already have taken effect; check what it changes before retrying.",
+      });
+    }
+  });
+
+  it("never sends a built-in call stopped while its connection was opening, and says it was stopped", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let open!: () => void;
+    const opening = new Promise<void>((resolve) => (open = resolve));
+    let called = 0;
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "python",
+          name: "Python",
+          open: async () => {
+            await opening;
+            return {
+              listTools: async () => [{ name: "run" }],
+              callTool: async () => {
+                called += 1;
+                return { content: [] };
+              },
+              close: async () => {},
+            };
+          },
+        },
+      ],
+    );
+    const stop = new AbortController();
+
+    const running = servers.execute(
+      "mcp__python__run",
+      {},
+      { signal: stop.signal },
+    );
+    stop.abort();
+    open();
+
+    await expect(running).resolves.toEqual({
+      ok: false,
+      reason: "The action was stopped.",
+    });
+    expect(called).toBe(0);
+  });
+
+  it("routes a conversation-scoped built-in only through that conversation's connection", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const opened: string[] = [];
+    const closed: string[] = [];
+    const forgotten: string[] = [];
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async (scope) => {
+            if (!scope) throw new Error("missing conversation scope");
+            opened.push(scope);
+            return {
+              listTools: async () => [{ name: "navigate" }],
+              callTool: async () => ({
+                content: [{ type: "text", text: scope }],
+              }),
+              close: async () => {
+                closed.push(scope);
+              },
+            };
+          },
+          forget: async (scope) => {
+            forgotten.push(scope);
+          },
+        },
+      ],
+    );
+
+    await servers.availableTools("first");
+    await servers.availableTools("second");
+
+    expect(opened).toEqual(["first", "second"]);
+    expect(
+      await servers.execute("mcp__browser__navigate", {}, { scope: "first" }),
+    ).toEqual({
+      ok: true,
+      value: { content: [{ type: "text", text: "first" }] },
+    });
+    expect(
+      await servers.execute("mcp__browser__navigate", {}, { scope: "second" }),
+    ).toEqual({
+      ok: true,
+      value: { content: [{ type: "text", text: "second" }] },
+    });
+    await servers.shutdownScope("first");
+    expect(closed).toEqual(["first"]);
+    expect(forgotten).toEqual(["first"]);
+    await servers.availableTools("first");
+    expect(opened).toEqual(["first", "second", "first"]);
+  });
+
+  it("refuses to declare, configure, or credential a built-in connection", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [],
+        callTool: async () => ({}),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "navigate" }],
+            callTool: async () => ({}),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+
+    // It ships with the application: no package declares it, there is no
+    // endpoint to point elsewhere, and no account to sign in to.
+    await expect(servers.saveToken("browser", "secret")).rejects.toThrow(
+      "built in",
+    );
+    await expect(
+      servers.setToolEnabled("browser", "navigate", false),
+    ).rejects.toThrow("built in");
+    await expect(
+      servers.declare({
+        id: "browser",
+        name: "Mine",
+        url: "https://example.com/mcp",
+        enabled: true,
+      }),
+    ).rejects.toThrow("built in");
+  });
+
+  it("reports a built-in that cannot start, without losing the others", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [{ name: "read" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => {
+            throw new Error("No supported browser could be started.");
+          },
+        },
+      ],
+    );
+    await servers.declare({
+      id: "docs",
+      name: "Docs",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+
+    const states = await servers.manage();
+    expect(states).toContainEqual(
+      expect.objectContaining({ id: "browser", status: "failed" }),
+    );
+    expect(states).toContainEqual(
+      expect.objectContaining({ id: "docs", status: "connected" }),
+    );
+    // The user's own server still works.
+    expect((await servers.availableTools()).map((tool) => tool.name)).toEqual([
+      "mcp__docs__read",
+    ]);
+  });
+
+  it("retries an unscoped built-in that failed once fixed, and asks again next time", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let missing = true;
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "git",
+          name: "Git",
+          open: async () => {
+            if (missing) throw new Error("git.exe was not found.");
+            return {
+              listTools: async () => [{ name: "git_status" }],
+              callTool: async () => ({ content: [] }),
+              close: async () => {},
+            };
+          },
+        },
+      ],
+    );
+
+    expect(await servers.manage()).toContainEqual(
+      expect.objectContaining({
+        id: "git",
+        status: "failed",
+        reason: "git.exe was not found.",
+      }),
+    );
+
+    // Installing git is the fix, and the next check should notice it.
+    missing = false;
+    const fixed = (await servers.manage()).find((item) => item.id === "git");
+    expect(fixed).toMatchObject({ status: "connected", toolCount: 1 });
+    // Ready, with nothing left of the failure it had.
+    expect(fixed).not.toHaveProperty("reason");
+  });
+
+  it("answers a built-in's call from another conversation while a connector given a new key is still being reached", async () => {
+    let slow = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        if (slow) await new Promise((resolve) => setTimeout(resolve, 3_000));
+        return {
+          listTools: async () => [{ name: "search" }],
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        };
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "python",
+          name: "Python",
+          open: async () => ({
+            listTools: async () => [{ name: "run" }],
+            callTool: async () => ({ content: [{ type: "text", text: "4" }] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.declare({
+      id: "research/search",
+      name: "Search",
+      url: "https://search.example/mcp",
+      enabled: true,
+    });
+    await servers.manage();
+
+    slow = true;
+    const saving = servers.saveToken("research/search", "secret");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const started = performance.now();
+    // A conversation that never activated the connector leaves it out.
+    const answered = await servers.execute(
+      "mcp__python__run",
+      {},
+      { scope: "conversation-2", excludedServerIds: ["research/search"] },
+    );
+
+    expect(answered).toMatchObject({ ok: true });
+    expect(performance.now() - started).toBeLessThan(200);
+    await saving;
+    expect(
+      (await servers.manage()).find((item) => item.id === "research/search"),
+    ).toMatchObject({ status: "connected", credential: { status: "saved" } });
+  });
+
+  it("answers a built-in's call, and another connector's, while a connector the conversation uses is still being reached", async () => {
+    let slow = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async (definition) => {
+        if (slow && definition.id === "research/search")
+          await new Promise((resolve) => setTimeout(resolve, 3_000));
+        return {
+          listTools: async () => [{ name: "search" }],
+          callTool: async () => ({
+            content: [{ type: "text", text: "found" }],
+          }),
+          close: async () => {},
+        };
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "python",
+          name: "Python",
+          open: async () => ({
+            listTools: async () => [{ name: "run" }],
+            callTool: async () => ({ content: [{ type: "text", text: "4" }] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    for (const [id, url] of [
+      ["research/search", "https://search.example/mcp"],
+      ["notes/notes", "https://notes.example/mcp"],
+    ] as const)
+      await servers.declare({ id, name: id, url, enabled: true });
+    await servers.manage();
+
+    slow = true;
+    const saving = servers.saveToken("research/search", "secret");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const started = performance.now();
+    // This conversation uses the connector being reached.
+    const inspected = await servers.inspect(
+      "mcp__python__run",
+      {},
+      "conversation-1",
+    );
+    const builtIn = await servers.execute(
+      "mcp__python__run",
+      {},
+      { scope: "conversation-1" },
+    );
+    const other = await servers.execute(
+      (await servers.availableTools("conversation-1", ["research/search"]))
+        .map((tool) => tool.name)
+        .find((name) => name.includes("notes"))!,
+      {},
+      { scope: "conversation-1" },
+    );
+
+    expect(inspected).toMatchObject({ ok: true });
+    expect(builtIn).toMatchObject({ ok: true });
+    expect(other).toMatchObject({ ok: true });
+    expect(performance.now() - started).toBeLessThan(500);
+    await saving;
+  });
+
+  it("reports a conversation-scoped built-in's tools and readiness without opening a conversation", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    const opened: (string | undefined)[] = [];
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async (scope) => {
+            opened.push(scope);
+            throw new Error("no conversation is open in this test");
+          },
+          describe: async () => [
+            { name: "navigate", description: "Go to a page." },
+          ],
+        },
+      ],
+    );
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "browser",
+        builtIn: true,
+        status: "connected",
+        toolCount: 1,
+        tools: [
+          { name: "navigate", description: "Go to a page.", enabled: true },
+        ],
+      }),
+    ]);
+    // Its general state is known without any conversation's own connection.
+    expect(opened).toEqual([]);
+  });
+
+  it("reports why a conversation-scoped built-in cannot work here, and asks again next time", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let refusal: string | undefined = "No supported browser could be started.";
+    const servers = managed(
+      directory,
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async () => {
+            throw new Error("no conversation is open in this test");
+          },
+          describe: async () => {
+            if (refusal) throw new Error(refusal);
+            return [{ name: "navigate" }];
+          },
+        },
+      ],
+    );
+
+    expect(await servers.manage()).toEqual([
+      expect.objectContaining({
+        id: "browser",
+        status: "failed",
+        reason: "No supported browser could be started.",
+        toolCount: 0,
+      }),
+    ]);
+    // Installing a browser is the fix, and the page should notice it.
+    refusal = undefined;
+    const fixed = await servers.manage();
+    expect(fixed).toEqual([
+      expect.objectContaining({
+        id: "browser",
+        status: "connected",
+        toolCount: 1,
+      }),
+    ]);
+    // Ready, with no word left of the failure it no longer has.
+    expect(fixed[0]?.reason).toBeUndefined();
+  });
+
+  it("closes built-in connections when the application shuts down", async () => {
+    const directory = await folders.make("zhiyin-mcp-");
+    let closed = false;
+    const servers = managed(
+      directory,
+      async () => ({
+        listTools: async () => [],
+        callTool: async () => ({}),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          open: async () => ({
+            listTools: async () => [{ name: "navigate" }],
+            callTool: async () => ({}),
+            close: async () => {
+              closed = true;
+            },
+          }),
+        },
+      ],
+    );
+    await servers.availableTools();
+
+    await servers.shutdownAll();
+
+    expect(closed).toBe(true);
+  });
+});
+
+/**
+ * A connector is dialed when something needs it — a conversation that may use
+ * it, or a person checking it — never just because the app looked at the
+ * list. Each look would otherwise reach every service a person has set up.
+ */
+describe("connectors connect when they are used", () => {
+  const search = {
+    id: "research/search",
+    name: "Search",
+    url: "https://search.example/mcp",
+    enabled: true,
+  };
+  const github = {
+    id: "engineering/github",
+    name: "GitHub",
+    url: "https://github.example/mcp",
+    enabled: true,
+  };
+
+  async function lazy(
+    tools: Record<string, McpConnection["listTools"]> = {},
+    now?: () => number,
+  ) {
+    const dialed: string[] = [];
+    const servers = new ManagedMcpServers(
+      await folders.make("zhiyin-mcp-"),
+      async (definition) => {
+        dialed.push(definition.id);
+        return {
+          listTools: tools[definition.id] ?? (async () => [{ name: "lookup" }]),
+          callTool: async () => ({ content: [] }),
+          close: async () => {},
+        };
+      },
+      new InMemoryMcpCredentials(),
+      { declared: async () => [search, github], now },
+    );
+    return { servers, dialed };
+  }
+
+  it("names each connector a conversation waits for, and none it already reached", async () => {
+    const { servers } = await lazy();
+    const named: string[] = [];
+
+    await servers.availableTools("c-1", [github.id], (name) =>
+      named.push(name),
+    );
+    await servers.availableTools("c-1", [], (name) => named.push(name));
+
+    expect(named).toEqual(["Search", "GitHub"]);
+  });
+
+  it("reports a connector nobody has used yet as unchecked, without reaching it", async () => {
+    const { servers, dialed } = await lazy();
+
+    expect(await servers.states()).toEqual([
+      expect.objectContaining({
+        id: search.id,
+        status: "unchecked",
+        tools: [],
+      }),
+      expect.objectContaining({
+        id: github.id,
+        status: "unchecked",
+        tools: [],
+      }),
+    ]);
+    expect(dialed).toEqual([]);
+  });
+
+  it("reaches only the connectors a conversation may use", async () => {
+    const { servers, dialed } = await lazy();
+
+    const tools = await servers.availableTools("first", [github.id]);
+
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "mcp__research__search__lookup",
+    ]);
+    expect(dialed).toEqual([search.id]);
+    expect(await servers.states()).toEqual([
+      expect.objectContaining({ id: search.id, status: "connected" }),
+      expect.objectContaining({ id: github.id, status: "unchecked" }),
+    ]);
+  });
+
+  it("checks one connector when asked, even one that failed a moment ago", async () => {
+    let reachable = false;
+    let clock = 1_000;
+    const { servers, dialed } = await lazy(
+      {
+        [search.id]: async () => {
+          if (!reachable) throw new Error("offline");
+          return [{ name: "lookup" }];
+        },
+      },
+      () => clock,
+    );
+
+    expect(await servers.check(search.id)).toMatchObject({
+      id: search.id,
+      status: "failed",
+      checkedAt: 1_000,
+    });
+    reachable = true;
+    clock = 2_000;
+    expect(await servers.check(search.id)).toMatchObject({
+      id: search.id,
+      status: "connected",
+      checkedAt: 2_000,
+      tools: [{ name: "lookup", enabled: true }],
+    });
+    expect(dialed).toEqual([search.id, search.id]);
+  });
+});
+
+/**
+ * A remote tool publishes the shape of its input. A call that does not fit it
+ * would be refused by the server after a person approved it, so the model is
+ * told what is wrong before anyone is asked.
+ */
+describe("a connector call is checked against the tool's input schema", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      query: { type: "string" },
+      max_results: { type: "integer", minimum: 1 },
+    },
+    required: ["query"],
+    additionalProperties: false,
+  };
+
+  async function withTool(inputSchema: Record<string, unknown>) {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [{ name: "search", inputSchema }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "research/search",
+      name: "Search",
+      url: "https://search.example/mcp",
+      enabled: true,
+    });
+    return servers;
+  }
+
+  const tool = "mcp__research__search__search";
+
+  it("refuses a call missing a required argument as one the model can fix", async () => {
+    const servers = await withTool(schema);
+
+    expect(await servers.inspect(tool, { max_results: 3 })).toEqual({
+      ok: false,
+      correctable: true,
+      reason:
+        "The arguments do not match what search expects: the input must have required property 'query'.",
+    });
+  });
+
+  it("names every mismatch, not only the first", async () => {
+    const servers = await withTool(schema);
+
+    const inspection = await servers.inspect(tool, {
+      query: "tides",
+      max_results: 0,
+      depth: "deep",
+    });
+
+    expect(inspection).toMatchObject({ ok: false, correctable: true });
+    expect(!inspection.ok && inspection.reason).toContain(
+      "must NOT have additional properties",
+    );
+    expect(!inspection.ok && inspection.reason).toContain(
+      "max_results must be >= 1",
+    );
+  });
+
+  it("asks about a call that fits the schema", async () => {
+    const servers = await withTool(schema);
+
+    expect(
+      await servers.inspect(tool, { query: "tides", max_results: 3 }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("does not refuse a call because the server's own schema cannot be read", async () => {
+    const servers = await withTool({
+      type: "object",
+      properties: { query: { type: "strng" } },
+      required: ["query"],
+    });
+
+    expect(await servers.inspect(tool, {})).toMatchObject({ ok: true });
+  });
+});
+
+describe("a connector's tools follow what the server says it offers", () => {
+  it("offers the new tools once a connected server says its list changed", async () => {
+    let announce: ((tools: readonly ConnectionTool[]) => void) | undefined;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => ({
+        listTools: async () => [{ name: "search" }],
+        callTool: async () => ({ content: [] }),
+        close: async () => {},
+        onToolsChanged: (listener) => {
+          announce = listener;
+        },
+      }),
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "research/search",
+      name: "Search",
+      url: "https://search.example/mcp",
+      enabled: true,
+    });
+
+    announce?.([{ name: "search" }, { name: "extract" }]);
+
+    expect((await servers.availableTools()).map((tool) => tool.name)).toEqual([
+      "mcp__research__search__search",
+      "mcp__research__search__extract",
+    ]);
+  });
+
+  it("hears a tool-list change through the production HTTP adapter", async () => {
+    let listed = 0;
+    let stream: ServerResponse | undefined;
+    const server = createServer(async (request, response) => {
+      if (request.method === "GET") {
+        response.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+        });
+        response.flushHeaders();
+        stream = response;
+        return;
+      }
+      if (request.method !== "POST") {
+        response.writeHead(405).end();
+        return;
+      }
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const message = JSON.parse(Buffer.concat(chunks).toString()) as {
+        id?: number;
+        method: string;
+      };
+      if (message.id === undefined) {
+        response.writeHead(202).end();
+        return;
+      }
+      const result =
+        message.method === "initialize"
+          ? {
+              protocolVersion: "2025-11-25",
+              capabilities: { tools: { listChanged: true } },
+              serverInfo: { name: "fixture", version: "1" },
+            }
+          : message.method === "tools/list"
+            ? {
+                tools: (++listed > 1 ? ["read", "write"] : ["read"]).map(
+                  (name) => ({ name, inputSchema: { type: "object" } }),
+                ),
+              }
+            : {};
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ jsonrpc: "2.0", id: message.id, result }));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("No test port");
+    try {
+      const connection = await connectHttpMcpServer(
+        {
+          id: "fixture",
+          name: "Fixture",
+          enabled: true,
+          url: `http://127.0.0.1:${address.port}/mcp`,
+        },
+        async () => undefined,
+      );
+      try {
+        const changed = new Promise<readonly ConnectionTool[]>((resolve) =>
+          connection.onToolsChanged?.(resolve),
+        );
+        expect((await connection.listTools()).map((tool) => tool.name)).toEqual(
+          ["read"],
+        );
+        await vi.waitFor(() => expect(stream).toBeDefined());
+        stream!.write(
+          `data: ${JSON.stringify({ jsonrpc: "2.0", method: "notifications/tools/list_changed" })}\n\n`,
+        );
+
+        expect((await changed).map((tool) => tool.name)).toEqual([
+          "read",
+          "write",
+        ]);
+      } finally {
+        await connection.close();
+      }
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+});
+
+describe("a built-in connection's tools, when what it offers follows the chosen model", () => {
+  it("are listed again for an open conversation without closing it, and described again for the rest", async () => {
+    let seeing = false;
+    let opened = 0;
+    let closed = 0;
+    const offered = () => [
+      { name: "navigate" },
+      ...(seeing ? [{ name: "screenshot" }] : []),
+    ];
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async () => {
+            opened += 1;
+            return {
+              listTools: async () => offered(),
+              callTool: async () => ({ content: [] }),
+              close: async () => {
+                closed += 1;
+              },
+            };
+          },
+          describe: async () => offered(),
+        },
+      ],
+    );
+    const names = async () =>
+      (await servers.availableTools("conversation-a")).map((tool) => tool.name);
+    const described = async () =>
+      (await servers.states())
+        .find((state) => state.id === "browser")
+        ?.tools.map((tool) => tool.name);
+    expect(await names()).toEqual(["mcp__browser__navigate"]);
+    expect(await described()).toEqual(["navigate"]);
+
+    seeing = true;
+    await servers.listBuiltInsAgain();
+
+    expect(await names()).toEqual([
+      "mcp__browser__navigate",
+      "mcp__browser__screenshot",
+    ]);
+    expect(await described()).toEqual(["navigate", "screenshot"]);
+    // The conversation's browser stays open with what it shows.
+    expect([opened, closed]).toEqual([1, 0]);
+  });
+
+  it("keep what they were when listing them again fails", async () => {
+    let failing = false;
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new Error("no user servers here");
+      },
+      new InMemoryMcpCredentials(),
+      [
+        {
+          id: "browser",
+          name: "Zhiyin's browser",
+          scope: "conversation",
+          open: async () => ({
+            listTools: async () => {
+              if (failing) throw new Error("The browser did not answer.");
+              return [{ name: "navigate" }];
+            },
+            callTool: async () => ({ content: [] }),
+            close: async () => {},
+          }),
+        },
+      ],
+    );
+    await servers.availableTools("conversation-a");
+    failing = true;
+
+    await expect(servers.listBuiltInsAgain()).resolves.toBeUndefined();
+
+    expect(
+      (await servers.availableTools("conversation-a")).map((tool) => tool.name),
+    ).toEqual(["mcp__browser__navigate"]);
+  });
+});
