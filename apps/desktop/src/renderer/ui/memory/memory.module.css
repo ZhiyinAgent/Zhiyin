@@ -1,0 +1,1031 @@
+/*
+ * The Memory page: scopes in a column on the left, the chosen scope on the
+ * right. Instructions read as cards of text; knowledge as rows of a list;
+ * an opened entry as a page of its own. Where the page is narrow, the scopes
+ * become a row above it.
+ */
+/* Measured by its own width, so the scopes fold whatever sits beside the page. */
+.memory-frame {
+  container: memory-frame / inline-size;
+}
+
+.memory-page {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  width: min(100%, 1080px);
+}
+
+.memory-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+}
+
+/* Scopes */
+
+.memory-scopes {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.memory-scopes ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-scopes__label {
+  margin: 14px 0 4px 12px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.memory-scope {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: var(--zy-radius-10);
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memory-scope:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.memory-scope[aria-current="page"] {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.memory-scope:focus-visible,
+.memory-row:focus-visible,
+.memory-link:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.memory-scope strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.memory-scope span {
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-folder {
+  justify-self: start;
+  gap: 7px;
+  margin: 18px 0 0 7px;
+}
+
+/* The chosen scope */
+
+.memory-main {
+  container-type: inline-size;
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.memory-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-muted);
+}
+
+.memory-search:focus-within {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.memory-search svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.memory-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 38px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.memory-failure {
+  margin: 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.memory-off,
+.memory-deleted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-panel-soft);
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-quiet {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* About the person and how to work side by side where they fit. */
+.memory-instructions {
+  display: grid;
+  gap: 22px;
+}
+
+.memory-instructions:empty {
+  display: none;
+}
+
+@container (min-width: 600px) {
+  .memory-instructions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .memory-instructions > .memory-section {
+    grid-template-rows: auto 1fr;
+  }
+
+  /* A conversation has a brief alone, which takes the whole row. */
+  .memory-instructions > .memory-section:only-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.memory-section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.memory-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+}
+
+.memory-section h2 {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.memory-section > header > span {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-13);
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+/* An entry's text */
+
+.memory-text {
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.memory-text p,
+.memory-text ul {
+  margin: 0;
+}
+
+.memory-text p + p,
+.memory-text p + ul,
+.memory-text ul + p,
+.memory-text ul + ul {
+  margin-top: 10px;
+}
+
+.memory-text ul {
+  padding-left: 18px;
+}
+
+.memory-text li + li {
+  margin-top: 4px;
+}
+
+.memory-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-accent);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-color: var(--zy-accent-line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.memory-link:hover {
+  text-decoration-color: var(--zy-accent);
+}
+
+.memory-link--gone {
+  color: var(--zy-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A change to how to work that waits for the person. */
+.memory-waiting {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-amber-line);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-amber-fill);
+}
+
+.memory-waiting__label {
+  color: var(--zy-amber);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-waiting p {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.memory-waiting__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.memory-waiting__foot > span:first-child {
+  margin-right: auto;
+}
+
+/* The two choices wrap together, never one alone. */
+.memory-waiting__actions {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* Rows of entries */
+
+.memory-rows {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-13);
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+  list-style: none;
+}
+
+.memory-rows li + li {
+  border-top: 1px solid var(--zy-line-faint);
+}
+
+.memory-row {
+  display: grid;
+  grid-template-columns: 3.2em minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memory-rows li:first-child .memory-row {
+  border-radius: var(--zy-radius-13) var(--zy-radius-13) 0 0;
+}
+
+.memory-rows li:last-child .memory-row {
+  border-radius: 0 0 var(--zy-radius-13) var(--zy-radius-13);
+}
+
+.memory-rows li:only-child .memory-row {
+  border-radius: var(--zy-radius-13);
+}
+
+.memory-row:hover {
+  background: var(--zy-wash);
+}
+
+.memory-row__number {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-row__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-row__words strong {
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.memory-row__words span {
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-row__side {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.memory-row__scope {
+  padding: 1px 7px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-pill);
+}
+
+/* An opened entry */
+
+.memory-entry {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.memory-back {
+  justify-self: start;
+}
+
+.memory-back svg {
+  transform: rotate(90deg);
+}
+
+.memory-entry__page {
+  display: grid;
+  gap: 12px;
+  padding: clamp(18px, 2.4vw, 28px);
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-13);
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+.memory-entry__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-entry__where span + span::before {
+  margin-right: 6px;
+  content: "·";
+}
+
+.memory-entry__page h2 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.memory-entry__page h2:focus {
+  outline: none;
+}
+
+.memory-entry__summary {
+  margin: -4px 0 4px;
+  color: var(--zy-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.memory-entry__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--zy-line-faint);
+}
+
+.memory-entry__foot p {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.memory-entry__foot cite {
+  font-style: normal;
+}
+
+.memory-entry__actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.memory-entry__links {
+  display: grid;
+  gap: 18px;
+  margin-top: 8px;
+}
+
+@container (min-width: 600px) {
+  .memory-entry__links {
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  }
+}
+
+.memory-entry__links section {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.memory-entry__links h3 {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Editing an entry */
+
+.memory-editor {
+  display: grid;
+  gap: 12px;
+}
+
+.memory-editor label {
+  display: grid;
+  gap: 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-editor input,
+.memory-editor textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+}
+
+.memory-editor textarea {
+  min-height: 200px;
+  resize: vertical;
+}
+
+.memory-editor input:focus-visible,
+.memory-editor textarea:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.memory-editor__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.memory-editor__foot > span {
+  margin-right: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.memory-editor > p {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.memory-editor__over {
+  color: var(--zy-amber);
+}
+
+/* The Projects label, with New project at its end. */
+.memory-scopes__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+
+.memory-scopes__head .memory-scopes__label {
+  margin: 0 0 0 12px;
+}
+
+.memory-scopes__new {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--zy-radius-10);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.memory-scopes__new:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.memory-scopes__new:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.memory-scopes__new svg {
+  width: 15px;
+  height: 15px;
+}
+
+.memory-scopes__name,
+.memory-project__ask input,
+.memory-project__merge select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-10);
+  background-color: var(--zy-field);
+  box-shadow: 0 1px 0 var(--zy-edge-light) inset;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.memory-scopes__name:focus-visible,
+.memory-project__ask input:focus-visible,
+.memory-project__merge select:focus-visible,
+.memory-entry__scope select:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+/* Projects whose work is done: listed, but quieter. */
+.memory-scopes--archived .memory-scope {
+  color: var(--zy-muted);
+}
+
+/* A project's own settings, under its memory. */
+.memory-project .memory-card {
+  gap: 14px;
+}
+
+.memory-project__folders {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.memory-project__folders ul {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-project__folders li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+}
+
+.memory-project__folders li > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-muted);
+}
+
+.memory-project__folders li > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-project__folders .text-button,
+.memory-project__folders li .text-button {
+  margin-top: 0;
+}
+
+.memory-project__folders > .text-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.memory-project__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--zy-line-faint);
+}
+
+.memory-project__ask {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--zy-line-faint);
+}
+
+.memory-project__ask > p {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.memory-project__ask .memory-project__actions {
+  justify-content: flex-end;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.memory-project__merge {
+  display: grid;
+  gap: 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.memory-project__merge select,
+.memory-entry__scope select {
+  padding-right: 32px;
+  background-image: var(--zy-select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  appearance: none;
+  cursor: pointer;
+}
+
+/* Where an entry is kept, chosen in place. */
+.memory-entry__scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 6px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.memory-entry__scope select {
+  field-sizing: content;
+  max-width: 220px;
+  min-height: 30px;
+  padding-left: 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-10);
+  background-color: var(--zy-field);
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+}
+
+.memory-project__merge select option,
+.memory-entry__scope select option {
+  background: var(--zy-panel);
+  color: var(--zy-text);
+}
+
+/* Narrow: the scopes become a row above the page. */
+@container memory-frame (max-width: 640px) {
+  .memory-page {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
+  .memory-scopes {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .memory-scopes ul {
+    display: contents;
+  }
+
+  .memory-scopes__label {
+    display: none;
+  }
+
+  .memory-scopes__head {
+    margin: 0;
+  }
+
+  .memory-scope {
+    width: auto;
+    padding: 6px 12px;
+    border: 1px solid var(--zy-line);
+    border-radius: var(--zy-radius-pill);
+  }
+
+  .memory-scope span {
+    display: none;
+  }
+
+  .memory-folder {
+    margin: 0 0 0 auto;
+  }
+}
+
+/*
+ * What a turn kept in memory: a quiet card under the turn, drawn like the
+ * card of the files it changed, so the two read as one family.
+ */
+.turn-memory {
+  width: min(560px, 100%);
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel);
+}
+
+.turn-memory__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 12px;
+  color: var(--zy-muted);
+}
+
+.turn-memory__header > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.turn-memory__header h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-memory__counts {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-memory__rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+  container-type: inline-size;
+}
+
+.turn-memory__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0 10px;
+  min-height: 34px;
+  padding: 0 8px 0 12px;
+}
+
+.turn-memory__row + .turn-memory__row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.turn-memory__kind {
+  display: grid;
+  place-items: center;
+  color: var(--zy-muted);
+}
+
+.turn-memory__kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.turn-memory__kind--added {
+  color: var(--zy-green);
+}
+
+.turn-memory__kind--waiting {
+  color: var(--zy-amber);
+}
+
+.turn-memory__title {
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.turn-memory__title {
+  cursor: pointer;
+}
+
+button.turn-memory__title:hover {
+  color: var(--zy-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.turn-memory__title:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.turn-memory__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.turn-memory__about {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px -4px 0;
+  padding: 5px;
+  border: 0;
+  border-radius: var(--zy-radius-round);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.turn-memory__about:hover,
+.turn-memory__about:focus-visible {
+  color: var(--zy-text);
+}
+
+/* The change itself, under its row, with the person's two choices. */
+.turn-memory__waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  grid-column: 2 / -1;
+  padding: 2px 0 10px;
+}
+
+.turn-memory__waiting p {
+  flex: 1 1 220px;
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* The two choices wrap together, never one alone. */
+.turn-memory__waiting > span {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* A narrow card: the note moves under the title rather than squeezing it. */
+@container (max-width: 440px) {
+  .turn-memory__row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    padding-block: 6px;
+  }
+
+  .turn-memory__note {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: left;
+    white-space: normal;
+  }
+}
+
+.turn-memory__failure {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-danger);
+  font-size: 13px;
+}

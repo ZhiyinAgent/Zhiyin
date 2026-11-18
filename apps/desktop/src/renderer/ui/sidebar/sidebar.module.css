@@ -1,0 +1,661 @@
+/* Styles owned by the sidebar module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* The brand row is part of the window's top bar, which the window is dragged
+   by. While a menu or dialog is open, a click on the bar closes it instead of
+   dragging the window, which the page would never be told of (useDismiss). */
+.app-sidebar__brand {
+  -webkit-app-region: drag;
+}
+
+:root[data-layer-open] .app-sidebar__brand,
+.app-sidebar__brand button {
+  -webkit-app-region: no-drag;
+}
+
+/* Still while the window is in the background, where nobody watches. */
+:root[data-window-away] .app-sidebar::before {
+  animation-play-state: paused;
+}
+
+/*
+ * The sidebar's ground is grained and darkens toward its edges; the look's
+ * side slot is drawn behind its list, at the column's foot. It makes no stacking
+ * context of its own: a conversation's menu opened from it is drawn over the
+ * page beside it, which it may reach into. So the grain is a layer of its
+ * background, and what the column holds is placed over it.
+ */
+.app-sidebar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 18px 20px;
+  border-right: 1px solid var(--zy-line);
+  background:
+    var(--zy-grain-ground) 0 0 / 200px 200px,
+    var(--zy-vignette) 0 0 / 100% 100% no-repeat,
+    var(--zy-sidebar);
+  background-blend-mode: soft-light, normal;
+}
+
+.app-sidebar > * {
+  position: relative;
+}
+
+/*
+ * The same height and the same rule under it as the conversation header beside
+ * it, so the two read as one bar across the window rather than as two columns
+ * that happen to start near each other. The negative margins undo the
+ * sidebar's own padding so the rule reaches the column's edges.
+ */
+.app-sidebar__brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: var(--zy-title-bar-height);
+  margin: 0 -18px;
+  padding: 0 23px;
+  border-bottom: 1px solid var(--zy-line-faint);
+}
+
+.app-nav button,
+.app-foot button {
+  border: 0;
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.new-task {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 37px;
+  margin: 20px 0 10px;
+  padding: 0 10px;
+  /* Neutral: red is kept for what runs or asks. */
+  border: 1px solid var(--zy-look-outline, var(--zy-line-strong));
+  border-radius: var(--zy-look-control-radius, var(--zy-radius-8));
+  background: var(--zy-look-fill-strong, var(--zy-wash));
+  color: var(--zy-text);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.new-task svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-text-soft);
+}
+
+.app-nav {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.app-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 33px;
+  padding: 0 10px;
+  border-radius: var(--zy-radius-7);
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  text-align: left;
+}
+
+.app-nav button:hover {
+  background: var(--zy-wash-strong);
+}
+
+.app-nav svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+}
+
+/*
+ * The conversation list is the part of the sidebar that gives. Everything else
+ * in the column - the brand, New task, the app links, the foot - is a fixed
+ * row a person must always be able to reach; the list is the part that grows
+ * without limit, so it is the part that scrolls. Otherwise enough
+ * conversations would push the foot, which holds the model, usage and
+ * settings, out of the window.
+ */
+/*
+ * The label stands above the list rather than in it, so a scrolled list still
+ * says what it is a list of, and the ground shows behind the label as it does
+ * everywhere else. A light grain lies over the words, fading out at the foot.
+ */
+/* It takes the column's room that is left, and only that. */
+.task-list-frame {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  margin-top: 14px;
+  min-height: 0;
+}
+
+/* Placed over the picture below, which is drawn first. */
+.task-list-frame > * {
+  position: relative;
+}
+
+.task-list-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--zy-grain-text) 0 0 / 160px 160px;
+  opacity: var(--zy-grain-text-strength);
+  mix-blend-mode: overlay;
+  mask-image: linear-gradient(
+    to bottom,
+    var(--zy-canvas) calc(100% - 60px),
+    transparent
+  );
+}
+
+.task-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow-y: auto;
+  /* It scrolls with the wheel, the keys and a touch; a bar beside the names
+     would only be one more line in a narrow column. */
+  scrollbar-width: none;
+}
+
+.task-list > * {
+  flex: none;
+}
+
+/*
+ * The look's side slot: fixed at the foot of the list's frame, behind the
+ * rows, which scroll over it. It takes no room of its own, however many
+ * conversations there are.
+ */
+.task-list-frame::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--zy-look-side-height);
+  pointer-events: none;
+  background: var(--zy-look-side);
+  opacity: calc(var(--zy-look-side-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-side-mask);
+  mask-composite: intersect;
+  animation: var(--zy-look-side-motion);
+}
+
+:root[data-window-away] .task-list-frame::before {
+  animation-play-state: paused;
+}
+
+.task-entry {
+  position: relative;
+  min-width: 0;
+}
+
+/*
+ * A conversation's menu has its own button, shown where the person is: the
+ * row under the pointer, the row reached by keyboard, or the row whose menu is
+ * open. It takes the age's place while it shows. Right-click stays a shortcut.
+ */
+.task-entry__options {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0 0 4px;
+  border: 0;
+  border-radius: var(--zy-radius-6);
+  background: transparent;
+  color: var(--zy-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  opacity: 0;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.task-entry:hover .task-entry__options,
+.task-entry:focus-within .task-entry__options,
+.task-entry--menu-open .task-entry__options {
+  opacity: 1;
+}
+
+.task-entry:hover .task-row small,
+.task-entry:focus-within .task-row small,
+.task-entry--menu-open .task-row small {
+  visibility: hidden;
+}
+
+/* The name fades out before the button, never running under its dots. */
+.task-entry:hover .task-row span,
+.task-entry:focus-within .task-row span,
+.task-entry--menu-open .task-row span {
+  mask-image: linear-gradient(to left, transparent 28px, var(--zy-canvas) 46px);
+}
+
+/* Solid, so nothing behind shows through it. */
+.task-entry__options:hover,
+.task-entry__options[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--zy-text) 12%, var(--zy-sidebar));
+  color: var(--zy-text);
+}
+
+.task-entry--menu-open .task-row {
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+/* Set like a caption. */
+.task-list__label {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  min-height: 26px;
+  padding: 0 7px;
+  color: var(--zy-faint);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+/* With projects, the labels run in the list, which scrolls as one. */
+.task-list__label--inline {
+  margin-top: 12px;
+}
+
+.task-list__group {
+  display: grid;
+  gap: 3px;
+}
+
+/*
+ * Projects: a row that opens to the project's own conversations, drawn under
+ * it on a hairline so they read as held by it.
+ */
+.project-list {
+  display: grid;
+  gap: 2px;
+}
+
+.project__row {
+  position: relative;
+}
+
+.project__toggle {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 38px 0 7px;
+  border: 0;
+  border-radius: var(--zy-radius-7);
+  background: transparent;
+  color: var(--zy-text-soft);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project__toggle:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.project__toggle:focus-visible,
+.project__new:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: -2px;
+}
+
+.project__toggle svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+  transform: rotate(-90deg);
+  transition: transform 140ms ease;
+}
+
+.project__toggle[aria-expanded="true"] svg {
+  transform: none;
+}
+
+.project__toggle span {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project__toggle small {
+  color: var(--zy-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Starts a conversation in the project; shown where the person is. */
+.project__new {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--zy-radius-6);
+  background: transparent;
+  color: var(--zy-muted);
+  opacity: 0;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.project__new svg {
+  width: 14px;
+  height: 14px;
+}
+
+.project__row:hover .project__new,
+.project__row:focus-within .project__new {
+  opacity: 1;
+}
+
+.project__row:hover .project__toggle small,
+.project__row:focus-within .project__toggle small {
+  visibility: hidden;
+}
+
+.project__new:hover {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.project__tasks {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 6px 13px;
+  padding-left: 6px;
+  border-left: 1px solid var(--zy-hairline);
+}
+
+.project__empty {
+  margin: 2px 0 8px 20px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.project__more {
+  margin: -2px 0 6px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project__toggle svg {
+    transition: none;
+  }
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 39px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-7);
+  background: transparent;
+  color: var(--zy-muted);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.task-row--editing {
+  display: block;
+  outline: 0;
+  border-color: var(--zy-accent-line);
+  background: var(--zy-panel-raised);
+  color: var(--zy-text);
+  font: inherit;
+}
+
+/* The menu is placed against its row; it is drawn as every menu is. */
+.task-context-menu {
+  position: fixed;
+  z-index: var(--zy-layer-confirm);
+  max-width: calc(100vw - 16px);
+}
+
+/* The question before a deletion takes the menu's place, in the same frame. */
+.task-delete-confirm {
+  position: fixed;
+  z-index: var(--zy-layer-confirm);
+  /* Sized to its question, not to the room right of where it opened. */
+  max-width: min(360px, calc(100vw - 16px));
+  padding: 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-9);
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow-menu);
+}
+
+/* Its own line, between the question and its answers. */
+.task-delete-confirm__forget {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.task-delete-confirm__forget input {
+  flex: none;
+  margin: 0;
+}
+
+.task-row:hover {
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+/* Where you are: a red line along its edge, or, in a look without outlines,
+   a soft patch. */
+.task-row[aria-current="page"] {
+  border-color: transparent;
+  border-radius: var(
+    --zy-look-control-radius,
+    var(--zy-radius-1) var(--zy-radius-7) var(--zy-radius-7) var(--zy-radius-1)
+  );
+  background: var(--zy-look-fill, transparent);
+  box-shadow: var(--zy-look-current-mark, inset 2px 0 0 var(--zy-accent-fill));
+  color: var(--zy-text);
+}
+
+.task-row span {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-row small {
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/*
+ * The foot: the model by name, then Usage and Settings by their icons, on one
+ * row. It sits at the end of the column and never gives up its height to the
+ * list above it: it is how a person reaches the model, usage and settings.
+ */
+.app-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 2px;
+  align-items: center;
+  margin-top: auto;
+  flex: 0 0 auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.app-foot button {
+  display: grid;
+  place-items: center;
+  min-width: 33px;
+  min-height: 33px;
+  padding: 0;
+  border-radius: var(--zy-radius-7);
+}
+
+.app-foot button:hover {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text-soft);
+}
+
+.app-foot svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-foot .app-foot__model {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.app-foot__model svg {
+  flex: 0 0 auto;
+  color: var(--zy-muted);
+}
+
+.app-foot__model span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  /* The app's navigation folds away into a drawer behind a floating button. */
+  .app-sidebar.app-sidebar--drawer {
+    display: none;
+  }
+
+  /* Placed against the app like the button that opens it, so the two stay
+     in line wherever the app starts. */
+  .app-sidebar.app-sidebar--drawer-open {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: var(--zy-layer-navigation);
+    display: flex !important;
+    width: min(300px, 90vw);
+    /* The same offset the conversation pane uses, so the drawer's own brand row
+       lines up with the floating button rather than starting below it. */
+    padding-top: 20px;
+    box-shadow: var(--zy-shadow);
+  }
+
+  /* The button that opened the drawer floats over it, so the name sits beside
+     the button instead of under it - the same clearance the conversation
+     header gives it. */
+  .app-sidebar.app-sidebar--drawer-open > .app-sidebar__brand {
+    /* Keeps its own height rather than being squeezed by the scrolling list
+       below it, so its middle is the same as the floating button's. */
+    flex: 0 0 auto;
+    padding-left: 72px;
+  }
+}
+
+/* The sidebar before the core has answered: placeholders at the size of
+   what they stand for. */
+.sidebar-skeleton__brand {
+  width: 118px;
+  height: 24px;
+}
+
+/* Where New task will be, at its size. */
+.sidebar-skeleton__button {
+  flex: none;
+  height: 37px;
+  margin: 20px 0 10px;
+}
+
+.sidebar-skeleton__nav {
+  flex: none;
+  width: 72%;
+  height: 22px;
+  margin-top: 12px;
+}
+
+/*
+ * An update downloaded and checked, said at the foot of the sidebar above the
+ * row of the app's pages, which it takes the end of the column from.
+ */
+.update-ready {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-11);
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+}
+
+.update-ready + .app-foot {
+  margin-top: 10px;
+}
+
+.update-ready__text {
+  min-width: 0;
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.update-ready > button {
+  width: 100%;
+}
+
+.update-ready__refusal {
+  margin: 0;
+  color: var(--zy-danger);
+  font-size: 12px;
+  line-height: 1.4;
+}

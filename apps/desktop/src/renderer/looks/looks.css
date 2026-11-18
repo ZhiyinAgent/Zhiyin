@@ -1,0 +1,62 @@
+/*
+ * The looks (ADR 0028). Each look is a folder: one stylesheet that fills
+ * every slot a component reads, and the pictures it names. A look is chosen
+ * by `data-look` on the page's root, or on any element that previews one, and
+ * its strength by `data-look-strength`.
+ *
+ * The slots, by the variables each reads:
+ *   ground  behind the conversation and the pages before it opens:
+ *           --zy-look-ground, -mask, -height, -opacity
+ *   drift   a band drifting over that ground: --zy-look-drift, -mask, -opacity
+ *   side    the side column's foot, behind the rows of its list, which scroll
+ *           over it: --zy-look-side, -mask, -height, -opacity, -motion
+ *   page    the foot of every other page: --zy-look-page, -mask, -height,
+ *           -opacity
+ *   title   behind a page's title: --zy-look-title, -mask, -opacity
+ *   marks   --zy-look-mark beside the name, --zy-look-mark-small in a line
+ *           at --zy-look-mark-small-size, --zy-look-mark-large on the
+ *           new-task page at
+ *           --zy-look-mark-large-size, all through --zy-look-mark-filter;
+ *           --zy-look-orbit shows the disc and rings around the large mark.
+ *
+ * The ground's slot also reads --zy-look-ground-blend, how the picture mixes
+ * with the ground, and its mask on the new-task page and on the pages shown
+ * before the conversations open: --zy-look-welcome-mask and
+ * --zy-look-standalone-mask. The new-task page's words can have a veil of
+ * their own, fading out past them: --zy-look-words-veil.
+ *
+ * A picture is a background, or `none` to leave the slot empty. A mark of
+ * `normal` is the app's own mark.
+ *
+ * The parts read variables too (ADR 0028): outlines (--zy-look-outline);
+ * panels (-panel-radius, -panel-shadow, -panel-ground); controls and chips
+ * (-control-radius, -chip-radius, -fill, -fill-strong); the command's well
+ * (-well); the composer's moving edge (-running-width, and -running-still
+ * under reduced motion); checks (-check-appearance, -check, -check-mask,
+ * -check-on-mask, in the colour of -dot); the step track (-track-mask,
+ * -track-height, -track-radius); the person's message (-bubble,
+ * -bubble-radius, -bubble-halo); suggestions (-suggestion, -suggestion-text);
+ * and the current row's mark (-current-mark). Each part falls back to its own drawing, which a look
+ * keeps by setting the variable to `initial`.
+ *
+ * Every look sets every one of these; the theme check refuses a look that
+ * leaves one out.
+ */
+
+@import "./neutral/look.css";
+@import "./ink/look.css";
+@import "./dots/look.css";
+
+/* Strength scales every slot's opacity; marks keep theirs. */
+:root,
+[data-look-strength="default"] {
+  --zy-look-strength: 1;
+}
+
+[data-look-strength="subtle"] {
+  --zy-look-strength: 0.5;
+}
+
+[data-look-strength="vivid"] {
+  --zy-look-strength: 1.5;
+}

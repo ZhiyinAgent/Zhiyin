@@ -1,0 +1,161 @@
+/* Styles owned by the beside module: the split beside the conversation,
+   the choice between surfaces, and the notice. The surfaces style
+   themselves. */
+
+.beside-split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The conversation keeps 320 pixels whatever share the space beside it is
+   given. */
+.beside-lane {
+  display: flex;
+  flex: 0 0 0%;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    flex-basis 200ms ease,
+    opacity 160ms ease;
+}
+
+.beside-split[data-split="true"] > .beside-lane {
+  flex-basis: min(var(--beside-share), calc(100% - 328px));
+  opacity: 1;
+}
+
+.beside-surface {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+
+/* The conversation column is what its ground's landscape is drawn against. */
+.beside-conversation {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.beside-divider {
+  flex: 0 0 0px;
+  min-width: 0;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+  transition: flex-basis 200ms ease;
+}
+
+.beside-split[data-split="true"] > .beside-divider {
+  flex-basis: 8px;
+}
+
+.beside-divider::after {
+  content: "";
+  position: absolute;
+  inset: 12px 3px;
+  border-radius: var(--zy-radius-1);
+  background: var(--zy-line);
+}
+
+.beside-divider:hover::after,
+.beside-divider:focus-visible::after {
+  background: var(--zy-accent-line);
+}
+
+.beside-divider:focus-visible {
+  outline: none;
+}
+
+.beside-split[data-dragging="true"] > .beside-lane,
+.beside-split[data-dragging="true"] > .beside-divider {
+  transition: none;
+}
+
+.beside-split[data-dragging="true"] {
+  user-select: none;
+}
+
+/* Two buttons that read as one control, drawn as the header's
+   Conversation / Workspace choice is: the pressed one is the surface on
+   screen. */
+.beside-switch {
+  flex: none;
+  align-self: flex-start;
+  justify-self: start;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-6);
+}
+
+.beside-switch button {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: var(--zy-radius-3);
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.beside-switch button:hover {
+  color: var(--zy-text-soft);
+}
+
+.beside-switch button[aria-pressed="true"] {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.beside-switch button:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: 3px;
+}
+
+/* Written where what happens is written down, and gone once it is acted on. */
+.beside-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-wash-faint);
+  color: var(--zy-text-soft);
+  font-size: 12.5px;
+}
+
+.beside-notice svg {
+  flex: none;
+  width: 14px;
+  color: var(--zy-muted);
+}
+
+.beside-notice p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beside-lane,
+  .beside-divider {
+    transition: none;
+  }
+}

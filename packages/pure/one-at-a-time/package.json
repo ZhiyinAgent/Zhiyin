@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/one-at-a-time",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Work run one piece at a time in the order it was asked for, alone or one line per key.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

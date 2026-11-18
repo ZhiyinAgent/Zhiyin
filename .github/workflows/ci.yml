@@ -1,0 +1,181 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  # Weekly, so an advisory published while nobody commits still fails the
+  # gate's audit step and is reported.
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Repository gate
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Enable the pinned pnpm version
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+
+      # A fresh machine's system disk is kept busy by Windows' own work for
+      # its first minutes, and a browser whose profile is there can wait half
+      # a minute on it. The runner's work disk is idle.
+      - name: Keep temporary files on the runner's work disk
+        shell: powershell
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 't'
+          New-Item -ItemType Directory -Force -Path $temp | Out-Null
+          "TEMP=$temp" >> $env:GITHUB_ENV
+          "TMP=$temp" >> $env:GITHUB_ENV
+
+      - name: Install dependencies
+        shell: powershell
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the Electron runtime after the clean install
+        shell: powershell
+        run: pnpm --filter desktop install:electron
+
+      # The gate installs the programs some tests need (Typst, Tectonic and
+      # uv) into ZHIYIN_TEST_TOOLS, each verified against its pinned digest,
+      # so those tests run here, and keeps Blender's archive for the test that
+      # installs it. uv also runs Ruff and the Python tests of the harnesses'
+      # code that needs neither Blender nor the CAD environment. A Blender
+      # running scenes needs a graphics card, which this machine lacks: the
+      # tests that need one run on a PC that has it, and a release asks for
+      # their record. Only the downloads are kept between runs, and only
+      # until a pin changes.
+      - name: Keep the downloaded programs between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\zt\archives
+          key: test-tools-${{ hashFiles('packages/feature/toolchains/src/toolchains.ts') }}
+
+      # The build fetches the spelling dictionaries from Chromium's server,
+      # which this machine sometimes cannot reach for a minute. Kept between
+      # runs until the list changes; the build checks each kept file's
+      # SHA-256 before using it, and fetches only what is missing or differs.
+      - name: Keep the spelling dictionaries between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\dictionaries
+          key: dictionaries-${{ hashFiles('packages/feature/spelling/dictionaries.json') }}
+
+      # The build also fetches the fallback font from GitHub, kept the same way.
+      - name: Keep the fallback font between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps\desktop\fonts
+          key: fonts-${{ hashFiles('apps/desktop/fonts.json') }}
+
+      - name: Run the repository gate
+        shell: powershell
+        env:
+          ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1
+
+  # The real-Blender tests that ask for no picture, on this machine without a
+  # graphics card: the session finds it cannot draw with EEVEE and draws its
+  # previews with Cycles on the processor (ADR 0022). Beside the gate, never
+  # in it, and in three parts of about 25 minutes each: measured on
+  # 2026-11-14, these files take about three times as long here as on a PC
+  # with a graphics card. The files that render, and the CAD suites, run on
+  # such a PC, and a release asks for their record.
+  blender:
+    name: Real Blender, no graphics card (${{ matrix.part }})
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: knowledge and library
+            files: >-
+              knowledge library-edits library-curves shading sculpt passes
+          - part: shapes and simulation
+            files: >-
+              simulate-cloth shapes materials placement bake processor
+          - part: surfaces and measures
+            files: >-
+              library-loops shapes-surfaces rig-bind scatter shared-geometry
+              library render-motion-loops library-details measure own-heights
+              cad-sizes
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Enable the pinned pnpm version
+        shell: powershell
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.25.0 --activate
+
+      - name: Install dependencies
+        shell: powershell
+        run: pnpm install --frozen-lockfile
+
+      # Blender's archive, kept between runs until its pin changes. A short
+      # folder: Blender's own tree adds up to 142 characters to its path.
+      - name: Keep Blender's archive between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: C:\zb\blender.zip
+          key: blender-${{ hashFiles('packages/feature/toolchains/src/toolchains.ts') }}
+
+      # The address and the digest are read from the app's own pin, so this
+      # runs the Blender the app installs, and nothing else is trusted.
+      - name: Download, verify and unpack the pinned Blender
+        shell: powershell
+        run: |
+          $pins = Get-Content -Raw packages/feature/toolchains/src/toolchains.ts
+          if ($pins -notmatch 'url: "(https://download\.blender\.org/[^"]+\.zip)",\s+sha256:\s+"([0-9a-f]{64})"') {
+            throw "Blender's pin could not be read from toolchains.ts."
+          }
+          $url = $Matches[1]
+          $digest = $Matches[2]
+          New-Item -ItemType Directory -Force -Path C:\zb | Out-Null
+          if (-not (Test-Path C:\zb\blender.zip)) {
+            Invoke-WebRequest -Uri $url -OutFile C:\zb\blender.zip
+          }
+          $found = (Get-FileHash -Algorithm SHA256 C:\zb\blender.zip).Hash.ToLowerInvariant()
+          if ($found -ne $digest) {
+            Remove-Item C:\zb\blender.zip
+            throw "Blender's archive is not the pinned one: $found."
+          }
+          Expand-Archive -Path C:\zb\blender.zip -DestinationPath C:\zb
+          $folder = [IO.Path]::GetFileNameWithoutExtension($url)
+          "ZHIYIN_BLENDER=C:\zb\$folder\blender.exe" >> $env:GITHUB_ENV
+
+      - name: Run this part's real-Blender tests
+        shell: powershell
+        env:
+          ZHIYIN_TEST_WINDOWS: aside
+        run: |
+          $files = "${{ matrix.files }}".Split(" ", [StringSplitOptions]::RemoveEmptyEntries) |
+            ForEach-Object { "packages/feature/blender-studio/system-boundary/real-blender-$_.test.ts" }
+          pnpm exec vitest run --project system-boundary @files

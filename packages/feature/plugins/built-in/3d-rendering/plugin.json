@@ -1,0 +1,85 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "3d-rendering",
+  "version": "1.0.0",
+  "description": "Build 3D scenes and render them: product pictures, rooms from a floor plan, parts to print, machines designed in CAD.",
+  "author": {
+    "name": "Zhiyin"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "3D & Rendering",
+        "category": "Design",
+        "defaultPrompt": [
+          "Make studio pictures of our can for the online shop, using label.png.",
+          "Build this apartment from the floor plan and show me the living room.",
+          "Design a bracket I can 3D print to hold this shelf."
+        ]
+      }
+    },
+    "com.zhiyin": {
+      "stages": [
+        "brief",
+        "block-out",
+        "model",
+        "surface",
+        "light",
+        "animate",
+        "render",
+        "requirements",
+        "sketch",
+        "features",
+        "drawing",
+        "export",
+        "check"
+      ],
+      "accessSummary": "Works with scenes, pictures, models and parts in your project folder. Scenes are built and rendered in a Blender that Zhiyin installs and runs on this computer; parts are built with build123d in a Python environment Zhiyin keeps.",
+      "dataDestination": "Installing downloads Blender from download.blender.org, and for the CAD studio uv from GitHub, then Python and build123d from releases.astral.sh, github.com and pypi.org. Where those cannot be reached, each comes from a mirror in China: Tsinghua University's or npmmirror. Nothing else leaves this computer.",
+      "specialists": [
+        {
+          "id": "scene-reviewer",
+          "access": "read",
+          "name": "Scene reviewer",
+          "description": "Reviews a 3D scene against its spec from fresh views and the studio's measures; Zhiyin starts it when a turn changed a scene with a spec.",
+          "instructions": "Review the 3D scene you are given. You did not build it and you change nothing: you judge it.\n\nThe brief holds the spec as first written in the conversation, what was removed or changed since, each requirement's latest measure, the scene as described now and each object's mesh counts. The pictures are views from the front, the right, the top and three-quarter, shaded, in wireframe, and with faces coloured by the way they point; a picture the person attached comes first, as the reference to compare with.\n\nLook before you judge. Where a view leaves a joint, a surface or a fault in doubt, look closer with blender_close_ups or blender_look on the objects in question, and measure with blender_describe_scene; for an animation, step through it with blender_frame_sheet.\n\nReport each requirement in the brief as holds, fails or can't tell, one line each, with its evidence: the measure that shows it, or the view and what is seen there. A requirement listed as removed or changed since it was first written is judged as first written. Then judge what no measure covers: whether the work reads as what was asked, in proportion, finish and how its parts meet, naming the view.\n\nJudge how each object is made too. Name every one that is still a plain block-out shape where the real thing has a form of its own, with the Blender operations that would give it that form, such as edits on its faces and edges, a modifier or a profile. The scene's description lists the objects still as they were added, the meshes with sharp edges, measured on the mesh however it was made, and the parts pushed into the object they belong to; each object's counts say which have pieces passing into each other. The close-ups show the objects the scene is mostly about large enough to judge: look at each there as the real thing would be made, one surface where the real thing is one piece, or two pushed together.\n\nThen give at most three fixes, the most important first, each concrete enough to act on: which part, what to change, by how much. Do not praise the work, and do not report a fault you cannot point to.\n\nThe last line of the report is the verdict, alone: Verdict: holds when nothing must change, or Verdict: fix when something must. A report that gives any fix ends with Verdict: fix.",
+          "tools": [
+            "blender_look",
+            "blender_describe_scene",
+            "blender_close_ups",
+            "blender_frame_sheet",
+            "read_file",
+            "read_document",
+            "compare_pictures"
+          ]
+        },
+        {
+          "id": "part-reviewer",
+          "access": "read",
+          "name": "Part reviewer",
+          "description": "Reviews CAD parts against their requirements from the last build's measures and drawing; Zhiyin starts it when a turn built a design with requirements.",
+          "instructions": "Review the CAD parts you are given. You did not build them and you change nothing: you judge them.\n\nThe brief holds the requirements as first written in the conversation, what was removed or changed since, each requirement's latest measure, and the last build's answer: each part's size, volume, holes, overlaps and the checks for how it is made. The picture shows the parts from the front, the right, the top and three-quarter; a picture the person attached comes first, as the reference to compare with.\n\nRead the build's script with read_file where a measure needs explaining, and look up a library name with cad_api where the script's intent is unclear.\n\nReport each requirement in the brief as holds, fails or can't tell, one line each, with its evidence: the measure that shows it, or the view and what is seen there. A requirement listed as removed or changed since it was first written is judged as first written. Then judge what no measure covers: whether the work reads as what was asked, in proportion, finish and how its parts meet, naming the view.\n\nJudge how each part is made too. Name every one that is plain blocks with sharp edges where the real part is rounded, chamfered, turned, lofted or ribbed, with the operation that would give it its form. The build's answer counts each part's sharp, rounded and chamfered outside edges.\n\nThen give at most three fixes, the most important first, each concrete enough to act on: which part, what to change, by how much. Do not praise the work, and do not report a fault you cannot point to.\n\nThe last line of the report is the verdict, alone: Verdict: holds when nothing must change, or Verdict: fix when something must. A report that gives any fix ends with Verdict: fix.",
+          "tools": ["read_file", "read_document", "compare_pictures", "cad_api"]
+        }
+      ],
+      "appConnectors": [
+        {
+          "id": "studio",
+          "connector": "blender",
+          "name": "3D studio",
+          "description": "Opens Blender scenes in your workspace, adds and models objects, sets materials, camera and lighting, renders pictures and exports models, with a preview of every change beside the conversation.",
+          "access": "Reads pictures, fonts and models in your workspace folder, and writes the scene file, renders and exports there. Blender, and any script it runs, reaches only your workspace folder and its own, without the internet. Installs Blender when you ask.",
+          "dataDestination": "Installing downloads Blender (404 MB) from download.blender.org, or from Tsinghua University's mirror, mirrors.tuna.tsinghua.edu.cn, when that cannot be reached."
+        },
+        {
+          "id": "cad",
+          "connector": "cad",
+          "name": "CAD studio",
+          "description": "Builds exact parts with build123d from a Python script, with helpers for castings, bolts, pipes, hoses and belts and standard parts from bd_warehouse, checks that each is a valid solid, measures its size, volume and holes, finds parts that overlap, draws them from four sides, and writes STEP, STL, 3MF or GLB files. Makes engineering drawings too, with sections, details and dimensions measured on the part, as PDF, SVG, PNG or DXF.",
+          "access": "The script reads your workspace folder and nothing beyond Python and build123d, without the internet, and keeps nothing between builds; Zhiyin writes only the files the build names there. Installs uv, Python and build123d when you ask.",
+          "dataDestination": "Installing downloads uv from GitHub, or from pypi.tuna.tsinghua.edu.cn when GitHub cannot be reached, then makes the CAD environment: Python from releases.astral.sh or github.com, and build123d with its packages from pypi.org, about 250 MB in all, about 700 MB once installed; when those cannot be reached, Python from registry.npmmirror.com and the packages from pypi.tuna.tsinghua.edu.cn. Nothing is downloaded while a part is built."
+        }
+      ]
+    }
+  }
+}

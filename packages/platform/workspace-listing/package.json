@@ -1,0 +1,23 @@
+{
+  "name": "@zhiyin/workspace-listing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The bundled ripgrep run over a workspace folder: what a search or a listing chooses, and a folder's files compared before and after.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vscode/ripgrep": "1.18.0",
+    "@zhiyin/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/sandbox": "workspace:*",
+    "@zhiyin/test-support": "workspace:*"
+  }
+}

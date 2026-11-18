@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/tool-input",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A call's input checked against the schema its tool offers the model: the input as the tool takes it, or what is wrong with it in words.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

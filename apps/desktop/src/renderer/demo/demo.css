@@ -1,0 +1,91 @@
+html {
+  min-width: 320px;
+  height: 100%;
+  background: #343636;
+}
+
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: #343636;
+  color: var(--zy-text);
+}
+
+.demo-stage {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+}
+
+.demo-window {
+  width: min(1450px, 100%);
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 17px;
+  background: var(--zy-canvas);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.32);
+}
+
+.window-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border-bottom: 1px solid var(--zy-line);
+  background: #15191b;
+}
+
+.window-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.window-dot--coral {
+  background: var(--zy-accent);
+}
+
+.window-dot--amber {
+  background: var(--zy-amber);
+}
+
+.window-dot--green {
+  background: var(--zy-green);
+}
+
+.window-bar__title {
+  position: absolute;
+  left: 50%;
+  color: var(--zy-faint);
+  font-family: var(--zy-font-instrument);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  transform: translateX(-50%);
+}
+
+/* The app below the window bar, whatever it is showing. */
+.demo-window > :not(.window-bar) {
+  height: calc(100% - 34px);
+}
+
+@media (max-width: 720px) {
+  .demo-stage {
+    padding: 0;
+  }
+
+  .demo-window {
+    border: 0;
+    border-radius: 0;
+  }
+}

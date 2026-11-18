@@ -1,0 +1,7 @@
+Zhiyin includes an adapted version of Anthropic's frontend-design skill.
+
+Source: https://github.com/anthropics/skills/tree/main/skills/frontend-design
+License: Apache License 2.0
+
+The skill was modified for Zhiyin's capability model, runtime boundaries, and
+interface-validation requirements. It is not an unmodified Anthropic skill.

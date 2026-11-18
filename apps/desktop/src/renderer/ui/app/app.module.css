@@ -1,0 +1,597 @@
+/* Styles owned by the app module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/*
+ * The window's top bar is the app's own: the mark, the conversation header,
+ * and - drawn by Windows at the right-hand end of it - minimize, maximize and
+ * close. There is no strip above it: two thin bands stacked read as narrower
+ * than one bar.
+ *
+ * Two things follow from the controls living on the app's bar: the bar is
+ * what a person drags the window by, and nothing of the app's may be drawn in
+ * the width the controls take at its right-hand end. So the bar runs across
+ * every view, a plain one where there is no conversation header, and whatever
+ * scrolls does so below it: a page scrolling from the window's top edge
+ * carries its content, its pinned headers and its scrollbar under the
+ * controls. The sidebar's brand row and the conversation header are the bar
+ * too, and each says so in its own module.
+ */
+.top-bar {
+  -webkit-app-region: drag;
+}
+
+/* While a menu or dialog is open, a click on the bar closes it instead of
+   dragging the window, which the page would never be told of (useDismiss). */
+:root[data-layer-open] .top-bar {
+  -webkit-app-region: no-drag;
+}
+
+.mobile-navigation {
+  -webkit-app-region: no-drag;
+}
+
+/* The bar where a view has nothing of its own to put in it. */
+.top-bar {
+  flex: none;
+  height: var(--zy-title-bar-height);
+  border-bottom: 1px solid var(--zy-line-faint);
+}
+
+/* The window taking shape before the core has answered: the shell's own
+   columns and bar, with placeholders where what they hold will be. */
+/* On the conversation's ground, so nothing changes under it when it opens. */
+.window-skeleton__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    var(--zy-grain-ground) 0 0 / 200px 200px,
+    var(--zy-vignette) 0 0 / 100% 100% no-repeat,
+    var(--zy-canvas);
+  background-blend-mode: soft-light, normal;
+}
+
+.command-error {
+  position: fixed;
+  z-index: var(--zy-layer-alert);
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  max-width: min(550px, 90vw);
+  padding: 14px 18px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-13);
+  background: var(--zy-panel);
+  box-shadow: var(--zy-shadow);
+  transform: translateX(-50%);
+  font-size: 14px;
+}
+
+.command-error button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.command-error svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A point at the top of the conversation column for the notice to hang from,
+   taking no room of its own. */
+.restart-anchor {
+  position: relative;
+  z-index: var(--zy-layer-alert);
+  flex: none;
+  height: 0;
+}
+
+.mobile-navigation {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  /* Placed against the app, not the window, so it stays beside the header
+     wherever the app itself starts. */
+  .mobile-navigation {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    /*
+      Centred on the header it sits beside, worked out rather than fixed. The
+      pane's top padding puts the header 20px down the app and the header is
+      as tall as the title bar, so its middle is half that bar further, and
+      the button's own height decides the rest. A fixed offset would fall out
+      of line when either of those changes.
+    */
+    top: calc(20px + (var(--zy-title-bar-height) - 38px) / 2);
+    left: 16px;
+    /* Over the drawer it opens, which comes after it, and under a dialog. */
+    z-index: calc(var(--zy-layer-navigation) + 1);
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--zy-line);
+    border-radius: var(--zy-radius-round);
+    background: var(--zy-panel);
+    color: var(--zy-text);
+    cursor: pointer;
+  }
+
+  .mobile-navigation svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .session-pane,
+  .window-skeleton__main {
+    padding-top: 20px;
+  }
+
+  /* The conversation pane's offset, so the floating button sits in the top bar
+     of every page as it does beside the conversation header, and no page
+     content passes under it. */
+  .window-page {
+    padding-top: 20px;
+  }
+}
+
+/* The top bar, then the page, which scrolls within what is left. */
+/* Its width is what the clouds behind a title are measured against. */
+.window-page {
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background:
+    var(--zy-grain-ground) 0 0 / 200px 200px,
+    var(--zy-canvas);
+  background-blend-mode: soft-light;
+}
+
+/* The look's page slot, low along the foot of every page (ADR 0028). */
+.window-page::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: var(--zy-look-page-height);
+  pointer-events: none;
+  background: var(--zy-look-page);
+  opacity: calc(var(--zy-look-page-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-page-mask);
+  mask-composite: intersect;
+  mix-blend-mode: var(--zy-look-ground-blend, normal);
+}
+
+/* The look's title slot, behind each page's title: centred on its line,
+   starting from its left and never wider than the page. */
+.window-page h1 {
+  position: relative;
+}
+
+.window-page h1::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -40px;
+  z-index: -1;
+  width: min(760px, 100cqw - 64px);
+  height: 160px;
+  pointer-events: none;
+  background: var(--zy-look-title);
+  opacity: calc(var(--zy-look-title-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-title-mask);
+  transform: translateY(-64%);
+}
+
+/* A page settles like ink as it opens; the ground stays where it is. */
+@media (prefers-reduced-motion: no-preference) {
+  .window-page > :last-child {
+    animation: global(zy-settle) 340ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+}
+
+.app-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--zy-sidebar-width) minmax(0, 1fr);
+  min-height: 0;
+  background: var(--zy-canvas);
+}
+
+/* The edge the sidebar's width is dragged by, a few pixels over its border. */
+.sidebar-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--zy-sidebar-width) - 3px);
+  z-index: 2;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  background: var(--zy-line-strong);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.sidebar-resizer:hover::after,
+.sidebar-resizer:focus-visible::after {
+  opacity: 1;
+}
+
+.sidebar-resizer:focus-visible {
+  outline: none;
+}
+
+@media (max-width: 720px) {
+  .sidebar-resizer {
+    display: none;
+  }
+}
+
+/* A group of its own, so the grain over it blends with the words alone. */
+.conversation-view {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* A light grain over what is read: blended into the words, and over the bare
+   ground a fine speckle, a little lighter than the ground in the dark theme
+   and a little darker in the light one. */
+.conversation-view::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: var(--zy-grain-text) 0 0 / 160px 160px;
+  opacity: var(--zy-grain-text-strength);
+  mix-blend-mode: overlay;
+}
+
+/*
+ * The look's ground slot behind the conversation, rising from its foot, and
+ * its drift slot, a band low over it that drifts one pass in ninety seconds.
+ * The band moves by transform, so it is not painted again as it goes.
+ */
+.conversation-landscape {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  /* Blended as a whole with the ground under it. */
+  mix-blend-mode: var(--zy-look-ground-blend, normal);
+}
+
+.conversation-landscape::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--zy-look-ground-height);
+  background: var(--zy-look-ground);
+  opacity: calc(var(--zy-look-ground-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-ground-mask);
+}
+
+/* On the new-task page the calm area is where its words are, in the middle. */
+.conversation-landscape--new::before {
+  mask: var(--zy-look-welcome-mask, var(--zy-look-ground-mask));
+}
+
+.conversation-landscape::after {
+  content: "";
+  position: absolute;
+  bottom: 14%;
+  left: 0;
+  width: calc(100% + 1400px);
+  height: 34%;
+  background: var(--zy-look-drift);
+  opacity: calc(var(--zy-look-drift-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-drift-mask);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .conversation-landscape::after {
+    animation: global(zy-drift) 90s linear infinite;
+  }
+}
+
+/* Still while the window is in the background, where nobody watches. */
+:root[data-window-away] .conversation-landscape::after {
+  animation-play-state: paused;
+}
+
+.conversation-view[hidden],
+.composer-dock__composer[hidden],
+.composer-dock[hidden] {
+  display: none;
+}
+
+.session-pane {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background:
+    var(--zy-grain-ground) 0 0 / 200px 200px,
+    var(--zy-vignette) 0 0 / 100% 100% no-repeat,
+    var(--zy-canvas);
+  background-blend-mode: soft-light, normal;
+}
+
+.thread-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.thread-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px clamp(24px, 4vw, 50px) 28px;
+  /* Text scrolling up fades out at the top edge rather than being cut there,
+     where it would read as hidden under the plan above it. At rest the fade falls
+     inside the top padding and touches nothing; once the conversation scrolls,
+     it deepens, so text has dissolved before it reaches the plan. The
+     scrollbar's gutter is left out of the fade, so the bar is whole from end
+     to end. */
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent,
+      var(--zy-canvas) var(--thread-fade)
+    ),
+    linear-gradient(var(--zy-canvas), var(--zy-canvas));
+  animation: thread-fade-deepens linear both;
+  animation-timeline: scroll(self);
+  animation-range: 0 48px;
+  mask-position:
+    left top,
+    right top;
+  mask-repeat: no-repeat;
+  mask-size:
+    calc(100% - var(--zy-scrollbar)) 100%,
+    var(--zy-scrollbar) 100%;
+}
+
+/* Registered so the fade's depth can follow the scroll. */
+@property --thread-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 16px;
+}
+
+@keyframes thread-fade-deepens {
+  from {
+    --thread-fade: 16px;
+  }
+
+  to {
+    --thread-fade: 64px;
+  }
+}
+
+.thread-scroll > * {
+  flex: 0 0 auto;
+  width: min(var(--zy-reading-width), 100%);
+  margin-inline: auto;
+  /* Only what is on screen is laid out and painted, so a long conversation
+     costs no more to update than a short one. Everything stays in the page:
+     a screen reader and a search still reach all of it. Once drawn, an entry
+     keeps its own height while off screen. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 160px;
+}
+
+/* Containment clips what an entry draws outside itself and holds anything
+   fixed inside it, so an entry with a dialog, an open control or focus in it
+   is drawn whole, as is one that always draws past its edges. */
+.thread-scroll
+  > :is(
+    :has([aria-modal="true"], [aria-expanded="true"], :focus-within),
+    [data-draws-outside]
+  ) {
+  content-visibility: visible;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .thread-scroll[data-settling] > * {
+    animation: global(zy-settle) 340ms cubic-bezier(0.2, 0.7, 0.2, 1) backwards;
+  }
+
+  .thread-scroll[data-settling] > :nth-child(2) {
+    animation-delay: 40ms;
+  }
+
+  .thread-scroll[data-settling] > :nth-child(3) {
+    animation-delay: 80ms;
+  }
+
+  .thread-scroll[data-settling] > :nth-child(4) {
+    animation-delay: 120ms;
+  }
+
+  .thread-scroll[data-settling] > :nth-child(n + 5) {
+    animation-delay: 160ms;
+  }
+}
+
+/* Centred while it fits; where it does not, it starts at the top rather than
+   overflowing above it, where nothing can scroll to. */
+.thread-scroll--new {
+  justify-content: safe center;
+}
+
+.composer-dock {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 65%;
+  overflow-y: auto;
+  padding: 12px clamp(24px, 4vw, 50px) 28px;
+  border-top: 0;
+}
+
+/* The ground beside the dock has the conversation's grain, so a question or
+   an approval that makes the dock tall leaves no darker band at its height;
+   it lies under the composer and the cards, which stay clean. */
+.composer-dock::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--zy-grain-text) 0 0 / 160px 160px;
+  opacity: var(--zy-grain-text-strength);
+}
+
+/* Heard, not seen: the decision itself is on screen. */
+.composer-dock__announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A pending decision shrinks to the dock and scrolls inside itself, so the
+   dock never gains a scrollbar of its own however long the request is. */
+.composer-dock__decision {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 8px;
+}
+
+.composer-dock:has(> .composer-dock__decision) {
+  overflow: hidden;
+}
+
+.composer-dock > .composer-dock__composer {
+  flex: 0 0 auto;
+}
+
+/* The way back to the conversation lines up with the composer under it. */
+.composer-dock__decision,
+.composer-dock > .composer-dock__composer,
+.composer-dock > .composer-dock__completion {
+  width: min(var(--zy-reading-width), 100%);
+  margin-inline: auto;
+}
+
+.thread-view--approval .thread-scroll {
+  padding-bottom: 20px;
+}
+
+@media (max-width: 1020px) {
+  .app-shell {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /*
+   * There is one column here, so a surface still asking for the second one has
+   * nowhere to go: the browser would invent a track beyond the right-hand edge
+   * and draw the whole settings page into it, a few characters wide. The
+   * override lives beside the rule that collapses the columns, so both apply
+   * at the same width.
+   */
+  .window-page {
+    grid-column: 1 / -1;
+  }
+
+  .thread-scroll,
+  .composer-dock {
+    padding-inline: 16px;
+  }
+}
+
+/* Beside the browser the conversation has a narrow column, so it tightens. */
+.thread-scroll.thread-scroll--compact {
+  padding: 18px 16px;
+  gap: 20px;
+}
+
+.composer-dock.composer-dock--compact {
+  padding: 10px 16px 16px;
+}
+
+.composer-dock__completion {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+/*
+ * In a short window a pending approval or question needs the room the message
+ * box takes: its own buttons are the way on, and the box returns once it is
+ * answered.
+ */
+@media (max-height: 700px) {
+  .composer-dock--deciding > .composer-dock__composer {
+    display: none;
+  }
+}
+
+/* Reports kept in view above the conversation, however far it is scrolled.
+   Several take turns in a region of their own rather than pushing the
+   conversation out of the window. */
+.issue-stack {
+  display: grid;
+  flex: 0 1 auto;
+  gap: 8px;
+  max-height: 40%;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px clamp(24px, 4vw, 50px) 0;
+}

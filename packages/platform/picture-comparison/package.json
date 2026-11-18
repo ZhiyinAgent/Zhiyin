@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/picture-comparison",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "How two pictures' pixels differ, and the sheet that shows it, worked out on a thread of its own.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

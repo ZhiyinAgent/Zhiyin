@@ -1,0 +1,15 @@
+{
+  "name": "@zhiyin/file-kinds",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "What a file is, by its bytes: one answer for the file tools and the document panel.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

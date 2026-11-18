@@ -1,0 +1,56 @@
+/** The 3D studio's page on making bones and fitting ready rigs to a body. */
+
+import { readyRigKinds } from "./rig-bones-schema.js";
+import type { WrittenPage } from "./written-pages.js";
+
+export const rigBonesPage: WrittenPage = {
+  id: "doc:3d-rendering/rigging-bones",
+  title: "3D rigging: bones, and ready rigs fitted to a body",
+  summary:
+    "How blender_rig makes and edits an armature's bones, mirrors one side and gathers bones in collections; how it fits Rigify's metarigs to a body mesh by its sections and generates the rig; and the armature API that changed in Blender 4.0 and 5.0.",
+  terms: [
+    "blender_rig",
+    "armature",
+    "bones",
+    "bone_edits",
+    "extrude",
+    "subdivide",
+    "symmetrize",
+    "bone collections",
+    "Rigify",
+    "metarig",
+    "generate rig",
+    "fit rig",
+    "landmarks",
+    "zhiyin_rig_of",
+    "DEF bones",
+    "bone layers",
+    "bone groups",
+  ],
+  text: [
+    "Bones: armature names the armature object; a call with bones makes it at the world's origin, unturned, when there is none. Each entry of bones adds a bone, or changes the one of that name, keeping whatever it does not give. Points are in metres in the world: head is where the bone starts, tail where it ends and points. A new bone needs a tail, and a head unless it is connected to a parent, when it starts at the parent's tail. parent names a bone, or is empty for none; connected holds its head on the parent's tail; roll turns it about its own length, in degrees; deform says whether it moves the mesh bound to it (true by default); collection puts it in a bone collection, made when missing.",
+    "",
+    "bone_edits run in order after bones, each naming a bone and its kind:",
+    "- extrude: a new bone from its tail to `to`, connected, named `name` (or the next free name.001), in the same collections and rolled as it is.",
+    "- subdivide: into `count` equal connected bones, the first keeping its name and the rest name.001, name.002 …; its children move to the last.",
+    "- duplicate: copies of it and every bone below it, moved by `offset`, each name with replace[0] changed to replace[1] (or the next free .001 name), parented as the originals are, the copy of the top under the original's parent.",
+    "- rename: to `name`. remove: its children go to its parent, no longer connected.",
+    "symmetrize L (or R) mirrors every bone named for that side across the armature's own x = 0 onto the other side's names, as Blender's Symmetrize does: points mirrored, roll negated, parents and bone collections taken to the other side's where it has them. Names follow Blender's own flipping: upper_arm.L and upper_arm.R, hand_L and hand_R, Left arm and Right arm, lip.T.L.001 and lip.T.R.001. Bones already on the other side are replaced.",
+    "collections makes bone collections, puts the bones listed in them, and shows or hides them with visible.",
+    "",
+    "The answer after bones change: the armature, its bone count and how many deform; each bone (the first 40, the rest named) with its length, head and tail in the world, roll, parent (connected, or how far from the parent's tail it starts), whether it deforms and its collections, and which closed mesh pieces its middle lies in, with how far either end sticks out, or how far it is from the nearest mesh. Then each chain from a root or a branch to its end, its length and where it is not connected; the pairs named for the two sides, how many mirror within 0.1 mm and how far the others are off; the bones named for one side with none on the other; and the bone collections with their counts.",
+    "",
+    `Ready rigs: from fits one of Rigify's metarigs to a body mesh: ${readyRigKinds.join(", ")}. human has a face and fingers; basic_human has neither; quadruped is a four-legged animal, cat, wolf and horse are Rigify's animals with their faces, tails and paws or hooves; bird has wings, a tail and toes; shark has fins. The body stands on its lowest point with z up and x across it, its left at +x when it faces -y; facing says where its front looks if not -y. A person stands with the legs apart and the arms out from the body, level or angled down; an animal stands on its legs with its head at the front.`,
+    "Each joint is measured on the body's sections, the outlines where planes cut its surface: level cuts up a person, cuts across a limb along its middle line, cuts across an animal's length. A person's legs are the two columns a level cut near the ground finds, followed up to the crotch where they join; the hip joints are 6% of the height above it. A knee, an ankle, an elbow or a wrist is the narrowest section near where the metarig has it, when the limb narrows there; a limb that only tapers is placed by the metarig's proportion. The arms are the points out past the chest, with their middle line; the shoulder is where an arm leaves the chest, the tip its far end. The neck is the narrowest section between the shoulders and the head's top. An animal's legs are the columns near the ground, followed up to where each joins the body; its upper joint is 35% of the way from there to the top of the back. Its spine sits over the legs' upper joints as the metarig has it; the head's tip is the frontmost point above the legs, the tail's the rearmost; where the head joins the neck is the narrowest section between them. A joint that is straight in the body is bent a little the way the metarig bends it, which Rigify needs to know which way a knee or an elbow bends. Every other bone moves with the part between joints nearest it, so fingers follow the hand and the face the head.",
+    "The answer names each joint with the bone end it is, where it went, and what it was fitted to, a narrowest section with its width, or by proportion; what could not be found; Rigify's rig generated, its bones, deforming bones and bone collections; and the metarig's bones with a part outside the body and how far. Look at it before binding: a joint by proportion is a guess.",
+    "",
+    'The rig is named "<mesh> rig" (or armature), and its metarig "<mesh> metarig", kept hidden. To move a joint, give armature the metarig and bones with the joints\' new heads or tails: the rig is generated again, with the metarig\'s place and turn. A generated rig is refused for bone changes: its bones are made again from the metarig. The rig\'s property zhiyin_rig_of names the mesh it was fitted to, which bind takes the rig by. Its deforming bones are the DEF- ones; the others are controls (FK, IK, tweak) in bone collections such as Arm.L (IK) and Torso; its widget shapes are kept out of the scene.',
+    "",
+    "Armature API that changed (as Blender 5.2 has it):",
+    "- Bone layers and bone groups are gone (4.0). armature.layers, bone.layers, pose.bone_groups and pose_bone.bone_group raise AttributeError. Use bone collections: armature.collections.new(name), collection.assign(bone), bone.collections, collection.is_visible; a bone's colour is bone.color.palette or pose_bone.color.palette.",
+    "- armature.collections holds only the top-level collections: a nested one is not found there by name; armature.collections_all finds any.",
+    "- Bone.select, Bone.select_head and Bone.select_tail are gone (5.0): select with pose_bone.select in pose mode, or edit_bone.select in edit mode.",
+    "- A bone's head, tail and roll are set on armature.edit_bones, in edit mode: bpy.ops.object.mode_set(mode='EDIT') with the armature the active object, and mode_set(mode='OBJECT') after; armature.bones holds them as they were when edit mode was left.",
+    "- Rigify is an add-on that must be on: addon_utils.enable('rigify', default_set=True). Its generator keeps the generated rig at the world's origin whatever the metarig's place, which blender_rig puts right.",
+  ].join("\n"),
+};

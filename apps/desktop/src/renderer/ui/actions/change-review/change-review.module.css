@@ -1,0 +1,175 @@
+/* A change shown as a difference: the dialog's title and its files, the
+   summary of one file, and the lines it changes. */
+
+.diff-modal__title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.diff-modal__title p {
+  overflow: hidden;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-modal__files {
+  display: flex;
+  gap: 6px;
+  padding: 10px 20px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__files button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-10);
+  background: none;
+  color: var(--zy-muted);
+  font: 12px/1.4 var(--zy-font-data);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.diff-modal__files button[aria-selected="true"] {
+  border-color: var(--zy-line-strong);
+  background: var(--zy-wash);
+  color: var(--zy-text);
+}
+
+.change-review__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.change-review__path {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+}
+
+.change-review__count {
+  font-variant-numeric: tabular-nums;
+}
+
+.change-review__count--added {
+  color: var(--zy-green);
+}
+
+.change-review__count--removed {
+  color: var(--zy-danger);
+}
+
+.change-review__unavailable {
+  padding: 24px 20px;
+  color: var(--zy-text-soft);
+}
+
+.change-review__unavailable p {
+  margin: 0 0 8px;
+}
+
+.diff {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.6 var(--zy-font-data);
+}
+
+.diff__row td {
+  padding: 0;
+  vertical-align: top;
+}
+
+/* One number, the line's place in the changed file: room for four digits,
+   and never broken across lines. The page around lets words break anywhere,
+   which would leave a number one digit wide. */
+.diff__number {
+  width: 4ch;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  padding: 0 8px !important;
+  color: var(--zy-faint);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.diff__text {
+  width: 100%;
+  padding-right: 16px !important;
+}
+
+.diff__text code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff__marker {
+  display: inline-block;
+  width: 1.4em;
+  color: var(--zy-faint);
+  text-align: center;
+  user-select: none;
+}
+
+.diff__row--added {
+  background: var(--zy-green-fill);
+}
+
+.diff__row--added .diff__marker {
+  color: var(--zy-green);
+}
+
+.diff__row--removed {
+  background: var(--zy-accent-veil);
+}
+
+/* The words a rewritten line changed, inside the line's own colour. */
+.diff__changed {
+  border-radius: var(--zy-radius-2);
+  background: var(--zy-green-line);
+  color: inherit;
+}
+
+.diff__row--removed .diff__changed {
+  background: var(--zy-accent-soft-hover);
+}
+
+.diff__row--removed .diff__marker {
+  color: var(--zy-danger);
+}
+
+.diff__skip td {
+  padding: 4px 20px;
+  border-top: 1px solid var(--zy-line);
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/* The page a PDF's lines are on, named where the lines move onto it. */
+.diff__page th {
+  padding: 12px 20px 4px;
+  color: var(--zy-text-soft);
+  font: 600 12px/1.4 var(--zy-font-body);
+  text-align: left;
+}
+
+/* With no line numbers, the marker starts the line instead. */
+.diff__row .diff__text:first-child {
+  padding-left: 12px;
+}

@@ -1,0 +1,117 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "github": {
+      "type": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "name": "GitHub",
+      "description": "Searches and works with repositories, issues, and pull requests in your GitHub account.",
+      "access": "Needs a GitHub personal access token, and acts with that token's permissions.",
+      "dataDestination": "Repository, issue, and pull request data is sent to api.githubcopilot.com.",
+      "toolEffects": [
+        {
+          "tools": [
+            "get_me",
+            "get_teams",
+            "get_team_members",
+            "ui_get",
+            "get_label",
+            "issue_read",
+            "list_issue_fields",
+            "list_issue_types",
+            "list_issues",
+            "search_issues",
+            "list_pull_requests",
+            "pull_request_read",
+            "search_pull_requests",
+            "get_commit",
+            "get_file_contents",
+            "get_latest_release",
+            "get_release_by_tag",
+            "get_tag",
+            "list_branches",
+            "list_commits",
+            "list_releases",
+            "list_repository_collaborators",
+            "list_tags",
+            "search_code",
+            "search_commits",
+            "search_repositories",
+            "search_users"
+          ],
+          "effects": {
+            "reads": "account",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "none",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          }
+        },
+        {
+          "tools": [
+            "add_issue_comment",
+            "update_issue_comment",
+            "issue_write",
+            "sub_issue_write",
+            "create_pull_request",
+            "update_pull_request",
+            "add_comment_to_pending_review",
+            "add_reply_to_pull_request_comment",
+            "create_branch",
+            "fork_repository"
+          ],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "once",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          },
+          "destination": "{owner}/{repo}"
+        },
+        {
+          "tools": ["create_repository"],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "once",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          },
+          "destination": "{name}"
+        },
+        {
+          "tools": [
+            "merge_pull_request",
+            "update_pull_request_branch",
+            "pull_request_review_write",
+            "push_files",
+            "create_or_update_file",
+            "delete_file",
+            "delete_repository"
+          ],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "for-good",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          }
+        }
+      ],
+      "setup": {
+        "url": "https://github.com/settings/personal-access-tokens/new",
+        "keyName": "personal access token",
+        "advice": "Choose the repositories Zhiyin should work with, or all of them. Under Repository permissions, set Contents, Issues and Pull requests to Read and write: that covers searching, reading and making commits, branches, issues and pull requests. Add Workflows too if it should change GitHub Actions files."
+      }
+    }
+  }
+}

@@ -1,0 +1,378 @@
+/* The record of what ran in a turn, and the inspector each row opens. */
+
+.action-history {
+  padding-top: 2px;
+}
+
+.action-history ul {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+}
+
+.action-history__item {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.action-history__marker {
+  display: grid;
+  margin: 0 0 0 2px;
+}
+
+.action-history__content,
+.action-history__summary {
+  min-width: 0;
+}
+
+.action-history__content {
+  display: grid;
+  gap: 2px;
+}
+
+.action-history__summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* What was done keeps its words before what it was done on gives way: the
+   target shrinks a thousand times as fast. No floor: one would pad a short
+   title, pushing its target away from it. */
+.action-history__summary strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  font-weight: 570;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-history__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+  color: var(--zy-muted);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.action-history__status svg {
+  width: 11px;
+  height: 11px;
+}
+
+.action-history__item--failed .action-history__status,
+.action-history__item--denied .action-history__status,
+.action-history__item--blocked .action-history__status {
+  color: var(--zy-danger);
+}
+
+.action-history__item--reported .action-history__status {
+  color: var(--zy-amber);
+}
+
+/* What it was done on, after what was done: quiet, and the first to give
+   way at its end. */
+.action-history__target {
+  flex: 0 1000 auto;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--zy-muted);
+  font: 12px/1.45 var(--zy-font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Under it, the marks of what it does, then the account of it: one line
+   that gives way at its end; marks that need the room push the account to
+   a line of its own. */
+.action-history__about {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.action-history__account {
+  flex: 1 1 14em;
+  overflow: hidden;
+  min-width: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-history__permission {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-round);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: help;
+}
+
+.action-history__permission svg {
+  width: 11px;
+  height: 11px;
+}
+
+.action-history__permission:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.action-history__reason {
+  display: -webkit-box;
+  margin-top: 2px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  /* A compiler can report thousands of lines; the row says it failed and the
+     start of why, and Details holds the rest. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+/* What an action did, opened from the record of it. */
+.inspector__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 16px;
+  margin: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 12.5px;
+}
+
+.inspector__facts > div {
+  display: contents;
+}
+
+.inspector__facts dt {
+  color: var(--zy-muted);
+}
+
+.inspector__facts dd {
+  margin: 0;
+  color: var(--zy-text);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Files an action wrote whose contents are not shown: one line each. */
+.inspector__files {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector__files li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.inspector__path {
+  overflow-wrap: anywhere;
+}
+
+.inspector__change {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.inspector__files .inspector__note {
+  margin: 0;
+}
+
+.inspector__block {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.inspector__block h3 {
+  margin: 0 0 8px;
+  color: var(--zy-muted);
+  font: 600 12px/1.4 var(--zy-font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector__list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 12px/1.7 var(--zy-font-data);
+  color: var(--zy-text-soft);
+}
+
+.inspector__matches {
+  width: 100%;
+  border-collapse: collapse;
+  font: 12px/1.7 var(--zy-font-data);
+}
+
+.inspector__matches td {
+  padding: 2px 12px 2px 0;
+  vertical-align: top;
+}
+
+.inspector__where {
+  width: 1%;
+  color: var(--zy-muted);
+  white-space: nowrap;
+}
+
+.inspector__line {
+  color: var(--zy-faint);
+}
+
+.inspector__matches code {
+  overflow-wrap: anywhere;
+}
+
+.inspector__note {
+  margin: 8px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+/* Small enough to sit inside a record of what happened, and openable at the
+   size it was taken. Checkered ground: a screenshot with transparency has to
+   read as transparent rather than as whatever the panel happens to be. */
+.result-image__frame {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  margin-top: 8px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-7);
+  background: var(--zy-panel-soft);
+  object-fit: contain;
+}
+
+/* The picture itself opens it full size. */
+.result-image__open {
+  position: relative;
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--zy-radius-7);
+  background: none;
+  cursor: zoom-in;
+}
+
+/* The answer as it was sent, laid out as JSON is everywhere, and bounded. */
+.inspector__json {
+  max-height: 340px;
+  margin: 0;
+  overflow: auto;
+  color: var(--zy-code-punct);
+  font: 12px/1.55 var(--zy-font-data);
+}
+
+.inspector__raw {
+  padding: 16px 20px;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.inspector__raw summary {
+  padding-block: 5px;
+  cursor: pointer;
+}
+
+.inspector__raw p {
+  margin-block: 8px;
+}
+
+/* What was agreed to, kept with the record of it having happened. */
+.inspector__lead,
+.inspector__consequence,
+.inspector__claim {
+  margin: 0;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--zy-line);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.inspector__lead {
+  color: var(--zy-text);
+}
+
+.inspector__consequence {
+  color: var(--zy-text-soft);
+}
+
+.inspector__claim {
+  color: var(--zy-text-soft);
+}
+
+.inspector__reason {
+  max-height: 12em;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
+
+.inspector__title {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.inspector__raw pre,
+.inspector__block pre {
+  max-height: 200px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-9);
+  background: var(--zy-panel-soft);
+  font: 12px/1.6 var(--zy-font-data);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.action-history__inspect {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.action-history__status + .action-history__inspect {
+  margin-left: 0;
+}

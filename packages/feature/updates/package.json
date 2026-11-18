@@ -1,0 +1,23 @@
+{
+  "name": "@zhiyin/updates",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Updates Zhiyin itself: looks for newer releases, takes one only when a maintainer's key signed its installer, and installs it when the person restarts into it.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/files": "workspace:*",
+    "@zhiyin/one-at-a-time": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/test-support": "workspace:*"
+  }
+}

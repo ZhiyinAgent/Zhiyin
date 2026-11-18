@@ -1,0 +1,222 @@
+/*
+ * Dots: Guilin karst over a river, drawn in fine dots, behind the
+ * conversation; bamboo behind the foot of the side column; the Z drawn in
+ * dots. The parts lose their outlines: a panel is a rounded patch of ground
+ * with dots gathering at its top, checks are rings of dots, and the step
+ * track is a row of them. The pictures are drawn by the Dots scripts kept
+ * with the repository (ADR 0028).
+ *
+ * Words always sit on a calm ground: over the reading column and the middle
+ * of the new-task page, the landscape keeps a fraction of its opacity,
+ * divided by the strength above Default so Vivid leaves it as it is. Every
+ * other page shows a faint trace of it, which the strength scales.
+ */
+[data-look="dots"] {
+  --zy-dots-calm: calc(0.15 / max(1, var(--zy-look-strength)));
+  --zy-dots-page-calm: calc(0.3 / max(1, var(--zy-look-strength)));
+  --zy-dots-tone: conic-gradient(
+      color-mix(in srgb, var(--zy-chart-2) 8%, transparent) 25%,
+      transparent 0
+    )
+    0 0 / 4px 4px;
+
+  /* How much of the picture shows at the top of the ground, over the sky. */
+  --zy-dots-sky: 1;
+  /* The share of the way from calm to the full picture at each stop of the
+     fade, eased so neither end of it shows as an edge. */
+  --zy-dots-fade-1: color-mix(
+    in srgb,
+    var(--zy-canvas)
+      calc((var(--zy-dots-calm) + (1 - var(--zy-dots-calm)) * 0.1) * 100%),
+    transparent
+  );
+  --zy-dots-fade-2: color-mix(
+    in srgb,
+    var(--zy-canvas)
+      calc((var(--zy-dots-calm) + (1 - var(--zy-dots-calm)) * 0.5) * 100%),
+    transparent
+  );
+  --zy-dots-fade-3: color-mix(
+    in srgb,
+    var(--zy-canvas)
+      calc((var(--zy-dots-calm) + (1 - var(--zy-dots-calm)) * 0.9) * 100%),
+    transparent
+  );
+  --zy-dots-calm-ground: color-mix(
+    in srgb,
+    var(--zy-canvas) calc(var(--zy-dots-calm) * 100%),
+    transparent
+  );
+
+  --zy-look-ground: url("./landscape-dark.webp") left bottom / cover no-repeat;
+  /* Calm across the reading column, easing out to the full picture over
+     160px past it, at any width; and over the sky, faded towards the top. */
+  --zy-look-ground-mask:
+    linear-gradient(
+        90deg,
+        var(--zy-canvas) calc(50% - var(--zy-reading-width) / 2 - 176px),
+        var(--zy-dots-fade-3) calc(50% - var(--zy-reading-width) / 2 - 136px),
+        var(--zy-dots-fade-2) calc(50% - var(--zy-reading-width) / 2 - 96px),
+        var(--zy-dots-fade-1) calc(50% - var(--zy-reading-width) / 2 - 56px),
+        var(--zy-dots-calm-ground)
+          calc(50% - var(--zy-reading-width) / 2 - 16px),
+        var(--zy-dots-calm-ground)
+          calc(50% + var(--zy-reading-width) / 2 + 16px),
+        var(--zy-dots-fade-1) calc(50% + var(--zy-reading-width) / 2 + 56px),
+        var(--zy-dots-fade-2) calc(50% + var(--zy-reading-width) / 2 + 96px),
+        var(--zy-dots-fade-3) calc(50% + var(--zy-reading-width) / 2 + 136px),
+        var(--zy-canvas) calc(50% + var(--zy-reading-width) / 2 + 176px)
+      )
+      intersect,
+    linear-gradient(
+      color-mix(
+        in srgb,
+        var(--zy-canvas) calc(var(--zy-dots-sky) * 100%),
+        transparent
+      ),
+      var(--zy-canvas) 55%
+    );
+  /* The new-task page shows the whole picture, the sky faded as above; its
+     words have a veil. */
+  --zy-look-welcome-mask: linear-gradient(
+    color-mix(
+      in srgb,
+      var(--zy-canvas) calc(var(--zy-dots-sky) * 100%),
+      transparent
+    ),
+    var(--zy-canvas) 55%
+  );
+  --zy-look-words-veil: color-mix(
+    in srgb,
+    var(--zy-canvas) calc((1 - var(--zy-dots-calm)) * 100%),
+    transparent
+  );
+  --zy-look-standalone-mask: linear-gradient(
+    color-mix(
+      in srgb,
+      var(--zy-canvas) calc(var(--zy-dots-page-calm) * 100%),
+      transparent
+    ),
+    color-mix(
+        in srgb,
+        var(--zy-canvas) calc(var(--zy-dots-page-calm) * 100%),
+        transparent
+      )
+      70%,
+    var(--zy-canvas)
+  );
+  --zy-look-ground-height: 100%;
+  --zy-look-ground-opacity: 0.4;
+  /* The dots only lighten the dark ground, so its grain still shows. */
+  --zy-look-ground-blend: lighten;
+  --zy-look-drift: none;
+  --zy-look-drift-mask: none;
+  --zy-look-drift-opacity: 0;
+  /* Whole at any width of the column: it scales to fit the box, and is
+     centred in it, never cropped. */
+  --zy-look-side: url("./bamboo-dark.webp") center bottom / contain no-repeat;
+  --zy-look-side-mask: none;
+  --zy-look-side-height: 260px;
+  --zy-look-side-opacity: 0.31;
+  --zy-look-side-motion: none;
+  /* Every other page: a faint, even trace of the landscape. */
+  --zy-look-page: url("./landscape-dark.webp") center bottom / cover no-repeat;
+  --zy-look-page-mask: none;
+  --zy-look-page-height: 100%;
+  /* Not divided by the strength, as the ground's calm is: the page's picture
+     is scaled by it alone, so Subtle, Default and Vivid differ on every page. */
+  --zy-look-page-opacity: 0.09;
+  --zy-look-title: none;
+  --zy-look-title-mask: none;
+  --zy-look-title-opacity: 0;
+  --zy-look-mark: url("./mark-dark.webp");
+  --zy-look-mark-small: url("./mark-dark-small.svg");
+  /* Its 11 rows of dots two pixels apart, so each dot lands on the screen's
+     own pixels rather than between them. */
+  --zy-look-mark-small-size: 22px;
+  --zy-look-mark-large: url("./mark-dark-large.webp");
+  --zy-look-mark-filter: none;
+  --zy-look-mark-large-size: 86cqw;
+  --zy-look-orbit: 0;
+
+  /* The parts: no outlines, round corners, soft fills. */
+  --zy-look-outline: transparent;
+  --zy-look-panel-radius: 14px;
+  --zy-look-panel-shadow: none;
+  --zy-look-panel-ground:
+    linear-gradient(transparent, var(--zy-panel-raised) 65%),
+    var(--zy-dots-tone), var(--zy-panel-raised);
+  --zy-look-control-radius: 10px;
+  --zy-look-chip-radius: var(--zy-radius-pill);
+  --zy-look-fill: color-mix(in srgb, var(--zy-text) 6%, transparent);
+  --zy-look-fill-strong: color-mix(in srgb, var(--zy-text) 10%, transparent);
+  --zy-look-well: var(--zy-dots-tone), var(--zy-canvas);
+  /* The panel has no border, so the moving edge is a touch thicker. */
+  --zy-look-running-width: 1.5px;
+  --zy-look-running-still: color-mix(
+    in srgb,
+    var(--zy-running) 55%,
+    transparent
+  );
+  --zy-look-dot: color-mix(in srgb, var(--zy-chart-2) 75%, transparent);
+  --zy-look-check-appearance: none;
+  --zy-look-check: conic-gradient(currentColor 25%, transparent 0) 0 0 / 3px 3px;
+  --zy-look-check-mask: radial-gradient(
+    circle,
+    transparent 4.5px,
+    var(--zy-canvas) 5px 8px,
+    transparent 8.5px
+  );
+  --zy-look-check-on-mask: radial-gradient(
+    circle,
+    var(--zy-canvas) 8px,
+    transparent 8.5px
+  );
+  --zy-look-track-mask: linear-gradient(
+      90deg,
+      var(--zy-canvas) 3px,
+      transparent 3px
+    )
+    0 0 / 5px 100% repeat-x;
+  --zy-look-track-height: 3px;
+  --zy-look-track-radius: 0;
+  --zy-look-bubble: color-mix(in srgb, var(--zy-panel-soft) 92%, transparent);
+  --zy-look-bubble-radius: 16px 16px 4px 16px;
+  --zy-look-bubble-halo: 0 0 28px 10px
+    color-mix(in srgb, var(--zy-canvas) 55%, transparent);
+  --zy-look-suggestion: color-mix(in srgb, var(--zy-canvas) 82%, transparent);
+  --zy-look-suggestion-text: var(--zy-text-soft);
+  --zy-look-current-mark: none;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-look="dots"] {
+    --zy-dots-calm: calc(0.2 / max(1, var(--zy-look-strength)));
+    --zy-dots-tone: conic-gradient(
+        color-mix(in srgb, var(--zy-text) 6%, transparent) 25%,
+        transparent 0
+      )
+      0 0 / 4px 4px;
+    /* Muted text keeps 4.5:1 over the darkest dots of the light landscape. */
+    --zy-muted: #585b61;
+    /* The light sky is a field of fine dots that reads as noise behind the
+       top of the page; it fades in towards the hills. */
+    --zy-dots-sky: 0.45;
+    --zy-look-ground: url("./landscape-light.webp") left bottom / cover
+      no-repeat;
+    --zy-look-ground-opacity: 0.38;
+    /* The dots only darken the light ground. */
+    --zy-look-ground-blend: darken;
+    --zy-look-side: url("./bamboo-light.webp") center bottom / contain no-repeat;
+    --zy-look-side-opacity: 0.45;
+    --zy-look-page: url("./landscape-light.webp") center bottom / cover
+      no-repeat;
+    --zy-look-page-opacity: 0.1;
+    --zy-look-mark: url("./mark-light.webp");
+    --zy-look-mark-small: url("./mark-light-small.svg");
+    --zy-look-mark-large: url("./mark-light-large.webp");
+    --zy-look-dot: color-mix(in srgb, var(--zy-text) 60%, transparent);
+    --zy-look-bubble-halo: 0 0 28px 10px
+      color-mix(in srgb, var(--zy-canvas) 60%, transparent);
+  }
+}

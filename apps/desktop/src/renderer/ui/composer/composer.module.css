@@ -1,0 +1,796 @@
+/* Styles owned by the composer module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/*
+ * The running edge: two lit heads travelling opposite sides of the border.
+ * It is painted as a masked 1px ring in a pseudo-element rather than as a
+ * border, because a border cannot hold a gradient that follows the 24px
+ * radius — a conic gradient on the box itself corners square. The element's
+ * own border is dimmed to --zy-line underneath so the edge is still drawn
+ * where no head is currently passing.
+ */
+@property --composer-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.composer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 19px 20px 12px;
+  border: 1px solid var(--zy-look-outline, var(--zy-line-strong));
+  border-radius: var(--zy-look-panel-radius, var(--zy-radius-18));
+  background: var(--zy-look-panel-ground, var(--zy-panel-raised));
+  /* It rests on the ground like an ink stone: a soft shadow under it and a
+     faint light along its top edge. */
+  box-shadow: var(--zy-look-panel-shadow, var(--zy-shadow-rest));
+}
+
+.composer:focus-within {
+  border-color: var(--zy-accent-line);
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 25px;
+  max-height: 120px;
+  padding: 2px 3px;
+  resize: none;
+  field-sizing: content;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--zy-text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.composer textarea::placeholder {
+  color: var(--zy-faint);
+}
+
+.composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Stop and Send side by side, at the end of the footer. */
+.composer__ends {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.composer__tools > button,
+.composer__send {
+  display: grid;
+  place-items: center;
+  border: 0;
+  cursor: pointer;
+}
+
+.composer__tools > button {
+  width: 25px;
+  height: 25px;
+  border-radius: var(--zy-radius-6);
+  background: transparent;
+  color: var(--zy-muted);
+}
+
+.composer__tools > button:hover {
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+}
+
+.composer__tools svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composer__send {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--zy-look-control-radius, var(--zy-radius-round));
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.composer__tools > button:disabled {
+  color: var(--zy-faint);
+  cursor: default;
+}
+
+.composer__tools > button:disabled:hover {
+  background: transparent;
+}
+
+/* A filled control cannot be disabled by opacity: fading it towards the ground
+   makes it disappear rather than look unavailable, on a dark ground most of
+   all. It is muted by naming the muted colours instead, so it stays a visible
+   control on any ground. */
+.composer__send:disabled {
+  cursor: default;
+  outline: 1px solid var(--zy-line-strong);
+  outline-offset: -1px;
+  background: var(--zy-panel-soft);
+  color: var(--zy-faint);
+}
+
+.composer__send svg {
+  width: 15px;
+  height: 15px;
+}
+
+.composer__stop {
+  border: 1px solid var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.composer__stop:hover {
+  background: var(--zy-accent-soft-hover);
+}
+
+.composer__stop svg {
+  width: 13px;
+  height: 13px;
+  fill: currentcolor;
+}
+
+.composer--disabled {
+  border-color: var(--zy-look-outline, var(--zy-line));
+  background: var(--zy-panel-soft);
+  box-shadow: none;
+}
+
+.composer--running {
+  border-color: var(--zy-look-outline, var(--zy-line));
+}
+
+.composer--running::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: var(--zy-look-running-width, 1px);
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--composer-spin),
+    var(--zy-running) 0deg,
+    transparent 40deg,
+    transparent 140deg,
+    var(--zy-running) 180deg,
+    transparent 220deg,
+    transparent 320deg,
+    var(--zy-running) 360deg
+  );
+  mask:
+    linear-gradient(currentColor 0 0) content-box,
+    linear-gradient(currentColor 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: composer-spin 3.4s linear infinite;
+}
+
+/*
+ * Travel is the part reduced motion removes, not the signal. The edge keeps
+ * saying a response is running; it holds still and breathes instead of
+ * chasing, or, on a panel drawn without a border, stays lit all round.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .composer--running::before {
+    animation: none;
+    background: var(--zy-look-running-still, none);
+  }
+
+  .composer--running {
+    border-color: var(--zy-look-outline, var(--zy-running-line));
+    animation: composer-breathe 2.6s ease-in-out infinite;
+  }
+}
+
+.composer__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+.composer__error {
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.composer__note {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+.reasoning-controls {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.reasoning-controls__bulb {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 0;
+  border-radius: var(--zy-radius-8);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.reasoning-controls__bulb--on {
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.reasoning-controls__bulb:hover:not(:disabled),
+.reasoning-controls__bulb[aria-expanded="true"] {
+  background: var(--zy-wash-strong);
+}
+
+.reasoning-controls__bulb--on:hover:not(:disabled),
+.reasoning-controls__bulb--on[aria-expanded="true"] {
+  background: var(--zy-accent-soft-hover);
+}
+
+.reasoning-controls__bulb:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reasoning-controls__panel {
+  position: fixed;
+  z-index: var(--zy-layer-popover);
+  bottom: 0;
+  left: 0;
+  width: 248px;
+  max-width: calc(100vw - 40px);
+  padding: 10px 12px 12px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-14);
+  background: var(--zy-panel-soft);
+  box-shadow: var(--zy-shadow-pop);
+  color: var(--zy-muted);
+  font-family: var(--zy-font-body);
+}
+
+.reasoning-controls__heading {
+  display: grid;
+  grid-template-columns: 26px 1fr 26px;
+  align-items: center;
+  justify-items: center;
+  min-height: 26px;
+}
+
+.reasoning-controls__heading > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--zy-faint);
+}
+
+.reasoning-controls__level {
+  color: var(--zy-accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reasoning-controls__reset {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 5px;
+  border: 0;
+  border-radius: var(--zy-radius-5);
+  background: transparent;
+  color: var(--zy-muted);
+  cursor: pointer;
+}
+
+.reasoning-controls__reset:hover {
+  color: var(--zy-text);
+  background: var(--zy-wash-strong);
+}
+
+.reasoning-controls__reset svg {
+  width: 14px;
+  height: 14px;
+}
+
+.reasoning-controls__caption {
+  margin: 0 0 10px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reasoning-controls__range {
+  position: relative;
+  height: 28px;
+}
+
+.reasoning-controls__track {
+  position: absolute;
+  inset: 3px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  border-radius: var(--zy-radius-17);
+  background: linear-gradient(
+    to right,
+    var(--zy-accent-fill) var(--reasoning-fill),
+    var(--zy-line-strong) var(--reasoning-fill)
+  );
+  pointer-events: none;
+}
+
+.reasoning-controls__track i {
+  width: 4px;
+  height: 4px;
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-text-soft);
+  opacity: 0.5;
+}
+
+.reasoning-controls__range input {
+  position: relative;
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  border-radius: var(--zy-radius-17);
+  background: transparent;
+  cursor: pointer;
+}
+
+.reasoning-controls__range input::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.reasoning-controls__range input::-webkit-slider-thumb {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-on-accent);
+  box-shadow: 0 1px 4px var(--zy-inset);
+}
+
+.reasoning-controls__bulb:focus-visible,
+.reasoning-controls__panel button:focus-visible,
+.reasoning-controls__panel input:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 3px;
+}
+
+@keyframes composer-spin {
+  to {
+    --composer-spin: 360deg;
+  }
+}
+
+@keyframes composer-breathe {
+  0%,
+  100% {
+    border-color: var(--zy-look-outline, var(--zy-line-strong));
+  }
+  50% {
+    border-color: var(--zy-look-outline, var(--zy-running-line));
+  }
+}
+
+.context-ring svg {
+  width: 19px;
+  height: 19px;
+  transform: rotate(-90deg);
+}
+
+.context-ring__track,
+.context-ring__fill {
+  fill: none;
+  stroke-width: 2.25;
+}
+
+.context-ring__track {
+  stroke: var(--zy-line-strong);
+}
+
+/* Compacting: the track breathes in the running tint until it is done, light
+   enough that the arc still says how full the conversation is. */
+.context-ring[aria-busy="true"] .context-ring__track {
+  animation: context-ring-busy 1.5s ease-in-out infinite;
+}
+
+@keyframes context-ring-busy {
+  50% {
+    stroke: var(--zy-running-line);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .context-ring[aria-busy="true"] .context-ring__track {
+    animation: none;
+    stroke: var(--zy-running-line);
+  }
+}
+
+.context-ring__fill {
+  stroke: var(--zy-accent);
+  stroke-linecap: round;
+  transition: stroke-dasharray 240ms ease;
+}
+
+.context-ring__fill--over {
+  stroke: var(--zy-danger);
+}
+
+/*
+ * Unknown is the bare track with a point at its centre: never an arc, so it
+ * never reads as a share, and never moving, so it never reads as work.
+ */
+.context-ring__point {
+  fill: var(--zy-faint);
+}
+
+.context-ring__level--over {
+  color: var(--zy-danger);
+}
+
+.context-ring__level--unknown {
+  color: var(--zy-text-soft);
+}
+
+.reasoning-controls__reset:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Wide enough that what the budget means reads in two lines, not four. */
+.reasoning-controls__panel.context-ring__panel {
+  width: 300px;
+}
+
+.context-ring__panel .reasoning-controls__caption {
+  text-wrap: pretty;
+}
+
+/* The three budgets as one rounded control, as the effort slider is. */
+.context-ring__choices {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--zy-radius-17);
+  background: var(--zy-line-strong);
+}
+
+.context-ring__choices label {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 4px;
+  border-radius: var(--zy-radius-15);
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    color 160ms;
+}
+
+.context-ring__choices label > span:last-child {
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring__choices input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.context-ring__choices label:hover {
+  background: var(--zy-wash-strong);
+}
+
+.context-ring__choices label:has(input:checked) {
+  background: var(--zy-accent-fill);
+  color: var(--zy-on-accent);
+}
+
+.context-ring__choices label:has(input:checked) > span:last-child {
+  color: var(--zy-on-accent);
+  opacity: 0.8;
+}
+
+.context-ring__choices label:has(input:focus-visible) {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.context-ring__warning {
+  margin: 10px 0 0;
+  padding: 6px 8px;
+  text-align: center;
+  border-radius: var(--zy-radius-7);
+  background: var(--zy-wash-strong);
+  color: var(--zy-text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.context-ring__breakdown {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.context-ring__breakdown th,
+.context-ring__breakdown td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+}
+
+.context-ring__breakdown td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-ring__breakdown th {
+  font-weight: 500;
+}
+
+.context-ring__breakdown-total {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.context-ring__lowered {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.instruction-sources {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.instruction-sources h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__source {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-10);
+}
+
+.instruction-sources__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.instruction-sources__head span,
+.instruction-sources__note {
+  margin: 0;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+.instruction-sources summary {
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.instruction-sources pre {
+  max-height: 200px;
+  margin: 6px 0 0;
+  overflow: auto;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.instruction-sources__source :global(.button) {
+  justify-self: start;
+}
+
+.context-ring__about {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+  padding: 3px;
+  border: 0;
+  border-radius: var(--zy-radius-round);
+  background: transparent;
+  color: var(--zy-muted);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.context-ring__about:hover,
+.context-ring__about:focus-visible {
+  color: var(--zy-text);
+}
+
+/* Compact, in words: an icon here would read as "minimise this menu". */
+.context-ring__compact {
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-17);
+  background: transparent;
+  color: var(--zy-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.context-ring__compact:hover:not(:disabled) {
+  background: var(--zy-line-strong);
+}
+
+.context-ring__compact:disabled {
+  color: var(--zy-muted);
+  cursor: default;
+}
+
+/* The folder picker sits in the composer footer. It opens upward: the
+   composer is at the bottom of the window and a downward menu would be
+   clipped by it. */
+.folder-picker {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.folder-picker__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 240px;
+  height: 25px;
+  padding: 0 7px 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--zy-radius-6);
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.folder-picker__trigger:hover:not(:disabled),
+.folder-picker__trigger[aria-expanded="true"] {
+  border-color: var(--zy-line);
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+/* Unavailable, still readable: the faint text colour meets contrast, where
+   fading by opacity would take it to 2.9:1. */
+.folder-picker__trigger:disabled {
+  color: var(--zy-faint);
+  cursor: default;
+}
+
+.folder-picker__trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker__trigger svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+.folder-picker__trigger svg:last-child {
+  color: var(--zy-faint);
+}
+
+.folder-picker__trigger[aria-expanded="true"] svg:last-child {
+  transform: rotate(180deg);
+}
+
+/* Fixed, not absolute: the composer dock scrolls its own content, and an
+   absolutely positioned menu would be clipped by it. The component measures
+   the trigger and sets the offsets. */
+.folder-picker__menu {
+  position: fixed;
+  z-index: var(--zy-layer-popover);
+  width: max-content;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 24px));
+}
+
+/* The folder it is in, shown only when two listed folders share a name: on the
+   same line, at the menu's right edge, giving way before the name does. */
+.folder-picker__item small {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding-left: 16px;
+  overflow: hidden;
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-picker__item > span {
+  white-space: nowrap;
+}
+
+.folder-picker__item--current svg {
+  color: var(--zy-green);
+}
+
+/* Offset by the width of the check the current folder carries, so the names
+   line up in a column rather than stepping in and out. */
+.folder-picker__item:not(.folder-picker__item--current):not(
+    .folder-picker__item--choose
+  ) {
+  padding-left: 33px;
+}
+
+/* Choosing a folder elsewhere stands apart from the folders listed. */
+.folder-picker__menu > .folder-picker__item--choose {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid var(--zy-line);
+  border-radius: 0 0 var(--zy-radius-5) var(--zy-radius-5);
+}

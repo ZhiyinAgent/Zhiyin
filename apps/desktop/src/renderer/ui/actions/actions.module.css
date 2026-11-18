@@ -1,0 +1,439 @@
+/* Styles for the pieces the actions module's parts share: an action's kind
+   and why it asks, a call and its inputs, JSON, and the frame of the dialogs
+   an action opens. Class names here are local to it; anything written
+   :global() is one of the shared basics. */
+
+/* The action's kind, in a box: the same box on the card that asks, on the
+   record of what ran, where it is tinted by how the action stands, and in
+   its account. */
+.action-kind {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--zy-look-outline, var(--zy-line));
+  border-radius: var(--zy-look-control-radius, var(--zy-radius-6));
+  background: var(--zy-wash);
+  color: var(--zy-text-soft);
+}
+
+.action-kind svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* On the card that asks, a step smaller, so the question takes less room,
+   and red, because it asks. */
+.action-kind--asking {
+  width: 24px;
+  height: 24px;
+  border-color: var(--zy-look-outline, var(--zy-accent-line));
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.action-kind--asking svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* On the record of what ran, smaller still and tinted by how it stands. */
+.action-kind--record {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--zy-radius-5);
+  color: var(--zy-muted);
+}
+
+.action-kind--record svg {
+  width: 12px;
+  height: 12px;
+}
+
+.action-kind--completed {
+  border-color: var(--zy-look-outline, var(--zy-green-line));
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+/* Ran and answered, but the answer was not success: read as neither. */
+.action-kind--reported {
+  border-color: var(--zy-look-outline, var(--zy-amber-line));
+  background: var(--zy-amber-fill);
+  color: var(--zy-amber);
+}
+
+/*
+ * Grey, and deliberately not the accent: failed, denied and blocked use the
+ * accent ring, and a command still running must not look like one that has
+ * gone wrong.
+ */
+.action-kind--running {
+  border-color: var(--zy-look-outline, var(--zy-line-strong));
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+}
+
+.action-kind--failed,
+.action-kind--denied,
+.action-kind--blocked {
+  border-color: var(--zy-look-outline, var(--zy-accent-line));
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+/* Why a card asks, read on the card: the reasons' names, what they mean, and
+   More for the whole explanation. A long place, such as a repository with a
+   long owner, wraps inside the line rather than past its card. */
+.asked-why {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  min-width: 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.asked-why p {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The mark sits on the first line's middle. */
+.asked-why svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2.5px;
+  color: var(--zy-muted);
+}
+
+.asked-why strong {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.asked-why__more {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.asked-why__more:hover,
+.asked-why__more:focus-visible {
+  color: var(--zy-text);
+}
+
+/* Remote schema copy is useful context, but its source is named once for the
+   card instead of repeating the same heading above every argument. */
+.tool-call__description-source {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-faint);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tool-call__described {
+  margin: 0 0 4px;
+  color: var(--zy-text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* What was called, and with what. Every context uses this whole card; only its
+   outer margin belongs to the permission prompt or action inspector. */
+.tool-call {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-panel-soft);
+  container-type: inline-size;
+}
+
+.tool-call__header {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  background: var(--zy-wash-faint);
+}
+
+.tool-call__label {
+  color: var(--zy-faint);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  line-height: 1.3;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tool-call__identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tool-call__identity code {
+  color: var(--zy-text);
+  font: 12px/1.4 var(--zy-font-data);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.tool-call__via {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-faint);
+  font: 12px/1.4 var(--zy-font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call__none {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-faint);
+  font-size: 12px;
+}
+
+/* One name column for every row, as wide as the longest name up to a limit,
+   so a short name leaves no gap before its value. */
+.tool-call__arguments {
+  display: grid;
+  grid-template-columns: fit-content(160px) minmax(0, 1fr);
+  column-gap: 14px;
+  margin: 0;
+  padding: 3px 0;
+}
+
+.tool-call__arguments > div {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: start;
+  min-width: 0;
+  padding: 7px 12px;
+}
+
+.tool-call__arguments > div + div {
+  border-top: 1px solid var(--zy-line);
+}
+
+.tool-call__arguments dt {
+  color: var(--zy-muted);
+  font: 12px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+}
+
+.tool-call__arguments dd {
+  min-width: 0;
+  margin: 0;
+}
+
+/* A row a built-in tool wrote in words: read as a sentence, not as data. */
+.tool-call__arguments > .tool-call__words dt {
+  font: 12.5px/1.55 var(--zy-font-body);
+}
+
+.tool-call__words dd p {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* A very long input in a record: its start, and the way to the rest. */
+.tool-call__folded {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.tool-call__folded > pre {
+  align-self: stretch;
+}
+
+/* Says what is missing, in the place it is missing from. */
+.tool-call__omitted {
+  color: var(--zy-amber);
+  font-style: normal;
+}
+
+/* A tool's answer, indented and coloured. Bounded and scrollable: a useful
+   answer can be very long, and the panel is not the place to read all of it. */
+.json-block,
+.tool-call__value {
+  max-height: 340px;
+  margin: 0;
+  overflow: auto;
+  color: var(--zy-code-punct);
+  font: 12px/1.55 var(--zy-font-data);
+}
+
+.tool-call__value {
+  max-height: 220px;
+  color: var(--zy-code-string);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A call drawn whole, as an approval draws it, is read by scrolling the
+   approval once rather than a scrollbar inside a scrollbar. */
+.tool-call--whole .tool-call__value {
+  max-height: none;
+  overflow: visible;
+}
+
+@container (max-width: 420px) {
+  .tool-call__arguments {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tool-call__arguments > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .tool-call__via {
+    flex-basis: 100%;
+  }
+}
+
+/* Punctuation recedes, keys lead, prose reads as prose. Only the values that
+   are not language — numbers, true, false, null — take a tint, because those
+   are the ones a reader scanning a structure is actually looking for. */
+.json-key {
+  color: var(--zy-code-key);
+}
+
+.json-string {
+  color: var(--zy-code-string);
+}
+
+.json-number {
+  color: var(--zy-code-number);
+}
+
+.json-literal {
+  color: var(--zy-code-literal);
+}
+
+.json-line {
+  /* Wrapped text lands under the line's own indent rather than the margin. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-indent: -1ch;
+  padding-left: 1ch;
+}
+
+/* Present to a screen reader, absent to everyone else. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.diff-modal__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--zy-layer-overlay);
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: var(--zy-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.diff-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow);
+}
+
+/*
+ * No ring. Focus is moved here only so Escape and scrolling have somewhere to
+ * land; it is not a control anyone chose, and outlining the whole dialog reads
+ * as a border on the panel rather than as focus.
+ */
+.diff-modal:focus {
+  outline: none;
+}
+
+/* As tall as what it holds, within the window: a specialist's run of one
+   call is a short dialog. */
+.diff-modal--narrow {
+  width: min(720px, 100%);
+  max-height: min(760px, 100%);
+}
+
+.diff-modal__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.diff-modal__header h2 {
+  margin: 0;
+  font: 600 15px/1.3 var(--zy-font-display);
+}
+
+.diff-modal__body {
+  flex: 1;
+  padding: 0 0 12px;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diff-modal__scrim {
+    backdrop-filter: none;
+  }
+}
+
+/* The inspector controls only the card's placement. Its internal spacing is
+   identical to the permission request and every catalog example. */
+.diff-modal__body > .tool-call {
+  margin: 12px 20px 0;
+}
+
+/* A list of plain values, such as paths or packages, as a list. */
+.tool-call__list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--zy-text);
+  font: 12px/1.55 var(--zy-font-data);
+  overflow-wrap: anywhere;
+}

@@ -1,0 +1,1343 @@
+/* Styles owned by the conversation module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+/* A conversation taking shape before it has anything to show. */
+.thread-skeleton {
+  display: grid;
+  gap: 28px;
+  padding: 48px clamp(24px, 4vw, 50px);
+}
+
+.thread-skeleton__note {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.thread-skeleton__response {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.thread-skeleton__message {
+  width: 58%;
+  height: 58px;
+  margin-left: auto;
+}
+
+.thread-skeleton__panel {
+  display: block;
+  width: 82%;
+  height: 168px;
+  margin-top: 20px;
+}
+
+.work-trace h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+/*
+ * The plan: one pill centred above the conversation that opens into the list.
+ * Red is the app's colour for work under way (the composer uses it while a
+ * turn runs), green for done.
+ */
+.plan-pill {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  width: calc(100% - 2 * clamp(16px, 4vw, 50px));
+  margin: 12px auto 0;
+}
+
+.plan-pill__button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, 100%);
+  min-height: 34px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--zy-look-outline, var(--zy-line-strong));
+  border-radius: var(--zy-radius-pill);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-look-panel-shadow, var(--zy-shadow-pop));
+  color: var(--zy-text-soft);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.plan-pill__button:hover,
+.plan-pill__button[aria-expanded="true"] {
+  border-color: var(--zy-muted);
+  background: var(--zy-panel-soft);
+}
+
+.plan-pill__button--working {
+  border-color: var(--zy-running-line);
+}
+
+.plan-pill__button:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.plan-pill__button > svg:last-child {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+  transition: transform 160ms ease;
+}
+
+.plan-pill__button[aria-expanded="true"] > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.plan-pill__ring {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+
+.plan-pill__ring circle {
+  fill: none;
+  stroke-width: 2.25;
+}
+
+.plan-pill__ring circle {
+  stroke: var(--zy-line-strong);
+}
+
+.plan-pill__ring .plan-pill__arc {
+  stroke: var(--zy-green);
+  stroke-linecap: round;
+  transition: stroke-dasharray 300ms ease;
+}
+
+.plan-pill__name {
+  color: var(--zy-muted);
+  font-weight: 600;
+}
+
+.plan-pill__count {
+  color: var(--zy-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-pill__current {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--zy-text);
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-pill__panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  width: min(440px, 100%);
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel-raised);
+  box-shadow: var(--zy-shadow-menu);
+  transform: translateX(-50%);
+  animation: plan-pill-open 140ms ease-out;
+}
+
+@keyframes plan-pill-open {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -4px);
+  }
+}
+
+.plan-pill__head {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-pill__head > span:first-child {
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.plan-pill__bar {
+  height: 3px;
+  margin: 0 16px 6px;
+  overflow: hidden;
+  border-radius: var(--zy-radius-pill);
+  background: var(--zy-wash-strong);
+}
+
+.plan-pill__bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--zy-green);
+  transition: width 300ms ease;
+}
+
+.plan-pill__list {
+  margin: 0;
+  padding: 4px 8px 8px;
+  list-style: none;
+}
+
+.plan-pill__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px;
+  border-radius: var(--zy-radius-10);
+}
+
+/* A thread from each marker to the next, so the list reads as a sequence. It
+   hangs from the marker rather than the row, so a title on two lines does not
+   leave a gap. */
+.plan-pill__item:not(:last-child)::after {
+  position: absolute;
+  top: 27px;
+  bottom: -8px;
+  left: 16.5px;
+  width: 1px;
+  background: var(--zy-line-strong);
+  content: "";
+}
+
+.plan-pill__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 0.5px;
+  border: 1.5px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-panel-raised);
+  color: var(--zy-muted);
+}
+
+.plan-pill__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.plan-pill__text {
+  display: grid;
+  min-width: 0;
+}
+
+.plan-pill__title {
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* The state is said in words for anyone who cannot see the marker. */
+.plan-pill__state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.plan-pill__item--todo .plan-pill__title {
+  color: var(--zy-muted);
+}
+
+.plan-pill__item--doing {
+  background: var(--zy-accent-veil);
+}
+
+.plan-pill__item--doing .plan-pill__marker {
+  border-color: var(--zy-running);
+  background: radial-gradient(
+    circle,
+    var(--zy-running) 0 3.5px,
+    var(--zy-panel-raised) 4px
+  );
+  animation: plan-pill-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes plan-pill-pulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--zy-running-fill);
+  }
+}
+
+.plan-pill__item--doing .plan-pill__title {
+  color: var(--zy-text);
+  font-weight: 570;
+}
+
+.plan-pill__item--done .plan-pill__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.plan-pill__item--done .plan-pill__title {
+  color: var(--zy-text-soft);
+}
+
+.plan-pill__item--skipped .plan-pill__marker {
+  border-style: dashed;
+}
+
+.plan-pill__item--skipped .plan-pill__title {
+  color: var(--zy-faint);
+  text-decoration: line-through;
+}
+
+.work-trace {
+  padding: 16px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel-soft);
+}
+
+.work-trace__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.work-trace__pulse {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--zy-radius-pill);
+  background: var(--zy-running);
+  box-shadow: 0 0 0 5px var(--zy-running-fill);
+}
+
+.work-trace__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+}
+
+.work-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  min-height: 41px;
+  padding: 5px 0;
+}
+
+.work-step:not(:last-child)::after {
+  position: absolute;
+  top: 27px;
+  bottom: -5px;
+  left: 8px;
+  width: 1px;
+  background: var(--zy-line-strong);
+  content: "";
+}
+
+.work-step__marker {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-panel-soft);
+  color: var(--zy-muted);
+}
+
+.work-step__marker svg {
+  width: 11px;
+  height: 11px;
+}
+
+.work-step--complete .work-step__marker {
+  border-color: var(--zy-green-line);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.work-step--active .work-step__marker {
+  border-color: var(--zy-accent-line);
+}
+
+.work-step--failed .work-step__marker {
+  border-color: var(--zy-accent-line);
+  background: var(--zy-accent-soft);
+  color: var(--zy-accent);
+}
+
+.work-step--active .work-step__marker span {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-accent-fill);
+}
+
+.work-step__label {
+  display: block;
+  color: var(--zy-text-soft);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.work-step--active .work-step__label {
+  color: var(--zy-text);
+}
+
+.work-step--failed .work-step__label {
+  color: var(--zy-danger);
+}
+
+.work-step--queued .work-step__label {
+  color: var(--zy-faint);
+}
+
+.work-step p {
+  margin: 2px 0 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/*
+ * The look's large mark, in a disc with two rings around it where the look
+ * keeps them. A container, so a look can size the mark against it.
+ */
+.welcome-orbit {
+  position: relative;
+  isolation: isolate;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  width: 112px;
+  height: 112px;
+  margin-bottom: 34px;
+}
+
+.welcome-orbit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--zy-radius-round);
+  background: radial-gradient(
+    circle at 38% 35%,
+    var(--zy-panel-soft) 12%,
+    var(--zy-panel-raised) 56%,
+    var(--zy-panel)
+  );
+  box-shadow:
+    inset 0 0 25px var(--zy-wash-strong),
+    var(--zy-shadow-pop);
+  opacity: var(--zy-look-orbit);
+}
+
+.welcome-orbit__ring {
+  position: absolute;
+  inset: -9px;
+  border: 1px solid var(--zy-accent-line);
+  border-radius: var(--zy-radius-round);
+  transform: rotate(-28deg) scaleY(0.45);
+  opacity: var(--zy-look-orbit);
+  pointer-events: none;
+}
+
+.welcome-orbit__ring:last-child {
+  inset: -18px;
+  transform: rotate(35deg) scaleY(0.5);
+  border-color: var(--zy-line-strong);
+}
+
+.new-view {
+  animation: welcome-arrive 650ms ease-out both;
+}
+
+.user-turn__text {
+  /* The lines the person wrote, as they wrote them. */
+  white-space: pre-wrap;
+}
+
+.user-turn__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.user-turn {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: min(490px, 86%);
+  margin-inline: auto max(0px, calc((100% - var(--zy-reading-width)) / 2));
+  padding: 12px 14px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--zy-look-outline, var(--zy-line));
+  border-radius: var(
+    --zy-look-bubble-radius,
+    var(--zy-radius-12) var(--zy-radius-12) var(--zy-radius-2)
+      var(--zy-radius-12)
+  );
+  background: var(--zy-look-bubble, var(--zy-wash-strong));
+  /* A look that draws behind the words may keep a calm ground around them. */
+  box-shadow: var(--zy-look-bubble-halo, none);
+  color: var(--zy-text-soft);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+/* Said, and not yet read: the person's own words in outline, where a message
+   the model has read is filled. */
+.user-turn--waiting {
+  border-style: dashed;
+  border-color: var(--zy-line-strong);
+  background: transparent;
+  color: var(--zy-muted);
+}
+
+/* A waiting message with what can be done about it under its right edge. */
+.waiting-turn {
+  display: grid;
+  gap: 6px;
+}
+
+.waiting-turn__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+  /* The bubble's own right edge. */
+  margin-inline: auto max(0px, calc((100% - var(--zy-reading-width)) / 2));
+}
+
+.waiting-turn__note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  color: var(--zy-faint);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.waiting-turn__note svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.agent-turn {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+}
+
+/* The mark alone, on the conversation's own ground. It is a speaker label, not
+   a control, and a box around it reads as something to press. */
+.agent-turn__mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+}
+
+.agent-turn__body {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.agent-turn--status {
+  align-items: center;
+}
+
+.agent-turn--status .agent-turn__mark {
+  margin-top: 0;
+}
+
+.agent-turn--status .agent-turn__body {
+  justify-content: center;
+  min-height: 28px;
+}
+
+/* A status with the model's reasoning under it: the mark stays level with the
+   status line, and the reasoning hangs below it. */
+.agent-turn--thinking .agent-turn__mark {
+  margin-top: 0;
+}
+
+.agent-turn--thinking .agent-turn__body {
+  gap: 4px;
+}
+
+.agent-turn--thinking .response-status {
+  min-height: 28px;
+}
+
+/* A status and what can be asked of it, on one line. */
+.response-status-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Quiet beside what it acts on: it is offered, never pressed on the person. */
+.quiet-offer {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-11);
+  background: transparent;
+  color: var(--zy-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.quiet-offer:hover:not(:disabled) {
+  border-color: var(--zy-line-strong);
+  color: var(--zy-text-soft);
+}
+
+.quiet-offer:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.quiet-offer:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* The end of what the model is reasoning: seven lines that follow the newest,
+   quieter than an answer. Older lines leave by the top, which fades once
+   there is more than fits. */
+.reasoning-tail {
+  width: min(640px, 100%);
+  max-height: 7lh;
+  overflow: hidden;
+  padding-left: 12px;
+  border-left: 2px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.reasoning-tail--cut {
+  mask-image: linear-gradient(to bottom, transparent, var(--zy-canvas) 2lh);
+}
+
+.agent-turn--compact {
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.message-prose {
+  width: 100%;
+  max-width: none;
+  color: var(--zy-text-soft);
+  font-size: 15.5px;
+  line-height: 1.68;
+}
+
+.message-prose p {
+  text-wrap: pretty;
+}
+
+.message-prose > :first-child {
+  margin-top: 0;
+}
+
+.message-prose > :last-child {
+  margin-bottom: 0;
+}
+
+.message-prose h1,
+.message-prose h2,
+.message-prose h3,
+.message-prose h4 {
+  margin: 1.65em 0 0.55em;
+  color: var(--zy-text);
+  font-family: var(--zy-font-display);
+  font-weight: 590;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+  /* A heading as wide as the prose; one that runs long wraps in even lines. */
+  text-wrap: balance;
+}
+
+.message-prose h1 {
+  font-size: 24px;
+}
+
+.message-prose h2 {
+  font-size: 19px;
+}
+
+.message-prose h3 {
+  font-size: 15.5px;
+}
+
+.message-prose h4 {
+  font-size: 15.5px;
+  letter-spacing: -0.01em;
+}
+
+.message-prose p,
+.message-prose ul,
+.message-prose ol,
+.message-prose blockquote,
+.message-prose pre,
+.message-prose .message-table-scroll {
+  margin: 0.8em 0;
+}
+
+.message-prose ul,
+.message-prose ol {
+  padding-left: 1.4em;
+}
+
+.message-prose li {
+  margin: 0.28em 0;
+  padding-left: 0.18em;
+}
+
+.message-prose li::marker {
+  color: var(--zy-muted);
+}
+
+.message-prose strong {
+  color: var(--zy-text);
+  font-weight: 620;
+}
+
+.message-prose code {
+  padding: 0.12em 0.34em;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-3);
+  background: var(--zy-panel);
+  color: var(--zy-accent);
+  font: max(12px, 0.88em) / 1.5 var(--zy-font-data);
+}
+
+.message-prose pre {
+  max-width: 100%;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-8);
+  background: var(--zy-panel-soft);
+}
+
+.message-prose pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+}
+
+.message-prose blockquote {
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--zy-accent-line);
+  color: var(--zy-muted);
+}
+
+.message-prose hr {
+  margin: 1.7em 0;
+  border: 0;
+  border-top: 1px solid var(--zy-line);
+}
+
+/*
+ * The table sizes itself to its content and only scrolls when even the
+ * narrowest honest layout does not fit. `width: max-content` keeps a small
+ * table small; `max-width: 100%` hands wide ones back to the auto table
+ * algorithm, which allocates each column its min-content width first and
+ * shares what is left in proportion to how much more the column could use.
+ */
+.message-table-scroll {
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-8);
+}
+
+.message-prose table {
+  width: max-content;
+  max-width: 100%;
+  border-collapse: collapse;
+  background: var(--zy-wash-faint);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The thread sets `overflow-wrap: anywhere` so a pasted URL cannot push the
+ * conversation sideways. Inside a table that value is destructive: it counts
+ * every character as a wrap opportunity when computing min-content, so the
+ * column algorithm believes each column fits in one character and starves the
+ * short ones — "Q1" comes out stacked. `break-word` still breaks a word that
+ * genuinely cannot fit, but leaves min-content at the longest word, which is
+ * the width the column layout actually needs to reason with.
+ */
+.message-prose th,
+.message-prose td {
+  padding: 9px 11px;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+  border-bottom: 1px solid var(--zy-line);
+  text-align: left;
+  text-wrap: pretty;
+  vertical-align: top;
+}
+
+.message-prose th {
+  background: var(--zy-wash);
+  color: var(--zy-text);
+  font-family: var(--zy-font-instrument);
+  font-size: 12px;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.message-prose tr:last-child td {
+  border-bottom: 0;
+}
+
+/*
+ * The exception to the rule above: a hash, path or URL carries no wrap
+ * opportunity of its own, and honouring its length would hand one column the
+ * whole table. These break anywhere, so the column can be as narrow as the
+ * text around it needs.
+ */
+.message-prose th code,
+.message-prose td code {
+  overflow-wrap: anywhere;
+}
+
+/* A web page the answer links to, which opens in the browser (ADR 0003). */
+.message-link {
+  border-radius: var(--zy-radius-1);
+  color: var(--zy-blue);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.message-link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.message-link:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+/* A cited document page: reads as part of the sentence, presses like a link. */
+.message-citation {
+  display: inline;
+  padding: 0;
+  border: 0;
+  border-radius: var(--zy-radius-1);
+  background: none;
+  color: var(--zy-blue);
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.message-citation:hover {
+  text-decoration-thickness: 2px;
+}
+
+.message-citation:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+/* Present to a screen reader, absent to everyone else. */
+.message-citation__opens {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The site a link goes to, after its words: short, so it never takes a line
+   of its own. */
+.message-link__site {
+  color: var(--zy-faint);
+  font-size: max(12px, 0.86em);
+  white-space: nowrap;
+}
+
+.response-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1;
+}
+
+/* A retry is the same kind of status as "Working", with a clock for its dot. */
+.response-status--retry {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  line-height: 1.4;
+}
+
+.response-status--retry > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--zy-running);
+}
+
+.response-status__time {
+  margin-left: 2px;
+  color: var(--zy-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.response-status > span:first-child {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-running);
+  box-shadow: 0 0 0 4px var(--zy-running-fill);
+  animation: response-pulse 1.5s ease-in-out infinite;
+}
+
+.agent-turn__body > .work-trace {
+  width: min(540px, 100%);
+}
+
+.activity-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 9px;
+  border-radius: var(--zy-radius-6);
+  background: var(--zy-wash);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.activity-note svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: var(--zy-running);
+}
+
+.new-view {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 610px;
+  text-align: center;
+}
+
+/* The look's veil behind the words, wherever they sit: an oval that fades out
+   past them, with no corner or edge to see. The fade is a shadow, which never
+   makes the page wider. */
+.new-view::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  background: var(--zy-look-words-veil, transparent);
+  box-shadow: 0 0 140px 110px var(--zy-look-words-veil, transparent);
+}
+
+.new-view h1 {
+  margin: 0;
+  color: var(--zy-text);
+  font-family: var(--zy-font-display);
+  font-size: clamp(32px, 4vw, 52px);
+  font-weight: 520;
+  letter-spacing: -0.045em;
+}
+
+.new-view > p {
+  max-width: 54ch;
+  margin: 12px auto 0;
+  color: var(--zy-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.prompt-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 27px;
+}
+
+.prompt-suggestions button {
+  min-height: 42px;
+  padding: 0 16px;
+  /* Drawn in line, so the mountains show through them, unless the look's
+     picture is strong enough that they need a ground of their own. */
+  border: 1px solid var(--zy-look-outline, var(--zy-line-ink));
+  border-radius: var(--zy-look-chip-radius, var(--zy-radius-18));
+  background: var(--zy-look-suggestion, transparent);
+  color: var(--zy-look-suggestion-text, var(--zy-muted));
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.prompt-suggestions button:hover {
+  border-color: var(--zy-look-outline, var(--zy-line-strong));
+  color: var(--zy-text-soft);
+}
+
+/* The plugins' ways to begin: two to a row, each led by its plugin's name. */
+.starters {
+  display: grid;
+  /* Equal columns, so the ways to begin sit evenly about the middle. */
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px 28px;
+  width: min(100%, 610px);
+  margin: 27px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* An odd one out spans the row, so no row ends on a gap. */
+.starters li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+/* Each prompt is set to one measure, so they break alike, in two even lines. */
+.starters span {
+  justify-self: center;
+  max-width: 26ch;
+}
+
+.starters button {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 14px 11px;
+  /* Drawn in line, as the general suggestions are. */
+  border: 1px solid var(--zy-look-outline, var(--zy-line-ink));
+  border-radius: var(--zy-look-control-radius, var(--zy-radius-8));
+  background: var(--zy-look-suggestion, transparent);
+  color: var(--zy-look-suggestion-text, var(--zy-text-soft));
+  font-size: 12.5px;
+  line-height: 1.4;
+  /* Centred, the lines of a prompt balanced so none ends on a lone word. */
+  text-align: center;
+  text-wrap: balance;
+  cursor: pointer;
+}
+
+.starters button:hover {
+  border-color: var(--zy-look-outline, var(--zy-line-strong));
+  color: var(--zy-text);
+}
+
+.starters small {
+  color: var(--zy-muted);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+/* Connecting a model, in place of the ways to begin: read left to right, like
+   any form. */
+.new-view__setup {
+  width: min(100%, 560px);
+  margin-top: 24px;
+  text-align: left;
+}
+
+/* In a short window the words come first: the mark and the second row of
+   ways to begin give up their room, so the heading is never cut off. */
+@media (max-height: 640px) {
+  .new-view .welcome-orbit {
+    display: none;
+  }
+
+  .new-view h1 {
+    font-size: 32px;
+  }
+
+  .starters {
+    margin-top: 16px;
+  }
+
+  .starters li:nth-child(n + 3) {
+    display: none;
+  }
+
+  .starters li:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .new-view__setup {
+    margin-top: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .response-status > span:first-child {
+    animation: none;
+  }
+}
+
+@keyframes welcome-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes response-pulse {
+  50% {
+    opacity: 0.45;
+    transform: scale(0.78);
+  }
+}
+
+.condensing-card {
+  display: grid;
+  min-width: 0;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-panel-soft);
+}
+
+.condensing-card__line,
+.condensing-card__toggle {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.condensing-card__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.condensing-card__toggle:hover {
+  background: var(--zy-wash-faint);
+}
+
+.condensing-card__toggle:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: -2px;
+}
+
+.condensing-card__chevron {
+  display: inline-flex;
+  flex: none;
+  transition: transform 120ms ease;
+}
+
+.condensing-card__chevron svg {
+  width: 14px;
+  height: 14px;
+  color: var(--zy-muted);
+}
+
+.condensing-card__chevron--open {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .condensing-card__chevron {
+    transition: none;
+  }
+}
+
+.condensing-card__why {
+  margin: -6px 0 0;
+  padding: 0 12px 10px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* A long summary scrolls inside the card instead of running on under the
+   composer, and its own headings read as headings. */
+.condensing-card__details {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  max-height: min(420px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--zy-line);
+}
+
+.condensing-card__counts {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The summary's own headings sit under the card's, not above it. */
+.condensing-card__details :is(h1, h2) {
+  font-size: 15px;
+}
+
+.condensing-card__details h3 {
+  margin: 10px 0 0;
+  color: var(--zy-text-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.condensing-card__details ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.condensing-card__details code {
+  overflow-wrap: anywhere;
+}
+
+/* An entry and the turn's end it closes, spaced as the conversation spaces
+   its entries. */
+.timeline-entry {
+  display: grid;
+  gap: inherit;
+}
+
+/*
+ * Condensed history reads as set aside: greyed to the muted text colour, which
+ * still meets contrast on every ground, rather than faded with opacity, which
+ * would not. Every piece of a condensed entry is, whatever colour its own
+ * component gives it: a person's message or an action's title left at full
+ * strength would keep the history from looking set aside. Code loses its
+ * accent for the same reason.
+ */
+.timeline-entry[data-condensed]
+  :is(
+    div,
+    p,
+    li,
+    td,
+    th,
+    blockquote,
+    h1,
+    h2,
+    h3,
+    h4,
+    strong,
+    em,
+    span,
+    code,
+    a
+  ) {
+  color: var(--zy-muted) !important;
+}
+
+.timeline-entry[data-condensed] :is(svg, img) {
+  filter: saturate(0.3);
+}
+
+/* What condensed means, read before the first condensed entry and shown when
+   reached from the keyboard. */
+.condensed-note:not(:focus-visible) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.condensed-note {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.condensed-note:focus-visible {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 4px;
+}

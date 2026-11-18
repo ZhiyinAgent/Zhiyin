@@ -1,0 +1,52 @@
+{
+  "name": "@zhiyin/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The front desk between the app's window and everything behind it.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@zhiyin/agent-loop": "workspace:*",
+    "@zhiyin/artifacts": "workspace:*",
+    "@zhiyin/blender-studio": "workspace:*",
+    "@zhiyin/capabilities": "workspace:*",
+    "@zhiyin/context-budget": "workspace:*",
+    "@zhiyin/contract": "workspace:*",
+    "@zhiyin/conversation-export": "workspace:*",
+    "@zhiyin/conversation-rules": "workspace:*",
+    "@zhiyin/credential-removal": "workspace:*",
+    "@zhiyin/document-viewer": "workspace:*",
+    "@zhiyin/interactive-browser": "workspace:*",
+    "@zhiyin/memory": "workspace:*",
+    "@zhiyin/memory-projects": "workspace:*",
+    "@zhiyin/model-client": "workspace:*",
+    "@zhiyin/one-at-a-time": "workspace:*",
+    "@zhiyin/path-comparison": "workspace:*",
+    "@zhiyin/rewind": "workspace:*",
+    "@zhiyin/session": "workspace:*",
+    "@zhiyin/spelling": "workspace:*",
+    "@zhiyin/usage": "workspace:*",
+    "@zhiyin/value-checks": "workspace:*",
+    "@zhiyin/window-changes": "workspace:*"
+  },
+  "devDependencies": {
+    "@zhiyin/corrections-log": "workspace:*",
+    "@zhiyin/document-compiler": "workspace:*",
+    "@zhiyin/files": "workspace:*",
+    "@zhiyin/mcp": "workspace:*",
+    "@zhiyin/permission-engine": "workspace:*",
+    "@zhiyin/plugins": "workspace:*",
+    "@zhiyin/recovery": "workspace:*",
+    "@zhiyin/rewind-planner": "workspace:*",
+    "@zhiyin/test-support": "workspace:*",
+    "@zhiyin/toolchains": "workspace:*",
+    "@zhiyin/tools": "workspace:*"
+  }
+}

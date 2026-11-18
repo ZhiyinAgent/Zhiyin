@@ -1,0 +1,11 @@
+#!/bin/sh
+# Runs the same gate as everything else. Enable with:
+#   git config core.hooksPath .githooks
+# Skip once with: git commit --no-verify
+#
+# Git hands a hook the variables that tie git to this repository and index
+# (GIT_DIR in a linked worktree, GIT_INDEX_FILE always). Tests that run git in
+# their own temporary repositories would inherit them and act on this one, so
+# the gate runs without them, as it does by hand and on CI.
+unset $(git rev-parse --local-env-vars)
+exec powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1

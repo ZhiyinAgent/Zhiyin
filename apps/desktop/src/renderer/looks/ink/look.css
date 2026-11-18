@@ -1,0 +1,113 @@
+/*
+ * Ink: a landscape painted in one ink on the grained ground. Mountains rise
+ * along the foot of the conversation with mist drifting between them, water
+ * lies at the foot of the side column with light passing over it, far ranges
+ * stand at the foot of every other page and clouds behind its title. The mark
+ * is painted with a brush, large and on its own on the new-task page.
+ */
+[data-look="ink"] {
+  --zy-look-ground: var(--zy-landscape);
+  --zy-look-ground-mask: url("./ridges.svg") center bottom / cover no-repeat;
+  --zy-look-ground-height: 58%;
+  --zy-look-ground-opacity: 0.1;
+  --zy-look-drift: var(--zy-mist);
+  --zy-look-drift-mask: url("./mist.svg") 0 50% / 1400px 100% repeat-x;
+  --zy-look-drift-opacity: 0.12;
+  --zy-look-side: var(--zy-landscape);
+  --zy-look-side-mask: url("./water.svg") center bottom / 100% auto no-repeat;
+  --zy-look-side-height: 250px;
+  --zy-look-side-opacity: 0.15;
+  --zy-look-side-motion: none;
+  --zy-look-page: var(--zy-landscape);
+  --zy-look-page-mask:
+    url("./far-ranges.svg") center bottom / 100% 100% no-repeat,
+    linear-gradient(
+      90deg,
+      transparent,
+      var(--zy-canvas) 12%,
+      var(--zy-canvas) 88%,
+      transparent
+    );
+  --zy-look-page-height: 190px;
+  --zy-look-page-opacity: 0.075;
+  --zy-look-title: var(--zy-landscape);
+  --zy-look-title-mask: url("./clouds.svg") left center / contain no-repeat;
+  --zy-look-title-opacity: 0.08;
+  --zy-look-mark: url("./mark-dark.png");
+  --zy-look-mark-small: url("./mark-dark-small.png");
+  --zy-look-mark-small-size: 17px;
+  --zy-look-mark-large: url("./mark-dark-large.png");
+  --zy-look-mark-filter: none;
+  /* Most of the new-task page's space for it, however tall the window. */
+  --zy-look-mark-large-size: 86cqw;
+  --zy-look-orbit: 0;
+
+  /* The ground blends as any picture does, and every part keeps its own
+     drawing: `initial` makes each part use the value it falls back to. */
+  --zy-look-ground-blend: initial;
+  --zy-look-welcome-mask: initial;
+  --zy-look-words-veil: initial;
+  --zy-look-standalone-mask: initial;
+  --zy-look-outline: initial;
+  --zy-look-panel-radius: initial;
+  --zy-look-panel-shadow: initial;
+  --zy-look-panel-ground: initial;
+  --zy-look-control-radius: initial;
+  --zy-look-chip-radius: initial;
+  --zy-look-fill: initial;
+  --zy-look-fill-strong: initial;
+  --zy-look-well: initial;
+  --zy-look-running-width: initial;
+  --zy-look-running-still: initial;
+  --zy-look-dot: initial;
+  --zy-look-check-appearance: initial;
+  --zy-look-check: initial;
+  --zy-look-check-mask: initial;
+  --zy-look-check-on-mask: initial;
+  --zy-look-track-mask: initial;
+  --zy-look-track-height: initial;
+  --zy-look-track-radius: initial;
+  --zy-look-bubble: initial;
+  --zy-look-bubble-radius: initial;
+  --zy-look-bubble-halo: initial;
+  --zy-look-suggestion: initial;
+  --zy-look-suggestion-text: initial;
+  --zy-look-current-mark: initial;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-look="ink"] {
+    --zy-look-ground-opacity: 0.12;
+    --zy-look-drift-opacity: 0.6;
+    --zy-look-side-opacity: 0.17;
+    --zy-look-page-opacity: 0.13;
+    --zy-look-title-opacity: 0.096;
+    --zy-look-mark: url("./mark-light.png");
+    --zy-look-mark-small: url("./mark-light-small.png");
+    --zy-look-mark-large: url("./mark-light-large.png");
+  }
+}
+
+/* Light passes slowly over the water, back and forth. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-look="ink"] {
+    --zy-look-side-mask:
+      url("./water.svg") center bottom / 100% auto no-repeat,
+      linear-gradient(
+          100deg,
+          color-mix(in srgb, var(--zy-canvas) 35%, transparent) 20%,
+          var(--zy-canvas) 45%,
+          color-mix(in srgb, var(--zy-canvas) 35%, transparent) 70%
+        )
+        0% 0 / 300% 100% no-repeat;
+    --zy-look-side-motion: zy-ink-glint 11s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes zy-ink-glint {
+  to {
+    mask-position:
+      center bottom,
+      100% 0;
+  }
+}

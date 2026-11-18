@@ -1,0 +1,43 @@
+# Ruff, the gate's Python lint (scripts/python-lint.mjs), over every Python
+# file in the repository. Zhiyin ships two Python harnesses as source: the
+# script Blender runs for the 3D studio and the one the CAD studio's Python
+# runs, and the Python environment's startup file. Nothing else checks them
+# before they run, so these rules are chosen for the defects they catch: an
+# undefined or unused name, a syntax error, a bare except, a mutable default
+# argument. The scripts that draw the looks' pictures are held to the same
+# rules. The startup file runs on Pythons 3.11 to 3.14; its tests run it on
+# each.
+
+# The one release the gate runs; the script reads it from here.
+required-version = "==0.17.3"
+# Both harnesses run on Python 3.13: Blender 5.2's and the CAD environment's.
+target-version = "py313"
+# Where the import sorting below wraps an import line. No rule limits how long
+# other lines are: the harnesses' answer sentences run longer, and a line is
+# split where its parts are, not at a width.
+line-length = 120
+cache-dir = "node_modules/.cache/ruff"
+
+[lint]
+select = [
+  "F", # Pyflakes: undefined, unused and redefined names
+  "E4", # imports
+  "E7", # statements: bare except, comparisons to None and True
+  "E9", # syntax and runtime errors
+  "B", # flake8-bugbear: likely bugs
+  "PLE", # Pylint's errors
+  "I", # imports grouped and sorted, as Ruff's --fix writes them
+]
+ignore = [
+  # Naming a lambda is a style choice the harnesses make on purpose.
+  "E731",
+  # A one-letter name is judged by reading it, not by its letter.
+  "E741",
+  # zip() of lists of one length by construction; strict= would only add noise.
+  "B905",
+  # Every lambda flagged is called within the same pass of its loop, which
+  # the rule cannot tell from one kept for later.
+  "B023",
+  # An unused loop variable names what the loop counts.
+  "B007",
+]

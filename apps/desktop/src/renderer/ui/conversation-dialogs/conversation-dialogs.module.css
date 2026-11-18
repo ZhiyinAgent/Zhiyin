@@ -1,0 +1,315 @@
+/* Styles owned by the conversation dialogs module. Class names here are
+   local to it; anything written :global() is one of the shared basics. */
+
+/* Drawn by the shared dialog, which gives it its frame, layer and keyboard. */
+.conversation-permissions {
+  width: min(480px, 100%);
+}
+
+.conversation-permissions__task {
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.conversation-permissions__list {
+  display: grid;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-permissions__list > li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--zy-line);
+}
+
+.conversation-permissions__list > li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.conversation-permissions__list > li > div {
+  min-width: 0;
+}
+
+.conversation-permissions__list strong {
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.conversation-permissions__list p {
+  margin: 4px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.conversation-permissions__list button {
+  flex: 0 0 auto;
+}
+
+/* Exporting a conversation: two files side by side, each with a miniature of
+   what it makes, then where the file went. */
+.export-dialog__subject {
+  margin: 0 0 14px;
+  overflow: hidden;
+  color: var(--zy-text-soft);
+  font-size: 13.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-formats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.export-format {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: 6px;
+  padding: 10px 10px 14px;
+  border: 1px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel);
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.export-format > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.export-format:hover {
+  border-color: var(--zy-faint);
+}
+
+.export-format:has(input:checked) {
+  border-color: var(--zy-accent-line);
+  box-shadow: 0 0 0 1px var(--zy-accent-line);
+}
+
+.export-format:has(input:focus-visible) {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+.export-format:has(input:disabled) {
+  cursor: default;
+}
+
+.export-format:has(input:disabled) > input {
+  cursor: default;
+}
+
+.export-format__preview {
+  display: block;
+  height: 96px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-wash);
+}
+
+.export-format__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 4px;
+}
+
+/* The radio mark, drawn so it matches the theme in both modes. */
+.export-format__heading::before {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--zy-line-strong);
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-panel);
+}
+
+.export-format:has(input:checked) .export-format__heading::before {
+  border: 4px solid var(--zy-accent);
+}
+
+.export-format__label {
+  color: var(--zy-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.export-format__tag {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-4);
+  color: var(--zy-muted);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.export-format__detail {
+  padding-inline: 26px 4px;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Each file as the top of a sheet: the page with a title, the person's
+   message, an answer and an action, the way the exported page lays them out;
+   the record with its first lines. */
+.export-page,
+.export-data {
+  display: grid;
+  place-items: end center;
+  padding-top: 14px;
+}
+
+.export-page__sheet,
+.export-data code {
+  width: 70%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--zy-line);
+  border-bottom: 0;
+  border-radius: var(--zy-radius-5) var(--zy-radius-5) 0 0;
+  background: var(--zy-panel-raised);
+}
+
+.export-page__sheet {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.export-page__sheet > i {
+  display: block;
+  height: 5px;
+  border-radius: var(--zy-radius-2);
+  background: var(--zy-line-strong);
+}
+
+.export-page__sheet > .export-page__title {
+  width: 46%;
+  height: 7px;
+  margin-bottom: 2px;
+  background: var(--zy-faint);
+}
+
+.export-page__sheet > .export-page__ask {
+  justify-self: end;
+  width: 52%;
+  height: 10px;
+  border-radius: var(--zy-radius-4);
+  background: var(--zy-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--zy-accent-line);
+}
+
+.export-page__sheet > .export-page__line {
+  width: 92%;
+}
+
+.export-page__sheet > .export-page__line--short {
+  width: 70%;
+}
+
+.export-page__sheet > .export-page__action {
+  width: 100%;
+  height: 12px;
+  border-radius: var(--zy-radius-3);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--zy-line-strong);
+}
+
+.export-data code {
+  display: block;
+  width: 82%;
+  padding: 8px 12px 0;
+  overflow: hidden;
+  color: var(--zy-code-punct);
+  font-family: var(--zy-font-data);
+  font-size: 12px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.export-data__key {
+  color: var(--zy-code-key);
+}
+
+.export-data__punct {
+  color: var(--zy-code-punct);
+}
+
+.export-dialog__note {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.export-dialog__error {
+  margin: 14px 0 0;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.export-saved {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.export-saved__mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--zy-radius-round);
+  background: var(--zy-green-fill);
+  color: var(--zy-green);
+}
+
+.export-saved__mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.export-saved__text {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.export-saved__text strong {
+  color: var(--zy-text);
+  font-size: 14px;
+}
+
+.export-saved__path {
+  color: var(--zy-text-soft);
+  font-size: 13px;
+}

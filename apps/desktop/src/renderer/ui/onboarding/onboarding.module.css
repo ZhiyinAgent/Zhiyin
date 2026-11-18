@@ -1,0 +1,271 @@
+/* Styles owned by the onboarding module. Class names here are local to it;
+   anything written :global() is one of the shared basics. */
+
+.interest-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+/* With an odd number of interests, the last one takes the whole row rather
+   than standing alone in half of it. */
+.interest-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.interest-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  min-height: 158px;
+  padding: 23px;
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-17);
+  background: var(--zy-card);
+  box-shadow: var(--zy-shadow-card);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    transform 160ms;
+}
+
+.interest-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--zy-accent-line);
+}
+
+.interest-card[aria-pressed="true"] {
+  border-color: var(--zy-accent);
+  background: var(--zy-accent-soft);
+}
+
+.interest-card > svg {
+  width: 23px;
+  height: 23px;
+  margin-bottom: 14px;
+  color: var(--zy-accent);
+}
+
+.interest-card strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.interest-card > span:not(.interest-card__check) {
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.interest-card__check {
+  position: absolute;
+  right: 20px;
+  top: 24px;
+  color: var(--zy-accent);
+}
+
+.interest-card__check svg {
+  width: 17px;
+  height: 17px;
+}
+
+@media (max-width: 900px) {
+  .interest-grid {
+    margin-top: 36px;
+  }
+}
+
+@media (max-width: 520px) {
+  .interest-grid {
+    grid-template-columns: 1fr;
+    border-block: 0;
+  }
+}
+
+/* The look step: the looks side by side, each a card with its window. */
+.look-choices {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.look-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 14px;
+  border: 1px solid var(--zy-card-line);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-card);
+  cursor: pointer;
+  transition: border-color 160ms;
+}
+
+.look-card:hover {
+  border-color: var(--zy-accent-line);
+}
+
+.look-card:has(input:checked) {
+  border-color: var(--zy-accent);
+  background: var(--zy-accent-soft);
+}
+
+.look-card:has(input:focus-visible) {
+  outline: 2px solid var(--zy-accent);
+  outline-offset: 2px;
+}
+
+/* The radio is the card: kept for the keyboard and screen readers, not
+   drawn. */
+.look-card input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.look-card strong {
+  margin-top: 6px;
+  padding-inline: 4px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.look-card > span:last-child {
+  padding-inline: 4px;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.look-step__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/*
+ * The miniature: a window drawn at its own sizes and scaled down, so the
+ * look's sizes, masks and pictures fall as they do in the window.
+ */
+.miniature {
+  display: block;
+  overflow: hidden;
+  border-radius: var(--zy-radius-10);
+  background: var(--zy-canvas);
+  pointer-events: none;
+}
+
+.miniature__window {
+  display: grid;
+  grid-template-columns: var(--zy-sidebar-width) minmax(0, 1fr);
+  width: 1440px;
+  height: 900px;
+  zoom: 0.15;
+}
+
+@media (max-width: 900px) {
+  .miniature__window {
+    zoom: 0.11;
+  }
+}
+
+.miniature__side {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 28px 24px 0;
+  background: var(--zy-sidebar);
+}
+
+.miniature__row {
+  display: block;
+  width: 70%;
+  height: 18px;
+  border-radius: var(--zy-radius-pill);
+  background: color-mix(in srgb, var(--zy-text) 18%, transparent);
+}
+
+.miniature__row--short {
+  width: 52%;
+}
+
+.miniature__side-picture {
+  margin: auto -24px 0;
+  height: var(--zy-look-side-height);
+  background: var(--zy-look-side);
+  opacity: calc(var(--zy-look-side-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-side-mask);
+}
+
+.miniature__main {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  padding: 80px 40px 40px;
+  overflow: hidden;
+}
+
+.miniature__ground {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  mix-blend-mode: var(--zy-look-ground-blend, normal);
+}
+
+.miniature__ground::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--zy-look-ground-height);
+  background: var(--zy-look-ground);
+  opacity: calc(var(--zy-look-ground-opacity) * var(--zy-look-strength));
+  mask: var(--zy-look-ground-mask);
+}
+
+.miniature__bubble {
+  align-self: flex-end;
+  width: 420px;
+  height: 90px;
+  margin-right: max(0px, calc((100% - var(--zy-reading-width)) / 2));
+  border: 1px solid var(--zy-look-outline, var(--zy-line));
+  border-radius: var(
+    --zy-look-bubble-radius,
+    var(--zy-radius-12) var(--zy-radius-12) var(--zy-radius-2)
+      var(--zy-radius-12)
+  );
+  background: var(--zy-look-bubble, var(--zy-wash-strong));
+}
+
+.miniature__line {
+  width: min(var(--zy-reading-width), 100%);
+  height: 20px;
+  border-radius: var(--zy-radius-pill);
+  background: color-mix(in srgb, var(--zy-text) 22%, transparent);
+}
+
+.miniature__line--short {
+  width: min(calc(var(--zy-reading-width) * 0.6), 60%);
+  margin-right: auto;
+  margin-left: max(0px, calc((100% - var(--zy-reading-width)) / 2));
+}
+
+.miniature__composer {
+  width: min(var(--zy-reading-width), 100%);
+  height: 130px;
+  margin-top: auto;
+  border: 1px solid var(--zy-look-outline, var(--zy-line-strong));
+  border-radius: var(--zy-look-panel-radius, var(--zy-radius-18));
+  background: var(--zy-look-panel-ground, var(--zy-panel-raised));
+  box-shadow: var(--zy-look-panel-shadow, var(--zy-shadow-rest));
+}

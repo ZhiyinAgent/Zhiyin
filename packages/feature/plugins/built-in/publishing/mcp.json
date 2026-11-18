@@ -1,0 +1,95 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "alphaxiv": {
+      "type": "streamable-http",
+      "url": "https://api.alphaxiv.org/mcp/v1",
+      "name": "alphaXiv",
+      "description": "Finds arXiv research, reads papers' full text, searches citations and researchers, and explores papers' code repositories.",
+      "access": "Needs an alphaXiv API key, created under Settings > API Keys on alphaxiv.org. With it, the model can also change your alphaXiv library and followed researchers.",
+      "dataDestination": "Searches, paper requests, and library changes are sent to api.alphaxiv.org.",
+      "toolEffects": [
+        {
+          "tools": [
+            "discover_papers",
+            "get_paper_content",
+            "answer_pdf_queries",
+            "read_files_from_github_repository",
+            "find_researchers",
+            "get_researcher",
+            "get_researcher_papers",
+            "resolve_researchers",
+            "get_hot_feed"
+          ],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "none",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          }
+        },
+        {
+          "tools": [
+            "get_for_you_feed",
+            "list_library",
+            "list_followed_researchers",
+            "get_paper_notes",
+            "list_annotated_papers"
+          ],
+          "effects": {
+            "reads": "account",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "none",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          },
+          "notReadOnly": "They read the person's own library, notes, follows and feed, which the reviewing specialists, who only read, have no need of."
+        },
+        {
+          "tools": [
+            "save_papers_to_folder",
+            "remove_papers_from_folder",
+            "move_papers_between_folders",
+            "create_folder",
+            "rename_folder",
+            "delete_folder",
+            "edit_private_paper_metadata"
+          ],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "once",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          },
+          "destination": "alphaXiv library"
+        },
+        {
+          "tools": ["follow_researcher", "unfollow_researcher"],
+          "effects": {
+            "reads": "none",
+            "changes": "none",
+            "sends": "service",
+            "actsAsPerson": "once",
+            "runs": "none",
+            "lasting": false,
+            "brings": "outside"
+          },
+          "destination": "alphaXiv researchers followed"
+        }
+      ],
+      "setup": {
+        "url": "https://www.alphaxiv.org/settings",
+        "keyName": "API key",
+        "advice": "Sign in, open API Keys, and create a key."
+      }
+    }
+  }
+}

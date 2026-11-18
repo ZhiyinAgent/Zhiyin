@@ -1,0 +1,64 @@
+/*
+ * Neutral: the grained ground and nothing drawn on it. The mark is the app's
+ * own, in its disc and rings on the new-task page.
+ */
+[data-look="neutral"] {
+  --zy-look-ground: none;
+  --zy-look-ground-mask: none;
+  --zy-look-ground-height: 0px;
+  --zy-look-ground-opacity: 0;
+  --zy-look-drift: none;
+  --zy-look-drift-mask: none;
+  --zy-look-drift-opacity: 0;
+  --zy-look-side: none;
+  --zy-look-side-mask: none;
+  --zy-look-side-height: 0px;
+  --zy-look-side-opacity: 0;
+  --zy-look-side-motion: none;
+  --zy-look-page: none;
+  --zy-look-page-mask: none;
+  --zy-look-page-height: 0px;
+  --zy-look-page-opacity: 0;
+  --zy-look-title: none;
+  --zy-look-title-mask: none;
+  --zy-look-title-opacity: 0;
+  --zy-look-mark: normal;
+  --zy-look-mark-small: normal;
+  --zy-look-mark-small-size: 17px;
+  --zy-look-mark-large: normal;
+  --zy-look-mark-filter: var(--zy-mark-filter);
+  --zy-look-mark-large-size: 44px;
+  --zy-look-orbit: 1;
+
+  /* The ground blends as any picture does, and every part keeps its own
+     drawing: `initial` makes each part use the value it falls back to. */
+  --zy-look-ground-blend: initial;
+  --zy-look-welcome-mask: initial;
+  --zy-look-words-veil: initial;
+  --zy-look-standalone-mask: initial;
+  --zy-look-outline: initial;
+  --zy-look-panel-radius: initial;
+  --zy-look-panel-shadow: initial;
+  --zy-look-panel-ground: initial;
+  --zy-look-control-radius: initial;
+  --zy-look-chip-radius: initial;
+  --zy-look-fill: initial;
+  --zy-look-fill-strong: initial;
+  --zy-look-well: initial;
+  --zy-look-running-width: initial;
+  --zy-look-running-still: initial;
+  --zy-look-dot: initial;
+  --zy-look-check-appearance: initial;
+  --zy-look-check: initial;
+  --zy-look-check-mask: initial;
+  --zy-look-check-on-mask: initial;
+  --zy-look-track-mask: initial;
+  --zy-look-track-height: initial;
+  --zy-look-track-radius: initial;
+  --zy-look-bubble: initial;
+  --zy-look-bubble-radius: initial;
+  --zy-look-bubble-halo: initial;
+  --zy-look-suggestion: initial;
+  --zy-look-suggestion-text: initial;
+  --zy-look-current-mark: initial;
+}

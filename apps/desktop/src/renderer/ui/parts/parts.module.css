@@ -1,0 +1,120 @@
+/* Styles owned by the CAD parts' view: the drawing, what is said over it,
+   and the list of parts. The frame around it is the shared surface frame.
+   Class names here are local; anything written :global() is one of the
+   shared basics. */
+
+/* The drawing above the list, filling what the frame leaves. */
+.part-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The drawing and what is said over it fill what the list leaves. */
+.part-panel__area {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 120px;
+}
+
+/* It is turned by hand. */
+.part-panel__stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.part-panel__stage[hidden] {
+  display: none;
+}
+
+/* With nothing drawn, the list takes the drawing's room. */
+.part-panel[data-nothing-drawn="true"] .part-panel__area {
+  flex: none;
+  min-height: 0;
+}
+
+.part-panel[data-nothing-drawn="true"] .part-panel__list {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.part-panel__stage[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.part-panel__stage:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: -2px;
+}
+
+.part-panel__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Said over the drawing, never in the way of a drag. */
+.part-panel__status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--zy-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+/* Each part on a line: its name, then its size, which keeps to one line. */
+.part-panel__list {
+  flex: none;
+  display: grid;
+  max-height: 40%;
+  margin: 0;
+  padding: 6px 12px 8px;
+  overflow-y: auto;
+  border-top: 1px solid var(--zy-line);
+  background: var(--zy-sidebar);
+  list-style: none;
+}
+
+.part-panel__list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 12px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.part-panel__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--zy-text);
+  font-weight: 600;
+}
+
+.part-panel__size {
+  color: var(--zy-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.part-panel__invalid {
+  color: var(--zy-danger);
+}

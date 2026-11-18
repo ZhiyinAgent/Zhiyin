@@ -1,0 +1,299 @@
+/*
+ * What a turn did to the person's files. A quiet card under the turn: the
+ * header answers "how much", the rows answer "which", and nothing competes
+ * with the answer above it for attention.
+ */
+.turn-files {
+  width: min(560px, 100%);
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel);
+}
+
+.turn-files__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 8px 4px 12px;
+  color: var(--zy-muted);
+}
+
+.turn-files__header > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.turn-files__header h3 {
+  margin: 0;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-files__counts {
+  display: inline-flex;
+  gap: 6px;
+  font: 12px/1 var(--zy-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.turn-files__added {
+  color: var(--zy-green);
+}
+
+.turn-files__removed {
+  color: var(--zy-danger);
+}
+
+.turn-files__undone {
+  padding: 2px 7px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-pill);
+  font-size: 12px;
+}
+
+.turn-files__undo {
+  margin: 0 0 0 auto;
+}
+
+.turn-files__rows {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--zy-line);
+  list-style: none;
+  /* The rows, not the panel: a container would hold the dialogs it opens. */
+  container-type: inline-size;
+}
+
+.turn-files__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px 0 12px;
+}
+
+/* A note naming where a file went may be a whole path: it takes at most half
+   the row and wraps, so the file it is about stays readable beside it. */
+.turn-files__row--move {
+  grid-template-columns: 18px minmax(0, 1fr) fit-content(50%) auto;
+}
+
+.turn-files__row + .turn-files__row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.turn-files__kind {
+  display: grid;
+  place-items: center;
+  color: var(--zy-muted);
+}
+
+.turn-files__kind svg {
+  width: 13px;
+  height: 13px;
+}
+
+.turn-files__kind--created {
+  color: var(--zy-green);
+}
+
+/* A removed file is drawn as removed, not as something that went wrong. */
+.turn-files__kind--recycled,
+.turn-files__kind--deleted {
+  color: var(--zy-text-soft);
+}
+
+.turn-files__path {
+  color: var(--zy-text-soft);
+  font: 12.5px/1.4 var(--zy-font-data);
+}
+
+.turn-files__note {
+  color: var(--zy-muted);
+  font-size: 12px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.turn-files__review {
+  margin: 0;
+}
+
+.turn-files__more {
+  margin: 0 0 6px 12px;
+}
+
+/* What the panel says about commands beyond their files. */
+.turn-files__notes {
+  display: grid;
+  gap: 4px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+  font-size: 12px;
+}
+
+.turn-files__notes p {
+  margin: 0;
+}
+
+.turn-files__error {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--zy-danger);
+  font-size: 13px;
+}
+
+.turn-files__lead {
+  margin: 0;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+/* What undo does to each file: one box, its rows divided by rules, the
+   path above what happens to it, beside an icon saying which. */
+.turn-files__preview {
+  margin: 16px 0 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-11);
+  list-style: none;
+}
+
+.turn-files__preview li {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
+  padding: 10px 14px;
+}
+
+.turn-files__preview li + li {
+  border-top: 1px solid var(--zy-line);
+}
+
+.turn-files__preview li > svg {
+  grid-row: span 2;
+  align-self: start;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--zy-muted);
+}
+
+.turn-files__preview li > span:first-of-type {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.turn-files__preview li > span:last-child {
+  color: var(--zy-muted);
+  font-size: 13px;
+}
+
+/* A narrow panel: the note moves under the path rather than squeezing it. */
+@container (max-width: 440px) {
+  .turn-files__row {
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    row-gap: 0;
+    padding-block: 6px;
+  }
+
+  .turn-files__note,
+  .turn-files__row > .turn-files__counts {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: left;
+  }
+}
+
+/*
+ * Checks a tool measured: each row's verdict in words beside its mark, so
+ * the colour is never the only sign, then what the check is and what was
+ * measured, which wraps under the label when the row is narrow.
+ */
+.checks__body {
+  border-top: 1px solid var(--zy-line);
+}
+
+.checks__rows {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checks__row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: baseline;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.checks__row + .checks__row {
+  border-top: 1px solid var(--zy-line);
+}
+
+.checks__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.checks__verdict svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  align-self: center;
+}
+
+.checks__row--holds .checks__verdict {
+  color: var(--zy-green);
+}
+
+.checks__row--fails .checks__verdict {
+  color: var(--zy-danger);
+}
+
+.checks__row--unchecked .checks__verdict {
+  color: var(--zy-muted);
+}
+
+.checks__label {
+  color: var(--zy-text);
+  overflow-wrap: anywhere;
+}
+
+.checks__note {
+  grid-column: 2;
+  color: var(--zy-muted);
+  font: 12px/1.45 var(--zy-font-data);
+  overflow-wrap: anywhere;
+}
+
+.checks__more {
+  margin: 0;
+  padding: 7px 12px 9px;
+  border-top: 1px solid var(--zy-line);
+  color: var(--zy-text-soft);
+  font-size: 12px;
+}
+
+/* In a block of its own, as in an action's inspector, the list goes without
+   the card's edge padding. */
+.checks--flush > .checks__row,
+.checks__more.checks--flush {
+  padding-inline: 0;
+}
