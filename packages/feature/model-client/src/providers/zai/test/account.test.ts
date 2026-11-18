@@ -239,7 +239,7 @@ describe("the Z.ai models offered", () => {
             input: 8,
             cacheRead: 2,
             output: 28,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
         {
@@ -253,7 +253,7 @@ describe("the Z.ai models offered", () => {
             input: 0.8,
             cacheRead: 0.23,
             output: 2.8,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
         {
@@ -267,7 +267,7 @@ describe("the Z.ai models offered", () => {
             input: 2,
             cacheRead: 0.57,
             output: 7,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
       ],

@@ -66,12 +66,15 @@ describe("a request to MiniMax", () => {
     expect(sent[0]?.body["thinking"]).toEqual({ type: "disabled" });
   });
 
-  it("refuses to turn thinking off on MiniMax-M2.7, which always thinks, before sending anything", async () => {
+  it("refuses to turn thinking off on MiniMax-M3.1-Flash, which always thinks, before sending anything", async () => {
     const sent: Sent[] = [];
 
     await expect(
       drain(
-        miniMaxClient({ model: "MiniMax-M2.7", fetcher: recording(sent) }),
+        miniMaxClient({
+          model: "MiniMax-M3.1-Flash",
+          fetcher: recording(sent),
+        }),
         { messages: hello, reasoning: { enabled: false } },
       ),
     ).rejects.toMatchObject({ code: "unsupportedReasoning" });
@@ -242,12 +245,12 @@ describe("MiniMax's answer", () => {
     expect(await usage("international")).toEqual({
       amount: expect.closeTo(0.15 * 0.6 + 0.85 * 0.12 + 0.1 * 2.4, 10),
       currency: "USD",
-      priceList: "2026-10-22",
+      priceList: "2026-11-18",
     });
     expect(await usage("mainland")).toEqual({
       amount: expect.closeTo(0.15 * 4.2 + 0.85 * 0.84 + 0.1 * 16.8, 10),
       currency: "CNY",
-      priceList: "2026-10-22",
+      priceList: "2026-11-18",
     });
   });
 });

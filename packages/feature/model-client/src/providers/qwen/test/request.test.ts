@@ -232,12 +232,12 @@ describe("Qwen's answer", () => {
     expect(await usage("international")).toEqual({
       amount: expect.closeTo(0.6 * 2 + 0.4 * 0.25 + 0.1 * 6, 10),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
     expect(await usage("mainland")).toEqual({
       amount: expect.closeTo(0.6 * 12 + 0.4 * 1.5 + 0.1 * 36, 10),
       currency: "CNY",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
   });
 });

@@ -1489,8 +1489,8 @@ unchanged; no prefix rule is documented. Usage is Anthropic's:
 M2.x only and bills writes; Zhiyin sends no marks. `max_tokens` counts
 thinking; recommended 131,072 for M3 (maximum 524,288) and 65,536 for M2.x
 (maximum 204,800). M3's prices are marked "permanent 50% off", and double
-past 512k input, cache hits included. M2.7 prices a cache write; 204,800
-window, text only. NOT
+past 512k input, cache hits included. M2.7 was retired on 2026-11-18
+(MiniMax's model FAQ, checked that day) and is no longer listed. NOT
 CONFIRMED: whether "512k" is 512,000 or 524,288 tokens (Zhiyin uses
 512,000); the error for an empty balance or an over-long conversation on the
 compatible API; whether M3 reports cache writes from its own caching, which
@@ -1747,19 +1747,54 @@ and 504. Which status an exhausted allowance or a reached spending limit
 returns is NOT CONFIRMED. `GET /v1/models` gives each model's `id` and
 `aliases`; its schema wraps the list in `data`, its example is a bare list.
 Pictures: PNG, JPEG, WebP or single-frame GIF, up to 10 MB, 8 per request.
-Large 4 is `mistral-large-4` (also `mistral-large-4-0`), in public preview
-since 2026-10-06; Medium 3.5 is `mistral-medium-3-5` (also
-`mistral-medium-3`, `mistral-medium-latest`). Both take text and images and
+Large 4 is `mistral-large-4` (also `mistral-large-4-0`), generally available
+since 2026-11-05 (checked 2026-11-18); since 2026-10-29 it always reasons and
+takes `reasoning_effort` `low`, `medium` or `high`, `high` when none is sent,
+each answered live on 2026-11-18. Its price is 0.7 / 0.07 cached / 2.1 USD per
+million. Medium 3.5 is `mistral-medium-3-5` (also
+`mistral-medium-3`, `mistral-medium-latest`), deprecated 2026-10-31 and
+retiring 2027-04-30. Both take text and images and
 call tools. Their cards give the window as "1M" and "256k", not exact counts,
 and state no longest reply (NOT CONFIRMED). Prices are in USD; the pages also
 offer EUR, whose amounts were not in the page data read, and an organization
 is billed in its own billing currency, set in a way the documentation does
-not state. Zhiyin ships Large 4's regular price; the changelog gives a
-launch price of half that, "50% off for 2 weeks" from 2026-10-06, with no
-exact end date. No page prices a cache write and the caching guide's billing
+not state. No page prices a cache write and the caching guide's billing
 example has none, though the regional inference page names cache writes
 among what it bills. A plan's included monthly usage is spent before
 pay-as-you-go, so an estimate can exceed the bill.
+
+Models added in model list v3, checked against each lab's pages and live with
+Zhiyin's own client on 2026-11-18 (key, catalog, streamed answer with cost,
+tool round with reasoning sent back, picture, cached repeat, every listed
+effort):
+
+- `claude-fable-5-2`: 1M window, 128,000 reply, thinking cannot be turned off,
+  efforts `low` to `max`, default `high`; 8 / 0.20 cached / 10 write / 40 USD.
+  A tool loaded mid-conversation was called and the earlier part read from the
+  cache. A request whose earlier tool result was replaced by a placeholder was
+  accepted in three tries out of three; twice the model went back to what it
+  had said from that result, once calling the tool again instead of answering.
+- `gpt-6.2-astra` (8 / 0.40 / 10 / 40, past 272K 16 / 0.80 / 20 / 60) and
+  `gpt-6.2-sol` (2 / 0.10 / 2.50 / 10, past 272K 4 / 0.20 / 5 / 15): 1,050,000
+  window, 128,000 reply, reasoning required. OpenAI states neither their
+  efforts nor a default; all five, `low` to `max`, were answered live. Both
+  called a tool loaded mid-conversation.
+- `gpt-6.1-terra` (1 / 0.05 / 1.25 / 5, past 272K 2 / 0.10 / 2.50 / 7.5):
+  reasoning can be off, default `medium`. It called a tool loaded
+  mid-conversation once in three tries, answering twice "No notes were
+  provided." instead, so the list does not mark it as loading tools.
+- `kimi-k3.1-pro-highspeed`: 1,048,576 window and reply (the reply taken live),
+  efforts `low`, `high`, `max`, default `max`; 4 / 0.20 / 4 / 20 USD. It called
+  a tool loaded mid-conversation. The
+  international platform offers it; the mainland one answered that it does
+  not offer the model to the account, though its price page lists it at 26 /
+  1.3 / 26 / 136 CNY, so only the international price is listed.
+- `qwen4-max`: 1M window, 131,072 reply (taken live on both platforms),
+  thinking can be off, efforts `low`, `high`, `xhigh`, default `high`;
+  1.5 / 0.075 / 4.5 USD, 10 / 0.5 / 30 CNY.
+
+The Kimi K2 models are closed to accounts made since 2026-10-31 and retire at
+the end of December 2026; they stay listed for accounts that have them.
 
 **Not checked:** whether the mainland platforms require a mainland phone
 number or identity check to register; StepFun beyond its pricing page.

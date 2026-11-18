@@ -29,7 +29,7 @@ function listAdding(model: Partial<ListedModel>): ModelLists {
   return {
     lab: (provider) =>
       provider === "anthropic"
-        ? { checked: "2026-11-12", models: [added] }
+        ? { checked: "2026-11-18", models: [added] }
         : undefined,
   };
 }

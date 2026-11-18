@@ -238,12 +238,12 @@ describe("Z.ai's answer", () => {
     expect(await estimate("international")).toEqual({
       amount: expect.closeTo(0.6 * 1.4 + 0.4 * 0.26 + 0.1 * 4.4, 10),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
     expect(await estimate("mainland")).toEqual({
       amount: expect.closeTo(0.6 * 8 + 0.4 * 2 + 0.1 * 28, 10),
       currency: "CNY",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
   });
 });

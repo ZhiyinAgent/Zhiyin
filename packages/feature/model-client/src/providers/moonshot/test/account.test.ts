@@ -181,7 +181,7 @@ describe("the Moonshot models offered", () => {
             input: 6.5,
             cacheRead: 1.1,
             output: 27,
-            checked: "2026-10-23",
+            checked: "2026-11-18",
           }),
         },
       ],
@@ -199,6 +199,7 @@ describe("the Moonshot models offered", () => {
     expect(
       catalog.status === "ready" && catalog.models.map((model) => model.id),
     ).toEqual([
+      "kimi-k3.1-pro-highspeed",
       "kimi-k3.1-pro",
       "kimi-k3",
       "kimi-k2.7-code",

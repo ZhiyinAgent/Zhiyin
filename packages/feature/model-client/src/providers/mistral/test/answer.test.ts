@@ -189,9 +189,9 @@ describe("Mistral's answer", () => {
         cacheReadTokens: 400_000,
         cacheWriteTokens: 0,
         estimatedCost: {
-          amount: expect.closeTo(0.6 * 1.36 + 0.4 * 0.14 + 0.1 * 4.18, 10),
+          amount: expect.closeTo(0.6 * 0.7 + 0.4 * 0.07 + 0.1 * 2.1, 10),
           currency: "USD",
-          priceList: "2026-10-09",
+          priceList: "2026-11-18",
         },
       },
     });
@@ -207,7 +207,7 @@ describe("Mistral's answer", () => {
     expect(usage?.kind === "usage" && usage.usage.estimatedCost).toEqual({
       amount: expect.closeTo(0.6 * 1.5 + 0.4 * 0.15 + 0.1 * 7.5, 10),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
   });
 

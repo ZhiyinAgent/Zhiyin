@@ -147,7 +147,7 @@ describe("the OpenAI models offered", () => {
                 output: 15,
               },
             ],
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
         {
@@ -174,7 +174,14 @@ describe("the OpenAI models offered", () => {
 
     expect(
       catalog.status === "ready" && catalog.models.map((model) => model.id),
-    ).toEqual(["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]);
+    ).toEqual([
+      "gpt-6.2-astra",
+      "gpt-6.2-sol",
+      "gpt-6.1-terra",
+      "gpt-6-astra",
+      "gpt-6.1-sol",
+      "gpt-6-luna",
+    ]);
   });
 });
 

@@ -277,7 +277,7 @@ describe("Anthropic's answer", () => {
     expect(usage?.kind === "usage" && usage.usage.estimatedCost).toEqual({
       amount: expect.closeTo(0.05 * 4 + 0.1 * 5 + 0.85 * 0.2 + 0.1 * 20, 10),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
   });
 

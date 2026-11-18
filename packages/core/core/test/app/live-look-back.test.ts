@@ -61,7 +61,7 @@ const labs = [
     name: "minimax",
     provider: "minimax",
     region: "international",
-    model: "MiniMax-M2.7",
+    model: "MiniMax-M3.1-Flash",
   },
   {
     name: "xiaomi",

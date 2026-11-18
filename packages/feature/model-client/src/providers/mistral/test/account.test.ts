@@ -122,7 +122,7 @@ describe("the Mistral models offered", () => {
             input: 1.5,
             cacheRead: 0.15,
             output: 7.5,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
       ],
@@ -173,8 +173,8 @@ describe("Mistral's settings", () => {
       endpoint: "https://api.mistral.ai/v1/chat/completions",
       reasoning: {
         status: "available",
-        required: false,
-        efforts: ["high"],
+        required: true,
+        efforts: ["low", "medium", "high"],
       },
     });
     expect(settings).not.toHaveProperty("maximumOutputTokens");

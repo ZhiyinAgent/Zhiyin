@@ -1,15 +1,42 @@
 {
   "format": 1,
-  "version": 2,
-  "published": "2026-10-23",
+  "version": 3,
+  "published": "2026-11-18",
   "labs": {
     "anthropic": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
-        "Anthropic's models overview, context windows, extended thinking, effort and pricing pages"
+        "Anthropic's models overview, context windows, extended thinking, effort and pricing pages",
+        "https://platform.claude.com/docs/en/models/fable-5-2/overview",
+        "https://platform.claude.com/docs/en/about-claude/pricing"
       ],
-      "note": "One platform, priced in US dollars; Anthropic does not offer its API in mainland China. Cache writes are priced for the five-minute cache, the one Zhiyin asks for; reads are 0.025× input on Fable 5.1, 0.05× on Opus 5.5 and Sonnet 5.5, 0.1× on Haiku 5.5.",
+      "note": "One platform, priced in US dollars; Anthropic does not offer its API in mainland China. Cache writes are priced for the five-minute cache, the one Zhiyin asks for; reads are 0.025× input on Fable 5.2 and 5.1, 0.05× on Opus 5.5 and Sonnet 5.5, 0.1× on Haiku 5.5.",
       "models": [
+        {
+          "id": "claude-fable-5-2",
+          "name": "Claude Fable 5.2",
+          "contextWindow": 1000000,
+          "maximumOutputTokens": 128000,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": true,
+            "defaultEnabled": true,
+            "defaultEffort": "high",
+            "efforts": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "withdrawsTools": true,
+          "loadsTools": true,
+          "offered": {
+            "default": {
+              "currency": "USD",
+              "input": 8,
+              "cacheRead": 0.2,
+              "cacheWrite": 10,
+              "output": 40
+            }
+          }
+        },
         {
           "id": "claude-fable-5-1",
           "name": "Claude Fable 5.1",
@@ -125,12 +152,115 @@
       ]
     },
     "openai": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
-        "OpenAI's model pages, reasoning guide and pricing page (Standard processing)"
+        "OpenAI's model pages, reasoning guide and pricing page (Standard processing)",
+        "https://developers.openai.com/api/docs/pricing",
+        "https://developers.openai.com/api/docs/models/gpt-6.2-astra",
+        "https://developers.openai.com/api/docs/models/gpt-6.2-sol",
+        "https://developers.openai.com/api/docs/models/gpt-6.1-terra"
       ],
-      "note": "Each model has a 1,050,000-token window, of which at most 922,000 is input, and replies of up to 128,000 tokens. A request with more than 272K input tokens pays the long-context prices for all of it. One platform, not offered in mainland China. Astra's default effort is not stated.",
+      "note": "Each model has a 1,050,000-token window, of which at most 922,000 is input, and replies of up to 128,000 tokens. A request with more than 272K input tokens pays the long-context prices for all of it. Cache writes are priced for the 30-minute cache. One platform, not offered in mainland China. The Astra models' default effort is not stated, nor GPT-6.2 Sol's; GPT-6.2's efforts are not stated either, and each was answered live on 2026-11-18. GPT-6.1 Terra called a tool loaded mid-conversation once in three live tries, so it is sent opened toolkits through the bridge.",
       "models": [
+        {
+          "id": "gpt-6.2-astra",
+          "name": "GPT-6.2 Astra",
+          "contextWindow": 1050000,
+          "maximumOutputTokens": 128000,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": true,
+            "defaultEnabled": true,
+            "efforts": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "withdrawsTools": true,
+          "loadsTools": true,
+          "offered": {
+            "default": {
+              "currency": "USD",
+              "input": 8,
+              "cacheRead": 0.4,
+              "cacheWrite": 10,
+              "output": 40,
+              "tiers": [
+                {
+                  "aboveInputTokens": 272000,
+                  "input": 16,
+                  "cacheRead": 0.8,
+                  "cacheWrite": 20,
+                  "output": 60
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "gpt-6.2-sol",
+          "name": "GPT-6.2 Sol",
+          "contextWindow": 1050000,
+          "maximumOutputTokens": 128000,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": true,
+            "defaultEnabled": true,
+            "efforts": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "withdrawsTools": true,
+          "loadsTools": true,
+          "offered": {
+            "default": {
+              "currency": "USD",
+              "input": 2,
+              "cacheRead": 0.1,
+              "cacheWrite": 2.5,
+              "output": 10,
+              "tiers": [
+                {
+                  "aboveInputTokens": 272000,
+                  "input": 4,
+                  "cacheRead": 0.2,
+                  "cacheWrite": 5,
+                  "output": 15
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "gpt-6.1-terra",
+          "name": "GPT-6.1 Terra",
+          "contextWindow": 1050000,
+          "maximumOutputTokens": 128000,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": false,
+            "defaultEnabled": true,
+            "defaultEffort": "medium",
+            "efforts": ["low", "medium", "high", "xhigh", "max"]
+          },
+          "withdrawsTools": true,
+          "offered": {
+            "default": {
+              "currency": "USD",
+              "input": 1,
+              "cacheRead": 0.05,
+              "cacheWrite": 1.25,
+              "output": 5,
+              "tiers": [
+                {
+                  "aboveInputTokens": 272000,
+                  "input": 2,
+                  "cacheRead": 0.1,
+                  "cacheWrite": 2.5,
+                  "output": 7.5
+                }
+              ]
+            }
+          }
+        },
         {
           "id": "gpt-6-astra",
           "name": "GPT-6 Astra",
@@ -235,7 +365,7 @@
       ]
     },
     "zai": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
         "Z.ai's model pages, API reference and core parameters (docs.z.ai)",
         "https://docs.z.ai/guides/overview/pricing",
@@ -331,7 +461,7 @@
       ]
     },
     "deepseek": {
-      "checked": "2026-10-22",
+      "checked": "2026-11-18",
       "sources": [
         "https://api-docs.deepseek.com/quick_start/pricing",
         "https://api-docs.deepseek.com/zh-cn/quick_start/pricing",
@@ -438,15 +568,41 @@
       ]
     },
     "moonshot": {
-      "checked": "2026-10-23",
+      "checked": "2026-11-18",
       "sources": [
         "Kimi API documentation: model list, model parameters, thinking and reasoning effort guides",
         "https://platform.kimi.ai/docs/guide/kimi-k3-1-pro-quickstart",
         "https://platform.kimi.ai/docs/pricing/chat",
-        "https://platform.kimi.com/docs/pricing/chat"
+        "https://platform.kimi.com/docs/pricing/chat",
+        "https://platform.kimi.ai/docs/models"
       ],
-      "note": "Prices are flat, with no tiers by length and no peak hours. Only the K3 models bill a cache write, at the 5-minute tier the API uses when a request names none.",
+      "note": "Prices are flat, with no tiers by length and no peak hours. The K3 models bill a cache write, at the 5-minute tier the API uses when a request names none. The K2 models are closed to accounts made since 31 October 2026, and retire at the end of December 2026.",
       "models": [
+        {
+          "id": "kimi-k3.1-pro-highspeed",
+          "name": "Kimi K3.1 Pro HighSpeed",
+          "contextWindow": 1048576,
+          "maximumOutputTokens": 1048576,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": true,
+            "defaultEnabled": true,
+            "defaultEffort": "max",
+            "efforts": ["low", "high", "max"]
+          },
+          "loadsTools": true,
+          "offered": {
+            "international": {
+              "currency": "USD",
+              "input": 4,
+              "cacheRead": 0.2,
+              "cacheWrite": 4,
+              "output": 20
+            }
+          },
+          "note": "Checked live 2026-11-18: offered to an international account, refused to a mainland one, though the mainland price page lists it."
+        },
         {
           "id": "kimi-k3.1-pro",
           "name": "Kimi K3.1 Pro",
@@ -593,14 +749,15 @@
       ]
     },
     "minimax": {
-      "checked": "2026-10-22",
+      "checked": "2026-11-18",
       "sources": [
         "https://platform.minimax.io/docs/api-reference/text-anthropic-api",
         "https://platform.minimax.io/docs/guides/models-intro",
         "https://platform.minimax.io/docs/guides/pricing",
-        "https://platform.minimax.cn/docs/guides/pricing"
+        "https://platform.minimax.cn/docs/guides/pricing",
+        "https://platform.minimax.io/docs/faq/models"
       ],
-      "note": "MiniMax-M3's prices carry a \"permanent 50% off\", so the list holds the reduced price. M2.7 bills cache writes, which only explicit marks make and Zhiyin sends none of. MiniMax requires every request to name its longest reply. Each listed is the one MiniMax recommends: 131,072 for M3, taken for M3.1 Flash too since MiniMax names none for it, and 65,536 for M2.7. The maximums are 524,288 for M3 and M3.1 Flash and 204,800 for M2.7.",
+      "note": "MiniMax-M3's prices carry a \"permanent 50% off\", so the list holds the reduced price. MiniMax requires every request to name its longest reply. Each listed is the one MiniMax recommended: 131,072 for M3, taken for M3.1 Flash too since MiniMax names none for it; the maximum is 524,288 for both. M2.7 was retired on 18 November 2026.",
       "models": [
         {
           "id": "MiniMax-M3.1-Flash",
@@ -674,44 +831,17 @@
             }
           },
           "note": "MiniMax documents pictures for M3, but checked live 2026-10-09 it misread every one, so it is offered none. Past 512k input tokens, cache hits included, the whole request pays the tier's prices."
-        },
-        {
-          "id": "MiniMax-M2.7",
-          "name": "MiniMax-M2.7",
-          "contextWindow": 204800,
-          "maximumOutputTokens": 65536,
-          "acceptsImages": false,
-          "reasoning": {
-            "status": "available",
-            "required": true,
-            "defaultEnabled": true,
-            "efforts": []
-          },
-          "offered": {
-            "international": {
-              "currency": "USD",
-              "input": 0.3,
-              "cacheRead": 0.06,
-              "cacheWrite": 0.375,
-              "output": 1.2
-            },
-            "mainland": {
-              "currency": "CNY",
-              "input": 2.1,
-              "cacheRead": 0.42,
-              "cacheWrite": 2.625,
-              "output": 8.4
-            }
-          }
         }
       ]
     },
     "xiaomi": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
-        "Xiaomi MiMo's model summary and Chat Completions reference (thinking, pictures, longest reply)",
-        "Xiaomi MiMo's OpenCode integration page (the window in tokens, the names as Xiaomi writes them)",
-        "Xiaomi MiMo's pay-as-you-go pricing, in yuan for mainland China accounts and US dollars for overseas ones"
+        "https://mimo.mi.com/docs/en-US/quick-start/summary/model",
+        "https://mimo.mi.com/docs/en-US/quick-start/usage-guide/text-generation/deep-thinking",
+        "https://mimo.mi.com/docs/en-US/tokenplan/integration/opencode",
+        "https://mimo.mi.com/docs/en-US/price/pay-as-you-go",
+        "https://mimo.mi.com/docs/zh-CN/price/pay-as-you-go"
       ],
       "note": "No input tiers and no time-of-day prices for these models. Cache writes are free for a limited time, with no price given after. Chat Completions takes no effort, only thinking on or off.",
       "models": [
@@ -772,13 +902,44 @@
       ]
     },
     "qwen": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
         "QwenCloud's model pages and API reference (qwencloud.com, US dollars)",
-        "千问云's model pages and API reference (qianwenai.com, yuan)"
+        "千问云's model pages and API reference (qianwenai.com, yuan)",
+        "https://www.qwencloud.com/models/qwen4-max",
+        "https://docs.qwencloud.com/developer-guides/getting-started/model-prices",
+        "https://platform.qianwenai.com/docs/developer-guides/getting-started/model-prices"
       ],
-      "note": "Neither platform prices these models by input length or time of day. The cache price is the implicit cache's, the only one Zhiyin uses. Both platforms give the window as \"1M\" and the longest reply as \"128k\" (\"131K\" on the model pages); the list takes the smaller readings.",
+      "note": "Neither platform prices these models by input length or time of day. The cache price is the implicit cache's, the only one Zhiyin uses: Qwen4's explicit cache is used only when a request asks for it. Both platforms give the window as \"1M\" and the longest reply as \"128k\" (\"131K\" on the model pages); the list takes the smaller readings. Qwen4-Max's longest reply without thinking is 131,072 tokens.",
       "models": [
+        {
+          "id": "qwen4-max",
+          "name": "Qwen4-Max",
+          "contextWindow": 1000000,
+          "maximumOutputTokens": 131072,
+          "acceptsImages": true,
+          "reasoning": {
+            "status": "available",
+            "required": false,
+            "defaultEnabled": true,
+            "defaultEffort": "high",
+            "efforts": ["low", "high", "xhigh"]
+          },
+          "offered": {
+            "international": {
+              "currency": "USD",
+              "input": 1.5,
+              "cacheRead": 0.075,
+              "output": 4.5
+            },
+            "mainland": {
+              "currency": "CNY",
+              "input": 10,
+              "cacheRead": 0.5,
+              "output": 30
+            }
+          }
+        },
         {
           "id": "qwen3.8-max",
           "name": "Qwen3.8-Max",
@@ -838,12 +999,16 @@
       ]
     },
     "mistral": {
-      "checked": "2026-10-09",
+      "checked": "2026-11-18",
       "sources": [
         "Mistral's model cards and reasoning guide",
-        "https://docs.mistral.ai/inference/pricing"
+        "https://docs.mistral.ai/inference/pricing",
+        "https://docs.mistral.ai/models/mistral-large-4",
+        "https://docs.mistral.ai/capabilities/reasoning/",
+        "https://docs.mistral.ai/getting-started/changelog/",
+        "https://docs.mistral.ai/getting-started/models/models_overview/"
       ],
-      "note": "The cards give the window as \"1M\" and \"256k\", read at their smaller value, and state no longest reply. Reasoning on always names `high`, the setting Mistral recommends for agentic use. Large 4's list price is its regular one, not its undated launch discount: an estimate that stays high after a sale is safer than one that stays low.",
+      "note": "The cards give the window as \"1M\" and \"256k\", read at their smaller value, and state no longest reply. Large 4 always reasons since 29 October 2026, at low, medium or high; high when none is named. Medium 3.5 reasons at high when on; it is deprecated and retires on 30 April 2027.",
       "models": [
         {
           "id": "mistral-large-4",
@@ -852,17 +1017,17 @@
           "acceptsImages": true,
           "reasoning": {
             "status": "available",
-            "required": false,
+            "required": true,
             "defaultEnabled": true,
             "defaultEffort": "high",
-            "efforts": ["high"]
+            "efforts": ["low", "medium", "high"]
           },
           "offered": {
             "default": {
               "currency": "USD",
-              "input": 1.36,
-              "cacheRead": 0.14,
-              "output": 4.18
+              "input": 0.7,
+              "cacheRead": 0.07,
+              "output": 2.1
             }
           }
         },

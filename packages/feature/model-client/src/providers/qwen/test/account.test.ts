@@ -119,6 +119,20 @@ describe("the Qwen models offered", () => {
       status: "ready",
       models: [
         expect.objectContaining({
+          id: "qwen4-max",
+          name: "Qwen4-Max",
+          contextWindow: 1_000_000,
+          acceptsImages: true,
+          reasoning: true,
+          price: expect.objectContaining({
+            currency: "CNY",
+            input: 10,
+            cacheRead: 0.5,
+            output: 30,
+            checked: "2026-11-18",
+          }),
+        }),
+        expect.objectContaining({
           id: "qwen3.8-max",
           name: "Qwen3.8-Max",
           contextWindow: 1_000_000,
@@ -129,7 +143,7 @@ describe("the Qwen models offered", () => {
             input: 12,
             cacheRead: 1.5,
             output: 36,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           }),
         }),
         expect.objectContaining({

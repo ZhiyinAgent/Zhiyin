@@ -139,7 +139,7 @@ describe("the Claude models offered", () => {
             cacheRead: 0.2,
             cacheWrite: 5,
             output: 20,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
         expect.objectContaining({
@@ -158,6 +158,7 @@ describe("the Claude models offered", () => {
     expect(
       catalog.status === "ready" && catalog.models.map((model) => model.id),
     ).toEqual([
+      "claude-fable-5-2",
       "claude-fable-5-1",
       "claude-opus-5-5",
       "claude-sonnet-5-5",

@@ -125,7 +125,7 @@ describe("the Xiaomi MiMo models offered", () => {
             input: 1,
             cacheRead: 0.02,
             output: 2,
-            checked: "2026-10-09",
+            checked: "2026-11-18",
           },
         },
       ],

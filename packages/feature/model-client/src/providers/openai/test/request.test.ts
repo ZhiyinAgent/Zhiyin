@@ -238,7 +238,7 @@ describe("OpenAI's answer", () => {
         10,
       ),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
     // 300K in: 100K uncached, 200K from the cache, 10K out, all at the long rates.
     expect(await cost(usage(300_000, 200_000, 0, 10_000))).toMatchObject({

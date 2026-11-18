@@ -350,12 +350,12 @@ describe("Moonshot's answer", () => {
     expect(await cost("international")).toEqual({
       amount: expect.closeTo(0.5 * 3 + 0.4 * 0.3 + 0.1 * 3 + 0.1 * 15, 10),
       currency: "USD",
-      priceList: "2026-10-23",
+      priceList: "2026-11-18",
     });
     expect(await cost("mainland")).toEqual({
       amount: expect.closeTo(0.5 * 20 + 0.4 * 2 + 0.1 * 20 + 0.1 * 100, 10),
       currency: "CNY",
-      priceList: "2026-10-23",
+      priceList: "2026-11-18",
     });
   });
 

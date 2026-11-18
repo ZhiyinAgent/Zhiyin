@@ -130,9 +130,12 @@ describe("a request to Mistral", () => {
     expect(sent[0]?.body).not.toHaveProperty("tool_choice");
   });
 
-  it("asks for a full thinking trace when reasoning is on, and for none when it is off", async () => {
+  it("asks Medium 3.5 for a full thinking trace when reasoning is on, and for none when it is off", async () => {
     const sent: Sent[] = [];
-    const client = mistralClient({ fetcher: recording(sent) });
+    const client = mistralClient({
+      model: "mistral-medium-3-5",
+      fetcher: recording(sent),
+    });
 
     await drain(client, { messages: hello, reasoning: { enabled: false } });
     await drain(client, {
@@ -150,12 +153,40 @@ describe("a request to Mistral", () => {
     ]);
   });
 
+  it("asks Large 4 for the effort chosen, high when none is, and refuses to turn its reasoning off before sending anything", async () => {
+    const sent: Sent[] = [];
+    const client = mistralClient({ fetcher: recording(sent) });
+
+    await expect(
+      drain(client, { messages: hello, reasoning: { enabled: false } }),
+    ).rejects.toMatchObject({ code: "unsupportedReasoning" });
+    for (const effort of ["low", "medium", "high"] as const)
+      await drain(client, {
+        messages: hello,
+        reasoning: { enabled: true, effort },
+      });
+    await drain(client, { messages: hello, reasoning: { enabled: true } });
+
+    expect(sent.map(({ body }) => body["reasoning_effort"])).toEqual([
+      "low",
+      "medium",
+      "high",
+      "high",
+    ]);
+  });
+
   it("refuses an effort Mistral does not document before sending anything", async () => {
     const sent: Sent[] = [];
+    const asked = [
+      ["mistral-large-4", "xhigh"],
+      ["mistral-large-4", "max"],
+      ["mistral-medium-3-5", "low"],
+      ["mistral-medium-3-5", "medium"],
+    ] as const;
 
-    for (const effort of ["low", "medium", "xhigh"] as const)
+    for (const [model, effort] of asked)
       await expect(
-        drain(mistralClient({ fetcher: recording(sent) }), {
+        drain(mistralClient({ model, fetcher: recording(sent) }), {
           messages: hello,
           reasoning: { enabled: true, effort },
         }),

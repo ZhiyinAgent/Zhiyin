@@ -123,7 +123,7 @@ describe("the MiniMax models offered", () => {
             input: 2.1,
             cacheRead: 0.42,
             output: 8.4,
-            checked: "2026-10-22",
+            checked: "2026-11-18",
           }),
         }),
       ],
@@ -137,7 +137,7 @@ describe("the MiniMax models offered", () => {
 
     expect(
       catalog.status === "ready" && catalog.models.map((model) => model.id),
-    ).toEqual(["MiniMax-M3.1-Flash", "MiniMax-M3", "MiniMax-M2.7"]);
+    ).toEqual(["MiniMax-M3.1-Flash", "MiniMax-M3"]);
   });
 });
 
@@ -145,7 +145,7 @@ describe("MiniMax's settings", () => {
   it("say earlier turns go back with their reasoning, so it counts toward a request's size", async () => {
     const client = new ProviderModelClient(miniMax, {
       region: "international",
-      model: "MiniMax-M2.7",
+      model: "MiniMax-M3.1-Flash",
       apiKey: async () => "sk-test",
       catalogFetch: answering({}),
       modelInfo: (model) =>
@@ -153,17 +153,18 @@ describe("MiniMax's settings", () => {
     });
 
     expect(await client.settings()).toMatchObject({
-      model: "MiniMax-M2.7",
-      contextWindow: 204_800,
-      maximumOutputTokens: 65_536,
-      acceptsImages: false,
+      model: "MiniMax-M3.1-Flash",
+      contextWindow: 1_000_000,
+      maximumOutputTokens: 131_072,
+      acceptsImages: true,
       reasoningSentBack: true,
       endpoint: "https://api.minimax.io/anthropic/v1/messages",
       reasoning: {
         status: "available",
         required: true,
         defaultEnabled: true,
-        efforts: [],
+        defaultEffort: "max",
+        efforts: ["low", "medium", "high", "xhigh", "max"],
       },
     });
   });

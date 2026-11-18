@@ -220,7 +220,7 @@ describe("Xiaomi MiMo's answer", () => {
     const international = {
       amount: expect.closeTo(0.6 * 0.435 + 0.4 * 0.0036 + 0.1 * 0.87, 10),
       currency: "USD",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     };
     expect(await usage("international", "2026-10-08T12:00:00Z")).toEqual(
       international,
@@ -231,7 +231,7 @@ describe("Xiaomi MiMo's answer", () => {
     expect(await usage("mainland", "2026-10-08T12:00:00Z")).toEqual({
       amount: expect.closeTo(0.6 * 3 + 0.4 * 0.025 + 0.1 * 6, 10),
       currency: "CNY",
-      priceList: "2026-10-09",
+      priceList: "2026-11-18",
     });
   });
 });

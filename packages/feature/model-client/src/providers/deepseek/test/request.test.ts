@@ -277,7 +277,7 @@ describe("DeepSeek's answer", () => {
     expect(await usage("international", "2026-10-08T12:00:00Z")).toEqual({
       amount: expect.closeTo(0.6 * 0.66 + 0.4 * 0.022 + 0.1 * 1.98, 10),
       currency: "USD",
-      priceList: "2026-10-22",
+      priceList: "2026-11-18",
     });
     expect(await usage("international", "2026-10-08T07:00:00Z")).toMatchObject({
       amount: expect.closeTo(0.6 * 1.32 + 0.4 * 0.044 + 0.1 * 3.96, 10),
@@ -285,7 +285,7 @@ describe("DeepSeek's answer", () => {
     expect(await usage("mainland", "2026-10-08T12:00:00Z")).toEqual({
       amount: expect.closeTo(0.6 * 4.5 + 0.4 * 0.15 + 0.1 * 13.5, 10),
       currency: "CNY",
-      priceList: "2026-10-22",
+      priceList: "2026-11-18",
     });
   });
 });

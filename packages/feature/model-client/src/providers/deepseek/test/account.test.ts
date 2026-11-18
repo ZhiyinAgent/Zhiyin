@@ -182,7 +182,7 @@ describe("the DeepSeek models offered", () => {
             input: 1,
             cacheRead: 0.02,
             output: 4,
-            checked: "2026-10-22",
+            checked: "2026-11-18",
           }),
         },
       ],
