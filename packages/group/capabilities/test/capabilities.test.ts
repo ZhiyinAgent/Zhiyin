@@ -797,7 +797,7 @@ describe("a plugin's contents", () => {
           notReady: browserNeeds,
         },
       ],
-      note: "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+      note: "A connector that is not ready adds no tools to this conversation. It is waiting for the person, not out of service: tell them what it needs and where before any other way around it.",
     });
     expect(contents?.connectors[0]).not.toHaveProperty("notReady");
     expect(capabilities.describePluginContents(contents!)).toContainEqual({

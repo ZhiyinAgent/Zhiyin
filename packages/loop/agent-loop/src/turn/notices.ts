@@ -80,6 +80,8 @@ export const noticeKinds = [
   "skill",
   /** A toolkit the model opened, and the tools it loads (ADR 0017, 0016). */
   "toolkit",
+  /** What the person set up or switched since the plugin directory was sent. */
+  "readiness",
 ] as const;
 
 export type NoticeKind = (typeof noticeKinds)[number];

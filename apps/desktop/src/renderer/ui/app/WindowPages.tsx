@@ -89,9 +89,11 @@ type SurfaceCommands = Pick<
 function Surface({ children }: { children: ReactNode }) {
   const surface = useRef<HTMLDivElement>(null);
   // What opened the page went with what it replaced, so focus starts at the
-  // page's heading; a dialog the page opened on keeps it.
+  // page's heading; a dialog the page opened on keeps it, and so does the
+  // place in the page it opened at.
   useEffect(() => {
     if (document.querySelector('[aria-modal="true"]')) return;
+    if (surface.current?.contains(document.activeElement)) return;
     surface.current?.querySelector<HTMLElement>("h1")?.focus();
   }, []);
   return (
@@ -123,11 +125,16 @@ export function WindowPages({
   );
   const memoryEntry =
     typeof state.surfaceAt === "number" ? state.surfaceAt : undefined;
+  const pluginAt =
+    typeof state.surfaceAt === "object" ? state.surfaceAt.plugin : undefined;
   return (
     <>
       {state.surface === "library" && (
         <Surface>
           <CapabilityLibrary
+            // Opened again at another plugin, it starts there.
+            key={pluginAt ?? "library"}
+            opening={pluginAt}
             plugins={state.plugins}
             mcpServers={state.mcpServers}
             loading={state.pluginDirectory === "loading"}

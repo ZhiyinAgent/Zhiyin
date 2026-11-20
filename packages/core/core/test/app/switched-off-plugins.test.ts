@@ -44,7 +44,12 @@ describe("a person who skipped onboarding", () => {
     const sent = JSON.stringify(requests[0]?.messages);
     expect(sent).toContain("Full-Stack Software Engineering");
     expect(sent).toContain('\\"switchedOff\\":true');
-    expect(sent).toContain("they can switch it on in Plugins");
-    expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain("open");
+    expect(sent).toContain(
+      "The person does each under Connectors on that plugin's page in Plugins, where they switch a plugin on too.",
+    );
+    const tools = requests[0]?.tools?.map((tool) => tool.name);
+    expect(tools).not.toContain("open");
+    // Nothing can be opened, but the person can be shown where to switch one on.
+    expect(tools).toContain("suggest_setup");
   });
 });

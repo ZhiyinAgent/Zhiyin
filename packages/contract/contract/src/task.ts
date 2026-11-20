@@ -9,6 +9,7 @@ import type { TaskGuidance, TaskMessage } from "./messages.js";
 import type { ModelHistoryEntry } from "./model-history.js";
 import type { ModelResponseRecord } from "./model-response.js";
 import type { TaskPlanItem } from "./plan.js";
+import type { DirectoryReadiness } from "./plugin-directory.js";
 import type { TaskUndo } from "./rewind.js";
 import type { ReasoningSelection } from "./reasoning.js";
 import type { SpecialistRun } from "./specialist-run.js";
@@ -231,6 +232,13 @@ export type WorkspaceTask = TaskContext & {
    * the model with its next request so it does not keep them again.
    */
   readonly memoryKept?: readonly string[];
+  /**
+   * The plugin directory's marks as this conversation's requests start with
+   * them: fixed when a plugin is first listed to it, so the start stays the
+   * same as connectors are set up, and a change is told in a notice instead
+   * (ADR 0016).
+   */
+  readonly readinessSent?: DirectoryReadiness;
 };
 
 /**

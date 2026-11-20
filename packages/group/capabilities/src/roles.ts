@@ -21,6 +21,7 @@ import type {
   PluginDirectoryEntry,
   PluginState,
   RunningCommand,
+  SetupSuggestion,
   ShellAvailability,
   SpecialistDefinition,
   ToolCallInspection,
@@ -140,6 +141,12 @@ export interface CapabilityTools {
   pluginContents(id: string): Promise<PluginContents | undefined>;
   /** The same components arranged for a readable action result. */
   describePluginContents(contents: PluginContents): readonly ActionDetail[];
+  /**
+   * The card asking the person to set up a connector, by its id, or to switch
+   * on a built-in plugin, by its id, in Zhiyin's words; reaches nothing.
+   * Nothing when that is ready, or no listed plugin has it.
+   */
+  connectorSetup(id: string): Promise<SetupSuggestion | undefined>;
   inspect(
     conversationId: string,
     owner: ToolOwner,

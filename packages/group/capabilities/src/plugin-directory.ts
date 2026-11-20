@@ -10,11 +10,13 @@ import type {
   ActionDetail,
   AuthoredPluginContents,
   ComponentContent,
+  ConnectorNeed,
   McpServerState,
   PluginComponentState,
   PluginComponentStatus,
   PluginDirectoryEntry,
   PluginState,
+  SetupSuggestion,
   SpecialistDefinition,
   ToolchainState,
 } from "@zhiyin/contract";
@@ -59,45 +61,169 @@ export function activePlugins(
 }
 
 /**
+ * What each connection last answered, and what each application connection
+ * has of its programs: enough to say what a connector needs without reaching
+ * it.
+ */
+export type ConnectorFacts = {
+  readonly connections: ReadonlyMap<string, McpServerState>;
+  readonly appConnections: AppConnectionFacts;
+};
+
+/**
+ * What one connector needs before it can be used, known without reaching
+ * it: from its own switch, its declaration and saved key, and what Zhiyin
+ * found of its programs. Nothing for one that is ready, not reached yet,
+ * being installed, or absent from this build.
+ */
+function connectorNeed(
+  view: PluginView,
+  componentId: string,
+  facts: ConnectorFacts,
+): ConnectorNeed | undefined {
+  const server = view.mcpServers.find((item) => item.id === componentId);
+  if (server) {
+    if (!server.enabled) return "switched-off";
+    const state = facts.connections.get(server.id);
+    if (!state || state.status === "connected") return undefined;
+    if (state.status === "unauthorized")
+      return state.signIn && !server.setup ? "sign-in" : "key";
+    if (state.credential.status === "unavailable") return "could-not-start";
+    if (server.setup && state.credential.status === "none") return "key";
+    // A switched-off plugin reaches nothing, so what it last found is past.
+    return state.status === "failed" && view.enabled
+      ? "could-not-start"
+      : undefined;
+  }
+  const connector = view.appConnectors.find((item) => item.id === componentId);
+  if (!connector) return undefined;
+  if (!connector.enabled) return "switched-off";
+  const found = facts.appConnections.get(connector.connector);
+  if (!found) return undefined;
+  const program = found.toolchain?.status;
+  if (program === "missing" || program === "failed") return "install";
+  if (program === "installing") return undefined;
+  // What it cannot start without, such as a browser, is a program to install.
+  return found.state.status !== "connected" && found.state.reason
+    ? "install"
+    : undefined;
+}
+
+/** Every connector of a plugin that needs something, by id. */
+function needsOf(
+  view: PluginView,
+  facts: ConnectorFacts | undefined,
+): PluginDirectoryEntry["needs"] {
+  if (!facts) return undefined;
+  const needs = Object.fromEntries(
+    [...view.mcpServers, ...view.appConnectors].flatMap((connector) => {
+      const need = connectorNeed(view, connector.id, facts);
+      return need ? [[connector.id, need] as const] : [];
+    }),
+  );
+  return Object.keys(needs).length ? needs : undefined;
+}
+
+/**
  * Every enabled plugin, and each built-in one switched off, as the model is
- * told of them. Nothing in it depends on what a conversation has activated.
+ * told of them, with what each connector that cannot be used needs. Nothing
+ * in it depends on what a conversation has activated.
  */
 export function pluginDirectoryFrom(
   views: readonly PluginView[],
   toolkitIds: (view: PluginView) => readonly string[],
+  facts?: ConnectorFacts,
 ): readonly PluginDirectoryEntry[] {
   return views
     .filter((view) => view.enabled || view.provenance.source === "built-in")
-    .map((view) => ({
-      id: view.manifest.name,
-      name: view.manifest.displayName,
-      purpose: view.manifest.description,
-      includes: {
-        skills: view.skills
-          .filter((skill) => skill.enabled)
-          .map((skill) => ({
-            id: skillEntryId(skill),
-            description: skill.description,
-          })),
-        specialists: view.specialists
-          .filter((specialist) => specialist.enabled)
-          .map((specialist) => specialist.name),
-        connectors: [...view.mcpServers, ...view.appConnectors]
-          .filter((connector) => connector.enabled)
-          .map((connector) => {
-            const description = connector.description
-              .trim()
-              .replace(/\s+/g, " ");
-            const purpose =
-              description.length > 120
-                ? `${description.slice(0, 117).trimEnd()}…`
-                : description;
-            return purpose ? `${connector.name} — ${purpose}` : connector.name;
-          }),
-        toolkits: toolkitIds(view),
+    .map((view) => {
+      const needs = needsOf(view, facts);
+      return {
+        id: view.manifest.name,
+        name: view.manifest.displayName,
+        purpose: view.manifest.description,
+        includes: {
+          skills: view.skills
+            .filter((skill) => skill.enabled)
+            .map((skill) => ({
+              id: skillEntryId(skill),
+              description: skill.description,
+            })),
+          specialists: view.specialists
+            .filter((specialist) => specialist.enabled)
+            .map((specialist) => specialist.name),
+          // One switched off is listed too, so the model can say it exists.
+          connectors: [...view.mcpServers, ...view.appConnectors].map(
+            (connector) => {
+              const description = connector.description
+                .trim()
+                .replace(/\s+/g, " ");
+              const purpose =
+                description.length > 120
+                  ? `${description.slice(0, 117).trimEnd()}…`
+                  : description;
+              return purpose
+                ? `${connector.name} — ${purpose}`
+                : connector.name;
+            },
+          ),
+          toolkits: toolkitIds(view),
+        },
+        ...(needs ? { needs } : {}),
+        ...(view.enabled ? {} : { switchedOff: true as const }),
+      };
+    });
+}
+
+/**
+ * The card that asks the person to set up a connector, or to switch on a
+ * plugin, in Zhiyin's words: for a connector that needs something or whose
+ * plugin is switched off, or for a switched-off plugin by its id. Nothing
+ * when there is nothing to set up, or no such connector or plugin is listed.
+ */
+export function setupSuggestionFor(
+  views: readonly PluginView[],
+  id: string,
+  facts: ConnectorFacts,
+): SetupSuggestion | undefined {
+  const listed = views.filter(
+    (view) => view.enabled || view.provenance.source === "built-in",
+  );
+  const pluginOf = (view: PluginView) => ({
+    id: view.manifest.name,
+    name: view.manifest.displayName,
+    ...(view.enabled ? {} : { switchedOff: true as const }),
+  });
+  const plugin = listed.find((view) => view.manifest.name === id);
+  if (plugin) return plugin.enabled ? undefined : { plugin: pluginOf(plugin) };
+  for (const view of listed) {
+    const server = view.mcpServers.find((item) => item.id === id);
+    const app = view.appConnectors.find((item) => item.id === id);
+    const connector = server ?? app;
+    if (!connector) continue;
+    const needs = connectorNeed(view, id, facts);
+    if (!needs && view.enabled) return undefined;
+    const detail = server
+      ? facts.connections.get(server.id)?.reason
+      : app && appDetail(facts.appConnections.get(app.connector));
+    return {
+      plugin: pluginOf(view),
+      connector: {
+        id,
+        name: connector.name,
+        ...(needs ? { needs } : {}),
+        ...(server?.setup ? { setup: server.setup } : {}),
+        ...(needs && needs !== "switched-off" && detail ? { detail } : {}),
       },
-      ...(view.enabled ? {} : { switchedOff: true as const }),
-    }));
+    };
+  }
+  return undefined;
+}
+
+/** Why an application connector cannot run, as Zhiyin found it. */
+function appDetail(found: AppConnectionFact | undefined): string | undefined {
+  if (found?.toolchain?.status === "failed") return found.toolchain.reason;
+  return found?.state.reason;
 }
 
 /**
@@ -266,7 +392,7 @@ export function pluginContentsOf(
     ),
     ...(needs.size
       ? {
-          note: "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+          note: "A connector that is not ready adds no tools to this conversation. It is waiting for the person, not out of service: tell them what it needs and where before any other way around it.",
         }
       : {}),
   };

@@ -87,7 +87,11 @@ export type {
 } from "./file-change.js";
 export {
   PLUGIN_SWITCHED_OFF,
+  type ConnectorNeed,
+  type DirectoryReadiness,
   type PluginDirectoryEntry,
+  type PluginReadiness,
+  type SetupSuggestion,
 } from "./plugin-directory.js";
 export * from "./portable-name.js";
 export type * from "./text-diff.js";

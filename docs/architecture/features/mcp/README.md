@@ -187,7 +187,10 @@ says about itself is shown as its claim.
   credential, which was issued for the old one.
 - A refused credential is reported as `unauthorized`, apart from an
   unreachable server, both when connecting and mid-use, and the tools are
-  withdrawn.
+  withdrawn. A service refused with no key saved and no sign-in to offer is
+  said to need its key, not to have refused one. A call to a tool of a
+  connection waiting for its key or a sign-in is answered that it needs
+  setting up under Connectors on its plugin's page, never that it is down.
 - A sign-in is offered when the service publishes the standard MCP sign-in
   (OAuth 2.1 with PKCE, where to sign in, and self-registration for apps). It
   runs only when a person asks: the service's page opens in their browser and

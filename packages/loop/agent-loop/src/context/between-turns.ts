@@ -54,6 +54,7 @@ export async function condenseBetweenTurns(
       gathered: gathered.value,
       activatedPlugins,
       route: deps.host.toolLoading(),
+      readiness: records.task(taskId).readinessSent,
     },
     () => history.messages(),
   );

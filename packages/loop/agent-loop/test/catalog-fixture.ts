@@ -9,7 +9,9 @@
 import {
   PLUGIN_SWITCHED_OFF,
   type CatalogEntry,
+  type DirectoryReadiness,
   type PluginDirectoryEntry,
+  type SetupSuggestion,
   type SpecialistDefinition,
   type ToolCallInspection,
   type ToolSpec,
@@ -48,7 +50,12 @@ export type MadeUpPlugin = {
     readonly tools?: readonly string[];
   }[];
   readonly docs?: readonly { readonly id: string; readonly text: string }[];
+  /** Its connectors, as the directory lists them. */
+  readonly connectors?: readonly string[];
 };
+
+/** What the directory marks of each plugin as it stands, asked at every gathering. */
+export type MadeUpReadiness = () => DirectoryReadiness;
 
 /** A tool of a made-up plugin: it takes a path, and one named write_… changes a file. */
 function madeUpTool(name: string): ToolSpec {
@@ -118,25 +125,34 @@ function entriesOf(
 function madeUpCatalog(
   plugins: readonly MadeUpPlugin[],
   workspaceTools: readonly ToolSpec[],
+  readiness?: MadeUpReadiness,
+  connectorSetup?: (id: string) => SetupSuggestion | undefined,
 ): Partial<CapabilityTools> {
   const enabled = plugins.filter((plugin) => !plugin.switchedOff);
-  const directory: PluginDirectoryEntry[] = plugins.map((plugin) => ({
-    id: plugin.id,
-    name: plugin.id,
-    purpose: `The ${plugin.id} plugin.`,
-    includes: {
-      skills: (plugin.skills ?? []).map((skill) => ({
-        id: `skill:${plugin.id}/${skill.id}`,
-        description: skill.description,
-      })),
-      specialists: (plugin.specialists ?? []).map((item) => item.id),
-      connectors: [],
-      toolkits: (plugin.toolkits ?? []).map(
-        (toolkit) => `toolkit:${plugin.id}/${toolkit.id}`,
-      ),
-    },
-    ...(plugin.switchedOff ? { switchedOff: true as const } : {}),
-  }));
+  const directory = (): PluginDirectoryEntry[] =>
+    plugins.map((plugin) => {
+      const marks = readiness?.()[plugin.id];
+      return {
+        id: plugin.id,
+        name: plugin.id,
+        purpose: `The ${plugin.id} plugin.`,
+        includes: {
+          skills: (plugin.skills ?? []).map((skill) => ({
+            id: `skill:${plugin.id}/${skill.id}`,
+            description: skill.description,
+          })),
+          specialists: (plugin.specialists ?? []).map((item) => item.id),
+          connectors: plugin.connectors ?? [],
+          toolkits: (plugin.toolkits ?? []).map(
+            (toolkit) => `toolkit:${plugin.id}/${toolkit.id}`,
+          ),
+        },
+        ...(marks?.needs ? { needs: marks.needs } : {}),
+        ...((marks ? marks.switchedOff : plugin.switchedOff)
+          ? { switchedOff: true as const }
+          : {}),
+      };
+    });
   const toolkits = enabled.flatMap((plugin) =>
     (plugin.toolkits ?? []).map((toolkit) => ({
       id: `toolkit:${plugin.id}/${toolkit.id}`,
@@ -174,7 +190,7 @@ function madeUpCatalog(
         ],
         skills: [],
         specialists,
-        pluginDirectory: directory,
+        pluginDirectory: directory(),
         toolkits,
         ownerOf: (name) =>
           workspace.has(name) || pluginTools.has(name) ? "built-in" : undefined,
@@ -226,6 +242,7 @@ function madeUpCatalog(
         ? { skills: [], specialists: [], connectors: [] }
         : undefined,
     describePluginContents: () => [],
+    connectorSetup: async (id) => connectorSetup?.(id),
   };
 }
 
@@ -240,6 +257,10 @@ export function overCatalog(options: {
   readonly answer?: (name: string) => unknown;
   /** More of the loop's dependencies, such as the model's window. */
   readonly more?: Partial<LoopTestDependencies>;
+  /** The directory's marks as they stand, in place of each plugin's own. */
+  readonly readiness?: MadeUpReadiness;
+  /** The setup card the capabilities answer for an id. */
+  readonly connectorSetup?: (id: string) => SetupSuggestion | undefined;
 }): CatalogFixture {
   const requests: ModelRequest[] = [];
   const ran: { name: string; args: unknown }[] = [];
@@ -259,7 +280,13 @@ export function overCatalog(options: {
   const { host } = loopAndHost({
     ...base,
     ...(options.route ? { route: options.route } : {}),
-    capabilitiesWith: () => madeUpCatalog(options.plugins, workspaceTools),
+    capabilitiesWith: () =>
+      madeUpCatalog(
+        options.plugins,
+        workspaceTools,
+        options.readiness,
+        options.connectorSetup,
+      ),
     tools: {
       list: () => workspaceTools,
       inspect,

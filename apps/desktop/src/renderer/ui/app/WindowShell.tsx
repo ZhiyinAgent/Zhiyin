@@ -182,6 +182,14 @@ export function WindowShell({
           setNavigationOpen(false);
           dispatch({ type: "surfaceOpened", surface: "memory", at: number });
         },
+        openPluginConnectors: (plugin) => {
+          setNavigationOpen(false);
+          dispatch({
+            type: "surfaceOpened",
+            surface: "library",
+            at: { plugin },
+          });
+        },
         ...(state.provider.provider
           ? { provider: state.provider.provider }
           : {}),

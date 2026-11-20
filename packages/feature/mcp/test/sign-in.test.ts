@@ -112,7 +112,7 @@ describe("a connector with the standard sign-in", () => {
     expect(checked).toMatchObject({
       status: "unauthorized",
       reason:
-        "This server refused the access token. Save a current token to sign in again.",
+        "This connector needs its key or access token before it can be used.",
     });
     expect(checked.signIn).toBeUndefined();
   });

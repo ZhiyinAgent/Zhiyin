@@ -7,6 +7,7 @@ import {
   turnChecks,
 } from "../actions/index.js";
 import { TurnMemory } from "../memory/index.js";
+import { SetupCard } from "../capabilities/index.js";
 import { MarkdownMessage, type TimelinePieces } from "../conversation/index.js";
 import { TaskViewCard } from "../views/index.js";
 import { InteractionCard } from "../user-input/index.js";
@@ -46,6 +47,8 @@ type RewindLanding = {
   openModel(opening: "apiKey" | "model"): void;
   /** The Memory page, at one entry. */
   openMemoryEntry(number: number): void;
+  /** Plugins, at one plugin's connectors. */
+  openPluginConnectors(pluginId: string): void;
   /** Who requests go to, whose billing page adding credits opens. */
   provider?: ProviderSettings["provider"];
   /** No key is saved for it, so the key is added rather than updated. */
@@ -208,10 +211,26 @@ export function timelinePieces(
       );
       const files = touchesFiles(actions);
       const checks = turnChecks(actions);
-      if (!files && memory.length === 0 && checks.length === 0) return null;
+      const setups = actions.flatMap((action) =>
+        action.setup ? [{ id: action.id, suggestion: action.setup }] : [],
+      );
+      if (
+        !files &&
+        memory.length === 0 &&
+        checks.length === 0 &&
+        setups.length === 0
+      )
+        return null;
       const undone = task.undos.find((undo) => undo.messageId === opening.id);
       return (
         <>
+          {setups.map(({ id, suggestion }) => (
+            <SetupCard
+              key={id}
+              suggestion={suggestion}
+              onOpen={landing.openPluginConnectors}
+            />
+          ))}
           {checks.length > 0 && <TurnChecks checks={checks} />}
           {files && (
             <TurnFiles

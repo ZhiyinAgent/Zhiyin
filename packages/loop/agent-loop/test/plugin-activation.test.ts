@@ -471,7 +471,7 @@ describe("a plugin whose connector cannot run yet", () => {
       "3D studio needs setting up: the person can install what it needs under Connectors on 3d-rendering's page in Plugins.",
     );
     expect(answer).toContain(
-      "A connector that is not ready adds no tools to this conversation. Tell the person what it needs.",
+      "A connector that is not ready adds no tools to this conversation. It is waiting for the person, not out of service: tell them what it needs and where before any other way around it.",
     );
   });
 
