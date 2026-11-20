@@ -109,6 +109,17 @@ describe("what a turn kept in memory", () => {
     expect(within(second!).queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
+  it("shows an entry the person removed on the Memory page as removed, with nothing to open or undo", () => {
+    draw([added, { ...changed, state: "removed" }]);
+
+    expect(screen.getByText("1 new · 1 removed since")).toBeVisible();
+    const [, removed] = within(
+      screen.getByRole("list", { name: "Changes to memory" }),
+    ).getAllByRole("listitem");
+    expect(removed).toHaveTextContent("Removed on the Memory page");
+    expect(within(removed!).queryByRole("button")).toBeNull();
+  });
+
   it("says why memory refused an Undo", async () => {
     draw([added], {
       ok: false,

@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type {
   DocumentComparison,
+  RewindCommitResult,
   TaskAction,
   TaskUndo,
   UndoPreview,
@@ -15,6 +16,7 @@ import type {
 import { TurnFiles } from "./TurnFiles.js";
 import { changedFiles, touchesFiles } from "./turnChanges.js";
 import { ApprovalEvidence } from "../approvals/ApprovalEvidence.js";
+import { keyboardStops } from "../../shared/index.js";
 
 function edit(
   id: string,
@@ -299,6 +301,7 @@ describe("the files a turn changed", () => {
         { path: "report.md", action: "remove", status: "recoverable" },
         { path: "notes.md", action: "restore", status: "conflict" },
       ],
+      memory: [],
     };
     const commit = vi.fn(async () => ({ files: [] }));
     render(
@@ -332,7 +335,175 @@ describe("the files a turn changed", () => {
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Undo changes" }),
     );
-    await waitFor(() => expect(commit).toHaveBeenCalledWith("undo-1"));
+    await waitFor(() =>
+      expect(commit).toHaveBeenCalledWith("undo-1", "restore", "keep"),
+    );
+  });
+
+  describe("of a turn that also kept something in memory", () => {
+    const remembered: UndoPreview = {
+      id: "undo-1",
+      taskId: "task-1",
+      messageId: "u1",
+      files: [{ path: "plan.md", action: "restore", status: "recoverable" }],
+      memory: [
+        {
+          writeId: "w2",
+          number: 6,
+          title: "Hotel prices",
+          status: "changed",
+          reason: "#6 Hotel prices was changed since, so it was left as it is.",
+        },
+        {
+          writeId: "w1",
+          number: 5,
+          title: "Lodging apart",
+          status: "undoable",
+        },
+      ],
+    };
+
+    async function reviewing(
+      commit = vi.fn(async (): Promise<RewindCommitResult> => ({ files: [] })),
+    ) {
+      render(
+        <TurnFiles
+          actions={turn}
+          running={false}
+          onPreviewUndo={async () => remembered}
+          onCommitUndo={commit}
+        />,
+      );
+      fireEvent.click(
+        within(panel()).getByRole("button", { name: "Undo these changes" }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Undo these changes",
+      });
+      const box = (name: string) =>
+        within(dialog).getByRole("checkbox", { name });
+      return { dialog, box, commit };
+    }
+
+    it("undoes both by default, listing each entry and what becomes of it", async () => {
+      const { dialog, box, commit } = await reviewing();
+
+      expect(box("Undo everything")).toBeChecked();
+      expect(box("Undo file changes")).toBeChecked();
+      expect(box("Undo memory changes")).toBeChecked();
+      expect(
+        within(dialog).getByText("#5 Lodging apart").closest("li"),
+      ).toHaveTextContent("Taken back.");
+      expect(
+        within(dialog).getByText("#6 Hotel prices").closest("li"),
+      ).toHaveTextContent(
+        "#6 Hotel prices was changed since, so it was left as it is.",
+      );
+
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Undo changes" }),
+      );
+      await waitFor(() =>
+        expect(commit).toHaveBeenCalledWith("undo-1", "restore", "undo"),
+      );
+    });
+
+    it("undoes only memory when the file box is cleared, saying the files stay", async () => {
+      const { dialog, box, commit } = await reviewing();
+
+      fireEvent.click(box("Undo file changes"));
+
+      expect(box("Undo everything")).toBePartiallyChecked();
+      expect(
+        within(dialog).getByText("plan.md").closest("li"),
+      ).toHaveTextContent("Stays as this turn left it.");
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Undo changes" }),
+      );
+      await waitFor(() =>
+        expect(commit).toHaveBeenCalledWith("undo-1", "keep", "undo"),
+      );
+    });
+
+    it("undoes only files when the memory box is cleared, saying the entry stays", async () => {
+      const { dialog, box, commit } = await reviewing();
+
+      fireEvent.click(box("Undo memory changes"));
+
+      expect(
+        within(dialog).getByText("#5 Lodging apart").closest("li"),
+      ).toHaveTextContent("Stays kept.");
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Undo changes" }),
+      );
+      await waitFor(() =>
+        expect(commit).toHaveBeenCalledWith("undo-1", "restore", "keep"),
+      );
+    });
+
+    it("cannot undo with both boxes cleared", async () => {
+      const { dialog, box } = await reviewing();
+
+      fireEvent.click(box("Undo everything"));
+
+      expect(
+        within(dialog).getByRole("button", { name: "Undo changes" }),
+      ).toBeDisabled();
+      fireEvent.click(box("Undo memory changes"));
+      expect(
+        within(dialog).getByRole("button", { name: "Undo changes" }),
+      ).toBeEnabled();
+    });
+
+    it("is reached by the keyboard: the boxes in order, then the buttons", async () => {
+      const { dialog, box } = await reviewing();
+
+      const stops = keyboardStops(dialog);
+      const boxes = [
+        box("Undo everything"),
+        box("Undo file changes"),
+        box("Undo memory changes"),
+      ];
+      expect(
+        stops.filter((stop) => boxes.includes(stop as HTMLInputElement)),
+      ).toEqual(boxes);
+      expect(stops.indexOf(boxes[2]!)).toBeLessThan(
+        stops.indexOf(
+          within(dialog).getByRole("button", { name: "Undo changes" }),
+        ),
+      );
+    });
+
+    it("says after the undo which entry memory left kept, and why", async () => {
+      const { commit } = await reviewing(
+        vi.fn(async () => ({
+          files: [{ path: "plan.md", status: "restored" as const }],
+          memory: [
+            {
+              writeId: "w2",
+              number: 6,
+              title: "Hotel prices",
+              status: "refused" as const,
+              reason:
+                "#6 Hotel prices was changed since, so it was left as it is.",
+            },
+            {
+              writeId: "w1",
+              number: 5,
+              title: "Lodging apart",
+              status: "undone" as const,
+            },
+          ],
+        })),
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Undo changes" }));
+
+      await waitFor(() => expect(commit).toHaveBeenCalled());
+      expect(await within(panel()).findByRole("status")).toHaveTextContent(
+        "One memory entry stays kept: #6 Hotel prices was changed since, so it was left as it is.",
+      );
+    });
   });
 
   it("shows an undone turn as undone, file by file, with no second undo", () => {
@@ -798,6 +969,7 @@ describe("the files a turn's commands changed", () => {
       taskId: "task-1",
       messageId: "u1",
       files: [{ path: "plan.md", action: "restore", status: "conflict" }],
+      memory: [],
     };
     render(
       <TurnFiles

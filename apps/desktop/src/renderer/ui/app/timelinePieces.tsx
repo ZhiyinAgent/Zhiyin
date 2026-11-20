@@ -87,10 +87,24 @@ export function timelinePieces(
     const unresolved = result.files.filter(
       (file) => file.status === "conflict" || file.status === "unprotected",
     );
-    if (unresolved.length)
-      landing.say(
-        `Went back. ${unresolved.length} ${unresolved.length === 1 ? "file was" : "files were"} left unchanged because recovery was unavailable or unsafe.`,
-      );
+    const refused = (result.memory ?? []).filter(
+      (write) => write.status === "refused",
+    );
+    const said = [
+      ...(unresolved.length
+        ? [
+            `${unresolved.length} ${unresolved.length === 1 ? "file was" : "files were"} left unchanged because recovery was unavailable or unsafe.`,
+          ]
+        : []),
+      ...(refused.length
+        ? [
+            `${refused.length === 1 ? "One memory entry stays" : `${refused.length} memory entries stay`} kept: ${refused
+              .map((write) => write.reason ?? write.title)
+              .join(" ")}`,
+          ]
+        : []),
+    ];
+    if (said.length) landing.say(["Went back.", ...said].join(" "));
   }
   function backInComposer(
     message: {
@@ -221,7 +235,12 @@ export function timelinePieces(
         setups.length === 0
       )
         return null;
-      const undone = task.undos.find((undo) => undo.messageId === opening.id);
+      // An undo of memory alone leaves the files to undo.
+      const undone = task.undos.find(
+        (undo) =>
+          undo.messageId === opening.id &&
+          (undo.actionIds.length > 0 || undo.files.length > 0),
+      );
       return (
         <>
           {setups.map(({ id, suggestion }) => (
@@ -240,8 +259,11 @@ export function timelinePieces(
               {...(previewUndo && commitUndo
                 ? {
                     onPreviewUndo: () => previewUndo(task.id, opening.id),
-                    onCommitUndo: (undoId: string) =>
-                      commitUndo(task.id, undoId),
+                    onCommitUndo: (
+                      undoId: string,
+                      files: "keep" | "restore",
+                      memory: "keep" | "undo",
+                    ) => commitUndo(task.id, undoId, files, memory),
                   }
                 : {})}
               onCompareDocument={

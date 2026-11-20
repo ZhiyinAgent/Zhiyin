@@ -325,7 +325,7 @@ export class ConversationMemory {
     if (call.name === memory.recallTool.name) {
       let read: RecallOutcome;
       try {
-        read = await memory.recall(input);
+        read = await memory.recall(input, taskId);
       } catch (error) {
         return this.#failed(taskId, error, unreadable);
       }
@@ -506,6 +506,8 @@ function readTarget(shown: RecallShown): string {
     return `${shown.alsoFound.length} ${shown.alsoFound.length === 1 ? "entry" : "entries"} found`;
   if (shown.nothingFor.length)
     return `Nothing found for ${shown.nothingFor.map((search) => `“${search}”`).join(" or ")}`;
+  if (shown.takenBack.length)
+    return `${shown.takenBack.map((number) => `#${number}`).join(", ")} taken back with the turn that kept ${shown.takenBack.length === 1 ? "it" : "them"}`;
   return "Nothing kept under those numbers";
 }
 
@@ -556,6 +558,15 @@ function readDetails(shown: RecallShown): ActionDetail[] {
             kind: "list" as const,
             label: "Not kept",
             items: shown.notKept.map((number) => `#${number}`),
+          },
+        ]
+      : []),
+    ...(shown.takenBack.length
+      ? [
+          {
+            kind: "list" as const,
+            label: "Taken back with the turn that kept it",
+            items: shown.takenBack.map((number) => `#${number}`),
           },
         ]
       : []),

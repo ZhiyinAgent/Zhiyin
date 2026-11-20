@@ -1507,3 +1507,74 @@
   gap: 8px;
   margin-left: auto;
 }
+
+/* What to undo: one card, the box for both on top, the kinds indented under
+   it. Each row is its label, so the whole row ticks its box. */
+.undo-choices {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 16px 0 0;
+  padding: 8px 6px;
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-11);
+}
+
+.undo-choices__legend {
+  padding: 0 8px;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.undo-choices__parts {
+  display: grid;
+  gap: 2px;
+  padding-left: 26px;
+}
+
+.undo-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: var(--zy-radius-7);
+  cursor: pointer;
+}
+
+.undo-choice:hover:has(input:not(:disabled)) {
+  background: var(--zy-wash);
+}
+
+.undo-choice:has(input:disabled) {
+  cursor: default;
+}
+
+.undo-choice input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--zy-accent);
+}
+
+.undo-choice > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.undo-choice strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.undo-choice span span {
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}

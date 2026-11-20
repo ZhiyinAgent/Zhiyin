@@ -329,7 +329,7 @@ export const appEntries: ComponentCatalogEntry[] = [
     id: "conversation-rewind",
     title: "Conversation rewind",
     description:
-      "Edit opens the message where it is; Resend goes back at once. Either asks first here: a file can be put back, one was changed by hand since, two were changed by a command, and an edit cannot be undone.",
+      "Edit opens the message where it is; Resend goes back at once. Either asks first here: a file can be put back, one was changed by hand since, two were changed by a command, and an edit cannot be undone. Memory kept after the message: one entry can be taken back, one was changed since, one the person already kept, so the boxes for file and memory changes sit under one for everything.",
     render: () => (
       <LabRewindMessage
         taskId="catalog-task"
@@ -380,8 +380,91 @@ export const appEntries: ComponentCatalogEntry[] = [
               status: "conflict",
             },
           ],
+          memory: [
+            {
+              writeId: "catalog-write-style",
+              number: 3,
+              title: "How to work",
+              status: "decided",
+            },
+            {
+              writeId: "catalog-write-dates",
+              number: 9,
+              title: "Release dates for the spring launch",
+              status: "changed",
+              reason:
+                "#9 Release dates for the spring launch was changed since, so it was left as it is.",
+            },
+            {
+              writeId: "catalog-write-tone",
+              number: 8,
+              title: "Release notes are written for customers, not engineers",
+              status: "undoable",
+            },
+          ],
         })}
         onCommit={async () => ({ files: [] })}
+        onSend={async () => undefined}
+      />
+    ),
+  },
+  {
+    id: "conversation-rewind-memory",
+    title: "Going back over what was kept in memory",
+    description:
+      "Going back over a turn that kept one Knowledge entry and changed no file: one box, for memory changes, and the entry with what becomes of it, which follows the box.",
+    render: () => (
+      <LabRewindMessage
+        taskId="catalog-task"
+        messageId="catalog-message"
+        text="Plan a weekend in Bordeaux."
+        bubble={<UserTurn text="Plan a weekend in Bordeaux." />}
+        onPreview={async () => ({
+          id: "catalog-rewind",
+          taskId: "catalog-task",
+          messageId: "catalog-message",
+          draft: "Plan a weekend in Bordeaux.",
+          discardedMessages: 2,
+          laterUserMessages: 0,
+          discardedActions: [
+            {
+              id: "catalog-keep",
+              action: "Keep in memory",
+              target: "Lodging apart from the group",
+              status: "completed",
+              sequence: 3,
+              memory: {
+                writeId: "catalog-write-lodging",
+                number: 5,
+                title: "Lodging apart from the group",
+                change: "added",
+                scope: "everything",
+                scopeName: "Everything you do",
+                section: "knowledge",
+              },
+            },
+          ],
+          files: [],
+          memory: [
+            {
+              writeId: "catalog-write-lodging",
+              number: 5,
+              title: "Lodging apart from the group",
+              status: "undoable",
+            },
+          ],
+        })}
+        onCommit={async () => ({
+          files: [],
+          memory: [
+            {
+              writeId: "catalog-write-lodging",
+              number: 5,
+              title: "Lodging apart from the group",
+              status: "undone",
+            },
+          ],
+        })}
         onSend={async () => undefined}
       />
     ),
@@ -406,6 +489,7 @@ export const appEntries: ComponentCatalogEntry[] = [
           laterUserMessages: 2,
           discardedActions: [],
           files: [],
+          memory: [],
         })}
         onCommit={async () => ({ files: [] })}
         onSend={async () => undefined}

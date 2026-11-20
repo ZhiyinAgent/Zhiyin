@@ -284,11 +284,12 @@ export class Core {
         openPath(await workspace.kept.attachmentPath(taskId, id)),
       previewRewind: (taskId, messageId) =>
         workspace.rewinds.preview(taskId, messageId),
-      commitRewind: (taskId, rewindId, files) =>
-        workspace.commitRewind(taskId, rewindId, files),
+      commitRewind: (taskId, rewindId, files, memory) =>
+        workspace.commitRewind(taskId, rewindId, files, memory),
       previewUndo: (taskId, messageId) =>
         workspace.rewinds.previewUndo(taskId, messageId),
-      commitUndo: (taskId, undoId) => workspace.commitUndo(taskId, undoId),
+      commitUndo: (taskId, undoId, files, memory) =>
+        workspace.commitUndo(taskId, undoId, files, memory),
       compareDocument: (taskId, messageId, path) =>
         workspace.rewinds.compareDocument(taskId, messageId, path),
       interruptTask: (taskId) => turns.cancel(taskId),

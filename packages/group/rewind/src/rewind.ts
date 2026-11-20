@@ -1,6 +1,9 @@
 import type {
   RewindCommitResult,
+  RewindMemoryEffect,
+  RewindMemoryOutcome,
   RewindPreview,
+  TaskAction,
   UndoPreview,
   WorkspaceTask,
 } from "@zhiyin/contract";
@@ -26,17 +29,34 @@ export type PendingRewind = {
   readonly source: string;
   readonly task: WorkspaceTask;
   readonly review: RecoveryReview;
+  /**
+   * What the operation has done so far: the files once restored, then what
+   * became of its memory writes. Set from the start when no file is put back.
+   */
   readonly result?: RewindCommitResult;
   /**
    * For an undo, what it was planned from, so a restart records it from what
    * the restore found. An entry without it finishes as `task`.
    */
   readonly undo?: { readonly plan: UndoPlan; readonly at: string };
+  /**
+   * The memory writes of the turns it takes back, as reviewed, and whether
+   * the person chose to undo them.
+   */
+  readonly memory?: {
+    readonly effects: readonly RewindMemoryEffect[];
+    readonly choice: "keep" | "undo";
+  };
 };
 
 export interface RewindJournal {
   pending(): Promise<readonly PendingRewind[]>;
   begin(operation: PendingRewind): Promise<void>;
+  /**
+   * Writes down what the operation has done so far, before the conversation
+   * is saved: what the restore found, and then what became of its memory
+   * writes.
+   */
   filesRestored(id: string, result: RewindCommitResult): Promise<void>;
   complete(id: string): Promise<void>;
 }
@@ -116,7 +136,13 @@ function recordedUndo(
     },
     result.files,
     undo.at,
+    result.memory,
   );
+}
+
+/** A review of no files, for an operation that puts none back. */
+function noFiles(id: string): RecoveryReview {
+  return { id, workspaceRoot: "", files: [], targets: [] };
 }
 
 function journalKey(value: string): string {
@@ -220,6 +246,35 @@ export type RewindHost = {
   readonly open?: (conversationId: string) => Promise<void>;
   readonly task: (conversationId: string) => WorkspaceTask;
   readonly save: (task: WorkspaceTask) => Promise<void>;
+  /** What memory makes of the writes the turns taken back kept. */
+  readonly memory?: RewindMemoryHost;
+};
+
+/**
+ * Memory, as a rewind or an undo reaches it: what undoing what its turns
+ * kept would do, and doing it.
+ */
+export type RewindMemoryHost = {
+  /** What undoing memory changes would do to each write these actions made, newest first. */
+  readonly effects: (
+    actions: readonly TaskAction[],
+  ) => Promise<readonly RewindMemoryEffect[]>;
+  /**
+   * Takes back the writes reviewed, or leaves them, as the person chose, and
+   * says what became of each; `cardsStay` when the conversation still shows
+   * them, as after an undo. Never throws: a write it cannot reach is refused.
+   */
+  readonly takeBack: (
+    effects: readonly RewindMemoryEffect[],
+    choice: "keep" | "undo",
+    cardsStay: boolean,
+  ) => Promise<readonly RewindMemoryOutcome[]>;
+};
+
+/** What the person chose to undo of an operation. */
+export type RewindChoice = {
+  readonly files: "keep" | "restore";
+  readonly memory: "keep" | "undo";
 };
 
 type Refusal = { readonly ok: false; readonly reason: string };
@@ -260,17 +315,22 @@ export interface Rewind {
     messageId: string,
     host: RewindHost,
   ): Promise<RewindPreviewing>;
-  /** Applies exactly the reviewed rewind, restoring files only when asked to. */
+  /**
+   * Applies exactly the reviewed rewind, restoring files only when asked to,
+   * and taking back the memory writes it reviewed unless `memory` is `keep`.
+   */
   commit(
     conversationId: string,
     rewindId: string,
     files: "keep" | "restore",
     host: RewindHost,
+    memory?: "keep" | "undo",
   ): Promise<RewindCommitting>;
 
   /**
-   * Reviews putting back the files the turn a message opened changed, keeping
-   * the conversation. Replaces any earlier review of an undo for it.
+   * Reviews undoing what the turn a message opened changed, its files and
+   * what it kept in memory, keeping the conversation. Replaces any earlier
+   * review of an undo for it.
    */
   previewUndo(
     conversationId: string,
@@ -278,13 +338,15 @@ export interface Rewind {
     host: RewindHost,
   ): Promise<UndoPreviewing>;
   /**
-   * Puts back exactly the reviewed files, never one changed since, and records
-   * the undo on the conversation.
+   * Undoes exactly what was reviewed, each kind as chosen, both by default:
+   * the files, never one changed since, and the memory writes. Records the
+   * undo on the conversation.
    */
   commitUndo(
     conversationId: string,
     undoId: string,
     host: RewindHost,
+    choice?: RewindChoice,
   ): Promise<RewindCommitting>;
 
   /**
@@ -302,8 +364,25 @@ export interface Rewind {
   forgetConversation(conversationId: string): Promise<void>;
 }
 
-type Pending = { readonly plan: RewindPlan; readonly review?: RecoveryReview };
-type PendingUndo = { readonly plan: UndoPlan; readonly review: RecoveryReview };
+type Pending = {
+  readonly plan: RewindPlan;
+  readonly review?: RecoveryReview;
+};
+type PendingUndo = {
+  readonly plan: UndoPlan;
+  readonly review: RecoveryReview;
+  readonly memory: readonly RewindMemoryEffect[];
+};
+
+/** The memory writes of these actions as the host reviews them; none without one. */
+function memoryOf(
+  actions: readonly TaskAction[],
+  host: RewindHost,
+): Promise<readonly RewindMemoryEffect[]> {
+  return host.memory && actions.some((action) => action.memory)
+    ? host.memory.effects(actions)
+    : Promise.resolve([]);
+}
 
 export class ComposedRewind implements Rewind {
   readonly #members: RewindMembers;
@@ -392,11 +471,12 @@ export class ComposedRewind implements Rewind {
           throw new Error(
             "A pending rewind no longer matches the saved conversation.",
           );
-        const result =
+        const restored =
           operation.result ??
           (await this.#members.recovery.restore(operation.review));
         if (!operation.result)
-          await this.#journal.filesRestored(operation.id, result);
+          await this.#journal.filesRestored(operation.id, restored);
+        const result = await this.#withMemory(operation, restored, host);
         await host.save(finished(current, result));
         await this.#journal.complete(operation.id);
         completed = true;
@@ -410,6 +490,37 @@ export class ComposedRewind implements Rewind {
       }
     }
     if (failures.length) throw failures[0];
+  }
+
+  /**
+   * The operation's result with its memory writes taken back or left, as
+   * the person chose, written down before the conversation is saved; as it
+   * was when that is done already or the operation has none.
+   */
+  async #withMemory(
+    operation: PendingRewind,
+    result: RewindCommitResult,
+    host: RewindHost,
+  ): Promise<RewindCommitResult> {
+    if (!operation.memory || result.memory) return result;
+    const { effects, choice } = operation.memory;
+    const memory = host.memory
+      ? await host.memory.takeBack(effects, choice, Boolean(operation.undo))
+      : effects.map((effect): RewindMemoryOutcome => ({
+          writeId: effect.writeId,
+          ...(effect.number !== undefined ? { number: effect.number } : {}),
+          title: effect.title,
+          ...(choice === "keep" || effect.status === "decided"
+            ? { status: "kept" as const }
+            : {
+                status: "refused" as const,
+                reason: "Memory could not be reached.",
+              }),
+        }));
+    const done = { ...result, memory };
+    this.#restored.set(operation.id, done);
+    await this.#journal.filesRestored(operation.id, done);
+    return done;
   }
 
   async settle(conversationId: string, host: RewindHost): Promise<void> {
@@ -446,7 +557,11 @@ export class ComposedRewind implements Rewind {
           planned.preview.discardedActions,
         )
       : undefined;
-    const preview = { ...planned.preview, files: review?.files ?? [] };
+    const preview = {
+      ...planned.preview,
+      files: review?.files ?? [],
+      memory: await memoryOf(planned.preview.discardedActions, host),
+    };
     for (const [id, pending] of this.#pending)
       if (pending.plan.preview.taskId === conversationId)
         this.#pending.delete(id);
@@ -473,24 +588,30 @@ export class ComposedRewind implements Rewind {
     const operation = (await this.#journal.pending()).find(
       (item) => item.id === id && item.conversationId === conversationId,
     );
-    const result = operation?.result ?? this.#restored.get(id);
-    if (!operation || !result) return undefined;
+    // What this session found is at least what the journal could write down.
+    const found = this.#restored.get(id) ?? operation?.result;
+    if (!operation || !found) return undefined;
     const current = host.task(conversationId);
-    const intended = operation.undo
-      ? recordedUndo(
-          this.#members.conversation,
-          JSON.parse(operation.source) as WorkspaceTask,
-          operation.undo,
-          operation.review,
-          result,
-        )
-      : { ok: true as const, task: operation.task };
-    if (!intended.ok) return undefined;
     const before = JSON.stringify(current) === operation.source;
-    if (!before && !savedAs(current, intended.task)) return undefined;
     this.#restoring.add(conversationId);
     try {
-      if (!operation.result) await this.#journal.filesRestored(id, result);
+      if (JSON.stringify(operation.result) !== JSON.stringify(found))
+        await this.#journal.filesRestored(id, found);
+      // Memory is taken back only while the conversation is still as it was.
+      const result = before
+        ? await this.#withMemory(operation, found, host)
+        : found;
+      const intended = operation.undo
+        ? recordedUndo(
+            this.#members.conversation,
+            JSON.parse(operation.source) as WorkspaceTask,
+            operation.undo,
+            operation.review,
+            result,
+          )
+        : { ok: true as const, task: operation.task };
+      if (!intended.ok) return undefined;
+      if (!before && !savedAs(current, intended.task)) return undefined;
       await host.save(before ? intended.task : current);
       await this.#journal.complete(id);
       this.#blocked.delete(conversationId);
@@ -509,6 +630,7 @@ export class ComposedRewind implements Rewind {
     rewindId: string,
     files: "keep" | "restore",
     host: RewindHost,
+    memory: "keep" | "undo" = "undo",
   ): Promise<RewindCommitting> {
     if (this.#restoring.has(conversationId))
       return { ok: false, reason: "That rewind is already being applied." };
@@ -528,17 +650,21 @@ export class ComposedRewind implements Rewind {
       this.#pending.delete(rewindId);
       return applied;
     }
+    const restore = files === "restore" ? pending.review : undefined;
+    const effects = pending.plan.preview.memory;
     const result = await this.#restoreAndSave(
       conversationId,
       rewindId,
-      files === "restore" && pending.review
+      restore || effects.length
         ? {
             version: 1,
             id: rewindId,
             conversationId,
             source: pending.plan.source,
             task: applied.task,
-            review: pending.review,
+            review: restore ?? noFiles(rewindId),
+            ...(restore ? {} : { result: { files: [] } }),
+            ...(effects.length ? { memory: { effects, choice: memory } } : {}),
           }
         : undefined,
       host,
@@ -549,12 +675,14 @@ export class ComposedRewind implements Rewind {
   }
 
   /**
-   * Puts back the files `entry` reviewed, through the journal, and saves the
-   * conversation as `saved` makes it from what the restore found. The entry
-   * is written before any file is touched, what the restore found before the
-   * save, and the entry is cleared once saved; should a step after the entry
-   * fail, the conversation stays blocked until the operation is finished.
-   * Without an entry no file is touched, and the conversation is only saved.
+   * Puts back the files `entry` reviewed, through the journal, takes back or
+   * leaves its memory writes, and saves the conversation as `saved` makes it
+   * from what was found. The entry is written before any file or memory is
+   * touched, each result before the save, and the entry is cleared once
+   * saved; should a step after the entry fail, the conversation stays blocked
+   * until the operation is finished. An entry whose result is set from the
+   * start puts no file back. Without an entry nothing is touched, and the
+   * conversation is only saved.
    */
   async #restoreAndSave(
     conversationId: string,
@@ -570,9 +698,13 @@ export class ComposedRewind implements Rewind {
       if (entry) {
         await this.#journal.begin(entry);
         durableIntent = true;
-        result = await this.#members.recovery.restore(entry.review);
-        this.#restored.set(id, result);
-        await this.#journal.filesRestored(id, result);
+        if (entry.result) result = entry.result;
+        else {
+          result = await this.#members.recovery.restore(entry.review);
+          this.#restored.set(id, result);
+          await this.#journal.filesRestored(id, result);
+        }
+        result = await this.#withMemory(entry, result, host);
       }
       await host.save(saved(result));
       if (entry) await this.#journal.complete(id);
@@ -620,9 +752,10 @@ export class ComposedRewind implements Rewind {
         ok: false,
         reason: `This conversation's folder, ${workspaceRoot}, could not be opened, so its files cannot be put back.`,
       };
+    const memory = await memoryOf(planned.turn, host);
     for (const [id, pending] of this.#pendingUndos)
       if (pending.plan.taskId === conversationId) this.#pendingUndos.delete(id);
-    this.#pendingUndos.set(planned.id, { plan: planned, review });
+    this.#pendingUndos.set(planned.id, { plan: planned, review, memory });
     return {
       ok: true,
       preview: {
@@ -630,6 +763,7 @@ export class ComposedRewind implements Rewind {
         taskId: conversationId,
         messageId,
         files: review.files,
+        memory,
       },
     };
   }
@@ -657,6 +791,7 @@ export class ComposedRewind implements Rewind {
     conversationId: string,
     undoId: string,
     host: RewindHost,
+    choice: RewindChoice = { files: "restore", memory: "undo" },
   ): Promise<RewindCommitting> {
     if (this.#restoring.has(conversationId))
       return { ok: false, reason: "Files are already being put back." };
@@ -674,23 +809,36 @@ export class ComposedRewind implements Rewind {
         ok: false,
         reason: "That undo is no longer active. Review the turn again.",
       };
+    const restore = choice.files === "restore";
+    const takeBack =
+      choice.memory === "undo" &&
+      pending.memory.some((effect) => effect.status !== "decided");
+    if (!restore && !takeBack)
+      return {
+        ok: false,
+        reason: "Choose the file changes or the memory changes to undo.",
+      };
     const at = (this.#members.now?.() ?? new Date()).toISOString();
     const task = host.task(conversationId);
+    // Files kept, the undo records no action as undone.
+    const plan = restore ? pending.plan : { ...pending.plan, actions: [] };
     // What the conversation becomes if the files go back as reviewed: the
     // record a restart finishes with, should it come between the two.
     const intended = this.#members.conversation.applyUndo(
       task,
-      pending.plan,
-      pending.review.files.map((file) => ({
-        path: file.path,
-        status:
-          file.status === "recoverable"
-            ? file.action === "remove"
-              ? ("removed" as const)
-              : ("restored" as const)
-            : file.status,
-        ...(file.reason ? { reason: file.reason } : {}),
-      })),
+      plan,
+      restore
+        ? pending.review.files.map((file) => ({
+            path: file.path,
+            status:
+              file.status === "recoverable"
+                ? file.action === "remove"
+                  ? ("removed" as const)
+                  : ("restored" as const)
+                : file.status,
+            ...(file.reason ? { reason: file.reason } : {}),
+          }))
+        : [],
       at,
     );
     if (!intended.ok) {
@@ -707,16 +855,20 @@ export class ComposedRewind implements Rewind {
         source: pending.plan.source,
         task: intended.task,
         review: pending.review,
-        undo: { plan: pending.plan, at },
+        undo: { plan, at },
+        ...(restore ? {} : { result: { files: [] } }),
+        ...(pending.memory.length
+          ? { memory: { effects: pending.memory, choice: choice.memory } }
+          : {}),
       },
       host,
-      (restored) => {
+      (done) => {
         const recorded = recordedUndo(
           this.#members.conversation,
           task,
-          { plan: pending.plan, at },
+          { plan, at },
           pending.review,
-          restored,
+          done,
         );
         return recorded.ok ? recorded.task : intended.task;
       },

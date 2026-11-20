@@ -8,16 +8,107 @@ import type { CommandEndings } from "../tools/command-endings.js";
 import { harnessNotice } from "./notices.js";
 import type { TurnRecords } from "./turn-records.js";
 
-/** What became of each file of an undone turn, in the words the model reads. */
+type MemoryWrite = NonNullable<TaskUndo["memory"]>[number];
+
+/**
+ * A memory write as the model reads it: an entry by its number and title, a
+ * change to About you or How to work by the one rule it changed, so the rest
+ * of that instruction is not taken for gone. `taken`: the write was taken
+ * back, so a rule it replaced or removed is there again.
+ */
+function writeName(write: MemoryWrite, taken: boolean): string {
+  const { rule } = write;
+  if (rule?.added !== undefined && rule.replaced !== undefined)
+    return taken
+      ? `the rule “${rule.added}” in ${write.title}, which reads “${rule.replaced}” again`
+      : `the rule “${rule.added}” in ${write.title}, in place of “${rule.replaced}”`;
+  if (rule?.added !== undefined)
+    return `the rule “${rule.added}” in ${write.title}`;
+  if (rule?.replaced !== undefined)
+    return taken
+      ? `the removal of the rule “${rule.replaced}” from ${write.title}, which is there again`
+      : `the removal of the rule “${rule.replaced}” from ${write.title}`;
+  return write.number === undefined
+    ? write.title
+    : `#${write.number} ${write.title}`;
+}
+
+/** That the rest of each instruction a rule was taken back from stays; nothing when none was. */
+function restStays(writes: readonly MemoryWrite[]): string | undefined {
+  const titles = [
+    ...new Set(writes.flatMap((write) => (write.rule ? [write.title] : []))),
+  ];
+  return titles.length
+    ? `The rest of ${titles.join(" and ")} stays as it is.`
+    : undefined;
+}
+
+/**
+ * What the person took back from memory alone, on a turn's memory card or on
+ * the Memory page, in the words the model reads.
+ */
+function memoryTakenText(
+  answering: string,
+  undo: TaskUndo,
+  from: NonNullable<TaskUndo["memoryFrom"]>,
+): string {
+  const writes = undo.memory ?? [];
+  const named = writes.map((write) => writeName(write, true)).join(", ");
+  if (from === "memoryPageBack")
+    return [
+      `The person put back, on the Memory page, what they had removed from memory and an earlier turn kept${answering}.`,
+      `Kept in memory again: ${named}. Rely on it as before.`,
+    ].join("\n");
+  const rest = restStays(writes);
+  return [
+    from === "card"
+      ? `The person undid, on its memory card, what an earlier turn kept in memory${answering}. The conversation stays as it is, but this is no longer in memory.`
+      : `The person removed from memory, on the Memory page, what an earlier turn kept${answering}. The conversation stays as it is, but this is no longer in memory.`,
+    from === "card"
+      ? `Taken back from memory, so no longer kept: ${named}.`
+      : `No longer kept: ${named}.`,
+    ...(rest ? [rest] : []),
+    "Do not say it is still in memory, and do not keep it again unless asked.",
+  ].join("\n");
+}
+
+/**
+ * What became of each file and each memory entry of an undone turn, in the
+ * words the model reads.
+ */
 function undoText(task: WorkspaceTask, undo: TaskUndo): string {
   const asked = task.messages.find((message) => message.id === undo.messageId);
+  if (undo.memoryFrom)
+    return memoryTakenText(
+      asked ? `, the one answering "${asked.text}"` : "",
+      undo,
+      undo.memoryFrom,
+    );
   const paths = (status: TaskUndo["files"][number]["status"]) =>
     undo.files
       .filter((file) => file.status === status)
       .map((file) => file.path)
       .join(", ");
+  const memory = undo.memory ?? [];
+  const undone = memory.filter((write) => write.status === "undone");
+  const takenBack = undone.map((write) => writeName(write, true)).join(", ");
+  const stillKept = memory
+    .filter((write) => write.status !== "undone")
+    .map((write) => writeName(write, false))
+    .join(", ");
+  const rest = restStays(undone);
+  const files = undo.actionIds.length > 0 || undo.files.length > 0;
+  const undid = [
+    ...(files ? ["the file changes"] : []),
+    ...(takenBack ? ["what it kept in memory"] : []),
+  ].join(" and ");
+  const after = takenBack
+    ? " Its messages stay, but what its remember calls kept is changed as below."
+    : files
+      ? " The conversation is unchanged; the files are not."
+      : " Nothing it kept could be taken back.";
   const lines = [
-    `The person undid the file changes of an earlier turn${asked ? `, the one answering "${asked.text}"` : ""}. The conversation is unchanged; the files are not.`,
+    `The person undid ${undid || "what it kept in memory"} of an earlier turn${asked ? `, the one answering "${asked.text}"` : ""}.${after}`,
   ];
   const restored = paths("restored");
   const removed = paths("removed");
@@ -30,9 +121,18 @@ function undoText(task: WorkspaceTask, undo: TaskUndo): string {
     lines.push(`Left as they are, because they changed since: ${conflicted}.`);
   if (unprotected)
     lines.push(`Not put back, because no copy was kept: ${unprotected}.`);
-  lines.push(
-    "Read a file again before relying on it, and do not redo these changes unless asked.",
-  );
+  if (takenBack)
+    lines.push(`Taken back from memory, so no longer kept: ${takenBack}.`);
+  if (rest) lines.push(rest);
+  if (stillKept) lines.push(`Still kept in memory as it is now: ${stillKept}.`);
+  if (files)
+    lines.push(
+      "Read a file again before relying on it, and do not redo these changes unless asked.",
+    );
+  if (takenBack)
+    lines.push(
+      "Do not say what was taken back is still in memory, and do not keep it again unless asked.",
+    );
   return lines.join("\n");
 }
 

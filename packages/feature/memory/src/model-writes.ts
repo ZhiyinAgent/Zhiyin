@@ -605,6 +605,10 @@ async function writeRule(
       scope,
       scopeName: scopeName(scope, snapshot),
       section,
+      rule: {
+        ...(rule ? { added: rule } : {}),
+        ...(replaces !== undefined ? { replaced: replaces } : {}),
+      },
     },
   };
 }

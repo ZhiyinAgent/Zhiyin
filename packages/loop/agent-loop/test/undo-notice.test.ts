@@ -117,3 +117,73 @@ describe("a turn whose files the person undid", () => {
     expect(loop.snapshot().tasks[0]?.undos?.[0]?.told).toBe(true);
   });
 });
+
+describe("a turn whose memory changes the person undid", () => {
+  async function toldOf(undo: WorkspaceTask["undos"][number]) {
+    const requests: ModelRequest[] = [];
+    const deps = stubDependencies(() => {});
+    const loop = loopFrom({
+      ...deps,
+      model: {
+        ...deps.model,
+        send: async function* (request) {
+          requests.push(request);
+          yield { kind: "textDelta" as const, text: "Noted." };
+          yield { kind: "done" as const };
+        },
+      },
+    });
+    loop.restore([{ ...undone(), undos: [undo] }]);
+    await loop.start("task-1", "What do you remember?");
+    return undoNotices(requests[0])[0] ?? "";
+  }
+
+  it("names each entry taken back and each left kept, and does not say the conversation is unchanged", async () => {
+    const told = await toldOf({
+      id: "undo-1",
+      messageId: "u1",
+      actionIds: ["write-1"],
+      at: "2026-10-02T09:00:00.000Z",
+      files: [{ path: "notes.md", status: "restored" }],
+      memory: [
+        {
+          writeId: "w2",
+          number: 6,
+          title: "Hotel prices",
+          status: "undone",
+        },
+        {
+          writeId: "w1",
+          number: 5,
+          title: "Lodging apart",
+          status: "refused",
+          reason:
+            "#5 Lodging apart was changed since, so it was left as it is.",
+        },
+        { writeId: "w0", number: 2, title: "How to work", status: "kept" },
+      ],
+    });
+
+    expect(told).toMatch(/taken back[^]*#6 Hotel prices/i);
+    expect(told).toMatch(/still kept[^]*#5 Lodging apart[^]*#2 How to work/i);
+    expect(told).toMatch(/put back[^]*notes\.md/i);
+    expect(told).not.toContain("The conversation is unchanged");
+  });
+
+  it("tells of memory alone when the person kept the files", async () => {
+    const told = await toldOf({
+      id: "undo-1",
+      messageId: "u1",
+      actionIds: [],
+      at: "2026-10-02T09:00:00.000Z",
+      files: [],
+      memory: [
+        { writeId: "w2", number: 6, title: "Hotel prices", status: "undone" },
+      ],
+    });
+
+    expect(told).toContain("what it kept in memory");
+    expect(told).not.toContain("file changes");
+    expect(told).toMatch(/taken back[^]*#6 Hotel prices/i);
+  });
+});

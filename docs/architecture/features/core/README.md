@@ -100,7 +100,8 @@ one group in for all five. It answers every other command:
 - **Kept items:** `kept` keeps a paste or an attached picture as a draft,
   finds a paste to open in the person's editor, and reads a stored picture.
 - **Rewind and undo:** `rewinds` previews them and `commitRewind` and
-  `commitUndo` apply them. Each is refused while the conversation's turn is
+  `commitUndo` apply them, each with whether to undo files and whether to
+  undo memory. Each is refused while the conversation's turn is
   running, and otherwise handed to the rewind group. None starts a model
   request. One whose conversation could not be saved stays on screen as not
   yet stored, and the next save that succeeds stores it.
@@ -406,12 +407,29 @@ one group in for all five. It answers every other command:
 - **A card says what became of its change.** Undoing a write, or keeping or
   dropping a change that waited, marks each open conversation's card showing
   it; a waiting change also marks the conversation it came from, opening it
-  if it was not open.
-- **Memory follows the conversation's record.** Going back past a turn takes
-  back what it and later turns kept, newest first; undoing a turn's changes
-  takes back what that turn kept and marks its cards. An entry the person
-  changed since stays as they left it. The conversation changes first, so a
-  write memory cannot take back then stays kept, shown on the Memory page.
+  if it was not open. Removing an entry on the Memory page marks the cards
+  that kept it as removed, opening the conversation that wrote it.
+- **What the person takes back from memory, the model hears.** A write
+  undone on its card, or an entry removed on the Memory page, is recorded on
+  each conversation whose card showed it, and that conversation's model is
+  told at its next request that the entry is no longer in memory; a change
+  to About you or How to work is named by the one rule it changed, so the
+  rest of that instruction is not taken for gone. Neither is listed again in
+  a later review of going back or undoing. A removal the person undoes on
+  the Memory page shows each card as before, and its model hears nothing of
+  it, or, when it was already told, that the entry is kept again.
+- **Memory follows the conversation's record, as the person chooses.** The
+  review of going back past a turn, or of undoing one, lists each write those
+  turns kept, newest first, with what undoing memory changes would do to it:
+  take it back; leave it, because the person already kept or discarded it;
+  or leave it, because memory would refuse it now, saying why, as for an
+  entry changed since. A write already undone is not listed. Committing
+  takes back the writes unless the person keeps memory, and says what became
+  of each, a refusal with its reason. Going back keeping memory leaves each
+  write the person's own to undo, as a change made on the Memory page is.
+  An undo that keeps memory or files leaves that kind as it is. A memory that
+  cannot be reached refuses each write, and the rewind or undo still
+  completes.
 - **Deleting a conversation** keeps what it wrote to memory and lets go of
   what undid it, since the cards that offered its Undo are gone.
 - **Forgetting a deleted conversation** removes, as the person chose, the

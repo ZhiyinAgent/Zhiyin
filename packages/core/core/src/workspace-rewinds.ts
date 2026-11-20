@@ -6,7 +6,7 @@ import type {
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { VisibleError } from "@zhiyin/contract";
-import type { Rewind, RewindHost } from "@zhiyin/rewind";
+import type { Rewind, RewindHost, RewindMemoryHost } from "@zhiyin/rewind";
 
 const recoveryIssue =
   "A file recovery operation could not be finished. The affected conversation will stay paused until recovery succeeds.";
@@ -30,12 +30,15 @@ export class WorkspaceRewinds {
     readonly pdfWords: (
       bytes: Uint8Array,
     ) => Promise<readonly string[] | undefined>;
+    /** What the turns a rewind or an undo takes back kept in memory. */
+    readonly memory: RewindMemoryHost;
   }) {
     this.#rewind = options.rewind;
     this.#host = {
       open: options.open,
       task: options.task,
       save: options.save,
+      memory: options.memory,
     };
     this.#historyAvailable = options.historyAvailable;
     this.#running = options.running;
@@ -87,6 +90,7 @@ export class WorkspaceRewinds {
     taskId: string,
     rewindId: string,
     files: "keep" | "restore",
+    memory: "keep" | "undo",
   ): Promise<RewindCommitResult> {
     if (this.#running(taskId))
       throw new VisibleError(
@@ -97,6 +101,7 @@ export class WorkspaceRewinds {
       rewindId,
       files,
       this.#host,
+      memory,
     );
     if (!result.ok) throw new VisibleError(result.reason);
     return result.result;
@@ -140,10 +145,15 @@ export class WorkspaceRewinds {
   async commitUndo(
     taskId: string,
     undoId: string,
+    files: "keep" | "restore",
+    memory: "keep" | "undo",
   ): Promise<RewindCommitResult> {
     if (this.#running(taskId))
       throw new VisibleError("Stop this task before undoing its changes.");
-    const result = await this.#rewind.commitUndo(taskId, undoId, this.#host);
+    const result = await this.#rewind.commitUndo(taskId, undoId, this.#host, {
+      files,
+      memory,
+    });
     if (!result.ok) throw new VisibleError(result.reason);
     return result.result;
   }

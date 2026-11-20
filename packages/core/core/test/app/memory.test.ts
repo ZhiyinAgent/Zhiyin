@@ -3,7 +3,7 @@
  * conversation's card, and the conversation's own choice of project.
  */
 
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -51,6 +51,18 @@ const typst = {
   text: "Chosen on 3 October.",
 };
 
+/** A model's send that writes down each request, as its text, when asked to. */
+function heardBy(
+  heard: string[] | undefined,
+  send: ReturnType<typeof calls>,
+): ReturnType<typeof calls> {
+  if (!heard) return send;
+  return (request, ...rest) => {
+    heard.push(JSON.stringify(request.messages));
+    return send(request, ...rest);
+  };
+}
+
 /** The app with `memory`, its model making `steps` in turn, hearing every event. */
 async function appWith(options: {
   readonly memory?: FileMemory;
@@ -62,6 +74,8 @@ async function appWith(options: {
   readonly unopened?: true;
   /** A folder the model writes in, its changes allowed and kept for undo. */
   readonly folder?: string;
+  /** Where each request the model is sent is written down. */
+  readonly heard?: string[];
 }) {
   const events: AppEvent[] = [];
   let created = 0;
@@ -104,7 +118,10 @@ async function appWith(options: {
           ),
         )),
     ...(options.memory ? { memory: options.memory } : {}),
-    model: { ...deps.model, send: calls(...(options.steps ?? [])) },
+    model: {
+      ...deps.model,
+      send: heardBy(options.heard, calls(...(options.steps ?? []))),
+    },
   });
   await app.initialize();
   const memoryEvents = () =>
@@ -197,6 +214,159 @@ describe("a conversation's card", () => {
     ).toBe("undone");
   });
 
+  it("tells the model at its next request that the entry its card undid is no longer kept", async () => {
+    const memory = await memoryAt();
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      heard,
+      steps: [["remember", typst], "answer"],
+    });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const kept = task(app).actions.find((action) => action.memory)!.memory!;
+    await app.memory.change({ kind: "undo", writeId: kept.writeId });
+    const before = heard.length;
+
+    await app.start(taskId, "What do you remember about the thesis?");
+
+    expect(heard[before]).toContain(
+      "Taken back from memory, so no longer kept: #1 Typst over LaTeX.",
+    );
+    expect(heard[before]).toContain(
+      'the one answering \\"We chose Typst for the thesis.\\"',
+    );
+  });
+
+  it("names the one rule its card undid in About you, so the model does not take the rest for gone", async () => {
+    const memory = await memoryAt();
+    await memory.add({
+      section: "about",
+      scope: "everything",
+      text: "- Their favourite colour is teal.",
+    });
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      heard,
+      steps: [
+        [
+          "remember",
+          {
+            section: "about",
+            scope: "everything",
+            rule: "Their favourite city is Porto.",
+            quote: "my favourite city is Porto",
+          },
+        ],
+        "answer",
+      ],
+    });
+    const taskId = await app.createTask();
+    await app.start(taskId, "Remember that my favourite city is Porto.");
+    const kept = task(app).actions.find((action) => action.memory)!.memory!;
+    await app.memory.change({ kind: "undo", writeId: kept.writeId });
+    const before = heard.length;
+
+    await app.start(taskId, "What do you remember about me?");
+
+    expect(heard[before]).toContain(
+      "Taken back from memory, so no longer kept: the rule “Their favourite city is Porto.” in About you.",
+    );
+    expect(heard[before]).toContain("The rest of About you stays as it is.");
+    expect((await memory.state()).entries[0]?.text).toBe(
+      "- Their favourite colour is teal.",
+    );
+  });
+
+  it("marks the card removed when the person removes its entry on the Memory page, and tells the model", async () => {
+    const memory = await memoryAt();
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      heard,
+      steps: [["remember", typst], "answer"],
+    });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+
+    await app.memory.change({ kind: "remove", number: 1 });
+    const before = heard.length;
+    await app.start(taskId, "What do you remember about the thesis?");
+
+    const card = task(app).actions.find((action) => action.memory)!.memory!;
+    expect(card.state).toBe("removed");
+    expect(heard[before]).toContain(
+      "The person removed from memory, on the Memory page, what an earlier turn kept",
+    );
+    expect(heard[before]).toContain("No longer kept: #1 Typst over LaTeX.");
+  });
+
+  it("shows the card as before when the person undoes a removal the model had not heard of, and tells it nothing", async () => {
+    const memory = await memoryAt();
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      heard,
+      steps: [["remember", typst], "answer"],
+    });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const removed = await app.memory.change({ kind: "remove", number: 1 });
+
+    await app.memory.change({
+      kind: "undo",
+      writeId: removed.ok ? removed.writeId! : "",
+    });
+    const before = heard.length;
+    await app.start(taskId, "What did we choose?");
+
+    const card = task(app).actions.find((action) => action.memory)!.memory!;
+    expect(card.state).toBeUndefined();
+    expect((await memory.state()).entries).toHaveLength(1);
+    expect(heard[before]).not.toContain("Memory page");
+  });
+
+  it("tells the model an entry is kept again when the person undoes its removal after it heard of it", async () => {
+    const memory = await memoryAt();
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      heard,
+      steps: [["remember", typst], "answer", "answer"],
+    });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const removed = await app.memory.change({ kind: "remove", number: 1 });
+    await app.start(taskId, "Is it still kept?");
+
+    await app.memory.change({
+      kind: "undo",
+      writeId: removed.ok ? removed.writeId! : "",
+    });
+    const before = heard.length;
+    await app.start(taskId, "And now?");
+
+    expect(heard[before]).toContain(
+      "Kept in memory again: #1 Typst over LaTeX. Rely on it as before.",
+    );
+  });
+
+  it("leaves out of a later review an entry the person removed on the Memory page", async () => {
+    const memory = await memoryAt();
+    const { app } = await appWith({ memory, steps: [["remember", typst]] });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    await app.memory.change({ kind: "remove", number: 1 });
+
+    const preview = await app.rewinds.preview(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+
+    expect(preview.memory).toEqual([]);
+  });
+
   it("keeps or drops a change that waited for the person, and the card says which", async () => {
     const memory = await memoryAt();
     const asked = (id: string) =>
@@ -268,25 +438,190 @@ describe("going back past a turn that kept something", () => {
     ]);
   });
 
-  it("leaves an entry the person changed since as they left it", async () => {
+  it("leaves an entry the person changed since as they left it, saying so in its review and after", async () => {
     const memory = await memoryAt();
     const { app } = await appWith({ memory, steps: [["remember", typst]] });
     const taskId = await app.createTask();
     await app.start(taskId, "We chose Typst for the thesis.");
     await memory.edit(1, { text: "Chosen on 3 October, for its speed." });
+    const why =
+      "#1 Typst over LaTeX was changed since, so it was left as it is.";
 
     const preview = await app.rewinds.preview(
       taskId,
       task(app).messages[0]!.id,
     );
-    await app.commitRewind(taskId, preview.id, "keep");
+    const result = await app.commitRewind(taskId, preview.id, "keep", "undo");
 
+    expect(preview.memory).toMatchObject([
+      { title: "Typst over LaTeX", status: "changed", reason: why },
+    ]);
+    expect(result.memory).toMatchObject([
+      { title: "Typst over LaTeX", status: "refused", reason: why },
+    ]);
     expect((await memory.state()).entries).toEqual([
       expect.objectContaining({
         number: 1,
         text: "Chosen on 3 October, for its speed.",
       }),
     ]);
+  });
+
+  it("shows the entry the turn kept as taken back in its review, and the Memory page agrees after", async () => {
+    const memory = await memoryAt();
+    const { app } = await appWith({ memory, steps: [["remember", typst]] });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const { writeId } = task(app).actions.find(
+      (action) => action.memory,
+    )!.memory!;
+
+    const preview = await app.rewinds.preview(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+    const result = await app.commitRewind(taskId, preview.id, "keep", "undo");
+
+    expect(preview.memory).toEqual([
+      { writeId, number: 1, title: "Typst over LaTeX", status: "undoable" },
+    ]);
+    expect(result.memory).toEqual([
+      { writeId, number: 1, title: "Typst over LaTeX", status: "undone" },
+    ]);
+    expect((await app.memory.state())?.entries).toEqual([]);
+  });
+
+  it("names a waiting change the person already kept as theirs, and leaves it", async () => {
+    const memory = await memoryAt();
+    const waiting = await memory.remember(
+      {
+        section: "how",
+        scope: "everything",
+        rule: "Cite sources as footnotes.",
+        quote: "Cite sources as footnotes.",
+      },
+      {
+        conversation: { id: "task-1", title: "Sources" },
+        personsWords: ["Cite sources as footnotes."],
+        held: { outside: true, because: "content from a web page" },
+      },
+    );
+    if (!waiting.ok) throw new Error(waiting.reason);
+    const saved = savedWith([waiting.change]);
+    const { app } = await appWith({
+      memory,
+      saved: {
+        ...saved,
+        messages: [
+          { id: "u1", role: "user", text: "Cite as footnotes", sequence: -1 },
+        ],
+      },
+    });
+    await app.memory.change({
+      kind: "keep",
+      waitingId: waiting.change.waiting!.id,
+    });
+
+    const preview = await app.rewinds.preview("task-1", "u1");
+    const result = await app.commitRewind("task-1", preview.id, "keep", "undo");
+
+    expect(preview.memory).toMatchObject([
+      { writeId: waiting.change.writeId, status: "decided" },
+    ]);
+    expect(result.memory).toMatchObject([{ status: "kept" }]);
+    expect((await memory.state()).entries).toMatchObject([
+      { section: "how", text: "- Cite sources as footnotes." },
+    ]);
+  });
+
+  it("leaves out of its review a write already undone from its card", async () => {
+    const memory = await memoryAt();
+    const { app } = await appWith({ memory, steps: [["remember", typst]] });
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const { writeId } = task(app).actions.find(
+      (action) => action.memory,
+    )!.memory!;
+    await app.memory.change({ kind: "undo", writeId });
+
+    const preview = await app.rewinds.preview(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+
+    // Already undone from its card: nothing is left to say of it.
+    expect(preview.memory).toEqual([]);
+  });
+});
+
+describe("going back keeping memory", () => {
+  it("leaves what the turn kept, with nothing left to undo it, while its files are put back", async () => {
+    const folder = await folders.make("zhiyin-core-back-");
+    await writeFile(join(folder, "notes.md"), "my notes", "utf8");
+    const memory = await memoryAt();
+    const { app } = await appWith({
+      memory,
+      folder,
+      steps: [
+        ["write_file", { path: "notes.md", content: "Typst it is." }],
+        ["remember", typst],
+      ],
+    });
+    await app.selectWorkspace(folder);
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const { writeId } = task(app).actions.find(
+      (action) => action.memory,
+    )!.memory!;
+
+    const preview = await app.rewinds.preview(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+    const result = await app.commitRewind(
+      taskId,
+      preview.id,
+      "restore",
+      "keep",
+    );
+
+    expect(await readFile(join(folder, "notes.md"), "utf8")).toBe("my notes");
+    expect(result.memory).toMatchObject([{ writeId, status: "kept" }]);
+    expect((await memory.state()).entries).toMatchObject([
+      { number: 1, title: "Typst over LaTeX" },
+    ]);
+    expect(await memory.undoable(writeId)).toEqual({
+      ok: false,
+      reason: "That change is no longer known.",
+    });
+  });
+
+  it("takes memory back while the files stay as the turn left them", async () => {
+    const folder = await folders.make("zhiyin-core-back-");
+    await writeFile(join(folder, "notes.md"), "my notes", "utf8");
+    const memory = await memoryAt();
+    const { app } = await appWith({
+      memory,
+      folder,
+      steps: [
+        ["write_file", { path: "notes.md", content: "Typst it is." }],
+        ["remember", typst],
+      ],
+    });
+    await app.selectWorkspace(folder);
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+
+    const preview = await app.rewinds.preview(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+    await app.commitRewind(taskId, preview.id, "keep", "undo");
+
+    expect(await readFile(join(folder, "notes.md"), "utf8")).toBe(
+      "Typst it is.",
+    );
+    expect((await memory.state()).entries).toEqual([]);
   });
 });
 
@@ -414,6 +749,72 @@ describe("undoing a turn's changes", () => {
     expect(
       task(app).actions.find((action) => action.memory)?.memory?.state,
     ).toBe("undone");
+  });
+
+  it("tells the model at its next request which entry was taken back, and a recall of its number says so", async () => {
+    const folder = await folders.make("zhiyin-core-undo-");
+    await writeFile(join(folder, "notes.md"), "my notes", "utf8");
+    const memory = await memoryAt();
+    const heard: string[] = [];
+    const { app } = await appWith({
+      memory,
+      folder,
+      heard,
+      steps: [
+        ["write_file", { path: "notes.md", content: "Typst it is." }],
+        ["remember", typst],
+        "answer",
+        ["recall", { numbers: [1] }],
+      ],
+    });
+    await app.selectWorkspace(folder);
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+    const preview = await app.rewinds.previewUndo(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+    await app.commitUndo(taskId, preview.id, "restore", "undo");
+    const before = heard.length;
+
+    await app.start(taskId, "What did we choose?");
+
+    expect(heard[before]).toMatch(
+      /Taken back from memory, so no longer kept: #1 Typst over LaTeX/,
+    );
+    expect(heard[before + 1]).toContain(
+      "#1 was taken back when the person undid the turn that kept it.",
+    );
+  });
+
+  it("keeps what the turn kept when the person undoes only its files", async () => {
+    const folder = await folders.make("zhiyin-core-undo-");
+    await writeFile(join(folder, "notes.md"), "my notes", "utf8");
+    const memory = await memoryAt();
+    const { app } = await appWith({
+      memory,
+      folder,
+      steps: [
+        ["write_file", { path: "notes.md", content: "Typst it is." }],
+        ["remember", typst],
+      ],
+    });
+    await app.selectWorkspace(folder);
+    const taskId = await app.createTask();
+    await app.start(taskId, "We chose Typst for the thesis.");
+
+    const preview = await app.rewinds.previewUndo(
+      taskId,
+      task(app).messages[0]!.id,
+    );
+    const result = await app.commitUndo(taskId, preview.id, "restore", "keep");
+
+    expect(await readFile(join(folder, "notes.md"), "utf8")).toBe("my notes");
+    expect(result.memory).toMatchObject([{ status: "kept" }]);
+    expect((await memory.state()).entries).toHaveLength(1);
+    expect(
+      task(app).actions.find((action) => action.memory)?.memory?.state,
+    ).toBeUndefined();
   });
 });
 

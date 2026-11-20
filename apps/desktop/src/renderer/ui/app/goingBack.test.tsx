@@ -73,6 +73,7 @@ describe("going back to a message", () => {
             laterUserMessages: 0,
             discardedActions: [],
             files: [],
+            memory: [],
           }),
           commitRewind,
           sendMessage,
@@ -96,10 +97,117 @@ describe("going back to a message", () => {
         undefined,
       ),
     );
-    expect(commitRewind).toHaveBeenCalledWith("task-1", "rewind-1", "keep");
+    expect(commitRewind).toHaveBeenCalledWith(
+      "task-1",
+      "rewind-1",
+      "keep",
+      "keep",
+    );
     expect(screen.getByText("Here is a draft.")).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Message Zhiyin" })).toHaveValue(
       "",
+    );
+  });
+
+  it("says, once it has gone back, which memory entry stayed kept and why", async () => {
+    const why = "#6 Hotel prices was changed since, so it was left as it is.";
+    const commitRewind = vi.fn<CoreApi["commitRewind"]>(async () => ({
+      files: [],
+      memory: [
+        {
+          writeId: "w2",
+          number: 6,
+          title: "Hotel prices",
+          status: "refused",
+          reason: why,
+        },
+      ],
+    }));
+    const dispatch = vi.fn();
+    render(
+      <WindowShell
+        state={createWindowState({
+          connection: "ready",
+          runtime: { tasks: "available", capabilities: "available" },
+          selectedTaskId: "task-1",
+          tasks: [
+            {
+              id: "task-1",
+              title: "Bordeaux",
+              updatedLabel: "Now",
+              updatedAt: "2026-11-19T09:00:00.000Z",
+              ...emptyConversationLists,
+              messages: [
+                {
+                  id: "message-1",
+                  role: "user",
+                  text: "Plan the trip",
+                  sequence: 0,
+                },
+                {
+                  id: "message-2",
+                  role: "assistant",
+                  text: "Planned.",
+                  sequence: 2,
+                },
+              ],
+              phase: {
+                kind: "completed",
+                outcome: { title: "Done", summary: "Planned." },
+              },
+            },
+          ],
+        })}
+        dispatch={dispatch}
+        commands={{
+          ...stubCommands,
+          previewRewind: async () => ({
+            id: "rewind-1",
+            taskId: "task-1",
+            messageId: "message-1",
+            draft: "Plan the trip",
+            discardedMessages: 2,
+            laterUserMessages: 0,
+            discardedActions: [],
+            files: [],
+            memory: [
+              {
+                writeId: "w2",
+                number: 6,
+                title: "Hotel prices",
+                status: "undoable",
+              },
+            ],
+          }),
+          commitRewind,
+          sendMessage: async () => {},
+        }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resend this message" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Go back to this message?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Go back and resend" }),
+    );
+
+    await waitFor(() =>
+      expect(commitRewind).toHaveBeenCalledWith(
+        "task-1",
+        "rewind-1",
+        "keep",
+        "undo",
+      ),
+    );
+    await waitFor(() =>
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "commandErrorShown",
+        message: `Went back. One memory entry stays kept: ${why}`,
+      }),
     );
   });
 
@@ -159,6 +267,7 @@ describe("going back to a message", () => {
             laterUserMessages: 0,
             discardedActions: [],
             files: [],
+            memory: [],
           }),
           openAttachment,
           sendMessage,
@@ -213,7 +322,12 @@ describe("going back to a message", () => {
         [pasted.id],
       ),
     );
-    expect(commitRewind).toHaveBeenCalledWith("task-1", "rewind-1", "keep");
+    expect(commitRewind).toHaveBeenCalledWith(
+      "task-1",
+      "rewind-1",
+      "keep",
+      "keep",
+    );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Message Zhiyin" })).toHaveValue(
       "",
@@ -309,4 +423,5 @@ const onlyItsReply = {
   laterUserMessages: 0,
   discardedActions: [],
   files: [],
+  memory: [],
 };

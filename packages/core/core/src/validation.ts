@@ -60,6 +60,10 @@ const rewoundFiles = oneOf<Parameters<Commands["commitRewind"]>[2]>({
   keep: true,
   restore: true,
 });
+const rewoundMemory = oneOf<Parameters<Commands["commitRewind"]>[3]>({
+  keep: true,
+  undo: true,
+});
 const approvalDecision = oneOf<Parameters<Commands["resolveApproval"]>[2]>({
   allow: true,
   "allow-conversation": true,
@@ -637,7 +641,6 @@ export function validateCommand(
     case CHANNEL.exportArtifact:
     case CHANNEL.previewRewind:
     case CHANNEL.previewUndo:
-    case CHANNEL.commitUndo:
     case CHANNEL.takeBackMessage:
     case CHANNEL.openDocument:
     case CHANNEL.showDocumentInFolder:
@@ -690,11 +693,13 @@ export function validateCommand(
         text(args[2], 4000);
       break;
     case CHANNEL.commitRewind:
+    case CHANNEL.commitUndo:
       valid =
-        args.length === 3 &&
+        args.length === 4 &&
         text(args[0]) &&
         text(args[1], 4000) &&
-        rewoundFiles(args[2]);
+        rewoundFiles(args[2]) &&
+        rewoundMemory(args[3]);
       break;
     case CHANNEL.exportConversation:
       valid = args.length === 2 && text(args[0]) && exportFormat(args[1]);

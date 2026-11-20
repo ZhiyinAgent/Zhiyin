@@ -3,7 +3,8 @@
 ## Purpose
 
 Takes a conversation back to an earlier message, with the files it changed
-since when the person asks, or undoes the file changes of a single turn. The conversation
+and what it kept in memory since, each when the person asks, or undoes the
+file changes and the memory writes of a single turn. The conversation
 planner decides what a rewind removes; file recovery keeps copies of files and
 puts them back. This group joins the two: it binds a plan to its file review,
 keeps that pair until it is applied, restores files, and finishes an
@@ -15,30 +16,33 @@ for the loop.
 
 ## Boundaries
 
-- **Owns:** binding a conversation plan to its file review, keeping the latest
-  review per conversation until it is applied or replaced, knowing when a
-  conversation's files are being put back, and the journal that finishes an
-  interrupted rewind or undo.
+- **Owns:** binding a conversation plan to its file review and to the memory
+  writes it takes back, keeping the latest review per conversation until it
+  is applied or replaced, knowing when a conversation's files are being put
+  back, and the journal that finishes an interrupted rewind or undo.
 - **Does not own:** which messages a rewind may remove (rewind planner),
   how files are copied, compared or restored, or what is copied and held
   around a file change or a run (recovery), when an action's backups are
   taken and what a missing one means (agent loop), whether a turn is running
-  (agent loop), or how the conversation is saved (the caller's host).
+  (agent loop), how the conversation is saved, or whether and how memory
+  takes a write back (the caller's host).
 - **Talks to other features only through:** contract types, type-only
   interfaces from its two members, and a host the caller passes in to read and
-  save the conversation. It imports nothing outside its members, so what it
+  save the conversation and to ask memory what becomes of a turn's writes. It imports nothing outside its members, so what it
   needs beyond them, as the journal's file replacement, is handed in.
 
 ## Public interface
 
-- `preview(conversationId, messageId, host)` reviews a rewind with its files,
-  or answers a refusal.
-- `commit(conversationId, rewindId, files, host)` applies exactly the reviewed
-  rewind, restores files only when `files` is `restore`, and saves through the
+- `preview(conversationId, messageId, host)` reviews a rewind with its files
+  and the memory writes of the turns it removes, or answers a refusal.
+- `commit(conversationId, rewindId, files, host, memory)` applies exactly the
+  reviewed rewind, restores files only when `files` is `restore`, takes back
+  the reviewed memory writes unless `memory` is `keep`, and saves through the
   host.
-- `previewUndo(conversationId, messageId, host)` reviews the files of the turn
-  that message opened; `commitUndo(conversationId, undoId, host)` puts exactly
-  those back and records the undo, keeping the conversation.
+- `previewUndo(conversationId, messageId, host)` reviews the files and the
+  memory writes of the turn that message opened;
+  `commitUndo(conversationId, undoId, host, { files, memory })` undoes exactly
+  those, each kind as chosen, and records the undo, keeping the conversation.
 - `versions(conversationId, messageId, path, host)` gives a file the turn
   changed, as it was before the turn and as the turn left it.
 - `restoring(conversationId)` says whether files are being put back.
@@ -53,7 +57,8 @@ for the loop.
   folder, each entry replaced whole by the `replace` it is handed (file
   replacement).
 - The types these take and return: `PendingRewind`, `RewindJournal`,
-  `RewindMembers`, `FileBackup`, `RewindHost`, `RewindPreviewing`,
+  `RewindMembers`, `FileBackup`, `RewindHost`, `RewindMemoryHost`,
+  `RewindChoice`, `RewindPreviewing`,
   `UndoPreviewing`, `RewindCommitting`, `ReplaceFile`, and the types of
   recovery's `FileBackups`, `RunBackups`, `RunBackup` and `RunStart`, passed
   on for the agent loop, which is handed recovery's backups beside the group.
@@ -99,6 +104,18 @@ for the loop.
   finished at once is, so such a file can still be undone after the restart.
 - What a turn did to a file is read from the turn's own recorded changes, in
   the conversation's folder.
+- The memory writes a rewind or an undo takes back are those its review
+  listed, each with what memory said of it then. They go through the same
+  journal as the files: written down with the operation before anything is
+  touched, taken back or left before the conversation is saved, what became
+  of each written down before the save, and finished by `resume` when a stop
+  came before it. A write taken back once is not asked of memory again after
+  a restart. A rewind that keeps every file but takes memory back is
+  journaled too, and puts no file back.
+- An undo records what became of each memory write with the undo, and marks
+  each one taken back as undone on its card. An undo that keeps the files
+  records no action as undone, so they can be undone later. An undo of
+  neither files nor memory is refused.
 
 ## Testing notes
 

@@ -104,7 +104,9 @@ function ChangeRow({
       >
         <Icon name={icons[change.change]} />
       </span>
-      {change.change === "removed" || number === undefined ? (
+      {change.change === "removed" ||
+      change.state === "removed" ||
+      number === undefined ? (
         <span className={styles["turn-memory__title"]}>{change.title}</span>
       ) : (
         <button
@@ -154,6 +156,7 @@ function ChangeRow({
 /** What the row says beside its title. */
 function note(change: MemoryChange, where: string): string {
   if (change.state === "undone") return "Undone";
+  if (change.state === "removed") return "Removed on the Memory page";
   if (change.state === "kept") return "Kept";
   if (change.state === "discarded") return "Discarded";
   if (change.change === "waiting") return "Waiting for you";
@@ -172,8 +175,10 @@ function counts(changes: readonly MemoryChange[]): string {
   let removed = 0;
   let waiting = 0;
   let undone = 0;
+  let removedSince = 0;
   for (const change of changes) {
     if (change.state === "undone") undone += 1;
+    else if (change.state === "removed") removedSince += 1;
     else if (change.change === "added") added += 1;
     else if (change.change === "changed") changed += 1;
     else if (change.change === "removed") removed += 1;
@@ -186,6 +191,7 @@ function counts(changes: readonly MemoryChange[]): string {
     removed ? `${removed} removed` : "",
     waiting ? `${waiting} waiting for you` : "",
     undone ? `${undone} undone` : "",
+    removedSince ? `${removedSince} removed since` : "",
   ]
     .filter(Boolean)
     .join(" · ");

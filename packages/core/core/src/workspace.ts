@@ -27,7 +27,6 @@ import type {
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { emptyConversationLists, VisibleError } from "@zhiyin/contract";
-import { actionsOfTurn } from "@zhiyin/conversation-rules";
 import type { TurnHost } from "@zhiyin/agent-loop";
 import type { Artifacts, DestinationChooser } from "@zhiyin/artifacts";
 import type { ConversationExport } from "@zhiyin/conversation-export";
@@ -286,6 +285,11 @@ export class Workspace {
       historyAvailable: () => this.#historyAvailable,
       running: (taskId) => this.turns.running(taskId),
       pdfWords: deps.pdfWords,
+      memory: {
+        effects: (actions) => this.memory.effects(actions),
+        takeBack: (effects, choice, cardsStay) =>
+          this.memory.takeBack(effects, choice, cardsStay),
+      },
     });
     this.rewinds = this.#rewinds;
     this.#capabilityState = new CapabilityState({
@@ -306,6 +310,7 @@ export class Workspace {
       ready: (taskId) => this.#readyToChange(taskId),
       save: (task) => this.#open.replace(task),
       folderOf: (taskId) => this.#folderOf(taskId),
+      now: deps.now,
     });
     // Looked up again first when the last look could not reach the model's
     // details.
@@ -677,20 +682,17 @@ export class Workspace {
     await this.#persistence.save().finally(() => this.#snapshotChanged());
   }
 
-  /** Files put back are drawn again as they now are, or said to be gone. */
+  /**
+   * Files put back are drawn again as they now are, or said to be gone.
+   * Undoing memory changes is the default, as the person's dialog offers it.
+   */
   async commitRewind(
     taskId: string,
     rewindId: string,
     files: "keep" | "restore",
+    memory: "keep" | "undo" = "undo",
   ): Promise<RewindCommitResult> {
-    const before = this.#open.required(taskId).actions;
-    const result = await this.#rewinds.commit(taskId, rewindId, files);
-    const after = new Set(
-      this.#open.required(taskId).actions.map((action) => action.id),
-    );
-    await this.memory.takeBack(
-      before.filter((action) => !after.has(action.id)),
-    );
+    const result = await this.#rewinds.commit(taskId, rewindId, files, memory);
     await this.surfaces.wentBack(
       taskId,
       reached(this.#open.required(taskId)),
@@ -702,12 +704,15 @@ export class Workspace {
   async commitUndo(
     taskId: string,
     undoId: string,
+    files: "keep" | "restore" = "restore",
+    memory: "keep" | "undo" = "undo",
   ): Promise<RewindCommitResult> {
-    const result = await this.#rewinds.commitUndo(taskId, undoId);
-    const task = this.#open.required(taskId);
-    const undo = task.undos.find((one) => one.id === undoId);
-    if (undo)
-      await this.memory.takeBack(actionsOfTurn(task, undo.messageId) ?? []);
+    const result = await this.#rewinds.commitUndo(
+      taskId,
+      undoId,
+      files,
+      memory,
+    );
     await this.surfaces.refresh(taskId);
     return result;
   }

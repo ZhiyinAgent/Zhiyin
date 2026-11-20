@@ -154,6 +154,29 @@
   text-wrap: pretty;
 }
 
+/* What memory left kept, said under the card once the undo is done. */
+.turn-files__left {
+  margin: 0;
+  padding: 0 12px 10px;
+  color: var(--zy-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.turn-files__subhead {
+  margin: 18px 0 0;
+  color: var(--zy-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.turn-files__subhead + .turn-files__preview {
+  margin-top: 8px;
+}
+
 /* What undo does to each file: one box, its rows divided by rules, the
    path above what happens to it, beside an icon saying which. */
 .turn-files__preview {

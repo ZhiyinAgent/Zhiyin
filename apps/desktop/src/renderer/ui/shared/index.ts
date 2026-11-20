@@ -32,6 +32,7 @@ export {
 } from "./SurfaceFrame.js";
 export { SurfacePanel } from "./SurfacePanel.js";
 export { Toggle } from "./Toggle.js";
+export { UndoChoices, type UndoChoice } from "./UndoChoices.js";
 export { moveAmongChoices, moveAmongTabs } from "./arrowKeys.js";
 export { tabStopOf } from "./radioChoices.js";
 export { focusMenu } from "./menuKeys.js";

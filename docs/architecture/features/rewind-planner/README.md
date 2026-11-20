@@ -26,10 +26,11 @@ plans to file recovery, and the core saves the result.
   still exactly the one the plan was made from. Otherwise the person is asked
   to review again.
 - `planUndo(task, messageId)` returns an `UndoPlan` naming the actions of the
-  turn that message opened whose file changes can still be undone, or a
-  refusal.
-- `applyUndo(task, plan, files, at)` records the undo and its per-file results
-  on the task, and changes nothing else.
+  turn that message opened whose file changes can still be undone, and every
+  action of the turn, or a refusal.
+- `applyUndo(task, plan, files, at, memory)` records the undo with its
+  per-file results and what became of the turn's memory writes, marks each
+  write taken back as undone on its card, and changes nothing else.
 - `ConversationRewind(newId)` implements `RewindPlanner`, naming each review
   with an id it makes.
 - The types these take and return: `RewindPreview`, `RewindRefusal`,

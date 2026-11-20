@@ -46,6 +46,7 @@ import { entryOnly, heldOf, projectOnly } from "./outcomes.js";
 import { MemoryProjects } from "./memory-projects.js";
 import { PersonsEdits } from "./persons-edits.js";
 import { UndoRecords } from "./undo-records.js";
+import { TakenBack, takenBackText, type TakenBackBy } from "./taken-back.js";
 
 export type FileMemoryOptions = {
   /** The memory folder, in Zhiyin's data folder. */
@@ -84,6 +85,7 @@ export class FileMemory implements Memory {
   readonly #edits: PersonsEdits;
   readonly #projects: MemoryProjects;
   readonly #records: UndoRecords;
+  readonly #taken: TakenBack;
   /** Every operation in turn, so no two writes cross and every read sees the last write. */
   readonly #queue = new Serial();
   readonly #listeners = new Set<() => void>();
@@ -92,7 +94,13 @@ export class FileMemory implements Memory {
     this.#options = options;
     this.#folder = new MemoryFolder(options.folder, options.now);
     this.#records = new UndoRecords(this.#folder, options.now);
-    this.#edits = new PersonsEdits(this.#folder, options, this.#records);
+    this.#taken = new TakenBack(this.#folder);
+    this.#edits = new PersonsEdits(
+      this.#folder,
+      options,
+      this.#records,
+      this.#taken,
+    );
     this.#projects = new MemoryProjects(this.#folder, options);
   }
 
@@ -167,7 +175,7 @@ export class FileMemory implements Memory {
     });
   }
 
-  recall(input: unknown): Promise<RecallOutcome> {
+  recall(input: unknown, conversationId?: string): Promise<RecallOutcome> {
     return this.#writing(async () => {
       const asked = readRecall(input);
       if (!asked)
@@ -187,7 +195,10 @@ export class FileMemory implements Memory {
       const byNumber = asked.numbers.map((number) =>
         snapshot.entries.find((entry) => entry.number === number),
       );
-      const notKept = asked.numbers.filter((_, index) => !byNumber[index]);
+      const missing = asked.numbers.filter((_, index) => !byNumber[index]);
+      const taken = conversationId ? await this.#taken.of(conversationId) : {};
+      const takenBack = missing.filter((number) => taken[number]);
+      const notKept = missing.filter((number) => !taken[number]);
       const closeness = new Closeness(snapshot.entries);
       const found = asked.searches.map((search) => ({
         search,
@@ -244,6 +255,13 @@ export class FileMemory implements Memory {
           })),
           ...(named.size ? { alsoFound } : {}),
           ...(notKept.length ? { notKept } : {}),
+          ...(takenBack.length
+            ? {
+                takenBack: takenBack.map((number) =>
+                  takenBackText(number, taken[number]!),
+                ),
+              }
+            : {}),
           ...(nothing.length
             ? { found: `Nothing kept matches ${nothing.join(" or ")}.` }
             : {}),
@@ -258,6 +276,7 @@ export class FileMemory implements Memory {
           })),
           alsoFound: Object.values(alsoFound).flat(),
           notKept,
+          takenBack,
           nothingFor: found
             .filter(({ hits }) => !hits.length)
             .map(({ search }) => search),
@@ -410,14 +429,23 @@ export class FileMemory implements Memory {
     return this.#writing(() => this.#edits.discard(waitingId));
   }
 
-  undo(writeId: string): Promise<PersonsOutcome> {
-    return this.#writing(() => this.#edits.undo(writeId));
+  undo(writeId: string, by?: TakenBackBy): Promise<PersonsOutcome> {
+    return this.#writing(() => this.#edits.undo(writeId, by));
+  }
+
+  undoable(writeId: string): Promise<PersonsOutcome> {
+    return this.#inTurn(() => this.#edits.undoable(writeId));
+  }
+
+  cardsGone(writeIds: readonly string[]): Promise<void> {
+    return this.#inTurn(() => this.#records.cardsGone(writeIds));
   }
 
   conversationDeleted(conversationId: string): Promise<void> {
-    return this.#inTurn(() =>
-      this.#records.conversationDeleted(conversationId),
-    );
+    return this.#inTurn(async () => {
+      await this.#records.conversationDeleted(conversationId);
+      await this.#taken.conversationDeleted(conversationId);
+    });
   }
 
   forgetConversation(

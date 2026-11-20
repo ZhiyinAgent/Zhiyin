@@ -515,7 +515,7 @@ export const actionsEntries: ComponentCatalogEntry[] = [
     id: "turn-files",
     title: "Files a turn changed",
     description:
-      "Under each turn that touched files: how many and how many lines, each file once with its own review, and one undo that shows what goes back and what stays before it does anything. Below, the same turn after its undo, one whose large file had no copy, one whose commands changed files that were only listed, one whose folder was too large to check, one that compiled over a PDF, whose review compares the words on its pages, and one that moved files: a rename, a folder, a file out of the workspace, a draft written then moved, and a file moved then edited, each move named at both ends.",
+      "Under each turn that touched files: how many and how many lines, each file once with its own review, and one undo that shows what goes back and what stays before it does anything. Then the same turn when it also kept something in memory: its undo offers file changes and memory changes, each a box under one for both, lists each entry and what becomes of it, and says after which entry memory left kept. Below, the same turn after its undo, one whose large file had no copy, one whose commands changed files that were only listed, one whose folder was too large to check, one that compiled over a PDF, whose review compares the words on its pages, and one that moved files: a rename, a folder, a file out of the workspace, a draft written then moved, and a file moved then edited, each move named at both ends.",
     render: () => (
       <div className="lab-narrow" style={{ display: "grid", gap: 16 }}>
         <TurnFiles
@@ -538,8 +538,60 @@ export const actionsEntries: ComponentCatalogEntry[] = [
               },
               { path: "summary.md", action: "remove", status: "recoverable" },
             ],
+            memory: [],
           })}
           onCommitUndo={async () => ({ files: [] })}
+        />
+        <TurnFiles
+          actions={turnActions}
+          running={false}
+          onPreviewUndo={async () => ({
+            id: "undo-lab-memory",
+            taskId: "task-lab",
+            messageId: "message-lab",
+            files: [
+              {
+                path: "notes/plan.md",
+                action: "restore",
+                status: "recoverable",
+              },
+            ],
+            memory: [
+              {
+                writeId: "write-prices",
+                number: 6,
+                title: "Hotel prices near Bordeaux Saint-Jean, checked once",
+                status: "changed",
+                reason:
+                  "#6 Hotel prices near Bordeaux Saint-Jean, checked once was changed since, so it was left as it is.",
+              },
+              {
+                writeId: "write-lodging",
+                number: 5,
+                title: "Lodging apart from the group",
+                status: "undoable",
+              },
+            ],
+          })}
+          onCommitUndo={async () => ({
+            files: [{ path: "notes/plan.md", status: "restored" }],
+            memory: [
+              {
+                writeId: "write-prices",
+                number: 6,
+                title: "Hotel prices near Bordeaux Saint-Jean, checked once",
+                status: "refused",
+                reason:
+                  "#6 Hotel prices near Bordeaux Saint-Jean, checked once was changed since, so it was left as it is.",
+              },
+              {
+                writeId: "write-lodging",
+                number: 5,
+                title: "Lodging apart from the group",
+                status: "undone",
+              },
+            ],
+          })}
         />
         <TurnFiles
           actions={turnActions}
@@ -627,6 +679,7 @@ export const actionsEntries: ComponentCatalogEntry[] = [
             files: [
               { path: "notes/plan.md", action: "restore", status: "conflict" },
             ],
+            memory: [],
           })}
           onCommitUndo={async () => ({ files: [] })}
         />
@@ -676,6 +729,7 @@ export const actionsEntries: ComponentCatalogEntry[] = [
                 status: "recoverable",
               },
             ],
+            memory: [],
           })}
           onCommitUndo={async () => ({ files: [] })}
           onCompareDocument={async () => ({

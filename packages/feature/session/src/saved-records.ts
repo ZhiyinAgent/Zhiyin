@@ -151,7 +151,7 @@ export function validRunningJob(value: unknown): boolean {
   return isRecord(value) && text(value.id) && text(value.command);
 }
 
-/** A turn whose file changes the person undid, and what became of each file. */
+/** A turn whose changes the person undid, and what became of each file. */
 export function validUndo(value: unknown): boolean {
   return (
     isRecord(value) &&
@@ -160,6 +160,10 @@ export function validUndo(value: unknown): boolean {
     listOf(value.actionIds, text) &&
     text(value.at) &&
     (value.told === undefined || value.told === true) &&
+    (value.memoryFrom === undefined ||
+      value.memoryFrom === "card" ||
+      value.memoryFrom === "memoryPage" ||
+      value.memoryFrom === "memoryPageBack") &&
     listOf(
       value.files,
       (file) =>

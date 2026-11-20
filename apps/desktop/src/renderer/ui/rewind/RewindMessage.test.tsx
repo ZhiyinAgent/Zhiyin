@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { RewindPreview } from "@zhiyin/contract";
@@ -22,6 +28,7 @@ const preview: RewindPreview = {
     },
   ],
   files: [],
+  memory: [],
 };
 
 /** A rewind that loses only the selected message's own replies. */
@@ -108,7 +115,7 @@ describe("editing a message", () => {
         "Change the third request",
       ),
     );
-    expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep");
+    expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep", "keep");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
@@ -155,7 +162,7 @@ describe("editing a message", () => {
     await waitFor(() =>
       expect(send).toHaveBeenCalledWith({ files: [] }, "Change it again"),
     );
-    expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep");
+    expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep", "keep");
   });
 
   it("keeps the edit open when going back is cancelled", async () => {
@@ -173,7 +180,7 @@ describe("editing a message", () => {
     expect(commit).not.toHaveBeenCalled();
   });
 
-  it("puts files back only when asked, and says which cannot be", async () => {
+  it("puts files back unless their box is cleared, and says which cannot be", async () => {
     const commit = vi.fn(async () => ({ files: [] }));
     render(
       <Message
@@ -193,13 +200,51 @@ describe("editing a message", () => {
     expect(dialog).toHaveTextContent(
       "You changed this file afterwards, so it is left as it is.",
     );
-    fireEvent.click(
-      screen.getByRole("checkbox", { name: /Put the files back as they were/ }),
-    );
+    // Only files to undo: no box for everything.
+    expect(within(dialog).getAllByRole("checkbox")).toEqual([
+      within(dialog).getByRole("checkbox", { name: "Undo file changes" }),
+    ]);
+    expect(
+      within(dialog).getByRole("checkbox", { name: "Undo file changes" }),
+    ).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Go back and send" }));
 
     await waitFor(() =>
-      expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "restore"),
+      expect(commit).toHaveBeenCalledWith(
+        "task-1",
+        "rewind-1",
+        "restore",
+        "keep",
+      ),
+    );
+  });
+
+  it("keeps the files as they are when their box is cleared", async () => {
+    const commit = vi.fn(async () => ({ files: [] }));
+    render(
+      <Message
+        reviewed={{
+          ...preview,
+          files: [
+            { path: "note.txt", action: "restore", status: "recoverable" },
+          ],
+        }}
+        onCommit={commit}
+      />,
+    );
+
+    edit("Change it");
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(
+      within(dialog).getByRole("checkbox", { name: "Undo file changes" }),
+    );
+    expect(
+      within(dialog).getByText("note.txt").closest("li"),
+    ).toHaveTextContent("Stays as it is now.");
+    fireEvent.click(screen.getByRole("button", { name: "Go back and send" }));
+
+    await waitFor(() =>
+      expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep", "keep"),
     );
   });
 
@@ -367,7 +412,7 @@ describe("going back over a command that changed files", () => {
     });
 
     expect(
-      screen.getByRole("checkbox", { name: /Put the files back as they were/ }),
+      screen.getByRole("checkbox", { name: "Undo file changes" }),
     ).toHaveAccessibleDescription(
       "Undoes 1 change Zhiyin made after this message. The 2 files changed while a command ran stay as they are.",
     );
@@ -385,7 +430,7 @@ describe("going back over a command that changed files", () => {
     expect(listed).not.toHaveTextContent("out.csv");
     expect(listed).toHaveTextContent("notes.md");
     expect(
-      screen.getByRole("checkbox", { name: /Put the files back as they were/ }),
+      screen.getByRole("checkbox", { name: "Undo file changes" }),
     ).toHaveAccessibleDescription(
       "Undoes 1 change Zhiyin made after this message. The file changed while a command ran stays as it is.",
     );
@@ -425,6 +470,157 @@ describe("going back over a command that changed files", () => {
     expect(listed).toHaveTextContent(
       "make: what it changed was not listed. The folder was too large to list.",
     );
+  });
+});
+
+describe("going back over turns that kept something in memory", () => {
+  const kept = (
+    id: string,
+    writeId: string,
+    title: string,
+  ): RewindPreview["discardedActions"][number] => ({
+    id,
+    action: "Keep in memory",
+    target: title,
+    status: "completed",
+    sequence: 5,
+    memory: {
+      writeId,
+      title,
+      change: "added",
+      scope: "everything",
+      scopeName: "Everything you do",
+      section: "knowledge",
+    },
+  });
+  const remembered: RewindPreview = {
+    ...preview,
+    laterUserMessages: 0,
+    discardedActions: [
+      kept("keep-lodging", "w1", "Lodging apart"),
+      kept("keep-prices", "w2", "Hotel prices"),
+    ],
+    files: [{ path: "plan.md", action: "restore", status: "recoverable" }],
+    memory: [
+      {
+        writeId: "w2",
+        number: 6,
+        title: "Hotel prices",
+        status: "changed",
+        reason: "#6 Hotel prices was changed since, so it was left as it is.",
+      },
+      { writeId: "w1", number: 5, title: "Lodging apart", status: "undoable" },
+    ],
+  };
+
+  async function goBack(
+    reviewed: RewindPreview,
+    commit = vi.fn(async () => ({ files: [] })),
+  ) {
+    render(<Message reviewed={reviewed} onCommit={commit} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Resend this message" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Go back to this message?",
+    });
+    const box = (name: string) =>
+      within(dialog).getByRole("checkbox", { name });
+    return { dialog, box, commit };
+  }
+
+  it("lists what was kept in memory with what becomes of each, never as not undone", async () => {
+    const { dialog } = await goBack(remembered);
+
+    const listed = within(dialog).getByRole("region", {
+      name: "Memory kept after this message",
+    });
+    expect(
+      within(listed).getByText("#5 Lodging apart").closest("li"),
+    ).toHaveTextContent("Taken back.");
+    expect(
+      within(listed).getByText("#6 Hotel prices").closest("li"),
+    ).toHaveTextContent(
+      "#6 Hotel prices was changed since, so it was left as it is.",
+    );
+    expect(dialog).not.toHaveTextContent("Not undone by going back");
+    expect(dialog).not.toHaveTextContent("Keep in memory");
+  });
+
+  it("undoes file and memory changes by default", async () => {
+    const { box, commit } = await goBack(remembered);
+
+    expect(box("Undo everything")).toBeChecked();
+    expect(box("Undo file changes")).toBeChecked();
+    expect(box("Undo memory changes")).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Go back and resend" }));
+
+    await waitFor(() =>
+      expect(commit).toHaveBeenCalledWith(
+        "task-1",
+        "rewind-1",
+        "restore",
+        "undo",
+      ),
+    );
+  });
+
+  it("keeps memory when its box is cleared, the files still put back, and says the entry stays", async () => {
+    const { dialog, box, commit } = await goBack(remembered);
+
+    fireEvent.click(box("Undo memory changes"));
+
+    expect(box("Undo everything")).toBePartiallyChecked();
+    expect(
+      within(dialog).getByText("#5 Lodging apart").closest("li"),
+    ).toHaveTextContent("Stays kept.");
+    fireEvent.click(screen.getByRole("button", { name: "Go back and resend" }));
+    await waitFor(() =>
+      expect(commit).toHaveBeenCalledWith(
+        "task-1",
+        "rewind-1",
+        "restore",
+        "keep",
+      ),
+    );
+  });
+
+  it("keeps both when everything is cleared, and still goes back", async () => {
+    const { box, commit } = await goBack(remembered);
+
+    fireEvent.click(box("Undo everything"));
+
+    expect(
+      screen.getByRole("button", { name: "Go back and resend" }),
+    ).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Go back and resend" }));
+    await waitFor(() =>
+      expect(commit).toHaveBeenCalledWith("task-1", "rewind-1", "keep", "keep"),
+    );
+  });
+
+  it("offers memory alone when no file can be put back", async () => {
+    const { dialog } = await goBack({ ...remembered, files: [] });
+
+    expect(within(dialog).getAllByRole("checkbox")).toEqual([
+      within(dialog).getByRole("checkbox", { name: "Undo memory changes" }),
+    ]);
+  });
+
+  it("offers no memory box when nothing kept can be taken back, and still lists what stays", async () => {
+    const { dialog } = await goBack({
+      ...remembered,
+      memory: [remembered.memory[0]!],
+    });
+
+    expect(
+      within(dialog).queryByRole("checkbox", { name: "Undo memory changes" }),
+    ).toBeNull();
+    expect(
+      within(dialog).getByRole("region", {
+        name: "Memory kept after this message",
+      }),
+    ).toHaveTextContent("#6 Hotel prices");
   });
 });
 

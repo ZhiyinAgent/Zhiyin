@@ -411,29 +411,56 @@ describe("privileged commands", () => {
     }
   });
 
-  it("accepts only exact undo identities", () => {
+  it("accepts only exact undo identities, with what to undo of files and of memory", () => {
     expect(() =>
       validateCommand(CHANNEL.previewUndo, ["task-1", "message-2"]),
     ).not.toThrow();
     expect(() =>
-      validateCommand(CHANNEL.commitUndo, ["task-1", "undo-3"]),
+      validateCommand(CHANNEL.commitUndo, [
+        "task-1",
+        "undo-3",
+        "restore",
+        "undo",
+      ]),
+    ).not.toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.commitUndo, ["task-1", "undo-3", "keep", "undo"]),
     ).not.toThrow();
     expect(() => validateCommand(CHANNEL.previewUndo, ["task-1"])).toThrow();
     expect(() =>
+      validateCommand(CHANNEL.commitUndo, ["task-1", "undo-3"]),
+    ).toThrow();
+    expect(() =>
       validateCommand(CHANNEL.commitUndo, ["task-1", "undo-3", "restore"]),
+    ).toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.commitUndo, [
+        "task-1",
+        "undo-3",
+        "restore",
+        "forget",
+      ]),
     ).toThrow();
   });
 
-  it("accepts only exact rewind identities", () => {
+  it("accepts only exact rewind identities, with what to undo of files and of memory", () => {
     expect(() =>
       validateCommand(CHANNEL.previewRewind, ["task-1", "message-2"]),
     ).not.toThrow();
     expect(() =>
-      validateCommand(CHANNEL.commitRewind, ["task-1", "rewind-3", "restore"]),
+      validateCommand(CHANNEL.commitRewind, [
+        "task-1",
+        "rewind-3",
+        "restore",
+        "keep",
+      ]),
     ).not.toThrow();
     expect(() => validateCommand(CHANNEL.previewRewind, ["task-1"])).toThrow();
     expect(() =>
-      validateCommand(CHANNEL.commitRewind, ["task-1", "", true]),
+      validateCommand(CHANNEL.commitRewind, ["task-1", "rewind-3", "restore"]),
+    ).toThrow();
+    expect(() =>
+      validateCommand(CHANNEL.commitRewind, ["task-1", "", true, "undo"]),
     ).toThrow();
   });
 
