@@ -5,7 +5,7 @@
  */
 
 import type { McpServerDefinition, McpSignInOutcome } from "@zhiyin/contract";
-import { SIGN_IN, UNAUTHORIZED } from "./connection-problems.js";
+import { NEEDS_KEY, SIGN_IN, UNAUTHORIZED } from "./connection-problems.js";
 import type { ConnectionPool } from "./connection-pool.js";
 import type { ConnectionSignIns } from "./connection-sign-ins.js";
 import type { ConnectionTokens } from "./connection-tokens.js";
@@ -82,14 +82,14 @@ export class CredentialChanges {
   /**
    * What a connection refused while connecting is told: to sign in, when its
    * service offers the standard sign-in and it holds no key, asked of the
-   * service once; otherwise that its key was refused.
+   * service once; that it needs a key, when it holds none; otherwise that
+   * its key was refused.
    */
   async refusedOnConnect(server: McpServerDefinition): Promise<string> {
-    if ((await this.#tokens.state(server.id, server.url)).status === "saved")
-      return UNAUTHORIZED;
-    return (await this.#signIns.offers(server.id, server.url))
-      ? SIGN_IN
-      : UNAUTHORIZED;
+    const held = (await this.#tokens.state(server.id, server.url)).status;
+    if (held === "saved") return UNAUTHORIZED;
+    if (await this.#signIns.offers(server.id, server.url)) return SIGN_IN;
+    return held === "none" ? NEEDS_KEY : UNAUTHORIZED;
   }
 
   /**

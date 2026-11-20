@@ -15,6 +15,7 @@ import type {
   McpServerState,
   McpSignInOutcome,
   PluginState,
+  SetupSuggestion,
   ShellAvailability,
   ToolCallInspection,
   ToolchainState,
@@ -40,8 +41,10 @@ import {
   pluginContentsOf,
   pluginDirectoryFrom,
   pluginStatesFrom,
+  setupSuggestionFor,
   withheldConnectionIds,
   type AppConnectionFact,
+  type ConnectorFacts,
   type PluginContents,
 } from "./plugin-directory.js";
 import {
@@ -207,6 +210,11 @@ export class ComposedCapabilities
       new Set(active.map((view) => view.manifest.name)),
     );
     const described = views ? await this.#described() : new Map();
+    // Read once each built-in has said whether it can work here, so a
+    // browser missing from this computer is known without reaching it.
+    const facts = views
+      ? await this.#facts().catch(() => undefined)
+      : undefined;
     const { toolkits, refused } = enabledToolkits(views ?? [], described);
     if (refused) return { ok: false, reason: refused };
     const builtIn = tools.list(conversationId);
@@ -249,7 +257,11 @@ export class ComposedCapabilities
         skills,
         specialists: views ? enabledSpecialists(views) : [],
         pluginDirectory: views
-          ? pluginDirectoryFrom(views, (view) => toolkitIdsOf(view, described))
+          ? pluginDirectoryFrom(
+              views,
+              (view) => toolkitIdsOf(view, described),
+              facts,
+            )
           : [],
         toolkits,
         ownerOf: (name) => owners.get(name),
@@ -317,6 +329,12 @@ export class ComposedCapabilities
 
   describePluginContents(contents: PluginContents): readonly ActionDetail[] {
     return pluginContentsDetails(contents);
+  }
+
+  async connectorSetup(id: string): Promise<SetupSuggestion | undefined> {
+    const views = await this.#members.plugins.list();
+    await this.#described();
+    return setupSuggestionFor(views, id, await this.#facts());
   }
 
   async editablePluginContents(
@@ -448,15 +466,28 @@ export class ComposedCapabilities
       plugins.damaged(),
     ]);
     const connections = knownConnections ?? (await this.#members.mcp.states());
-    const facts = new Map<string, AppConnectionFact>();
-    for (const state of connections.filter((item) => item.builtIn)) {
-      const toolchain = await this.#toolchainOf(state.id);
-      facts.set(state.id, { state, ...(toolchain ? { toolchain } : {}) });
-    }
+    const { appConnections } = await this.#facts(connections);
     return [
-      ...pluginStatesFrom(views, connections, facts),
+      ...pluginStatesFrom(views, connections, appConnections),
       ...damaged.map(damagedPluginState),
     ];
+  }
+
+  /** What each connection last answered and what each built-in has of its programs; reaches none. */
+  async #facts(known?: readonly McpServerState[]): Promise<ConnectorFacts> {
+    const connections = known ?? (await this.#members.mcp.states());
+    const appConnections = new Map<string, AppConnectionFact>();
+    for (const state of connections.filter((item) => item.builtIn)) {
+      const toolchain = await this.#toolchainOf(state.id);
+      appConnections.set(state.id, {
+        state,
+        ...(toolchain ? { toolchain } : {}),
+      });
+    }
+    return {
+      connections: new Map(connections.map((state) => [state.id, state])),
+      appConnections,
+    };
   }
 
   setPluginEnabled(id: string, enabled: boolean): Promise<void> {

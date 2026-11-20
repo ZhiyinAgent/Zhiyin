@@ -44,12 +44,14 @@ type WindowPage =
 
 /**
  * A page and where it opens, when what opened it pointed into it: the Memory
- * page at one entry, or settings at the provider's key.
+ * page at one entry, settings at the provider's key, or Plugins at one
+ * plugin's connectors.
  */
 type SurfaceOpening =
   | { surface: "memory"; at?: number }
   | { surface: "model"; at?: "apiKey" }
-  | { surface: Exclude<WindowPage, "memory" | "model"> };
+  | { surface: "library"; at?: { readonly plugin: string } }
+  | { surface: Exclude<WindowPage, "memory" | "model" | "library"> };
 
 export type ApprovalRequest = CoreApprovalRequest;
 export type TaskAction = CoreTaskAction;
@@ -96,9 +98,10 @@ export type WindowState = {
   surface: WindowPage;
   /**
    * Where the open page opens, when what opened it pointed into it: an entry
-   * of the Memory page, or the provider's key in settings.
+   * of the Memory page, the provider's key in settings, or a plugin's
+   * connectors in Plugins.
    */
-  surfaceAt?: number | "apiKey" | undefined;
+  surfaceAt?: number | "apiKey" | { readonly plugin: string } | undefined;
   /** What is beside each conversation, as the core last said. */
   beside: BesideConversations;
   /** The conversations opened so far. */

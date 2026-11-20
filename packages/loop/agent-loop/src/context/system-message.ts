@@ -86,7 +86,7 @@ export function agentSystemMessage(
       // own, and names the tools it has. A model that did not know where it
       // was started one in the shell to print and screenshot its pages.
       reader === "agent"
-        ? "To view a page or workspace HTML, for any task, use the Browser connector's preview, opening its plugin when its tools are not on offer, at phone size too for a phone. Never use a browser in the shell to view, screenshot or print; PDFs come from a document compiler."
+        ? "To view a page or workspace HTML, for any task, use the Browser connector's preview, opening its plugin when its tools are not on offer, at phone size too for a phone. When that plugin is switched off or the browser needs something, ask the person for it instead. Never use a browser in the shell to view, screenshot or print; PDFs come from a document compiler."
         : offered.some((name) => name.endsWith("browser_preview"))
           ? "Use the browser's workspace-preview tool to view local HTML, at phone size too for a phone, and look at a page you made there before calling it finished. Never start a browser in the shell; a PDF comes from a document compiler."
           : "Never start a browser in the shell to view, screenshot or print a page; a PDF comes from a document compiler.",

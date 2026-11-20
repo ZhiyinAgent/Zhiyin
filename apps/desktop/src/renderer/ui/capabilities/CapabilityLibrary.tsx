@@ -30,7 +30,10 @@ export function CapabilityLibrary({
   onOpenExternalUrl,
   onTryPrompt,
   onClose,
+  opening,
 }: {
+  /** The plugin to open at, at its connectors, as a setup card asks. */
+  opening?: string | undefined;
   plugins?: readonly PluginState[];
   mcpServers?: readonly McpServerState[];
   loading?: boolean;
@@ -44,7 +47,9 @@ export function CapabilityLibrary({
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(opening);
+  // Only as the page first shows: another plugin chosen opens at its top.
+  const [openedAt, setOpenedAt] = useState(opening);
   const [pendingAction, setPendingAction] = useState<string | undefined>();
   const [actionError, setActionError] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
@@ -199,6 +204,7 @@ export function CapabilityLibrary({
           onQuery={setQuery}
           onSelect={(id) => {
             setSelectedId(id);
+            setOpenedAt(undefined);
             setActionError(undefined);
           }}
         />
@@ -207,6 +213,7 @@ export function CapabilityLibrary({
           <PluginDetail
             key={selected.id}
             plugin={selected}
+            atConnectors={selected.id === openedAt}
             actions={{
               onToggle: (id, enabled) =>
                 attempt(

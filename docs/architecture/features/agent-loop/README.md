@@ -119,17 +119,39 @@ read, the exact link to cite it with. None of this can fail the turn.
 The browser is a plugin's connector, so its tools are offered only once that
 plugin is active. The main agent is told, in the same words whether it is
 active or not, to view a page in the Browser connector's preview, opening its
-plugin when its tools are not on offer, at phone size too for a phone. A
+plugin when its tools are not on offer, at phone size too for a phone, and to
+ask the person instead when that plugin is switched off or the browser needs
+something. A
 specialist offered the preview is told to look at a page it made there. Each
 is told never to start a browser in the shell to view, screenshot or print a
 page, and that a PDF comes from a document compiler.
 
+The plugin directory is told with what each connector that cannot be used yet
+needs, and where: under Connectors on its plugin's page in Plugins. The main
+agent is told that none of these is broken or out of service; that when a task
+would use such a connector, or a plugin switched off, it stops before any way
+around it and tells the person, in their own words and in one message, what
+is needed and where, showing them with `suggest_setup`; and that another way
+is only a choice offered to them, never a way around a site's limits or
+blocks.
+
 The loop answers some tools itself: `update_plan`; `delegate_specialist`,
 offered when any enabled plugin has specialists, with its `id` limited to
 exactly those, active or not; the catalog's `find` and `open`, offered while
-any plugin is enabled, and `call` where opened tools go through it; and,
+any plugin is enabled, and `call` where opened tools go through it;
+`suggest_setup`, offered while any plugin is listed; and,
 inside a specialist, `finish_specialist`; and, with memory, `remember` and
 `recall`.
+
+`suggest_setup(id)` takes a connector's id from the directory's needs, or a
+switched-off plugin's id, and shows the person a card: what to do, and a
+button that opens that plugin's page in Plugins at its connectors. The card
+is the capabilities' `connectorSetup` answer, all of it Zhiyin's words; the
+model only names the connector. It reads and changes nothing and asks for no
+approval; it is kept as the conversation's action with the card and its
+declared effects, and the model is answered, in one sentence, what the
+person was asked. An id with nothing to set up is refused, and no card is
+shown.
 
 The catalog holds what the enabled plugins bring (ADR 0017). `find` answers
 up to five entries, one per line as `id: title: summary`, fenced as data.
@@ -465,6 +487,15 @@ named by its target.
   lists the top-level entries at a turn's start, unless the last one the
   model was told lists the same, and again after a condensing replaced it. A
   specialist's system prompt, written for its run alone, holds them.
+- The plugin directory's marks, what each connector needs and which plugins
+  are switched off, are kept with the conversation as its requests first
+  carried them, a plugin first listed later with its own, so the start of
+  its requests stays the same, byte for byte, as the person sets a connector
+  up or switches a plugin on. What changed since is told in a `readiness`
+  notice at the end of the next request, unless the last one the model was
+  told says the same, and again when the conversation no longer holds it, as
+  after a condensing; once the marks are back as the directory gives them,
+  one notice says so.
 - What happened outside the turn reaches the model as a notice at its next
   request: a job's end (`job`; a job that ended by itself wakes a conversation
   with no turn running) and files the person put back with undo (`undo`, told

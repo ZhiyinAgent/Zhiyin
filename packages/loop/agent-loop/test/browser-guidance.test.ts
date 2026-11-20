@@ -32,7 +32,7 @@ function call(callId: string, name: string, input: unknown): ModelEvent {
 }
 
 const findTheBrowser =
-  "To view a page or workspace HTML, for any task, use the Browser connector's preview, opening its plugin when its tools are not on offer, at phone size too for a phone. Never use a browser in the shell to view, screenshot or print; PDFs come from a document compiler.";
+  "To view a page or workspace HTML, for any task, use the Browser connector's preview, opening its plugin when its tools are not on offer, at phone size too for a phone. When that plugin is switched off or the browser needs something, ask the person for it instead. Never use a browser in the shell to view, screenshot or print; PDFs come from a document compiler.";
 const useThePreview =
   "Use the browser's workspace-preview tool to view local HTML, at phone size too for a phone, and look at a page you made there before calling it finished. Never start a browser in the shell; a PDF comes from a document compiler.";
 

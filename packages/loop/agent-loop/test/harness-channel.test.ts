@@ -86,6 +86,7 @@ describe("a notice from Zhiyin", () => {
       "workspace",
       "skill",
       "toolkit",
+      "readiness",
     ]);
   });
 });

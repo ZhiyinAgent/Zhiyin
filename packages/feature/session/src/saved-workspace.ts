@@ -33,6 +33,7 @@ import {
   validContextUsage,
 } from "./saved-context.js";
 import { validChanges } from "./saved-changes.js";
+import { validReadinessSent, validSetupSuggestion } from "./saved-readiness.js";
 import {
   optionalTrue,
   validApproval,
@@ -339,6 +340,7 @@ function validAction(action: unknown): boolean {
     validInvocation(action.invocation) &&
     optionalTrue(action.readOnly) &&
     validMemoryChange(action.memory) &&
+    validSetupSuggestion(action.setup) &&
     optionalText(action.specialistRunId) &&
     actionStatus(action.status) &&
     optionalIsoDate(action.startedAt) &&
@@ -455,6 +457,7 @@ const conversationParts: {
   memoryKept: (task) =>
     task.memoryKept === undefined ||
     listOf(task.memoryKept, (line) => typeof line === "string"),
+  readinessSent: (task) => validReadinessSent(task.readinessSent),
 };
 
 /**

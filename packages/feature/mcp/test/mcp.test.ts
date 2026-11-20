@@ -2136,10 +2136,33 @@ describe("ManagedMcpServers", () => {
       expect.objectContaining({
         status: "unauthorized",
         reason:
-          "This server refused the access token. Save a current token to sign in again.",
+          "This connector needs its key or access token before it can be used.",
         credential: { status: "none" },
       }),
     ]);
+  });
+
+  it("says a tool of a connection waiting for its key needs setting up, never that it is down", async () => {
+    const servers = managed(
+      await folders.make("zhiyin-mcp-"),
+      async () => {
+        throw new McpUnauthorizedError("401");
+      },
+      new InMemoryMcpCredentials(),
+    );
+    await servers.declare({
+      id: "search",
+      name: "Search",
+      url: "https://example.com/mcp",
+      enabled: true,
+    });
+    await reached(servers);
+
+    expect(await servers.inspect("mcp__search__search", {})).toEqual({
+      ok: false,
+      reason:
+        "Search needs setting up before it can be used. This connector needs its key or access token before it can be used. The person does it under Connectors on the plugin's page in Plugins.",
+    });
   });
 
   it("withdraws tools and asks for a new token when a call is refused", async () => {

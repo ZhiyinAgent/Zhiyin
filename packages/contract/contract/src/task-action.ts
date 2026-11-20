@@ -5,6 +5,7 @@ import type {
   FileChange,
   ToolInvocation,
   MemoryChange,
+  SetupSuggestion,
 } from "./index.js";
 
 export type ConversationPermission = {
@@ -107,6 +108,8 @@ export type TaskAction = {
   readonly reachesPrivate?: true;
   /** For a `remember` call, the change it made to memory (ADR 0026). */
   readonly memory?: MemoryChange;
+  /** For a `suggest_setup` call, the card it showed the person. */
+  readonly setup?: SetupSuggestion;
   /**
    * A call the memory's look back over a turn made, after the turn's answer
    * (ADR 0026): kept in the record, shown only by what it kept.

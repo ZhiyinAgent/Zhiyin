@@ -13,6 +13,10 @@ import { LoopGuard } from "./loop-guard.js";
 import { PlanProgress } from "../plan/plan-progress.js";
 import { StandingInstructions } from "../context/standing-instructions.js";
 import { noteWorkspace } from "../context/workspace-notice.js";
+import {
+  keepReadiness,
+  noteReadiness,
+} from "../context/directory-readiness.js";
 import { asTheModelSees } from "./turn-pictures.js";
 import { deliverBackgroundWork } from "./background-deliveries.js";
 import type { ModelHistory } from "../context/model-history.js";
@@ -40,6 +44,7 @@ import { SpecialistExecution } from "../specialist/specialist-execution.js";
 import { Delegation } from "../specialist/delegation.js";
 import { PluginActivation } from "../tools/plugin-activation.js";
 import { CatalogTools } from "../tools/catalog-tools.js";
+import { SetupCards } from "../tools/setup-card.js";
 import { PendingHandoffs } from "../specialist/pending-handoffs.js";
 import type { CommandEndings } from "../tools/command-endings.js";
 import { TurnRecords } from "./turn-records.js";
@@ -369,6 +374,11 @@ export class TurnLoop {
       activatedPlugins,
     );
     if (!gathered.ok) throw new VisibleError(gathered.reason);
+    const readiness = await keepReadiness(
+      this.#records,
+      taskId,
+      gathered.value.pluginDirectory,
+    );
     const plan = new PlanProgress(this.#records, taskId);
     const history = await this.#openHistory(taskId);
     // What the turn has opened is read from its history as it stands, which
@@ -383,6 +393,7 @@ export class TurnLoop {
         gathered: gathered.value,
         activatedPlugins,
         route: this.#deps.host.toolLoading(),
+        readiness,
       },
       { memory, plan, delegated: options?.initialDelegatedChildren ?? 0 },
       () => (current.turn?.history ?? history).messages(),
@@ -405,6 +416,10 @@ export class TurnLoop {
       hooks: [
         { beforeRequest: (history) => offering.tellRoute(history) },
         { beforeRequest: (history) => noteWorkspace(history, workspace) },
+        {
+          beforeRequest: (history) =>
+            noteReadiness(history, offering.pluginDirectory, readiness),
+        },
         plan,
         { beforeRequest: (sent) => standing.send(sent) },
         memory,
@@ -463,8 +478,8 @@ export class TurnLoop {
 
   /**
    * What a turn offers: what it gathered, and the loop's own tools in the
-   * order they are offered: memory, the plan, delegating to a specialist and
-   * the catalog.
+   * order they are offered: memory, the plan, delegating to a specialist,
+   * the catalog and the setup card.
    */
   #offering(
     taskId: string,
@@ -499,6 +514,11 @@ export class TurnLoop {
           records: this.#records,
           taskId,
           offer,
+        }),
+        new SetupCards(this.#deps, {
+          records: this.#records,
+          taskId,
+          directory: () => offer.pluginDirectory,
         }),
       ],
     });

@@ -1,5 +1,6 @@
 import type { ConversationTools, OfferedToolkit } from "@zhiyin/capabilities";
 import type {
+  DirectoryReadiness,
   SpecialistDefinition,
   ToolOwner,
   ToolSpec,
@@ -7,6 +8,7 @@ import type {
 } from "@zhiyin/contract";
 import type { ModelMessage, ModelRequest } from "@zhiyin/model-client";
 import { fixedModelMessages } from "../context/conversation-context.js";
+import { directoryAsSent } from "../context/directory-readiness.js";
 import type { ModelHistory } from "../context/model-history.js";
 import { selfDescribing } from "../context/self-description.js";
 import type { LoopTool } from "../round/loop-tool.js";
@@ -48,6 +50,8 @@ export type OfferingStart = {
   readonly activatedPlugins: readonly string[];
   /** How a toolkit opened reaches the chosen model. */
   readonly route: ToolRoute;
+  /** The directory's marks as the conversation's requests start with them. */
+  readonly readiness?: DirectoryReadiness | undefined;
 };
 
 /** How what a turn offers is widened: a plugin activated, or the tools gathered again. */
@@ -81,6 +85,7 @@ export class TurnOffering {
   readonly #timeZone: string | undefined;
   readonly #conversation: () => readonly ModelMessage[];
   readonly #changes: OfferingChanges | undefined;
+  readonly #readiness: DirectoryReadiness | undefined;
   #gathered: ConversationTools;
   #activatedPlugins: readonly string[];
   #fixedMessages: readonly ModelMessage[];
@@ -104,6 +109,7 @@ export class TurnOffering {
     this.#timeZone = start.timeZone;
     this.#conversation = start.conversation;
     this.#changes = start.changes;
+    this.#readiness = start.readiness;
     this.#gathered = start.gathered;
     this.#activatedPlugins = start.activatedPlugins;
     this.#memoryTools = start.memoryTools ?? [];
@@ -119,6 +125,7 @@ export class TurnOffering {
     return this.#gathered.specialists;
   }
 
+  /** The directory as it stands now, which what is opened is checked against. */
   get pluginDirectory(): ConversationTools["pluginDirectory"] {
     return this.#gathered.pluginDirectory;
   }
@@ -310,7 +317,8 @@ export class TurnOffering {
   #start(): readonly ModelMessage[] {
     return fixedModelMessages({
       workspace: this.workspace,
-      pluginDirectory: this.pluginDirectory,
+      // Its marks as the conversation started; a change since is a notice.
+      pluginDirectory: directoryAsSent(this.pluginDirectory, this.#readiness),
       now: this.#startedAt,
       timeZone: this.#timeZone,
       // Named in the system prompt, which says how memory is used.

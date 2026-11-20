@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { PluginComponentState, PluginState } from "@zhiyin/contract";
 import {
   ConfirmChoice,
@@ -265,6 +265,7 @@ function ComponentGroup({
   actions,
   pluginOn,
   onNew,
+  opened = false,
 }: {
   kind: PluginComponentState["kind"];
   components: readonly PluginComponentState[];
@@ -272,12 +273,26 @@ function ComponentGroup({
   actions: ComponentActions;
   pluginOn: boolean;
   onNew: () => void;
+  /** The page was opened here: it is brought into view and takes focus. */
+  opened?: boolean;
 }) {
+  const section = useRef<HTMLElement>(null);
+  const headingId = useId();
+  useEffect(() => {
+    if (!opened) return;
+    section.current?.focus({ preventScroll: true });
+    section.current?.scrollIntoView?.({ block: "nearest" });
+  }, [opened]);
   if (!components.length && !authored) return null;
   return (
-    <section className={styles["plugin-group"]}>
+    <section
+      ref={section}
+      className={styles["plugin-group"]}
+      aria-labelledby={headingId}
+      {...(opened ? { tabIndex: -1 } : {})}
+    >
       <header>
-        <h3>{groupTitles[kind]}</h3>
+        <h3 id={headingId}>{groupTitles[kind]}</h3>
         <InfoTip
           topic={groupHelp[kind].topic}
           details={groupHelp[kind].details}
@@ -348,10 +363,13 @@ export function PluginDetail({
   plugin,
   actions,
   management,
+  atConnectors = false,
 }: {
   plugin: PluginState;
   actions: ComponentActions;
   management: PluginManagement;
+  /** Opened from the conversation to set a connector up: shown at its connectors. */
+  atConnectors?: boolean;
 }) {
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const authored = plugin.editing === "authored";
@@ -523,6 +541,7 @@ export function PluginDetail({
             actions={actions}
             pluginOn={plugin.enabled}
             onNew={() => management.onNewComponent(kind)}
+            opened={atConnectors && kind === "connection"}
           />
         ))}
       </div>

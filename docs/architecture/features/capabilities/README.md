@@ -86,7 +86,8 @@ connection a conversation may not reach.
   the core tools of activated plugins; the `toolkits` of every enabled
   plugin, each with the tools it loads; every enabled plugin's skills and
   specialists; the `pluginDirectory` of every enabled plugin and of each
-  built-in one switched off; and `ownerOf(name)`, which says who answers for
+  built-in one switched off, each entry with the `needs` of its connectors
+  that cannot be used yet; and `ownerOf(name)`, which says who answers for
   each tool, a toolkit's included (`built-in` or `mcp`). It refuses when two
   sources claim one name, or when a toolkit holds more than ten tools.
   `onConnecting` hears each connector the gathering waits for.
@@ -108,7 +109,12 @@ connection a conversation may not reach.
   person's answer to the tool that asked.
 - Plugin contents: `pluginContents(id)` lists one enabled plugin's components
   by name and purpose, with what each connector that cannot run yet needs,
-  and `describePluginContents` lays them out for an action result; `componentContent(id)` returns a skill's or specialist's full
+  and `describePluginContents` lays them out for an action result;
+  `connectorSetup(id)` is the `SetupSuggestion` a card in the conversation
+  shows for a connector, by its id, or for a built-in plugin switched off,
+  by its id: the plugin whose page it is set up on, and the connector's
+  name, need, key setup as its package declares it, and what Zhiyin found
+  of it, reaching nothing; `componentContent(id)` returns a skill's or specialist's full
   content, with the shipped content it replaced when a person edited it;
   `editablePluginContents(id)` returns an app-made plugin's whole content for
   its edit form.
@@ -187,9 +193,28 @@ connection a conversation may not reach.
 - **Activating a plugin changes nothing a turn is told but its core tools.**
   The directory lists each plugin's purpose, its enabled skills by catalog id
   with what each is for, its specialists, each connector with a short
-  purpose, and its toolkits by catalog id, the same before and after the
-  plugin is activated. Every enabled plugin's skills and specialists are
-  offered, activated or not. No instructions and no tool schemas.
+  purpose, one the person switched off included, and its toolkits by catalog
+  id, the same before and after the plugin is activated. Every enabled
+  plugin's skills and specialists are offered, activated or not. No
+  instructions and no tool schemas.
+- **The directory says what each connector needs, without reaching it.** An
+  entry's `needs` maps each connector that cannot be used yet, by id, to one
+  word: `key` for one whose package declares a key and none is saved, or
+  whose service refused it without a sign-in; `sign-in` for one refused whose
+  service offers its sign-in and declares no key; `install` for an
+  application connector whose program is missing or failed to install, or
+  that cannot start for want of a program outside Zhiyin, such as the
+  browser with neither Edge nor Chrome on the computer; `could-not-start`
+  for a connector that failed, or whose key cannot be read for want of
+  secure storage; `switched-off` for a connector the person switched off on
+  its own. A built-in plugin switched off carries its connectors' needs too,
+  so one message can ask for both; what it last found of a connector it no
+  longer reaches is not counted. A connector that is ready, not reached yet,
+  being installed or absent from this build is not named.
+- **A setup card is in Zhiyin's words.** `connectorSetup` builds every word
+  from the connector's declaration and what Zhiyin found; nothing the model
+  wrote reaches it. It answers nothing for a connector that needs nothing in
+  a plugin switched on, a plugin switched on, or an id no listed plugin has.
 - **A specialist names a connector's tool as its plugin does, by the tool's
   own name.** Its definition carries the names as written and the ids of its
   plugin's switched-on connections, so a reviewer that names its studio's
@@ -244,8 +269,9 @@ connection a conversation may not reach.
   sign-in, or that failed, or that is from an earlier release and needs
   updating, with what the person does about it and where in Plugins, said by
   what it does rather than by a control's label, and say
-  once that such a connector adds no tools and that the person should hear
-  what it needs. A connector that is ready, switched off, or not reached yet
+  once that such a connector adds no tools, is waiting for the person rather
+  than out of service, and that the person should hear what it needs and
+  where before any way around it. A connector that is ready, switched off, or not reached yet
   adds nothing, and the same sentences are listed for the person in the
   action's result.
 - **What a conversation was offered is forgotten with the conversation.**

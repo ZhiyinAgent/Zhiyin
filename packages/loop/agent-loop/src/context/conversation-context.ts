@@ -10,6 +10,7 @@ import type { ModelMessage, ModelTool } from "@zhiyin/model-client";
 import { agentSystemMessage } from "./system-message.js";
 import { boundedText, recordFrom } from "./generated-fields.js";
 import { harnessNotice } from "../turn/notices.js";
+import { suggestSetupToolName } from "../tools/setup-card.js";
 
 /**
  * What every request carries before the conversation itself: who the
@@ -45,7 +46,7 @@ export function fixedModelMessages({
       ? [
           {
             role: "system" as const,
-            content: `Plugins the person enabled, with their skills, toolkits, specialists and connectors. open takes a skill's or toolkit's id, or a plugin's id to activate that plugin. One marked switchedOff was switched off by the person and cannot be opened: when it would help, tell them they can switch it on in Plugins. ${JSON.stringify(pluginDirectory)}`,
+            content: `Plugins the person enabled, with their skills, toolkits, specialists and connectors. open takes a skill's or toolkit's id, or a plugin's id to activate that plugin. One marked switchedOff was switched off by the person and cannot be opened. A plugin's needs names, by id, each of its connectors that cannot be used yet and what it is waiting for: key (its API key), sign-in, install (a program to install), could-not-start (to be checked again) or switched-off (the person switched that connector off). The person does each under Connectors on that plugin's page in Plugins, where they switch a plugin on too. None of these is broken or out of service, and none should be called so. When a task would use such a connector, or a plugin switched off, stop before any way around it: tell the person, in their own words, what it needs and where, all of it in one message, and show them the place with ${suggestSetupToolName}. Offer another way only as a choice for them to make, and never get around a site's limits or blocks. ${JSON.stringify(pluginDirectory)}`,
           },
         ]
       : []),

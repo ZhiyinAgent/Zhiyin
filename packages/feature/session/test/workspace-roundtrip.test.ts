@@ -913,6 +913,74 @@ describe("FileSessions workspace persistence", () => {
     }
   });
 
+  it("keeps the directory marks a conversation started with and the setup cards it showed, and rejects malformed ones", async () => {
+    const root = await temporaryRoot();
+    const card = {
+      id: "action-1",
+      action: "Suggest setting up Tavily",
+      target: "Tavily",
+      sequence: 1,
+      status: "completed" as const,
+      setup: {
+        plugin: {
+          id: "research",
+          name: "Research",
+          switchedOff: true as const,
+        },
+        connector: {
+          id: "research/tavily",
+          name: "Tavily",
+          needs: "key" as const,
+          setup: { url: "https://app.tavily.com/home", keyName: "API key" },
+        },
+      },
+    };
+    const task = {
+      ...withoutCompaction(snapshot.tasks[0]!),
+      readinessSent: {
+        research: {
+          needs: { "research/tavily": "key" as const },
+          switchedOff: true as const,
+        },
+        engineering: {},
+      },
+      actions: [card],
+    };
+    await new FileSessions(root).saveWorkspace({ ...snapshot, tasks: [task] });
+
+    await expect(new FileSessions(root).loadWorkspace()).resolves.toMatchObject(
+      { tasks: [{ readinessSent: task.readinessSent, actions: [card] }] },
+    );
+    for (const wrong of [
+      {
+        readinessSent: { research: { needs: { "research/tavily": "broken" } } },
+      },
+      { readinessSent: { research: { switchedOff: false } } },
+      { readinessSent: { research: "off" } },
+      { actions: [{ ...card, setup: { plugin: { id: "research" } } }] },
+      {
+        actions: [
+          {
+            ...card,
+            setup: {
+              ...card.setup,
+              connector: { ...card.setup.connector, needs: "out of service" },
+            },
+          },
+        ],
+      },
+    ]) {
+      const planted = await temporaryRoot();
+      await plantHistory(planted, {
+        ...snapshot,
+        tasks: [{ ...withoutCompaction(snapshot.tasks[0]!), ...wrong }],
+      });
+      await expect(
+        new FileSessions(planted).loadWorkspace(),
+      ).rejects.toBeInstanceOf(SessionStoreError);
+    }
+  });
+
   it("keeps whether spelling is checked and in which languages across a restart, and rejects a malformed choice", async () => {
     const root = await temporaryRoot();
     const spellingChoice = { enabled: false, languages: ["fr", "en-GB"] };

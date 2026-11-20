@@ -1,6 +1,7 @@
 import {
   CapabilityLibrary,
   ComponentEditor,
+  SetupCard,
   type ComponentActions,
   type ConnectionActions,
   type PluginActions,
@@ -18,8 +19,43 @@ import type {
   ConnectionToolTreatment,
   McpServerState,
   McpSignInOutcome,
+  SetupSuggestion,
   ToolchainState,
 } from "@zhiyin/contract";
+
+/** What the setup cards ask, as the capabilities group words them. */
+const demoSetupCards: readonly SetupSuggestion[] = [
+  {
+    plugin: { id: "research", name: "Research", switchedOff: true },
+    connector: {
+      id: "research/tavily",
+      name: "Tavily",
+      needs: "key",
+      setup: {
+        url: "https://app.tavily.com/home",
+        keyName: "API key",
+        advice: "Sign in, then copy your API key from the dashboard.",
+      },
+    },
+  },
+  {
+    plugin: { id: "engineering", name: "Full-Stack Software Engineering" },
+    connector: {
+      id: "engineering/browser",
+      name: "Browser",
+      needs: "install",
+      detail:
+        "No supported browser is installed. Tried Microsoft Edge and Google Chrome.",
+    },
+  },
+  {
+    plugin: {
+      id: "publishing",
+      name: "Technical & Academic Publishing",
+      switchedOff: true,
+    },
+  },
+];
 import {
   demoCadInstalling,
   demoCadNotInstalled,
@@ -207,8 +243,11 @@ function SignInConnectorExample() {
  */
 function LibraryExample({
   initialConnections = demoConnections,
+  opening,
 }: {
   initialConnections?: McpServerState[];
+  /** Opened at this plugin's connectors, as a setup card opens it. */
+  opening?: string;
 }) {
   const [plugins, setPlugins] = useState(demoPlugins);
   const [connections, setConnections] = useState(initialConnections);
@@ -230,6 +269,7 @@ function LibraryExample({
       : server;
   return (
     <CapabilityLibrary
+      opening={opening}
       plugins={plugins}
       mcpServers={connections}
       onTryPrompt={() => {}}
@@ -423,6 +463,30 @@ export const capabilitiesEntries: ComponentCatalogEntry[] = [
         )}
       />
     ),
+  },
+  {
+    id: "setup-cards",
+    title: "Setup cards in the conversation",
+    description:
+      "What suggest_setup shows under a turn, every word Zhiyin's: Research switched off with Tavily waiting for its key, both steps on one card; the browser with no Edge or Chrome on this computer; a plugin switched off and nothing else. Each button opens that plugin's page at its connectors.",
+    render: () => (
+      <div style={{ display: "grid", gap: 12, maxWidth: 560 }}>
+        {demoSetupCards.map((suggestion) => (
+          <SetupCard
+            key={suggestion.connector?.id ?? suggestion.plugin.id}
+            suggestion={suggestion}
+            onOpen={() => {}}
+          />
+        ))}
+      </div>
+    ),
+  },
+  {
+    id: "library-at-connectors",
+    title: "Plugin directory, opened from a setup card",
+    description:
+      "Full-Stack Software Engineering opened at its connectors, which hold focus, as the card's button opens it.",
+    render: () => <LibraryExample opening="engineering" />,
   },
   {
     id: "cad-install",

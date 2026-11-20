@@ -1421,6 +1421,71 @@
   margin-right: auto;
 }
 
+/* A connector to set up, asked for in the conversation: a quiet card under the turn. */
+.setup-card {
+  width: min(560px, 100%);
+  border: 1px solid var(--zy-line);
+  border-radius: var(--zy-radius-16);
+  background: var(--zy-panel);
+}
+
+.setup-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--zy-line);
+  color: var(--zy-muted);
+}
+
+.setup-card__header > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.setup-card__header h3 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--zy-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.setup-card__body {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.setup-card__steps,
+.setup-card__step,
+.setup-card__why {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.setup-card__steps {
+  padding-left: 18px;
+}
+
+.setup-card__why {
+  color: var(--zy-muted);
+  font-size: 12.5px;
+}
+
+/* Where the conversation's setup card opens the page: its connectors. */
+.plugin-group:focus-visible {
+  outline: 2px solid var(--zy-accent-line);
+  outline-offset: 4px;
+  border-radius: var(--zy-radius-8);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .component-editor__form .access-choice__option {
     transition: none;

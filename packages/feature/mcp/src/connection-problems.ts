@@ -11,6 +11,10 @@ export const UNAUTHORIZED =
 
 export const SIGN_IN = "Sign in to use this connector.";
 
+/** A service that wants a key nobody has saved: nothing was refused. */
+export const NEEDS_KEY =
+  "This connector needs its key or access token before it can be used.";
+
 /**
  * A server rejected our credential. Distinct from an unreachable server: the
  * remedy is a new token, not a retry.
@@ -150,6 +154,9 @@ export function whyUnavailable(
   // needs to be named.
   if (!owner?.enabled || connected.has(owner.id)) return generic;
   const failure = failures.get(owner.id);
+  // One waiting for a key or a sign-in is not down: retrying mends nothing.
+  if (failure?.status === "unauthorized")
+    return `${owner.name} needs setting up before it can be used. ${failure.reason} The person does it under Connectors on the plugin's page in Plugins.`;
   return failure
     ? `${owner.name} is not connected. ${failure.reason} The person can retry it from the plugin's page.`
     : `${owner.name} is not connected right now.`;
