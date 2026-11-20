@@ -33,6 +33,7 @@ import {
 } from "./writes.js";
 import { rulesOf, withRule } from "./rules.js";
 import type { UndoRecords } from "./undo-records.js";
+import type { TakenBack, TakenBackBy } from "./taken-back.js";
 import {
   entryOnly,
   noRoomIn,
@@ -51,15 +52,18 @@ export class PersonsEdits {
   readonly #folder: MemoryFolder;
   readonly #options: PersonsEditsOptions;
   readonly #records: UndoRecords;
+  readonly #taken: TakenBack;
 
   constructor(
     folder: MemoryFolder,
     options: PersonsEditsOptions,
     records: UndoRecords,
+    taken: TakenBack,
   ) {
     this.#folder = folder;
     this.#options = options;
     this.#records = records;
+    this.#taken = taken;
   }
 
   #now(): string {
@@ -287,6 +291,7 @@ export class PersonsEdits {
       before?.path,
     );
     await this.#folder.dropOwnRecord("waiting", waitingId);
+    await this.#records.waitingDecided(waitingId);
     return ok;
   }
 
@@ -294,26 +299,46 @@ export class PersonsEdits {
     if (!(await this.#folder.ownRecord("waiting", waitingId)))
       return refused("That change is no longer waiting.");
     await this.#folder.dropOwnRecord("waiting", waitingId);
+    await this.#records.waitingDecided(waitingId);
     return ok;
   }
 
-  async undo(writeId: string): Promise<PersonsOutcome> {
+  /**
+   * Takes back one write. With `by`, the write is taken back with the turn
+   * that made it, and its number is noted for its conversation.
+   */
+  async undo(writeId: string, by?: TakenBackBy): Promise<PersonsOutcome> {
     const write = await this.#folder.ownRecord<WriteRecord>("writes", writeId);
     if (!write) return refused("That change is no longer known.");
     if (!this.#records.usable(write)) {
       await this.#folder.dropOwnRecord("writes", writeId);
       return refused("That change is no longer known.");
     }
-    const outcome = await this.#takeBack(write);
-    if (outcome.ok) await this.#folder.dropOwnRecord("writes", writeId);
-    return outcome;
+    const planned = await this.#takeBack(write);
+    if (!planned.ok) return planned;
+    await planned.apply();
+    await this.#folder.dropOwnRecord("writes", writeId);
+    if (by && write.conversation && write.kind !== "waiting")
+      await this.#taken.note(write.conversation, write.number, by);
+    return ok;
   }
 
-  async #takeBack(write: WriteRecord): Promise<PersonsOutcome> {
-    if (write.kind === "waiting") {
-      await this.#folder.dropOwnRecord("waiting", write.waitingId);
-      return ok;
-    }
+  /** Whether `undo` would take the write back now; nothing is changed. */
+  async undoable(writeId: string): Promise<PersonsOutcome> {
+    const write = await this.#folder.ownRecord<WriteRecord>("writes", writeId);
+    if (!write || !this.#records.usable(write))
+      return refused("That change is no longer known.");
+    const planned = await this.#takeBack(write);
+    return planned.ok ? ok : planned;
+  }
+
+  /** How the write would be taken back, made only by `apply`, or why it would not be. */
+  async #takeBack(write: WriteRecord): Promise<TakingBack> {
+    if (write.kind === "waiting")
+      return {
+        ok: true,
+        apply: () => this.#folder.dropOwnRecord("waiting", write.waitingId),
+      };
     const snapshot = await this.#folder.read();
     const now = snapshot.entries.find((entry) => entry.number === write.number);
     const changedSince = () =>
@@ -327,14 +352,18 @@ export class PersonsEdits {
       if (!now) return changedSince();
       const text = ruleTakenBack(now.text, write);
       if (text === undefined) return changedSince();
-      if (text.trim())
-        await this.#folder.save(
-          { ...entryOnly(now), text, written: this.#now() },
-          snapshot.projects,
-          now.path,
-        );
-      else await this.#folder.forget(now.path);
-      return ok;
+      return {
+        ok: true,
+        apply: async () => {
+          if (text.trim())
+            await this.#folder.save(
+              { ...entryOnly(now), text, written: this.#now() },
+              snapshot.projects,
+              now.path,
+            );
+          else await this.#folder.forget(now.path);
+        },
+      };
     }
     if (!unchangedSince(now, write.after)) return changedSince();
     const writtenSince =
@@ -350,21 +379,36 @@ export class PersonsEdits {
       return refused(
         `${writtenSince.title} was written again since, so the one removed was left out.`,
       );
-    if (write.before) {
-      const scope = scopeNow(write.before.scope, snapshot.projects);
+    const before = write.before;
+    if (before) {
+      const scope = scopeNow(before.scope, snapshot.projects);
       if (!scope)
         return refused(
-          `#${write.number} ${write.before.title} belonged to a project no longer kept, so it was left out.`,
+          `#${write.number} ${before.title} belonged to a project no longer kept, so it was left out.`,
         );
-      await this.#folder.save(
-        { ...write.before, scope },
-        snapshot.projects,
-        now?.path,
-      );
-    } else if (now) await this.#folder.forget(now.path);
-    return ok;
+      return {
+        ok: true,
+        apply: async () => {
+          await this.#folder.save(
+            { ...before, scope },
+            snapshot.projects,
+            now?.path,
+          );
+        },
+      };
+    }
+    return {
+      ok: true,
+      apply: async () => {
+        if (now) await this.#folder.forget(now.path);
+      },
+    };
   }
 }
+
+type TakingBack =
+  | { readonly ok: true; readonly apply: () => Promise<void> }
+  | { readonly ok: false; readonly reason: string };
 
 /** Why a line would not fit its list, for Knowledge and a brief, or nothing. */
 function lineProblem(

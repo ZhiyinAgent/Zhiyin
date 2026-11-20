@@ -211,6 +211,7 @@ export const conversationEntries: ComponentCatalogEntry[] = [
                     laterUserMessages: 0,
                     discardedActions: [],
                     files: [],
+                    memory: [],
                   }),
                   onCommit: async () => ({ files: [] }),
                   onSend: async () => undefined,

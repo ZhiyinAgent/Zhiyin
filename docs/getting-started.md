@@ -186,6 +186,8 @@ conversation: select a file to see the change line by line, and **Undo**
 beside a turn's files puts them back. Python scripts, CAD builds and the 3D
 studio's work run the same way, since Zhiyin copies the folder before each
 one. Editing an earlier message and sending it again can put files back too.
+Undoing a turn and going back also take back what Zhiyin kept in memory in
+those turns, unless you clear **Undo memory changes**.
 
 **When it asks.** Zhiyin asks only for what it can neither prevent nor undo:
 a shell command; deleting for good; reading or changing anything outside your

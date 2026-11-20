@@ -53,12 +53,7 @@ import type {
   PluginSourceOutcome,
   PluginState,
 } from "./plugin-state.js";
-import type {
-  DocumentComparison,
-  RewindCommitResult,
-  RewindPreview,
-  UndoPreview,
-} from "./rewind.js";
+import type { RewindCommands } from "./rewind.js";
 import type { WorkspaceTask } from "./task.js";
 import type { ShellAvailability } from "./tools.js";
 import type { UsageState } from "./usage-state.js";
@@ -141,7 +136,7 @@ export type AppEvent =
  * The whole surface the renderer is given. The preload bridge exposes exactly
  * this and nothing else — no Node, no Electron, no filesystem.
  */
-export interface CoreApi extends DocumentCommands {
+export interface CoreApi extends DocumentCommands, RewindCommands {
   configureProfile?(interests: readonly string[]): Promise<void>;
   /**
    * Answers the damaged-history question. `recover` keeps the conversations
@@ -283,32 +278,6 @@ export interface CoreApi extends DocumentCommands {
 
   /** Opens a pasted text in the person's own editor; `taskId` null for a draft. */
   openAttachment(taskId: string | null, id: string): Promise<void>;
-
-  /** Review the exact conversation revision before discarding anything. */
-  previewRewind(taskId: string, messageId: string): Promise<RewindPreview>;
-
-  /** Apply only the still-current rewind previously returned by previewRewind. */
-  commitRewind(
-    taskId: string,
-    rewindId: string,
-    files: "keep" | "restore",
-  ): Promise<RewindCommitResult>;
-
-  /** Review putting back the files one turn changed, keeping the conversation. */
-  previewUndo(taskId: string, messageId: string): Promise<UndoPreview>;
-
-  /** Put back exactly the reviewed files, never one changed since. */
-  commitUndo(taskId: string, undoId: string): Promise<RewindCommitResult>;
-
-  /**
-   * What one turn changed in a PDF, as its words before and after. Refused
-   * when no copy was kept before the turn or the PDF has changed since.
-   */
-  compareDocument(
-    taskId: string,
-    messageId: string,
-    path: string,
-  ): Promise<DocumentComparison>;
 
   /** Stop the active turn for a task and all work it owns. */
   interruptTask(taskId: string): Promise<void>;

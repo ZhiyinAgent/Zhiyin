@@ -138,6 +138,16 @@ export type MemoryState = {
   readonly broadFolders: readonly string[];
 };
 
+/**
+ * One rule a write changed in About you or How to work: the rule it added,
+ * the one that rule replaced, or, with no rule added, the one it removed.
+ * The rest of the instruction is not the write's.
+ */
+export type MemoryRuleChange = {
+  readonly added?: string | undefined;
+  readonly replaced?: string | undefined;
+};
+
 /** One change a turn made to memory, as its card in the conversation shows it. */
 export type MemoryChange = {
   /** The write, which Undo takes back. */
@@ -152,6 +162,8 @@ export type MemoryChange = {
   readonly section: MemorySection;
   /** For an entry removed because it was folded into another. */
   readonly mergedInto?: number | undefined;
+  /** For a change to About you or How to work, the one rule it changed. */
+  readonly rule?: MemoryRuleChange | undefined;
   /** For a change that waits for the person. */
   readonly waiting?:
     | {
@@ -161,8 +173,8 @@ export type MemoryChange = {
         readonly because: string;
       }
     | undefined;
-  /** What became of it since. */
-  readonly state?: "undone" | "kept" | "discarded" | undefined;
+  /** What became of it since; `removed` when the person removed its entry on the Memory page. */
+  readonly state?: "undone" | "kept" | "discarded" | "removed" | undefined;
 };
 
 /** A new entry the person writes, or an instruction they write the first time. */

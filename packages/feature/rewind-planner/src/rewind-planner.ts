@@ -14,7 +14,10 @@ export type UndoPlan = {
   readonly id: string;
   readonly taskId: string;
   readonly messageId: string;
+  /** The actions whose file changes are undone. */
   readonly actions: readonly TaskAction[];
+  /** Every action of the turn, those that kept something in memory among them. */
+  readonly turn: readonly TaskAction[];
   /** Exact authority binding. Never sent to the renderer. */
   readonly source: string;
 };
@@ -38,12 +41,17 @@ export interface RewindPlanner {
   apply(task: WorkspaceTask, plan: RewindPlan): RewindApplication;
   /** The file changes of the turn the message opened, still to be undone. */
   planUndo(task: WorkspaceTask, messageId: string): UndoPlanning;
-  /** Records an undo on the conversation it was planned from, and nothing else. */
+  /**
+   * Records an undo on the conversation it was planned from, with what became
+   * of the turn's memory writes, each taken back marked undone on its card,
+   * and nothing else.
+   */
   applyUndo(
     task: WorkspaceTask,
     plan: UndoPlan,
     files: RewindCommitResult["files"],
     at: string,
+    memory?: RewindCommitResult["memory"],
   ): RewindApplication;
 }
 
@@ -158,6 +166,7 @@ export class ConversationRewind implements RewindPlanner {
           (action) => action.sequence >= boundary,
         ),
         files: [],
+        memory: [],
       },
     };
   }
@@ -197,6 +206,7 @@ export class ConversationRewind implements RewindPlanner {
       taskId: task.id,
       messageId,
       actions,
+      turn,
       source: JSON.stringify(task),
     };
   }
@@ -206,6 +216,7 @@ export class ConversationRewind implements RewindPlanner {
     plan: UndoPlan,
     files: RewindCommitResult["files"],
     at: string,
+    memory?: RewindCommitResult["memory"],
   ): RewindApplication {
     if (task.id !== plan.taskId || JSON.stringify(task) !== plan.source)
       return {
@@ -213,10 +224,23 @@ export class ConversationRewind implements RewindPlanner {
         reason:
           "The conversation changed while the undo was being reviewed. Review it again.",
       };
+    const undone = new Set(
+      (memory ?? [])
+        .filter((write) => write.status === "undone")
+        .map((write) => write.writeId),
+    );
     return {
       ok: true,
       task: {
         ...task,
+        actions: task.actions.map((action) =>
+          action.memory && undone.has(action.memory.writeId)
+            ? {
+                ...action,
+                memory: { ...action.memory, state: "undone" as const },
+              }
+            : action,
+        ),
         undos: [
           ...task.undos,
           {
@@ -225,6 +249,7 @@ export class ConversationRewind implements RewindPlanner {
             actionIds: plan.actions.map((action) => action.id),
             at,
             files,
+            ...(memory?.length ? { memory } : {}),
           },
         ],
       },

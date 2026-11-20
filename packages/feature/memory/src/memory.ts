@@ -1,3 +1,4 @@
+import type { TakenBackBy } from "./taken-back.js";
 import type {
   MemoryChange,
   MemoryDraft,
@@ -59,6 +60,11 @@ export type RecallShown = {
   readonly alsoFound: readonly string[];
   /** Numbers asked for that name no entry. */
   readonly notKept: readonly number[];
+  /**
+   * Numbers asked for whose entry the person took back with the turn of this
+   * conversation that kept it.
+   */
+  readonly takenBack: readonly number[];
   /** Searches that found nothing. */
   readonly nothingFor: readonly string[];
 };
@@ -121,7 +127,12 @@ export interface Memory {
   /** The tool the model reads memory with. */
   readonly recallTool: ToolSpec;
   remember(input: unknown, context: WriteContext): Promise<RememberOutcome>;
-  recall(input: unknown): Promise<RecallOutcome>;
+  /**
+   * Reads for the conversation `conversationId`, which is told of a number
+   * asked for that its own writes kept and the person took back with their
+   * turn.
+   */
+  recall(input: unknown, conversationId?: string): Promise<RecallOutcome>;
   /**
    * The Knowledge entries close to `number` in its own scope and the
    * person's general one, closest first.
@@ -165,9 +176,21 @@ export interface Memory {
   discard(waitingId: string): Promise<PersonsOutcome>;
   /**
    * Takes back one write, unless the entry changed since; the answer says
-   * which.
+   * which. With `by`, it is taken back with the turn that made it, and a
+   * `recall` of its number in that conversation says so.
    */
-  undo(writeId: string): Promise<PersonsOutcome>;
+  undo(writeId: string, by?: TakenBackBy): Promise<PersonsOutcome>;
+  /**
+   * Whether `undo` would take the write back now, or why not, changing
+   * nothing.
+   */
+  undoable(writeId: string): Promise<PersonsOutcome>;
+  /**
+   * The conversation no longer shows these writes, as when the person went
+   * back past their turn keeping what it kept: what they wrote stays, and
+   * the records that would undo them are let go.
+   */
+  cardsGone(writeIds: readonly string[]): Promise<void>;
   /**
    * Lets go of what undoes a deleted conversation's writes, whose Undo its
    * cards offered. What it wrote stays.

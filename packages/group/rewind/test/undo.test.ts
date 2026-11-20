@@ -67,6 +67,7 @@ function planner(): RewindPlanner {
       taskId: task.id,
       messageId,
       actions: task.actions ?? [],
+      turn: task.actions ?? [],
       source: JSON.stringify(task),
     }),
     applyUndo: (task, plan, files, at) =>
@@ -147,6 +148,7 @@ describe("undoing a turn's file changes", () => {
         taskId: "conversation-1",
         messageId: "u1",
         files: [{ path: "notes.md", action: "restore", status: "recoverable" }],
+        memory: [],
       },
     });
     expect(asked).toEqual([["review", "undo-1", "C:/work", ["write-1"]]]);

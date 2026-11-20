@@ -58,6 +58,7 @@ function planner(overrides: Partial<RewindPlanner> = {}): RewindPlanner {
         laterUserMessages: 0,
         discardedActions: [],
         files: [],
+        memory: [],
       },
       task,
       source: JSON.stringify(task),

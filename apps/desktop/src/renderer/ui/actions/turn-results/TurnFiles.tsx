@@ -6,7 +6,15 @@ import type {
   TaskUndo,
   UndoPreview,
 } from "@zhiyin/contract";
-import { Dialog, Icon, PathName, visibleText } from "../../shared/index.js";
+import {
+  counted,
+  Dialog,
+  Icon,
+  PathName,
+  UndoChoices,
+  visibleText,
+  type UndoChoice,
+} from "../../shared/index.js";
 import { comparable, DiffModal } from "../change-review/DiffModal.js";
 import { changeWords, moveWords, shownKind } from "../actionWords.js";
 import {
@@ -20,6 +28,9 @@ import styles from "./turn-results.module.css";
 /** Rows shown before the rest are asked for. */
 const shownAtFirst = 5;
 
+/** Everything is undone unless the person clears it. */
+const everything: UndoChoice = { files: true, memory: true };
+
 const undoneWords: Record<
   RewindCommitResult["files"][number]["status"],
   string
@@ -30,16 +41,44 @@ const undoneWords: Record<
   unprotected: "Not put back: no copy was kept",
 };
 
-function previewWords(file: UndoPreview["files"][number]): string {
+function previewWords(
+  file: UndoPreview["files"][number],
+  restoring: boolean,
+): string {
   if (file.status === "conflict")
     return "You changed this file afterwards, so it will not be touched.";
   if (file.status === "unprotected")
     return file.reason
       ? `Stays as it is. ${file.reason}`
       : "Stays as it is, as no copy was kept.";
+  if (!restoring) return "Stays as this turn left it.";
   return file.action === "remove"
     ? "Removed, as this turn created it."
     : "Goes back to how it was.";
+}
+
+/** A memory entry as the person knows it: its number and title. */
+function entryName(write: {
+  readonly number?: number;
+  readonly title: string;
+}): string {
+  return write.number === undefined
+    ? write.title
+    : `#${write.number} ${write.title}`;
+}
+
+/** What memory refused to take back, said once the undo is done; empty when nothing. */
+function refusedWords(result: RewindCommitResult): string {
+  const refused = (result.memory ?? []).filter(
+    (write) => write.status === "refused",
+  );
+  if (!refused.length) return "";
+  return [
+    refused.length === 1
+      ? "One memory entry stays kept:"
+      : `${refused.length} memory entries stay kept:`,
+    ...refused.map((write) => write.reason ?? `${entryName(write)} stays.`),
+  ].join(" ");
 }
 
 function rowNote(file: TurnFile): string | undefined {
@@ -67,7 +106,11 @@ type TurnFilesProps = {
   undone?: TaskUndo | undefined;
   running: boolean;
   onPreviewUndo?: () => Promise<UndoPreview>;
-  onCommitUndo?: (undoId: string) => Promise<RewindCommitResult>;
+  onCommitUndo?: (
+    undoId: string,
+    files: "keep" | "restore",
+    memory: "keep" | "undo",
+  ) => Promise<RewindCommitResult>;
   /** What the turn did to a PDF, as its words before and after. */
   onCompareDocument?:
     ((path: string) => Promise<DocumentComparison>) | undefined;
@@ -94,6 +137,9 @@ export function TurnFiles({
   const [preview, setPreview] = useState<UndoPreview>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [choice, setChoice] = useState<UndoChoice>(everything);
+  /** What memory left kept when the undo was made, said once it is done. */
+  const [left, setLeft] = useState("");
   const headingId = useId();
   // A working turn's changes are its action rows; a summary under them would
   // read as the turn's conclusion before it has one.
@@ -116,13 +162,32 @@ export function TurnFiles({
     !undone && Boolean(onPreviewUndo && onCommitUndo) && files.some(undoable);
   // Once undone, the earlier version is back and there is no change to read.
   const compareDocument = undone ? undefined : onCompareDocument;
+  const offered = {
+    files:
+      preview?.files.some((file) => file.status === "recoverable") ?? false,
+    memory:
+      preview?.memory.some((effect) => effect.status === "undoable") ?? false,
+  };
+  const ticked =
+    (offered.files && choice.files) || (offered.memory && choice.memory);
+  // A kind with no box is undone as the review stands: its files, as an undo
+  // always has; its memory, not. With every box cleared there is no undo.
+  const chosen =
+    preview && (ticked || (!offered.files && !offered.memory))
+      ? ({
+          files: !offered.files || choice.files ? "restore" : "keep",
+          memory: offered.memory && choice.memory ? "undo" : "keep",
+        } as const)
+      : undefined;
 
   async function review() {
     if (!onPreviewUndo) return;
     setBusy(true);
     setError("");
+    setLeft("");
     try {
       setPreview(await onPreviewUndo());
+      setChoice(everything);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -135,12 +200,17 @@ export function TurnFiles({
   }
 
   async function undo() {
-    if (!preview || !onCommitUndo) return;
+    if (!preview || !onCommitUndo || !chosen) return;
     setBusy(true);
     setError("");
     try {
-      await onCommitUndo(preview.id);
+      const result = await onCommitUndo(
+        preview.id,
+        chosen.files,
+        chosen.memory,
+      );
       setPreview(undefined);
+      setLeft(refusedWords(result));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -272,6 +342,11 @@ export function TurnFiles({
           {error}
         </p>
       )}
+      {!preview && left && (
+        <p className={styles["turn-files__left"]} role="status">
+          {left}
+        </p>
+      )}
       {reviewing && (
         <DiffModal
           changes={files
@@ -301,7 +376,7 @@ export function TurnFiles({
               <button
                 type="button"
                 className="button button--accent"
-                disabled={busy}
+                disabled={busy || !chosen}
                 onClick={() => void undo()}
               >
                 Undo changes
@@ -310,11 +385,34 @@ export function TurnFiles({
           }
         >
           <p className={styles["turn-files__lead"]}>
-            The conversation stays as it is. Only these files change, and a file
-            you changed afterwards is never overwritten.
+            {preview.memory.length > 0
+              ? "The conversation stays as it is. Only what you choose below changes, and a file you changed afterwards is never overwritten."
+              : "The conversation stays as it is. Only these files change, and a file you changed afterwards is never overwritten."}
             {files.some((file) => !file.declared) &&
               " Files a command changed stay as they are, as no copy was kept of them."}
           </p>
+          <UndoChoices
+            files={{
+              offered: offered.files,
+              detail: `Puts back ${counted(
+                preview.files.filter((file) => file.status === "recoverable")
+                  .length,
+                "file",
+              )} this turn changed.`,
+            }}
+            memory={{
+              offered: offered.memory,
+              detail: `Takes back ${counted(
+                preview.memory.filter((effect) => effect.status === "undoable")
+                  .length,
+                "entry",
+                "entries",
+              )} this turn kept in memory.`,
+            }}
+            choice={choice}
+            onChange={setChoice}
+            disabled={busy}
+          />
           <ul className={styles["turn-files__preview"]}>
             {preview.files.map((file) => (
               <li key={file.path}>
@@ -329,10 +427,38 @@ export function TurnFiles({
                   aria-hidden="true"
                 />
                 <PathName path={file.path} />
-                <span>{previewWords(file)}</span>
+                <span>{previewWords(file, chosen?.files !== "keep")}</span>
               </li>
             ))}
           </ul>
+          {preview.memory.length > 0 && (
+            <>
+              <h4 className={styles["turn-files__subhead"]}>
+                Memory this turn kept
+              </h4>
+              <ul className={styles["turn-files__preview"]}>
+                {preview.memory.map((effect) => (
+                  <li key={effect.writeId}>
+                    <Icon
+                      name={effect.status === "undoable" ? "rewind" : "lock"}
+                      aria-hidden="true"
+                    />
+                    <span>{entryName(effect)}</span>
+                    <span>
+                      {effect.status === "decided"
+                        ? "Stays, as you already decided on it."
+                        : effect.status === "changed"
+                          ? (effect.reason ??
+                            "Stays as it is, as it was changed since.")
+                          : chosen?.memory === "undo"
+                            ? "Taken back."
+                            : "Stays kept."}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {error && (
             <p className={styles["turn-files__error"]} role="alert">
               {error}

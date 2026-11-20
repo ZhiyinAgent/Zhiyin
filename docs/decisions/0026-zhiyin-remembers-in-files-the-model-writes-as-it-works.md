@@ -1,6 +1,7 @@
 # 0026. Zhiyin remembers in files the model writes as it works
 
-Status: accepted
+Status: accepted. Its rule that going back past a turn, or undoing it, always
+undoes the turn's memory writes is superseded by 0030.
 
 ## Decision
 

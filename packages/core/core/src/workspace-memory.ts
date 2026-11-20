@@ -14,7 +14,10 @@ import {
   type MemoryOutcome,
   type MemoryRequest,
   type MemoryState,
+  type RewindMemoryEffect,
+  type RewindMemoryOutcome,
   type TaskAction,
+  type TaskUndo,
   type WorkspaceTask,
 } from "@zhiyin/contract";
 import { isBroadFolder } from "@zhiyin/memory-projects";
@@ -24,6 +27,22 @@ const notKept: MemoryOutcome = {
   ok: false,
   reason: "Memory is not kept here.",
 };
+
+const unreachable: MemoryOutcome = {
+  ok: false,
+  reason: "Memory could not be reached just now.",
+};
+
+/** What memory answered, or that it could not be reached, however it failed. */
+async function reached(
+  ask: () => Promise<MemoryOutcome>,
+): Promise<MemoryOutcome> {
+  try {
+    return await ask();
+  } catch {
+    return unreachable;
+  }
+}
 
 /** Memory, as the workspace reaches it. */
 export type MemoryPort = Memory;
@@ -38,6 +57,12 @@ export class WorkspaceMemory {
   readonly #ready: (taskId: string) => Promise<boolean>;
   readonly #save: (task: WorkspaceTask) => Promise<void>;
   readonly #folderOf: (taskId: string) => string | undefined;
+  readonly #now: () => Date;
+  /**
+   * The entry each removal on the Memory page took, by the removal's write,
+   * for as long as the app runs: the page offers its Undo only meanwhile.
+   */
+  readonly #removals = new Map<string, number>();
 
   constructor(options: {
     readonly memory: Memory | undefined;
@@ -52,6 +77,7 @@ export class WorkspaceMemory {
     readonly save: (task: WorkspaceTask) => Promise<void>;
     /** The folder a conversation works in. */
     readonly folderOf: (taskId: string) => string | undefined;
+    readonly now: () => Date;
   }) {
     this.#memory = options.memory;
     this.#emit = options.emit;
@@ -59,6 +85,7 @@ export class WorkspaceMemory {
     this.#ready = options.ready;
     this.#save = options.save;
     this.#folderOf = options.folderOf;
+    this.#now = options.now;
     // The model's writes as much as the person's.
     this.#memory?.onChange(() => void this.#tell());
   }
@@ -87,14 +114,40 @@ export class WorkspaceMemory {
             (waiting) => waiting.id === request.waitingId,
           )?.conversation.id
         : undefined;
+    // An entry removed is marked on the cards of the conversation that wrote
+    // it, opened or not.
+    const writer =
+      request.kind === "remove"
+        ? (await memory.state()).entries.find(
+            (entry) => entry.number === request.number,
+          )?.conversation?.id
+        : undefined;
     const outcome = await this.#apply(memory, request, chooseFolder);
     if (!outcome.ok) return outcome;
     if (from) await this.#ready(from).catch(() => false);
-    if (request.kind === "undo")
+    if (writer) await this.#ready(writer).catch(() => false);
+    const putBack =
+      request.kind === "undo" ? this.#removals.get(request.writeId) : undefined;
+    if (putBack !== undefined && request.kind === "undo") {
+      this.#removals.delete(request.writeId);
+      await this.#putBack(putBack);
+    } else if (request.kind === "undo")
       await this.#mark(
         (change) => change.writeId === request.writeId,
         "undone",
+        "card",
       );
+    if (request.kind === "remove") {
+      if (outcome.writeId) this.#removals.set(outcome.writeId, request.number);
+      await this.#mark(
+        (change) =>
+          change.number === request.number &&
+          change.change !== "removed" &&
+          (!change.state || change.state === "kept"),
+        "removed",
+        "memoryPage",
+      );
+    }
     if (request.kind === "keep" || request.kind === "discard")
       await this.#mark(
         (change) => change.waiting?.id === request.waitingId,
@@ -104,20 +157,97 @@ export class WorkspaceMemory {
   }
 
   /**
-   * Takes back what these actions kept, newest first, as when the turns that
-   * made them are gone back past or undone. An entry the person changed since
-   * stays as they left it, and a change they already decided on is theirs.
+   * What undoing memory changes would do to each write these actions kept,
+   * newest first, as when the turns that made them are gone back past or
+   * undone: one the person already kept or discarded is theirs, one memory
+   * would refuse now says why, as an entry changed since. A write already
+   * undone, or whose entry the person removed, is left out.
    */
-  async takeBack(actions: readonly TaskAction[]): Promise<void> {
+  async effects(
+    actions: readonly TaskAction[],
+  ): Promise<readonly RewindMemoryEffect[]> {
     const writes = actions
-      .filter((action) => action.memory && !action.memory.state)
-      .sort((left, right) => right.sequence - left.sequence);
-    for (const { memory } of writes)
-      // The conversation is already as the person asked; a write memory
-      // cannot reach now stays kept, shown on the Memory page.
-      await this.change({ kind: "undo", writeId: memory!.writeId }).catch(
-        () => undefined,
+      .filter(
+        (action) =>
+          action.memory &&
+          action.memory.state !== "undone" &&
+          action.memory.state !== "removed",
+      )
+      .sort((left, right) => right.sequence - left.sequence)
+      .map((action) => action.memory!);
+    const effects: RewindMemoryEffect[] = [];
+    for (const write of writes) {
+      const named = {
+        writeId: write.writeId,
+        ...(write.number !== undefined ? { number: write.number } : {}),
+        title: write.title,
+        ...(write.rule ? { rule: write.rule } : {}),
+      };
+      if (write.state) {
+        effects.push({ ...named, status: "decided" });
+        continue;
+      }
+      const memory = this.#memory;
+      const outcome = memory
+        ? await reached(() => memory.undoable(write.writeId))
+        : notKept;
+      effects.push(
+        outcome.ok
+          ? { ...named, status: "undoable" }
+          : { ...named, status: "changed", reason: outcome.reason },
       );
+    }
+    return effects;
+  }
+
+  /**
+   * Takes back the writes reviewed, newest first, or leaves them, as the
+   * person chose, and says what became of each. A write the person already
+   * decided on stays theirs; one memory refuses stays kept, with why. When
+   * the conversation no longer shows the writes (`cardsStay` false, as after
+   * going back), each one left is the person's to undo from then on.
+   */
+  async takeBack(
+    effects: readonly RewindMemoryEffect[],
+    choice: "keep" | "undo",
+    cardsStay: boolean,
+  ): Promise<readonly RewindMemoryOutcome[]> {
+    const memory = this.#memory;
+    const outcomes: RewindMemoryOutcome[] = [];
+    const left: string[] = [];
+    for (const effect of effects) {
+      const named = {
+        writeId: effect.writeId,
+        ...(effect.number !== undefined ? { number: effect.number } : {}),
+        title: effect.title,
+        ...(effect.rule ? { rule: effect.rule } : {}),
+      };
+      if (effect.status === "decided" || choice === "keep") {
+        outcomes.push({ ...named, status: "kept" });
+        left.push(effect.writeId);
+        continue;
+      }
+      const outcome = memory
+        ? await reached(() =>
+            memory.undo(
+              effect.writeId,
+              cardsStay ? "undoing the turn" : "going back",
+            ),
+          )
+        : notKept;
+      if (outcome.ok) outcomes.push({ ...named, status: "undone" });
+      else {
+        outcomes.push({ ...named, status: "refused", reason: outcome.reason });
+        left.push(effect.writeId);
+      }
+    }
+    // A record memory cannot reach now stays the conversation's, as before.
+    if (!cardsStay && left.length && memory)
+      await reached(async () => {
+        await memory.cardsGone(left);
+        return { ok: true };
+      });
+    return outcomes;
   }
 
   /**
@@ -243,17 +373,55 @@ export class WorkspaceMemory {
     return folder ? memory.linkFolder(id, folder) : { ok: true };
   }
 
-  /** Says on each card showing a matching change what became of it. */
+  /**
+   * Says on each card showing a matching change what became of it. With
+   * `taken`, the entry is gone from memory, and the conversation's model is
+   * told at its next request, as of an undo of that turn's memory alone.
+   */
   async #mark(
     matches: (change: MemoryChange) => boolean,
     state: NonNullable<MemoryChange["state"]>,
+    taken?: TaskUndo["memoryFrom"],
   ): Promise<void> {
     for (const { id } of this.#tasks()) {
       const task = this.#task(id);
-      if (
-        !task?.actions.some((action) => action.memory && matches(action.memory))
-      )
-        continue;
+      const marked = task?.actions.filter(
+        (action) => action.memory && matches(action.memory),
+      );
+      if (!task || !marked?.length) continue;
+      const at = this.#now().toISOString();
+      const undos: TaskUndo[] = taken
+        ? marked.flatMap((action) => {
+            const opening = openingOf(task, action);
+            const write = action.memory!;
+            return opening
+              ? [
+                  {
+                    id: `${taken}-${write.writeId}`,
+                    messageId: opening,
+                    actionIds: [],
+                    at,
+                    files: [],
+                    memory: [
+                      {
+                        writeId: write.writeId,
+                        ...(write.number !== undefined
+                          ? { number: write.number }
+                          : {}),
+                        title: write.title,
+                        // Removed on the Memory page, the whole entry is gone.
+                        ...(write.rule && taken === "card"
+                          ? { rule: write.rule }
+                          : {}),
+                        status: "undone" as const,
+                      },
+                    ],
+                    memoryFrom: taken,
+                  },
+                ]
+              : [];
+          })
+        : [];
       await this.#save({
         ...task,
         actions: task.actions.map((action) =>
@@ -261,6 +429,59 @@ export class WorkspaceMemory {
             ? { ...action, memory: { ...action.memory, state } }
             : action,
         ),
+        undos: [...task.undos, ...undos],
+      });
+    }
+  }
+
+  /**
+   * An entry the person put back on the Memory page after removing it: each
+   * card it marked removed shows the change as before, and its model, told
+   * of the removal or not yet, hears it is kept again or nothing at all.
+   */
+  async #putBack(number: number): Promise<void> {
+    const isRemoval = (undo: TaskUndo) =>
+      undo.memoryFrom === "memoryPage" &&
+      undo.memory?.some((write) => write.number === number) === true;
+    for (const { id } of this.#tasks()) {
+      const task = this.#task(id);
+      const marked = task?.actions.filter(
+        (action) =>
+          action.memory?.number === number && action.memory.state === "removed",
+      );
+      if (!task || !marked?.length) continue;
+      const told = task.undos.filter((undo) => isRemoval(undo) && undo.told);
+      const at = this.#now().toISOString();
+      await this.#save({
+        ...task,
+        actions: task.actions.map((action) =>
+          marked.includes(action)
+            ? {
+                ...action,
+                memory: {
+                  ...action.memory!,
+                  // A waiting change the person kept was kept before it was removed.
+                  state:
+                    action.memory!.change === "waiting" ? "kept" : undefined,
+                },
+              }
+            : action,
+        ),
+        undos: [
+          ...task.undos.filter((undo) => !isRemoval(undo) || undo.told),
+          ...told.map((undo): TaskUndo => ({
+            id: `${undo.id}-back`,
+            messageId: undo.messageId,
+            actionIds: [],
+            at,
+            files: [],
+            memory: (undo.memory ?? []).map((write) => ({
+              ...write,
+              status: "kept" as const,
+            })),
+            memoryFrom: "memoryPageBack",
+          })),
+        ],
       });
     }
   }
@@ -274,4 +495,17 @@ export class WorkspaceMemory {
     const state = await this.#memory?.state().catch(() => undefined);
     if (state) this.#emit({ kind: "memoryChanged", data: state });
   }
+}
+
+/** The person's message that opened the turn an action ran in. */
+function openingOf(
+  task: WorkspaceTask,
+  action: TaskAction,
+): string | undefined {
+  return task.messages
+    .filter(
+      (message) =>
+        message.role === "user" && message.sequence < action.sequence,
+    )
+    .at(-1)?.id;
 }

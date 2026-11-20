@@ -212,6 +212,84 @@ describe("undoing a turn's file changes", () => {
     expect(rewind.planUndo(applied.task, "u2")).toMatchObject({ ok: true });
   });
 
+  it("names every action of the turn, so what it kept in memory can be undone with it", () => {
+    const rewind = new ConversationRewind(() => "undo-1");
+
+    const planned = rewind.planUndo(task(), "u1");
+
+    if (!planned.ok) throw new Error(planned.reason);
+    expect(planned.turn.map((item) => item.id)).toEqual(["write-1", "read-1"]);
+  });
+
+  it("records what became of the turn's memory writes, marking those taken back as undone", () => {
+    const rewind = new ConversationRewind(() => "undo-1");
+    const kept = (
+      id: string,
+      sequence: number,
+      writeId: string,
+      title: string,
+    ): TaskAction => ({
+      id,
+      action: "Keep in memory",
+      target: title,
+      status: "completed",
+      sequence,
+      memory: {
+        writeId,
+        title,
+        change: "added",
+        scope: "everything",
+        scopeName: "Everything",
+        section: "knowledge",
+      },
+    });
+    const remembering: WorkspaceTask = {
+      ...task(),
+      actions: [
+        ...task().actions,
+        kept("keep-1", 2.1, "w1", "Lodging"),
+        kept("keep-2", 2.2, "w2", "Prices"),
+      ],
+    };
+    const planned = rewind.planUndo(remembering, "u1");
+    if (!planned.ok) throw new Error(planned.reason);
+
+    const applied = rewind.applyUndo(
+      remembering,
+      planned,
+      [{ path: "notes.md", status: "restored" }],
+      "2026-10-02T09:00:00.000Z",
+      [
+        { writeId: "w2", title: "Prices", status: "undone" },
+        {
+          writeId: "w1",
+          title: "Lodging",
+          status: "refused",
+          reason: "#1 Lodging was changed since, so it was left as it is.",
+        },
+      ],
+    );
+
+    if (!applied.ok) throw new Error(applied.reason);
+    expect(applied.task.undos[0]?.memory).toEqual([
+      { writeId: "w2", title: "Prices", status: "undone" },
+      {
+        writeId: "w1",
+        title: "Lodging",
+        status: "refused",
+        reason: "#1 Lodging was changed since, so it was left as it is.",
+      },
+    ]);
+    expect(
+      applied.task.actions
+        .filter((one) => one.memory)
+        .map((one) => [one.memory?.writeId, one.memory?.state]),
+    ).toEqual([
+      ["w1", undefined],
+      ["w2", "undone"],
+    ]);
+  });
+
   it("refuses a plan once the conversation has changed", () => {
     const rewind = new ConversationRewind(() => "undo-1");
     const planned = rewind.planUndo(task(), "u1");

@@ -498,8 +498,14 @@ named by its target.
   one notice says so.
 - What happened outside the turn reaches the model as a notice at its next
   request: a job's end (`job`; a job that ended by itself wakes a conversation
-  with no turn running) and files the person put back with undo (`undo`, told
-  once, and again if a rewind cut the notice that told it). A job that ended
+  with no turn running) and what the person undid of a turn (`undo`, told
+  once, and again if a rewind cut the notice that told it): each file and
+  what became of it, and each memory entry taken back and each left kept,
+  by number and title. Where memory changed, the notice does not say the
+  conversation is unchanged, and it asks the model not to say what was taken
+  back is still in memory. An entry taken back on its own, with one row's
+  Undo on the turn's memory card or by removing it on the Memory page, is
+  told the same way, saying which of the two. A job that ended
   by itself while a woken turn makes its last request, or while the
   conversation condenses because the person asked, wakes the conversation
   once that is done, a condensing that failed included.
@@ -883,6 +889,9 @@ named by its target.
   not on offer is refused as any tool not on offer is; a write checks the
   conversation's choice at each call, so a choice to keep nothing made during
   a turn or after it holds.
+- A `recall` reads for its conversation, so a number that conversation kept
+  and the person took back with its turn is answered as taken back, saying
+  how, rather than as not kept.
 - Each call is recorded as an action of the conversation, a specialist's with
   its run id. A read brings what the conversation that wrote the entry held,
   outside content or private data within reach, and counts among what this

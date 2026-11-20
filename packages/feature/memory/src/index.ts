@@ -11,3 +11,4 @@ export type {
   SentInstruction,
   WriteContext,
 } from "./memory.js";
+export type { TakenBackBy } from "./taken-back.js";

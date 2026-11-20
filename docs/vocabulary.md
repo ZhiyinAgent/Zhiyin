@@ -30,10 +30,15 @@ is defined and the other is marked as being renamed.
   prevent nor undo. Window: **Allow once**, **Deny**, and **Allow for this
   conversation** where one answer can stand.
 - **Going back**: editing an earlier message and sending it again, with the
-  files changed since put back if the person chooses. Window: **Go back**.
-  The code calls it rewind.
-- **Undo**: putting back the file changes of one turn while keeping the
-  conversation. Window: **Undo these changes**.
+  files changed since put back and what was kept in memory since taken back,
+  each unless the person clears it. Window: **Go back**, with **Undo
+  everything**, **Undo file changes** and **Undo memory changes**. The code
+  calls it rewind.
+- **Undo**: putting back the file changes of one turn, and taking back what
+  it kept in memory, while keeping the conversation. Window: **Undo these
+  changes**, with the same boxes.
+- **Taken back**: what becomes of a memory write whose turn the person went
+  back past or undid: the entry is as it was before the write.
 - **Memory**: what Zhiyin keeps across conversations, as files the person can
   read and change on the **Memory** page.
 - **Project**: a piece of work with a memory of its own, which a

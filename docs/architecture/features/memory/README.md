@@ -35,13 +35,18 @@ implements `Memory`:
 
 - `rememberToolFor(inProject)`, `recallTool`: the tools' specs. `remember`
   offers the scopes a conversation can write to, in a project or outside one,
-  and states its limits in characters.
+  and states its limits in characters. Its guidance keeps to About you and
+  How to work only what the person states as lasting, nothing inferred about
+  them, and no price, opening hours or availability without the date checked
+  and the source.
 - `remember(input, context)`: applies a call for the conversation in
   `context`: its project, the person's words in it and what it holds. Answers
   the model and gives the change its card shows, or a refusal said so the
   model can write again.
-- `recall(input)`: entries by number and by up to five searches, with their
-  links both ways, and what they held.
+- `recall(input, conversationId)`: entries by number and by up to five
+  searches, with their links both ways, and what they held. A number the
+  conversation's own write kept, taken back with its turn, is said to be
+  taken back rather than not kept.
 - `similarTo(number)`, `leastUsed(scope, count)`: the entries a write is
   compared with, and those a full section would give up first.
 - `startOf(project, conversation)`: the instructions and the data a
@@ -50,6 +55,12 @@ implements `Memory`:
 - `projectFor(folder)`: the project a folder's conversations belong to.
 - `state()`, `add`, `edit`, `remove`, `move`, `keep`, `discard`, `undo`, and
   the project changes, for the Memory page and the conversation's card.
+  `undo(writeId, by)` with `by`, going back or undoing the turn, takes a
+  write back with the turn that made it.
+- `undoable(writeId)`: whether `undo` would take the write back now, or why
+  not, changing nothing, for a rewind's or an undo's review.
+- `cardsGone(writeIds)`: the conversation no longer shows these writes, as
+  after going back keeping memory, so their records are let go.
 - `conversationDeleted(id)`, `forgetConversation(id, { own, general })`:
   what a deleted conversation leaves: no Undo of its writes and, as the person
   chose, none of the memory it kept for itself (`own`) or of the Knowledge
@@ -144,11 +155,21 @@ same.
   was written again since or its project is no longer kept, a rule added taken
   out while later rules stay. Writes are known across restarts, and a write's
   record is kept before the write, so none is left without its Undo.
+- Asking whether a write can be undone gives the same answer `undo` would,
+  and changes nothing.
+- A write taken back with its turn, by going back past it or undoing it, is
+  noted for its conversation by its number alone, never its text, and a
+  `recall` of that number from that conversation says how it was taken back.
+  Another conversation reads it as not kept. Deleting the conversation lets
+  go of the note.
 - A write's record is kept only while something can offer its Undo. A
-  conversation's writes can be undone while the conversation is kept;
-  deleting it lets go of their records and keeps what it wrote. A change the
-  person made on the Memory page can be undone for seven days, after which
-  its record is let go of, once memory is next used. Forgetting what a deleted
+  conversation's writes can be undone while the conversation shows their
+  card; deleting it, or going back past their turn keeping memory, lets go of
+  their records and keeps what they wrote. A change the person made on the
+  Memory page can be undone for seven days, after which its record is let go
+  of, once memory is next used. The record that undoes a waiting change is let go
+  of once the person keeps or discards it, and when memory is opened and the
+  change no longer waits. Forgetting what a deleted
   conversation kept removes, as the person chose, its own entries, the
   Knowledge entries it kept for other conversations, or both, and keeps
   nothing to undo them, so a removed entry's text is left nowhere under the

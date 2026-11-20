@@ -853,6 +853,7 @@ describe("a failed turn", () => {
             laterUserMessages: 0,
             discardedActions: [],
             files: [],
+            memory: [],
           }),
           commitRewind,
           sendMessage,
@@ -863,7 +864,12 @@ describe("a failed turn", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     await waitFor(() => expect(order).toEqual(["rewound", "sent"]));
-    expect(commitRewind).toHaveBeenCalledWith("task-1", "rewind-1", "keep");
+    expect(commitRewind).toHaveBeenCalledWith(
+      "task-1",
+      "rewind-1",
+      "keep",
+      "keep",
+    );
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith("task-1", "Summarise the notes", {
       enabled: true,
@@ -1076,6 +1082,7 @@ describe("a failed turn", () => {
             laterUserMessages: 0,
             discardedActions: [],
             files: [],
+            memory: [],
           }),
         }}
       />,
@@ -1298,6 +1305,7 @@ describe("a turn's files", () => {
         { path: "notes.md", action: "remove", status: "recoverable" },
         { path: "summary.md", action: "remove", status: "recoverable" },
       ],
+      memory: [],
     }));
     const commitUndo = vi.fn<CoreApi["commitUndo"]>(async () => ({
       files: [],
@@ -1318,7 +1326,12 @@ describe("a turn's files", () => {
     );
 
     await waitFor(() =>
-      expect(commitUndo).toHaveBeenCalledWith("task-1", "undo-1"),
+      expect(commitUndo).toHaveBeenCalledWith(
+        "task-1",
+        "undo-1",
+        "restore",
+        "keep",
+      ),
     );
     expect(previewUndo).toHaveBeenCalledWith("task-1", "u1");
   });

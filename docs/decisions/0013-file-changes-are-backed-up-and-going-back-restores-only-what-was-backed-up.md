@@ -1,6 +1,7 @@
 # 0013. File changes are backed up, and going back restores only what was backed up
 
-Status: accepted
+Status: accepted. Its rule that a rewind keeps the current files unless the
+person asks is superseded by 0030.
 
 ## Decision
 
