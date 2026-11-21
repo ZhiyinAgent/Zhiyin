@@ -23,7 +23,11 @@ type JobChanges = (
   conversationId: string,
   job: string,
   changes: CommandFileChanges,
+  outcome: ToolInvocationResult,
 ) => void;
+
+/** A job's answer when it ended well and said nothing in particular. */
+const endedWell: ToolInvocationResult = { ok: true, value: { exitCode: 0 } };
 
 function callsBashOnce() {
   let turn = 0;
@@ -46,6 +50,8 @@ function callsBashOnce() {
 function running(
   result: ToolInvocationResult,
   send: AgentLoopDependencies["model"]["send"] = callsBashOnce(),
+  /** What the call declares it does; nothing, as the worst it could do. */
+  effects?: Extract<ToolCallInspection, { ok: true }>["effects"],
 ) {
   let announce: JobChanges | undefined;
   const deps = stubDependencies(() => {});
@@ -73,6 +79,7 @@ function running(
         action: "Run a command",
         target: "python convert.py",
         command: 'bash({"command":"python convert.py"})',
+        ...(effects ? { effects } : {}),
       }),
       execute: async () => result,
     },
@@ -89,7 +96,12 @@ function running(
   return {
     loop: host.app,
     host,
-    announce: (...args: Parameters<JobChanges>) => announce?.(...args),
+    announce: (
+      conversationId: string,
+      job: string,
+      changes: CommandFileChanges,
+      outcome: ToolInvocationResult = endedWell,
+    ) => announce?.(conversationId, job, changes, outcome),
     created,
   };
 }
@@ -148,6 +160,48 @@ describe("what changed while a command ran", () => {
     expect(created).toEqual([
       [action?.id, "C:/work", [{ path: "out.csv", change: "created" }]],
     ]);
+  });
+
+  it("marks the action that started a job with what the job brought when it ends, as a command that ends in time is", async () => {
+    // A sealed-off command, which brings nothing until it is known to have.
+    const { loop, announce } = running(
+      {
+        ok: true,
+        value: { job: "J1", status: "running" },
+        commandChanges: { status: "running", job: "J1" },
+      },
+      callsBashOnce(),
+      {
+        reads: "workspace",
+        changes: "workspace",
+        sends: "service",
+        actsAsPerson: "none",
+        runs: "sealed",
+        lasting: false,
+        brings: "none",
+      },
+    );
+    const taskId = await loop.createTask();
+    await loop.start(taskId, "Download the data");
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.brings).toBeUndefined();
+
+    announce(
+      taskId,
+      "J1",
+      { ...converted, job: "J1" },
+      {
+        ok: true,
+        value: { exitCode: 0, refusedHosts: ["example.org"] },
+        brings: "outside",
+      },
+    );
+    await until(
+      () => loop.snapshot().tasks[0]?.actions?.[0]?.brings === "outside",
+    );
+
+    expect(loop.snapshot().tasks[0]?.actions?.[0]?.evidence).toContain(
+      "example.org",
+    );
   });
 
   it("is kept on the command's action, apart from the changes a copy was taken for", async () => {

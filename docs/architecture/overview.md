@@ -23,7 +23,10 @@ the path one message takes. The words used here are defined in
 - **Helper processes**: a contained process that draws documents, a thread
   that compares pictures, and the programs Zhiyin starts (shell commands, the
   browser, Python, Blender, the document compilers), each owned by a Windows
-  Job Object that ends it with the app.
+  Job Object that ends it with the app. A sealed-off shell command runs in
+  Zhiyin's busybox-w32 in an app container of its conversation's; its `git`
+  hands each git command over a pipe to the core, which runs the person's
+  Git outside the container (ADR 0029).
 
 ## The layers
 
@@ -132,7 +135,8 @@ the list to the folders.
 - `corrections-log`: the corrections answered to the model alone.
 - `document-compiler`: Typst and LaTeX to PDF.
 - `document-viewer`: the PDF, picture or video shown beside a conversation.
-- `git-connector`: Git as one typed tool per operation.
+- `git-connector`: Git as one typed tool per operation, and git run outside
+  the container for a sealed-off shell.
 - `interactive-browser`: the conversation's own headless browser.
 - `mcp`: connections to MCP servers, remote and served by Zhiyin.
 - `memory`: what Zhiyin keeps across conversations.

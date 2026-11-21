@@ -148,7 +148,9 @@ connection a conversation may not reach.
 - `stopConversation`, `restConversation`, `forgetConversation` and
   `shutdown` are the one place a conversation's browser, Blender, connections
   and running commands are let go of. Deleting a conversation also removes
-  the CAD studio's records of it. A stop ends only the running commands
+  the CAD studio's records of it, and, once its commands have stopped, what
+  the tools member kept for them, such as the home of its sealed-off
+  commands. A stop ends only the running commands
   and jobs; the rest stays open for the next turn (ADR 0007). A rest, for a
   conversation left alone, closes only its browser and Blender, which open
   again on their next use.

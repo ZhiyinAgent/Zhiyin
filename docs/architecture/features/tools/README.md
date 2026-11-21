@@ -4,7 +4,7 @@
 
 The built-in actions the model takes on the person's computer, and the folder
 each conversation works in. The tools read, list, search, write, edit and
-delete files in the conversation's folder, read and compare PDFs and pictures, run bash commands, and show charts,
+delete files in the conversation's folder, read and compare PDFs and pictures, run shell commands, and show charts,
 diagrams, quizzes and questions in the conversation.
 
 Each tool validates typed arguments against the schema it offers the model,
@@ -15,8 +15,9 @@ can approve it, performs one action, and returns typed data. A tool decides
 nothing about permission and renders nothing.
 
 How to use a tool is said in its own description, which reaches the model
-only with the tool: which tool to prefer to a shell's own search, that a
-command runs in Git Bash on Windows and that its exit code proves no effect,
+only with the tool: which tool to prefer to a shell's own search, which shell
+a command runs in (busybox sh, not bash, or Git Bash) and that its exit code
+proves no effect, what a sealed-off command reaches and how to ask for more,
 how to cite a page of a document read, that a view or quiz is shown in the
 conversation and is inside no file, and when to ask the person.
 
@@ -24,7 +25,7 @@ conversation and is inside no file, and when to ask the person.
   `find_files`, `write_file`, `multi_edit`, `move_file`, `delete_file`.
 - **Documents:** `read_document` for PDFs and pictures, `compare_pictures`,
   `close_document`.
-- **Commands:** `bash`, `job_output`, `stop_job`.
+- **Commands:** `bash`, `request_access`, `job_output`, `stop_job`.
 - **Display and input:** `render_diagram`, `render_bar_chart`,
   `render_line_chart`, `render_scatter_plot`, `render_histogram`,
   `render_box_plot`, `render_quiz`, `ask_user`.
@@ -33,12 +34,14 @@ Display and input tools work without a folder. The others need one, and are
 offered to a conversation only once it has entered its folder, except
 reading what the conversation kept by its `output://` or `attachment://`
 address. The searches are offered only when the bundled ripgrep is present.
-`bash` is offered only where a bash is found, normally the one Git for Windows
-installs, and, in the app, where process containment is available. The
-`bash.exe` in the Windows folder or among its app aliases starts WSL, whose
-commands would run outside that containment, so it is never used. Where no
-shell can be offered, it is said to be unavailable with the reason, and checking
-for a shell again does not change it.
+`bash` is offered, in the app, where process containment is available. Given
+Zhiyin's own shell, busybox-w32, its commands run in it, sealed off where it
+starts in an app container (ADR 0029), and `request_access` is offered with
+them; without it, commands run in a bash found here, normally the one Git for
+Windows installs. The `bash.exe` in the Windows folder or among its app
+aliases starts WSL, whose commands would run outside that containment, so it
+is never used. Where no shell can be offered, it is said to be unavailable
+with the reason, and checking for a shell again does not change it.
 
 ## Boundaries
 
@@ -74,7 +77,15 @@ for a shell again does not change it.
   bash path, process containment or why there is none, `ConversationItems`, a
   PDF pages source and a pixel source, which draws a picture or a PDF page to
   pixels (ADR 0019), a pixel comparer, where two pictures' pixels are
-  compared, the Recycle Bin, and the ripgrep path.
+  compared, the Recycle Bin, and the ripgrep path; and, for sealed-off
+  commands, `sealedShell` (`SealedShellSetup`: busybox, the folder of the
+  `git` that hands git to Zhiyin, where each conversation's home is kept,
+  toolchains to read, a `ShellGit` that runs git outside the container, and
+  Zhiyin's Node as a `SealedToolchain`, which says where it is installed and
+  installs it)
+  and `reach`, a `ConversationReach` saying what each conversation granted
+  (`ShellReach`: hosts, folders to read, folders to change, and whether the
+  package registries are on its list), which the agent loop keeps.
 - `ToolRegistry`: `list(conversationId?)`, `inspect(name, args, conversationId?)`,
   `execute(name, args, signal?, conversationId?, answerTokens?)`, and
   `completeUserInput(name, args, response)`. Inspection is asynchronous
@@ -87,7 +98,8 @@ for a shell again does not change it.
 - `ShellCommands`, apart from the registry: the jobs commands carry on as,
   through `runningCommands`, `commandOutput`, `stopCommandForPerson`,
   `stopCommands`, `stopAllCommands`, `onCommandEnded`, `onCommandsChanged`
-  and `onJobChanges`.
+  and `onJobChanges`, which is told the files an ended job changed with the
+  command's own answer; and `forgetConversation`, for a conversation deleted.
 - `WorkspaceContext`: `enterFolder(conversationId, path)`, which answers the
   folder's name, `checkFolder(path)`, `leaveFolder(conversationId)`, and, for
   a conversation, `workspaceRoot`, `describeWorkspace` (the folder's name and
@@ -114,14 +126,20 @@ for a shell again does not change it.
   folder or a Startup folder leaves something that runs later. A deletion to
   the Recycle Bin changes the workspace; one for good changes it for good.
   A move changes the workspace, or elsewhere when either end is outside it.
-  A shell command runs with the person's full access, may reach and send
-  anything, and brings what it prints.
+  A sealed-off command reads the workspace, changes it or, with a folder
+  granted for changing, elsewhere, runs code sealed off, and sends to the
+  hosts on its conversation's list when it has any; its result brings
+  outside content when a host sent it anything. A command with full access
+  runs with the person's full access, may reach and send anything, and
+  brings what it prints. A request for more declares what it grants
+  (`grants`), and a sealed-off command that it reaches what was granted
+  (`reachesGrants`), for the agent loop.
 - A refusal may be `correctable`: the model can fix it with a better call, so
   it is answered to the model rather than shown to the person (ADR 0009).
   Its reason says, after the tool's own words, how the input departs from
   the tool's schema, where those words do not already say it.
   Leaving the folder is never correctable.
-- A shell command, a deletion for good, a deletion outside the workspace and
+- A command with full access, a request for more, a deletion for good, a deletion outside the workspace and
   a move that takes from or puts outside it say they are asked every time, so no grant for the conversation covers them
   (ADR 0012). A deletion in the workspace whose every target goes to the
   Recycle Bin does not, so a grant for its file or folder may cover it
@@ -144,9 +162,14 @@ for a shell again does not change it.
 - The pixel comparer is the picture-comparison platform's: the composition
   root hands the tools one that compares on a thread of its own; without
   one, pixels are compared in the calling thread.
-- `resolveShell()` finds the shell commands run in, once, when the tools are
-  built: a shell that is not there is a capability that does not exist.
-- The types these take and return: `CommandContainer`,
+- `resolveShell()` finds the bash commands run in without Zhiyin's shell,
+  once, when the tools are built: a shell that is not there is a capability
+  that does not exist.
+- `packageRegistries`: the registry and Git hosts on every conversation's list
+  until it is confirmed or declined.
+- The types these take and return: `ConversationReach`, `ShellReach`,
+  `SealedShellSetup`, `ShellGit`, `ShellGitCall`, `ShellGitAnswer`,
+  `CommandContainer`,
   `CommandContainment`, `RecycleBin`, `OpenedPdf`, `PdfPagesSource`,
   `PixelSource`, `OpenedPixels`, `PixelFormat`, `ToolResult`, `ShellAvailability`, `ToolCallInspection`, `ToolSpec`,
   `WorkspaceToolsOptions`.
@@ -387,10 +410,59 @@ for a shell again does not change it.
   interface whole, marked as the input that runs, with the time limit beside
   it in words.
 - Python started from a command reads and writes UTF-8, as its output is read.
-- A command is not sandboxed: it starts in the folder and can reach whatever
-  the person's account can, including the network. Its process tree runs in a
-  Job Object, so stopping a command, or Zhiyin ending, ends everything it
-  started.
+- With Zhiyin's shell, a command runs sealed off unless the call says
+  `full_access`, in an app container of the conversation's own, and asks
+  nothing (ADR 0029). Its container reads the workspace, the shell, Zhiyin's
+  toolchains, what Windows opens to every container and the folders granted
+  for reading; changes the workspace and the folders granted for changing;
+  keeps the conversation's home, which no other conversation's commands
+  reach, where npm's, pip's and cargo's caches and settings go; and reaches
+  only the hosts on the conversation's list through Zhiyin's proxy. Its
+  effects come from that container, whatever the command's text. Zhiyin's
+  own Node comes first on its `PATH`, with npm and npx, installed when the
+  first sealed-off command runs; one that could not be installed is named to
+  the model, and the command runs without it. Node is told to keep paths as given. `/dev/null` works there; a
+  program that opens `NUL` itself does not. A deleted conversation's home is
+  removed with the container Windows keeps for it, once its jobs have
+  stopped.
+- Whether commands can be sealed off is checked once, by starting the shell in
+  a container and writing to the null device. Where it cannot, every command
+  runs with full access and asks each time, the description says why, and
+  `request_access` is not offered.
+- A sealed-off command's answer names each host Zhiyin's proxy refused it,
+  and, where it was refused a path, how to ask for more, or to run a program
+  installed where no container may read it with `full_access`. One that
+  carries on as a job names the hosts refused in the sentence its end is
+  announced with, and its answer, refused hosts and outside content included,
+  goes to whoever watches its changes. `show_ports` shows
+  ports of its container on this computer while it runs, at the addresses the
+  answer gives.
+- The container's `git` hands each git command, its folder and its standard
+  input to Zhiyin over a pipe only that container may open, and is answered
+  with what git printed and its exit code. The `ShellGit` the application
+  gives runs it. While it runs, every process of the conversation's
+  container is suspended, those of its other commands and jobs included, and
+  resumed before the answer is written, also when git fails or is stopped;
+  the conversation's git commands run one at a time.
+- `request_access` names one website or one folder, with the model's reason.
+  A website is granted by its registrable domain under the Public Suffix List,
+  covering every name below it, or one exact host, on port 443 unless another
+  is named; a name under a suffix where anyone can have one is its own
+  website. A public suffix, an address, a name of this computer or its
+  network and a cloud storage or delivery domain shared by many are refused.
+  A folder is granted by its whole real path, to read or to change; one named
+  through a link, holding a link out of it or a file with another name, in or
+  holding the workspace, a drive, the user folder or a folder holding it, a
+  network share, Zhiyin's own folders and where credentials are kept are
+  refused, and so, to change, are Windows, Program Files and the Startup
+  folders. A folder whose permissions this account may not change, as only an
+  administrator may for Program Files, cannot be given to a container and is
+  refused, pointing to `full_access`. Each is refused before any card,
+  checked again as it runs, and asked every time.
+- A command with full access is not sandboxed: it starts in the folder and can
+  reach whatever the person's account can, including the network. Every
+  command's process tree runs in a Job Object, so stopping a command, or
+  Zhiyin ending, ends everything it started.
 - A command with a simple command that starts with `rm`, `rmdir`, `del` or
   `Remove-Item`, `find` with `-delete`, or `git clean` is refused,
   correctably, before approval and again before it runs, pointing the model
@@ -404,7 +476,7 @@ for a shell again does not change it.
   whole stream is kept with the conversation under an `output://` address.
 - A command that exits non-zero ran and answered: its result keeps the exit
   code and output and is marked reported, not a failure to run. Exit code 0
-  with a bash "command not found" is reported as unconfirmed. A command that
+  with a bash or busybox "not found" is reported as unconfirmed. A command that
   could not start, was stopped, or ran past its time limit (30 minutes by
   default, at most two hours) is not marked reported.
 - A command still running after 30 seconds carries on as a job of its
@@ -431,8 +503,10 @@ for a shell again does not change it.
   script or command runs in it. It lists the files the ignore files list too,
   since those are often the data a script works on; the folders searches
   skip, which an install or a build makes again, and `.git` stay out. A command says it may change any
-  file in the workspace, so its folder is copied before it runs, and nothing
-  is held from it: it is not sealed off (ADR 0012).
+  file in the workspace, so its folder is copied before it runs. Nothing is
+  held from a command with full access; a sealed-off one runs sealed, so what
+  holds a sealed-off program's `.git` and Startup folders holds its too
+  (ADR 0012).
 
 ### Documents and pictures (ADR 0019)
 

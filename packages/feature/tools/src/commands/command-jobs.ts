@@ -243,13 +243,15 @@ export class CommandJobs implements ShellCommands {
     });
     // However it ended. Not once Zhiyin is closing: the conversation is
     // settled after the restart instead.
-    void command.changes.then((changes) => {
-      if (!changes || this.#closing) return;
-      const named =
-        changes.status === "checked" ? { ...changes, job: id } : changes;
-      for (const watcher of this.#changeWatchers)
-        watcher(conversationId, id, named);
-    });
+    void Promise.all([command.changes, command.outcome]).then(
+      ([changes, outcome]) => {
+        if (!changes || this.#closing) return;
+        const named =
+          changes.status === "checked" ? { ...changes, job: id } : changes;
+        for (const watcher of this.#changeWatchers)
+          watcher(conversationId, id, named, outcome);
+      },
+    );
     this.#changed(conversationId);
     return id;
   }
@@ -348,6 +350,11 @@ export class CommandJobs implements ShellCommands {
     }
     await Promise.all(jobs.map((job) => job.outcome));
     this.#byConversation.delete(conversationId);
+  }
+
+  /** The jobs keep nothing of a conversation once they are stopped. */
+  forgetConversation(conversationId: string): Promise<void> {
+    return this.stopCommands(conversationId);
   }
 
   async stopAllCommands(): Promise<void> {

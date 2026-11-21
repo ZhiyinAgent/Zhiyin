@@ -86,6 +86,10 @@ should last.
 - `resolveApproval(taskId, requestId, decision, reason?)` and
   `resolveUserInput(taskId, requestId, response)` answer the exact pending
   request. `revokeConversationPermission` removes a conversation grant.
+- `shellReach(taskId)` says what the conversation's grants let its sealed-off
+  commands reach: the hosts, the folders to read and to change, and whether
+  the package registries are on its list (ADR 0029). The application hands it
+  to the tools.
 - `running` and `anyRunning` say whether a turn runs. `running` is also true
   while a specialist that outlived its turn is finishing, so Stop stays
   reachable.
@@ -96,6 +100,9 @@ should last.
 
 The composition root connects `commandEnded`, `commandsChanged` and
 `jobChanged` to the capabilities group, for commands that carry on as jobs.
+`jobChanged` gives the action that started a job what the job changed and
+the command's own answer once it ends, which the action keeps as it would
+have had the command ended in time: what it brought, and its evidence.
 
 The dependencies are the feature interfaces above, `model`, `guidanceModel`
 (naming and labelling; the app points it at the conversation's model, ADR
@@ -338,6 +345,22 @@ named by its target.
   file grant a call changes the file of is kept as the call left it,
   whichever grant let the call run. The loop keeps no list of other
   features' tool names.
+- A request for sealed-off commands to reach more that the person allows
+  becomes a grant for the conversation, holding the conversation's two facts
+  as its card stated them (ADR 0029): a website, a folder to read, or a folder
+  to change, which is a grant for that folder. It holds only in the folder the
+  conversation worked in when it was made. A website's card says what
+  the grant lets out by the facts then: that what the conversation can read
+  could be sent there, when something private is within reach, or that
+  commands may download from it.
+- Before a built-in call that says it reaches what was granted, each grant
+  whose card did not cover a fact the conversation now holds, and the package
+  registries once outside content and something private meet, are shown on
+  one card. Allowed, they are kept with the facts now; declined, the grants
+  are taken back and the registries are off the conversation's list, and the
+  call is looked at again before it is decided.
+- When the person declines three requests for more in a row, the turn ends,
+  saying why; one allowed starts the count again.
 - A call that declares its effects is decided with what the conversation
   holds (ADR 0012), worked out from the conversation's own record each time,
   so going back past an action takes back what it brought: whether a call

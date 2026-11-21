@@ -117,6 +117,33 @@ Zhiyin includes an adapted version of Anthropic's frontend-design skill.
   interface-validation requirements
 - License copy: `apps/desktop/third-party-licenses/anthropic-frontend-design-LICENSE.txt`
 
+## busybox-w32 FRP-6354-g5f09fb446
+
+Zhiyin ships busybox-w32 as the shell its commands run in (ADR 0029), built
+from the commit below with two patches of Zhiyin's, as a program beside the
+app's archive. The patches and the script that builds it are in the
+repository: `scripts/busybox/null-device.patch` emulates `/dev/null` where an
+app container is refused Windows' null device, and
+`scripts/busybox/exec-wait.patch` keeps the shell waiting for the command it
+runs last when it cannot see its parent; `scripts/busybox.mjs` builds it with
+the configuration `mingw64u_defconfig`. The program beside it,
+`busybox/git/git.exe`, is Zhiyin's own, under Zhiyin's licence.
+
+The installed app carries the complete source beside the program, in
+`resources\busybox\source\` of the folder Zhiyin is installed in:
+busybox-w32's source tarball for the commit below, byte for byte as GitHub
+serves it (`busybox-w32-5f09fb446adf81d005f0aad9dc47eca19ac3b74c.tar.gz`,
+SHA-256 `5fe1444e…4839`), both patches, `git-handoff.c`, and `pins.json`,
+which names the toolchain and configuration it is built with. Packaging
+checks that it is there and that the tarball has that SHA-256.
+
+- Source: <https://github.com/rmyorston/busybox-w32>, commit
+  `5f09fb446adf81d005f0aad9dc47eca19ac3b74c`
+- License: GNU General Public License, version 2 only
+- Copyright: the BusyBox authors, and Ron Yorston and contributors for the
+  Windows port
+- License copy: `apps/desktop/third-party-licenses/busybox-w32/LICENSE`
+
 ## Chromium hunspell dictionaries
 
 Zhiyin ships the spelling dictionaries Chromium uses, unmodified: each `.bdic`

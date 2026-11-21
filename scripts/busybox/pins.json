@@ -1,0 +1,22 @@
+{
+  "w64devkit": {
+    "version": "2.11.0",
+    "file": "w64devkit-x64-2.11.0.7z.exe",
+    "url": "https://github.com/skeeto/w64devkit/releases/download/v2.11.0/w64devkit-x64-2.11.0.7z.exe",
+    "sha256": "54c2bb9962e8a30c8270e34c5efc3d5fee579f53087fa7d435b95fbba2af7b2b"
+  },
+  "busybox": {
+    "release": "FRP-6354-g5f09fb446",
+    "commit": "5f09fb446adf81d005f0aad9dc47eca19ac3b74c",
+    "committed": "2026-10-27T09:12:06Z",
+    "file": "busybox-w32-5f09fb446adf81d005f0aad9dc47eca19ac3b74c.tar.gz",
+    "url": "https://codeload.github.com/rmyorston/busybox-w32/tar.gz/5f09fb446adf81d005f0aad9dc47eca19ac3b74c",
+    "sha256": "5fe1444e4a15aa6b5f96590016df1ac994803eaf2d4042a5ec856289ad924839",
+    "configuration": "mingw64u_defconfig",
+    "patches": ["null-device.patch", "exec-wait.patch"]
+  },
+  "built": {
+    "busybox.exe": "3293b61866d820b35eea02c21ab5b7d2e00a5a8f1b2f96eabb916a2734e98255",
+    "git/git.exe": "75220fcdbcb60af036f74ed5131711fb768275b2e869af70b547faf66f96dde1"
+  }
+}

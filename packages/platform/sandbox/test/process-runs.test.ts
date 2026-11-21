@@ -106,6 +106,27 @@ describe.each(paths)("a %s run", (_, containment) => {
     },
   );
 
+  it("reads the file it is given as its standard input, and nothing when given none", async () => {
+    const directory = await folders.make("zhiyin-input-");
+    const input = join(directory, "input.txt");
+    await writeFile(input, "given words");
+    const echo = (extra: Partial<Parameters<typeof runProcess>[0]>) =>
+      runProcess({
+        executable: process.execPath,
+        arguments: [
+          "-e",
+          "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write('['+s+']'))",
+        ],
+        cwd: directory,
+        timeoutMs: 30_000,
+        ...(containment ? { containment } : {}),
+        ...extra,
+      });
+
+    expect((await echo({ input })).stdout).toBe("[given words]");
+    expect((await echo({})).stdout).toBe("[]");
+  });
+
   it("shows what a running program has printed so far, before it ends", async () => {
     const directory = await folders.make("zhiyin-live-");
     const go = join(directory, "go");

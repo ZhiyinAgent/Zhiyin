@@ -577,7 +577,8 @@ export function loopAndHost(dependencies: LoopTestDependencies): {
   );
   capabilities.onCommandsChanged((taskId) => void loop.commandsChanged(taskId));
   capabilities.onJobChanges(
-    (taskId, job, changes) => void loop.jobChanged(taskId, job, changes),
+    (taskId, job, changes, outcome) =>
+      void loop.jobChanged(taskId, job, changes, outcome),
   );
   host.stopTurn = async (taskId) => {
     if (loop.running(taskId)) await loop.cancel(taskId);

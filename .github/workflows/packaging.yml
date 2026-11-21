@@ -1,7 +1,8 @@
 name: Packaging
 
 # The full gate builds the installer and checks what only the packaged app
-# shows: its fuses, its dictionaries, the documents drawn from its archive, and
+# shows: its fuses, its dictionaries, its shell with the source it carries for
+# it, the documents drawn from its archive, and
 # the executable opened on a saved conversation. It runs when how the package
 # is made changes, or what it takes in as files rather than as built code, and
 # whenever it is asked for. A change to the app's own code alone meets these
@@ -25,6 +26,8 @@ on:
       - "scripts/verified-files.mjs"
       - "scripts/fonts.mjs"
       - "apps/desktop/fonts.json"
+      - "scripts/busybox.mjs"
+      - "scripts/busybox/**"
       - "scripts/gate.ps1"
       - "pnpm-lock.yaml"
       - "LICENSE"
@@ -87,6 +90,13 @@ jobs:
         with:
           path: ${{ runner.temp }}\zt\archives
           key: test-tools-${{ hashFiles('packages/feature/toolchains/src/toolchains.ts') }}
+
+      # As in CI: the shell's toolchain and source, kept until the pins change.
+      - name: Keep the shell's downloads between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\zt\busybox
+          key: shell-${{ hashFiles('scripts/busybox/pins.json') }}
 
       # As in CI: kept until the list changes, and each file's SHA-256 is
       # checked before the build uses it.

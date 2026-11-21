@@ -1,0 +1,105 @@
+Subject: [PATCH] win32: emulate /dev/null where Windows refuses 'nul'
+
+A process in an app container is denied Windows' null device, so every
+redirection to or from /dev/null fails there with "Permission denied".
+When opening 'nul' is refused, emulate the device with an anonymous pipe:
+opened for reading, its write end is closed at once and reads see end of
+file; otherwise a thread drains its read end and writes are discarded.
+The end returned is inheritable, so a child given it as a standard stream
+sees the same while the shell waits for it.
+
+Programs that open 'nul' themselves still fail in a container.
+---
+--- a/win32/mingw.c
++++ b/win32/mingw.c
+@@ -233,6 +233,68 @@
+ 	return get_dev_fd(filename);
+ }
+ 
++/*
++ * Windows can refuse to open its null device: a process in an app container
++ * is denied 'nul'.  /dev/null is then emulated with an anonymous pipe.  When
++ * it's opened for reading the write end is closed at once, so reads see end
++ * of file.  Otherwise a thread drains the read end, so writes are discarded.
++ * The end returned is inheritable unless O_NOINHERIT is given, so a child
++ * that gets it as a standard stream sees the same while this process runs.
++ */
++static DWORD WINAPI drain_null(LPVOID arg)
++{
++	HANDLE h = (HANDLE)arg;
++	char buf[4096];
++	DWORD n;
++
++	while (ReadFile(h, buf, sizeof(buf), &n, NULL))
++		;
++	CloseHandle(h);
++	return 0;
++}
++
++static int emulate_null(int oflags)
++{
++	HANDLE rd, wr, mine, given, thread;
++	int fd, reading = (oflags & O_ACCMODE) == O_RDONLY;
++
++	if (!CreatePipe(&rd, &wr, NULL, 0)) {
++		errno = EACCES;
++		return -1;
++	}
++	given = reading ? rd : wr;
++	mine = reading ? wr : rd;
++
++	if (!(oflags & O_NOINHERIT) &&
++			!SetHandleInformation(given, HANDLE_FLAG_INHERIT,
++									HANDLE_FLAG_INHERIT))
++		goto fail;
++
++	if (reading) {
++		CloseHandle(mine);
++		mine = NULL;
++	} else {
++		thread = CreateThread(NULL, 0, drain_null, mine, 0, NULL);
++		if (!thread)
++			goto fail;
++		CloseHandle(thread);
++		mine = NULL;
++	}
++
++	fd = _open_osfhandle((intptr_t)given,
++					(reading ? _O_RDONLY : _O_WRONLY) | _O_BINARY);
++	if (fd < 0)
++		CloseHandle(given);
++	return fd;
++
++ fail:
++	CloseHandle(given);
++	if (mine)
++		CloseHandle(mine);
++	errno = EACCES;
++	return -1;
++}
++
+ static int mingw_is_directory(const char *path);
+ #undef open
+ int mingw_open (const char *filename, int oflags, ...)
+@@ -269,6 +331,8 @@
+ 					((mode & S_IRUSR) ? _S_IREAD : 0);
+ 
+ 	fd = open(filename, oflags&~O_SPECIAL, pmode);
++	if (fd < 0 && errno == EACCES && strcmp(filename, "nul") == 0)
++		fd = emulate_null(oflags);
+ 	if (fd >= 0) {
+ 		update_special_fd(dev, fd);
+ 	}
+@@ -321,6 +385,12 @@
+ 	} else if ((fd=get_dev_fd(filename)) >= 0)
+ 		return fdopen(fd, otype);
+ 	stream = fopen(filename, otype);
++	if (stream == NULL && errno == EACCES && dev == DEV_NULL) {
++		int reading = otype[0] == 'r' && !strchr(otype, '+');
++
++		fd = emulate_null(reading ? O_RDONLY : O_WRONLY);
++		return fd == -1 ? NULL : fdopen(fd, otype);
++	}
+ 	if (stream == NULL && errno == EACCES && strcmp(otype, "r") == 0 &&
+ 			mingw_is_directory(filename))
+ 		errno = EISDIR;

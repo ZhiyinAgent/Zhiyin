@@ -135,6 +135,63 @@ describe("ApprovalPrompt", () => {
     await act(async () => settle());
   });
 
+  it("asks whether to keep what commands reach in one sentence and a row per place, answered for the conversation", () => {
+    const onDecision = vi.fn();
+    const since =
+      "This conversation has now read content from outside, and something private is within reach: a command could send what it reads to these places, or download something that steers the work.";
+    render(
+      <ApprovalPrompt
+        title="Keep letting commands reach these?"
+        target="Commands may reach example.com; Commands may read D:\\Data"
+        detail={since}
+        description={since}
+        reach={{
+          kind: "confirm",
+          since,
+          places: [
+            { label: "Commands may reach example.com", kind: "website" },
+            { label: "Commands may read D:\\Data", kind: "folder" },
+          ],
+        }}
+        onDecision={onDecision}
+      />,
+    );
+
+    expect(screen.getAllByText(since)).toHaveLength(1);
+    expect(
+      within(screen.getByRole("list", { name: "What commands may reach" }))
+        .getAllByRole("listitem")
+        .map((row) => row.textContent),
+    ).toEqual(["Commands may reach example.com", "Commands may read D:\\Data"]);
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Deny with a note" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Take back" }));
+    expect(onDecision).toHaveBeenCalledWith("deny");
+  });
+
+  it("says a request for commands to reach a website holds for the conversation, and gives its reason once", () => {
+    const detail =
+      "Commands in this conversation may connect to example.com until the conversation ends or you take it back.";
+    render(
+      <ApprovalPrompt
+        title="Let commands reach a website"
+        target="example.com"
+        detail={detail}
+        description={detail}
+        reach={{ kind: "grant" }}
+        onDecision={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText(detail)).toHaveLength(1);
+    expect(
+      screen.getByRole("button", { name: "Allow for this conversation" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
+  });
+
   it("offers a place an action acts as you on for the conversation, named by the place", () => {
     const onDecision = vi.fn();
     render(

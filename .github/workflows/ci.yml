@@ -71,6 +71,16 @@ jobs:
           path: ${{ runner.temp }}\zt\archives
           key: test-tools-${{ hashFiles('packages/feature/toolchains/src/toolchains.ts') }}
 
+      # The gate builds Zhiyin's shell, busybox-w32 and the git hand-off, from
+      # its pins for the sealed-off command tests. The w64devkit toolchain and
+      # busybox-w32's source it downloads are kept until the pins change; the
+      # build checks each kept file's SHA-256 before using it.
+      - name: Keep the shell's downloads between runs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}\zt\busybox
+          key: shell-${{ hashFiles('scripts/busybox/pins.json') }}
+
       # The build fetches the spelling dictionaries from Chromium's server,
       # which this machine sometimes cannot reach for a minute. Kept between
       # runs until the list changes; the build checks each kept file's

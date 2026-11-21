@@ -113,6 +113,10 @@ if ($Quick -or $failures.Count -gt 0) {
     exit 0
 }
 
+# Zhiyin's shell, which the sealed-off command tests run, built from its pins
+# when it is not in place, as packaging builds it (ADR 0029).
+Invoke-Step "shell"     { node scripts/busybox.mjs }
+
 Invoke-Step "test"      { pnpm test }
 
 # The harnesses' Python that needs neither Blender nor the CAD environment,
@@ -141,6 +145,9 @@ if ($Full) {
     # Every language is checked with nothing downloaded only if the installer
     # carries every dictionary, unchanged (ADR 0027).
     Invoke-Step "packaged dictionaries" { node scripts/dictionaries.mjs --check apps/desktop/release/win-unpacked/resources/dictionaries }
+    # The shell as pinned, with the source busybox-w32's GPL-2.0 asks the
+    # installer to carry, busybox-w32's matching its pinned SHA-256.
+    Invoke-Step "packaged shell" { node scripts/busybox.mjs --check apps/desktop/release/win-unpacked/resources/busybox }
     # Documents are drawn in a process whose script, pdf.js and canvas load from
     # inside app.asar once packed, which the build folder never exercises. The
     # packaged exe refuses Playwright's inspector switch, so the archive runs

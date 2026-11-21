@@ -10,6 +10,7 @@ import { VisibleError } from "@zhiyin/contract";
 import type { ModelMessage } from "@zhiyin/model-client";
 import { QuietFailures } from "../tools/quiet-failures.js";
 import { LoopGuard } from "./loop-guard.js";
+import { DeclinedRequests } from "./declined-requests.js";
 import { PlanProgress } from "../plan/plan-progress.js";
 import { StandingInstructions } from "../context/standing-instructions.js";
 import { noteWorkspace } from "../context/workspace-notice.js";
@@ -122,6 +123,8 @@ type Turn = {
   readonly hooks: readonly TurnHooks[];
   readonly quiet: QuietFailures;
   readonly guard: LoopGuard;
+  /** Requests for more the person declined in a row. */
+  readonly declined: DeclinedRequests;
   /** Whether the files the turn changed were checked. */
   readonly checks: WorkChecks;
   /** What the turn has said, a part for each round that said something. */
@@ -437,6 +440,7 @@ export class TurnLoop {
       checks,
       quiet: new QuietFailures(),
       guard: new LoopGuard(),
+      declined: new DeclinedRequests(),
       said: [],
       answered: false,
       history,
@@ -860,11 +864,21 @@ export class TurnLoop {
         observe: (name, input, outcome) => {
           guard.observe(name, input, outcome);
           turn.checks.observe(name, input, outcome);
+          turn.declined.observe(name, outcome);
         },
       },
     });
     if (round.stopped) {
       await this.#interruptIfCurrent(taskId, controller);
+      return "stopped";
+    }
+    const pressed = turn.declined.stops();
+    if (pressed) {
+      await this.#records.replaceTask({
+        ...this.#records.task(taskId),
+        phase: { kind: "interrupted", reason: pressed },
+      });
+      this.#doneWith(turn, false);
       return "stopped";
     }
     await guard.tell(history);

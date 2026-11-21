@@ -41,6 +41,16 @@ extraResources:
     to: dictionaries
     filter:
       - "*.bdic"
+  # Zhiyin's shell, busybox-w32 and the git that hands git to Zhiyin, built
+  # from pinned sources and checked against their recorded SHA-256 before the
+  # build (ADR 0029, ADR 0027). Programs, so outside the archive. With them,
+  # the source they are built from, which busybox-w32's GPL-2.0 asks for.
+  - from: busybox
+    to: busybox
+    filter:
+      - busybox.exe
+      - git/git.exe
+      - source/**
   - from: ../../LICENSE
     to: LICENSE
   - from: ../../NOTICE

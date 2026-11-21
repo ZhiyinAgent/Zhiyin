@@ -26,6 +26,14 @@ function whatItAllows(permission: Permission): string {
       return "May change this file again in this conversation without a copy kept first, until it is changed outside Zhiyin.";
     case "destination":
       return "May act as you on this place again in this conversation. What can’t be taken back still asks each time.";
+    case "reach-host":
+      return "Commands in this conversation may connect to this website, and could send it what the conversation can read.";
+    case "reach-folder":
+      return "Commands in this conversation may read the files in this folder and the folders in it.";
+    case "reach-registries":
+      return permission.declined
+        ? "Commands in this conversation may not reach the package registries and Git hosts Zhiyin lists."
+        : "Commands in this conversation may reach the package registries and Git hosts Zhiyin lists, as you confirmed.";
     case "connector-tool":
       return permission.toolName.endsWith("__*")
         ? "What it names may run again in this conversation without asking."

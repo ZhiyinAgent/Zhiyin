@@ -16,13 +16,14 @@ import { accountOf } from "../actionWords.js";
 import { ApprovalAccount } from "./ApprovalAccount.js";
 import {
   ApprovalChoice,
+  type AnswerWords,
   type ApprovalDecision,
   type GrantOffer,
 } from "./ApprovalChoice.js";
 import { ApprovalEvidence, commandOf } from "./ApprovalEvidence.js";
 import { readOnItsOwn } from "../change-review/CodeReview.js";
 import { codeTab, DiffModal } from "../change-review/DiffModal.js";
-import { visibleText } from "../../shared/index.js";
+import { Icon, visibleText } from "../../shared/index.js";
 import styles from "./approvals.module.css";
 
 type ApprovalPromptProps = {
@@ -46,6 +47,8 @@ type ApprovalPromptProps = {
   conversationRule?: ApprovalRequest["conversationRule"];
   /** For a change by Zhiyin's own file tools, its file and its folder, each one click. */
   fileRules?: ApprovalRequest["fileRules"];
+  /** What sealed-off commands reach, whose answer holds for the conversation. */
+  reach?: ApprovalRequest["reach"];
   /** Tighter spacing, for a conversation sharing the window with the browser. */
   compact?: boolean;
   /**
@@ -93,6 +96,7 @@ export function ApprovalPrompt({
   why,
   conversationRule,
   fileRules,
+  reach,
   compact = false,
   takesFocus = false,
   onDecision,
@@ -164,59 +168,64 @@ export function ApprovalPrompt({
             {visibleText(title)}
           </h3>
         </header>
-        <div className={styles.approval__summary}>
-          {asked && <AskedReasons reason={asked} />}
-          {effect && effect !== title && (
-            <p className={styles.approval__effect}>{visibleText(effect)}</p>
-          )}
-          {/*
+        {reach?.kind === "confirm" ? (
+          <ReachToKeep since={reach.since} places={reach.places} />
+        ) : (
+          <div className={styles.approval__summary}>
+            {asked && <AskedReasons reason={asked} />}
+            {effect && effect !== title && (
+              <p className={styles.approval__effect}>{visibleText(effect)}</p>
+            )}
+            {/*
             A deletion's detail is its warning, and the list cannot say it;
             nor can a list of files none of whose changes can be shown.
           */}
-          {detail &&
-            (!changes?.length ||
-              changes.every((item) => item.omitted !== undefined) ||
-              changes.some(
-                (item) =>
-                  item.change === "recycled" || item.change === "deleted",
-              )) && (
-              <p className={styles.approval__detail}>{visibleText(detail)}</p>
+            {detail &&
+              (!changes?.length ||
+                changes.every((item) => item.omitted !== undefined) ||
+                changes.some(
+                  (item) =>
+                    item.change === "recycled" || item.change === "deleted",
+                )) && (
+                <p className={styles.approval__detail}>{visibleText(detail)}</p>
+              )}
+            {/* Said once, though the request may give it as both. */}
+            {account.ours && account.ours !== detail && (
+              <p className={styles.approval__reason}>
+                {visibleText(account.ours)}
+              </p>
             )}
-          {account.ours && (
-            <p className={styles.approval__reason}>
-              {visibleText(account.ours)}
-            </p>
-          )}
-          <ApprovalAccount
-            claim={account.model && visibleText(account.model)}
-          />
-          {places.length ? (
-            <p className={styles.approval__destination}>
-              Sends this to{" "}
-              {places.map((place, index) => (
-                <Fragment key={place}>
-                  {index === 0
-                    ? ""
-                    : index === places.length - 1
-                      ? " or "
-                      : ", "}
-                  <strong>{visibleText(place)}</strong>
-                </Fragment>
-              ))}
-              :
-            </p>
-          ) : null}
-          <ApprovalEvidence
-            title={title}
-            target={target}
-            invocation={invocation}
-            changes={files}
-            disabled={pendingDecision !== null}
-            onReview={setReviewing}
-            onReviewCode={() => setReviewing(codeTab)}
-          />
-          <UnrestorableFiles recovery={recovery} />
-        </div>
+            <ApprovalAccount
+              claim={account.model && visibleText(account.model)}
+            />
+            {places.length ? (
+              <p className={styles.approval__destination}>
+                Sends this to{" "}
+                {places.map((place, index) => (
+                  <Fragment key={place}>
+                    {index === 0
+                      ? ""
+                      : index === places.length - 1
+                        ? " or "
+                        : ", "}
+                    <strong>{visibleText(place)}</strong>
+                  </Fragment>
+                ))}
+                :
+              </p>
+            ) : null}
+            <ApprovalEvidence
+              title={title}
+              target={target}
+              invocation={invocation}
+              changes={files}
+              disabled={pendingDecision !== null}
+              onReview={setReviewing}
+              onReviewCode={() => setReviewing(codeTab)}
+            />
+            <UnrestorableFiles recovery={recovery} />
+          </div>
+        )}
         {decisionError && (
           <p className={styles.approval__error} role="alert">
             {decisionError}
@@ -232,6 +241,7 @@ export function ApprovalPrompt({
             onReason: setDenialReason,
           }}
           offers={grantOffers(fileRules, conversationRule)}
+          {...(reach ? { words: reachWords[reach.kind] } : {})}
           onDecide={(decision) => void decide(decision)}
         />
       </div>
@@ -245,6 +255,64 @@ export function ApprovalPrompt({
         />
       )}
     </section>
+  );
+}
+
+/**
+ * What answering a request about what commands reach does: it holds for the
+ * rest of the conversation, so neither answer says "once".
+ */
+const reachWords: Record<
+  NonNullable<ApprovalRequest["reach"]>["kind"],
+  AnswerWords
+> = {
+  grant: {
+    allow: "Allow for this conversation",
+    allowing: "Allowing…",
+    deny: "Deny",
+    denying: "Denying…",
+    note: true,
+  },
+  confirm: {
+    allow: "Keep for this conversation",
+    allowing: "Keeping…",
+    deny: "Take back",
+    denying: "Taking back…",
+    note: false,
+  },
+};
+
+/**
+ * Whether to keep what commands reach, now the conversation holds more than
+ * when it was allowed: why it asks, in one sentence, then each place as a
+ * row, a website by its globe and a folder by its folder.
+ */
+function ReachToKeep({
+  since,
+  places,
+}: Omit<
+  Extract<NonNullable<ApprovalRequest["reach"]>, { kind: "confirm" }>,
+  "kind"
+>) {
+  return (
+    <div className={styles.approval__summary}>
+      <p className={styles.approval__reason}>{visibleText(since)}</p>
+      <ul
+        className={styles["approval__file-list"]}
+        aria-label="What commands may reach"
+      >
+        {places.map((place) => (
+          <li key={place.label} className={styles.approval__place}>
+            <span className={styles["approval__file-icon"]}>
+              <Icon name={place.kind === "folder" ? "folder" : "globe"} />
+            </span>
+            <span className={styles["approval__file-name"]}>
+              {visibleText(place.label)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

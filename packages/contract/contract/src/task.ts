@@ -103,6 +103,24 @@ export type ApprovalRequest = {
     /** The file's changes are not backed up: Zhiyin could not copy it (ADR 0013). */
     readonly withoutBackup?: true;
   }[];
+  /**
+   * A request about what sealed-off commands reach (ADR 0029), whose answer
+   * holds for the rest of the conversation: `grant` lets them reach one more
+   * place; `confirm` keeps or takes back each place in `places`, which the
+   * conversation outgrew since they were allowed, as `since` says.
+   */
+  readonly reach?:
+    | { readonly kind: "grant" }
+    | {
+        readonly kind: "confirm";
+        readonly places: readonly {
+          /** As a person reads it, such as "Commands may read D:\Data". */
+          readonly label: string;
+          /** The package registries are websites too. */
+          readonly kind: "website" | "folder";
+        }[];
+        readonly since: string;
+      };
 };
 
 export type TaskPhase =

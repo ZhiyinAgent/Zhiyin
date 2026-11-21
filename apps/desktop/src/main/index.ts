@@ -374,6 +374,10 @@ void app.whenReady().then(async () => {
           here,
           "../../../../packages/feature/blender-studio/src/session/start.py",
         ),
+    // Built by scripts/busybox.mjs; packaged beside the app's resources.
+    busyboxDirectory: app.isPackaged
+      ? join(process.resourcesPath, "busybox")
+      : join(here, "../../busybox"),
     cadHarness: app.isPackaged
       ? join(process.resourcesPath, "cad-harness", "run.py")
       : join(

@@ -15,6 +15,27 @@ export type GrantOffer = {
 };
 
 /**
+ * What the two answers say, and say while they are sent: Deny and Allow
+ * once, unless the request's answer holds for the rest of the conversation.
+ * `note` false leaves out denying with a note.
+ */
+export type AnswerWords = {
+  readonly allow: string;
+  readonly allowing: string;
+  readonly deny: string;
+  readonly denying: string;
+  readonly note: boolean;
+};
+
+const askedOnce: AnswerWords = {
+  allow: "Allow once",
+  allowing: "Allowing…",
+  deny: "Deny",
+  denying: "Denying…",
+  note: true,
+};
+
+/**
  * The decision, on one line: the grants for this conversation the request
  * offers, then Deny and Allow once. Every grant, a tool's, a destination's, a
  * file's or a folder's, is one button of the same kind, named by what it
@@ -27,6 +48,7 @@ export function ApprovalChoice({
   pending,
   denial,
   offers,
+  words = askedOnce,
   onDecide,
 }: {
   /** The decision being sent, which holds every control until it settles. */
@@ -40,6 +62,7 @@ export function ApprovalChoice({
     readonly onReason: (reason: string) => void;
   };
   offers: readonly GrantOffer[];
+  words?: AnswerWords;
   onDecide: (decision: ApprovalDecision) => void;
 }) {
   const busy = pending !== null;
@@ -108,33 +131,44 @@ export function ApprovalChoice({
         </div>
       )}
       <div className={styles.decision__answer}>
-        <span className={styles.decision__deny}>
+        {words.note ? (
+          <span className={styles.decision__deny}>
+            <button
+              className="button"
+              type="button"
+              disabled={busy}
+              onClick={() => onDecide("deny")}
+            >
+              {pending === "deny" ? words.denying : words.deny}
+            </button>
+            <button
+              className="button"
+              type="button"
+              aria-label="Deny with a note"
+              data-tip="Deny with a note"
+              disabled={busy}
+              onClick={denial.onOpen}
+            >
+              <Icon name="pencil" />
+            </button>
+          </span>
+        ) : (
           <button
             className="button"
             type="button"
             disabled={busy}
             onClick={() => onDecide("deny")}
           >
-            {pending === "deny" ? "Denying…" : "Deny"}
+            {pending === "deny" ? words.denying : words.deny}
           </button>
-          <button
-            className="button"
-            type="button"
-            aria-label="Deny with a note"
-            data-tip="Deny with a note"
-            disabled={busy}
-            onClick={denial.onOpen}
-          >
-            <Icon name="pencil" />
-          </button>
-        </span>
+        )}
         <button
           className="button button--accent"
           type="button"
           disabled={busy}
           onClick={() => onDecide("allow-once")}
         >
-          {pending === "allow-once" ? "Allowing…" : "Allow once"}
+          {pending === "allow-once" ? words.allowing : words.allow}
         </button>
       </div>
     </div>

@@ -781,6 +781,7 @@ describe("the pinned releases", () => {
       "tectonic",
       "blender",
       "uv",
+      "node",
     ]);
     for (const spec of pinnedToolchains) {
       expect(spec.sources.length).toBeGreaterThan(1);
@@ -799,6 +800,7 @@ describe("the pinned releases", () => {
       "github.com/tectonic-typesetting/tectonic",
       "download.blender.org",
       "github.com/astral-sh/uv",
+      "nodejs.org",
     ]);
   });
 

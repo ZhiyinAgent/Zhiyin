@@ -457,6 +457,20 @@ export function folderGrants(
   };
 }
 
+/**
+ * Whether a folder can be given to a container: this account may change who
+ * may open it, which granting it does. One only an administrator may change,
+ * as Program Files and Windows' own folders, cannot be.
+ */
+export function mayGrantFolder(path: string): boolean {
+  if (process.platform !== "win32") return false;
+  const files = windowsFiles();
+  const opened = files.openWithoutFollowing(path, READ_CONTROL | WRITE_DAC);
+  if (opened.handle === undefined) return false;
+  files.close(opened.handle);
+  return true;
+}
+
 const session = folderGrants(windowsPermissions, sessionWalks);
 
 /** The capabilities for the folders a run is given, in this session of the app. */

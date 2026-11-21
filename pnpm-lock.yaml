@@ -376,6 +376,9 @@ importers:
       '@zhiyin/rewind-planner':
         specifier: workspace:*
         version: link:../../feature/rewind-planner
+      '@zhiyin/sandbox':
+        specifier: workspace:*
+        version: link:../../platform/sandbox
       '@zhiyin/test-support':
         specifier: workspace:*
         version: link:../../test-helper/test-support
@@ -881,6 +884,9 @@ importers:
       '@zhiyin/workspace-listing':
         specifier: workspace:*
         version: link:../../platform/workspace-listing
+      tldts:
+        specifier: 7.4.11
+        version: 7.4.11
     devDependencies:
       '@zhiyin/test-support':
         specifier: workspace:*

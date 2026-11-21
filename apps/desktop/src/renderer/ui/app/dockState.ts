@@ -52,6 +52,7 @@ export function approvalPromptDetails(prompt: ApprovalRequest) {
       ? { conversationRule: prompt.conversationRule }
       : {}),
     ...(prompt.fileRules ? { fileRules: prompt.fileRules } : {}),
+    ...(prompt.reach ? { reach: prompt.reach } : {}),
   };
 }
 

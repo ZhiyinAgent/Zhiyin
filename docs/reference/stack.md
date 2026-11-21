@@ -210,6 +210,72 @@ the document viewer resizes the root first.
 MIT or Unlicense. `--sort path` searches one file at a time: 822 ms instead of
 193 ms for a literal search over 20,000 small files.
 
+**busybox-w32 FRP-6354-g5f09fb446, built with w64devkit 2.11.0.** _Verified
+2026-11-21 by building it twice from scratch on Windows 11 and running it in
+app containers._ GPL-2.0 only. Commit
+`5f09fb446adf81d005f0aad9dc47eca19ac3b74c` (2026-10-27), the
+`mingw64u_defconfig` configuration of its release, built inside w64devkit's
+own `sh` with `SOURCE_DATE_EPOCH` at the commit's time and
+`-Wl,--no-insert-timestamp`: both builds came out byte for byte the same, so
+the SHA-256 in `scripts/busybox/pins.json` is checked on every build.
+w64devkit's self-extracting archive unpacks with Windows' own `tar.exe`.
+In an app container, opening `nul` is refused with access denied, so every
+`/dev/null` redirection fails without Zhiyin's patch, which answers it with a
+pipe; with it, `> /dev/null`, `2>/dev/null`, `< /dev/null`, a pipe from
+`/dev/null` and 100 KB written there by a child all work. A program that opens
+`NUL` itself still fails. Unpatched, `sh -c "true && node -v"` in a container
+exits 0 at once and prints nothing: the shell runs the last command with
+`exec`, which busybox-w32 emulates by waiting for the command unless
+`getppid()` returns 1, and `getppid()` finds the parent in a process snapshot,
+where a container does not see a parent outside it. Zhiyin's second patch asks
+Windows for the parent's PID instead. Its `bash` applet is its `ash`, so a
+script starting `#!/usr/bin/env bash`, such as npm's, runs in it. On this
+computer `C:\Program Files\nodejs` grants nothing to `ALL APPLICATION
+PACKAGES`, so a container cannot run that Node; Git for Windows' folder grants
+read and run to every container.
+
+**A container process reaches Zhiyin through a named pipe.** _Verified
+2026-11-21 in app containers on Windows 11._ A pipe whose ACL gives the
+container's SID read and write is opened from inside it with `CreateFileW`; a
+process in another container is refused it. A PowerShell relay started in the
+container, holding one waiting connection to such a pipe, carries a TCP
+connection from this computer to a port the container listens on, which
+loopback isolation otherwise keeps from it.
+
+**Holding a job's processes still.** _Verified 2026-11-21 against Microsoft
+Learn (`JOBOBJECT_BASIC_PROCESS_ID_LIST`, `IsProcessInJob`,
+`SetInformationJobObject`) and by running it in app containers on Windows 11
+23H2 (build 22631)._ `QueryInformationJobObject` with
+`JobObjectBasicProcessIdList` (3) answers two DWORD counts, then each process
+id as a `ULONG_PTR`. A list too long for the buffer has fewer ids than
+`NumberOfAssignedProcesses`. It is a snapshot, so ids are read again until a
+pass finds no new one. `IsProcessInJob` needs `PROCESS_QUERY_LIMITED_INFORMATION`
+and tells a process in the job from one that took the id of one that ended.
+Windows documents no information class that freezes a whole job.
+`NtSuspendProcess` and `NtResumeProcess`, exported by ntdll and called by
+Sysinternals' PsSuspend, are not in the SDK's documentation either. Each takes
+a handle with `PROCESS_SUSPEND_RESUME` and suspends or resumes every thread,
+counted as `SuspendThread` counts. Zhiyin's own process opens a container's
+processes that way. A process of the container suspended this way makes no
+progress until resumed. Closing the job still ends it.
+
+**Links an app container can make.** _Verified 2026-11-21 by running them in
+an app container on Windows 11 23H2, Developer Mode on._ `mklink /J` to a
+folder in the workspace works. To a folder the container may not change, even
+one it may read (`C:\Windows\Fonts`), Windows refuses it ("Access denied").
+Symbolic links, with `mklink /D` or busybox's `ln -s`, are refused even inside
+the workspace. So none of these was seen leading outside the folders the
+container may change. Holding the container while git runs keeps git's link
+check from depending on that alone.
+
+**tldts 7.4.11.** _Verified 2026-11-21 against the npm registry._ MIT, by
+Rémi Berson; released 2026-08-24, the latest being 7.5.5 (2026-11-19). The
+Public Suffix List is built into each release. `parse(host, {
+allowPrivateDomains: true })` gives `alice.github.io` as the domain of
+`docs.alice.github.io` and no domain for `github.io` or `co.uk`. It was
+already in the lockfile through `tough-cookie`, so it is pinned at that
+version; a newer list comes with a deliberate update.
+
 **Edge and Chrome over DevTools pipes.** _Verified 2026-10-01 against
 Chromium's source, Edge 154, Chrome 154, Node 22.14.0 and Electron 44.1.1._
 `--remote-debugging-pipe` with `--remote-debugging-io-pipes=<read>,<write>`
@@ -312,6 +378,18 @@ Tectonic downloads its TeX bundle from `relay.fullyjustified.net`, which
 sends it on to `data1b.fullyjustified.net` (see "Tectonic 0.17.0 and its
 bundle"), on first use and caches it under `%LOCALAPPDATA%\TectonicProject`. Typst downloads nothing
 unless a document imports a package.
+
+**Node.js 26.13.1, Zhiyin's own Node for sealed-off commands.** _Verified
+2026-11-21 against nodejs.org's release index and the release's
+`SHASUMS256.txt`, and by running it in an app container._ 26.13.1 is the
+current LTS line ("Lithium"), released 2026-11-10, with npm 11.20.0.
+`node-v26.13.1-win-x64.zip` is 41,166,246 bytes, SHA-256 `e2edda75…f1f7` as
+`SHASUMS256.txt` lists it; npmmirror's copy at
+`cdn.npmmirror.com/binaries/node/v26.13.1/` is the same file byte for byte.
+In Zhiyin's busybox sh, sealed off, its `node -v`, `npm --version`, `npx
+--version` and an `npm install` from registry.npmjs.org through Zhiyin's
+proxy work, its folder first on `PATH` and given to the container for
+reading. ADR 0029, ADR 0027.
 
 **uv 0.12.15 and where its Python goes.** _Verified 2026-10-17 against uv's
 documentation and source (`uv-python-managed`, `uv-cli`) and by running it._

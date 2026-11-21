@@ -9,3 +9,8 @@ export * from "./git-connector.js";
 export { resolveGit } from "./resolve-git.js";
 export type { GitContainer, GitContainment } from "./run-git.js";
 export { gitProgramLocations, type GitLocation } from "./program-locations.js";
+export {
+  shellGit,
+  type ShellGitAnswer,
+  type ShellGitCall,
+} from "./shell-git.js";

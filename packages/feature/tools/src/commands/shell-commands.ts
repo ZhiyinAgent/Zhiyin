@@ -8,6 +8,7 @@ import type {
   CommandFileChanges,
   CommandOutput,
   RunningCommand,
+  ToolInvocationResult,
 } from "@zhiyin/contract";
 
 /**
@@ -23,11 +24,16 @@ export type CommandEnded = (
 /** A conversation's running jobs changed: one started or one ended. */
 export type CommandsChanged = (conversationId: string) => void;
 
-/** What changed in the folder while a job ran, once it has ended. */
+/**
+ * What changed in the folder while a job ran, once it has ended, with the
+ * command's own answer: what it brought, and, sealed off, what the container
+ * refused it.
+ */
 export type JobChanges = (
   conversationId: string,
   job: string,
   changes: CommandFileChanges,
+  outcome: ToolInvocationResult,
 ) => void;
 
 export interface ShellCommands {
@@ -51,6 +57,11 @@ export interface ShellCommands {
   stopCommandForPerson(conversationId: string, jobId: string): Promise<void>;
   /** Stops a conversation's jobs, with everything they started. */
   stopCommands(conversationId: string): Promise<void>;
+  /**
+   * A conversation is gone: stops its jobs, then removes the home its
+   * sealed-off commands kept, with the container Windows keeps for it.
+   */
+  forgetConversation(conversationId: string): Promise<void>;
   /** Stops every conversation's jobs, as Zhiyin closes. */
   stopAllCommands(): Promise<void>;
 }

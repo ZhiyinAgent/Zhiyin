@@ -68,7 +68,7 @@ const purposes = /^[a-z][a-z0-9-]{0,30}$/;
  * of its own in the person's profile, which it may change, and storage in the
  * registry; a container per home keeps those apart as the homes are.
  */
-function containerName(purpose: string, home: string): string {
+export function containerName(purpose: string, home: string): string {
   const key = createHash("sha256")
     .update(resolve(home).toLowerCase())
     .digest("hex")
@@ -163,6 +163,11 @@ export function confinedEnvironment(
 export function confinedStart(confined: Confined) {
   const identity = identityOf(confined);
   return securityCapabilities(identity.container, identity.capabilities);
+}
+
+/** The name of the container a confined run is in, which its home's runs share. */
+export function containerOf(confined: Confined): string {
+  return containerName(confined.purpose, identityOf(confined).home);
 }
 
 /** The container a confined run is in, its home, and the hosts it may reach. */

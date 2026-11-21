@@ -41,6 +41,9 @@ import {
   resolveShell,
   shellAvailability as probeShellAvailability,
 } from "./commands/shell.js";
+import { requestAccessTool } from "./commands/request-access.js";
+import type { ConversationReach } from "./commands/reach.js";
+import type { SealedShellSetup } from "./commands/sealed-shell.js";
 import { renderDiagram } from "./views/render-diagram.js";
 import { renderBarChart } from "./views/render-bar-chart.js";
 import { renderLineChart } from "./views/render-line-chart.js";
@@ -134,6 +137,15 @@ export type WorkspaceToolsOptions = {
    * since a write there could change Zhiyin's own records.
    */
   readonly protect?: readonly string[] | undefined;
+  /**
+   * Zhiyin's own shell, busybox-w32, and what its sealed-off commands use
+   * (ADR 0029). With it, commands run sealed off where a container can hold
+   * them, and `request_access` is offered; without it, every command runs in
+   * the bash found here with full access.
+   */
+  readonly sealedShell?: SealedShellSetup | undefined;
+  /** What each conversation granted its sealed-off commands, as the agent loop keeps it. */
+  readonly reach?: ConversationReach | undefined;
   /** How long a command runs before it carries on as a job. Defaults to 30 s. */
   readonly promoteCommandsAfterMs?: number | undefined;
   /** The most files a folder may hold for what commands change to be checked. */
@@ -153,6 +165,7 @@ export class WorkspaceTools
   readonly #folders: ConversationFolders;
   readonly #table: ToolTable;
   readonly #jobs = new CommandJobs();
+  readonly #shell: CommandShell;
   /**
    * A folder's files as the checks of what commands change list them, for
    * whatever copies a folder before a script or command runs in it.
@@ -169,7 +182,10 @@ export class WorkspaceTools
     const shell = new CommandShell({
       ...("shell" in options ? { given: { shell: options.shell } } : {}),
       uncontained: options.uncontained,
+      sealed: options.sealedShell,
+      containment: options.containment,
     });
+    this.#shell = shell;
     const { items } = options;
     const protect = options.protect ?? [];
     const rg = "ripgrep" in options ? options.ripgrep : bundledRipgrep();
@@ -214,7 +230,9 @@ export class WorkspaceTools
           jobs: this.#jobs,
           files,
           promoteAfterMs: options.promoteCommandsAfterMs,
+          reach: options.reach,
         }),
+        requestAccessTool(protect),
         ...(options.containment ? jobTools(this.#jobs) : []),
         renderDiagram,
         renderBarChart,
@@ -339,6 +357,11 @@ export class WorkspaceTools
 
   stopCommands(conversationId: string): Promise<void> {
     return this.#jobs.stopCommands(conversationId);
+  }
+
+  async forgetConversation(conversationId: string): Promise<void> {
+    await this.#jobs.forgetConversation(conversationId);
+    await this.#shell.sealed?.forget(conversationId);
   }
 
   stopAllCommands(): Promise<void> {

@@ -423,7 +423,11 @@ export class ComposedCapabilities
       scenes?.forget(conversationId),
       cad?.forget(conversationId),
       mcp.shutdownScope(conversationId),
-      this.#members.commands?.stopCommands(conversationId),
+      (async () => {
+        await this.#members.commands?.stopCommands(conversationId);
+        // What its sealed-off commands kept goes once they have stopped.
+        await this.#members.commands?.forgetConversation(conversationId);
+      })(),
     ]);
   }
 
@@ -645,6 +649,7 @@ export class ComposedCapabilities
       conversationId: string,
       job: string,
       changes: CommandFileChanges,
+      outcome: ToolInvocationResult,
     ) => void,
   ): void {
     this.#members.commands?.onJobChanges(watcher);

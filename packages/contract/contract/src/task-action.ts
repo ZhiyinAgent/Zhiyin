@@ -17,10 +17,38 @@ export type ConversationPermission = {
     | "outside-file"
     | "outside-folder"
     | "uncopied-file"
-    | "destination";
+    | "destination"
+    | "reach-host"
+    | "reach-folder"
+    | "reach-registries";
   /** A tool, or every tool of a connection, written `mcp__<server>__*`. */
   readonly toolName: string;
-  /** The real path of a folder outside the workspace, for changes in it. */
+  /**
+   * For a website sealed-off commands may reach (ADR 0029): the hosts it
+   * covers, as a confinement names them, such as `example.com` and
+   * `*.example.com`.
+   */
+  readonly hosts?: readonly string[];
+  /**
+   * The conversation's two facts (ADR 0012) as the card that made a grant
+   * for sealed-off commands stated them (ADR 0029). A fact the card did not
+   * cover asks for the grant to be confirmed before a command reaches it.
+   */
+  readonly facts?: Readonly<{
+    outsideContent: boolean;
+    privateWithinReach: boolean;
+  }>;
+  /** The package registries, declined when their confirmation was. */
+  readonly declined?: true;
+  /**
+   * For a grant to sealed-off commands, the folder the conversation worked in
+   * when it was made: it does not carry to another (ADR 0029).
+   */
+  readonly workspaceRoot?: string;
+  /**
+   * The real path of a folder outside the workspace, for changes in it; or,
+   * for `reach-folder`, for sealed-off commands to read.
+   */
   readonly folder?: string;
   /**
    * The real path of a file outside the workspace, for changes to it; or of

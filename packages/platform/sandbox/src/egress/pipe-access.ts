@@ -52,25 +52,30 @@ function advapi(): Advapi {
 
 /**
  * Lets only the person, Windows and `container` (a SID's text) open the pipe
- * at `path`. Throws, saying what Windows answered, when it cannot.
+ * at `path`. Throws, saying what Windows answered, when it cannot, naming
+ * the pipe as `what`, such as "The network proxy".
  */
-export function openPipeTo(path: string, container: string): void {
+export function openPipeTo(
+  path: string,
+  container: string,
+  what = "The network proxy",
+): void {
   const windows = advapi();
   const descriptor: unknown[] = [null];
   // Owner rights, so the person running Zhiyin keeps making instances.
   const sddl = `D:P(A;;GA;;;OW)(A;;GA;;;SY)(A;;GRGW;;;${container})`;
   if (!windows.descriptor(sddl, descriptor))
-    throw new Error("The network proxy's permissions could not be written.");
+    throw new Error(`${what}'s permissions could not be written.`);
   try {
     const present = [0];
     const dacl: unknown[] = [null];
     const defaulted = [0];
     if (!windows.dacl(descriptor[0], present, dacl, defaulted) || !present[0])
-      throw new Error("The network proxy's permissions could not be read.");
+      throw new Error(`${what}'s permissions could not be read.`);
     const answered = windows.setNamed(path, dacl[0]);
     if (answered !== 0)
       throw new Error(
-        `The network proxy could not be opened to the program (Windows error ${answered}).`,
+        `${what} could not be opened to the program (Windows error ${answered}).`,
       );
   } finally {
     windows.free(descriptor[0]);

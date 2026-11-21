@@ -291,7 +291,7 @@ describe("a command call's input", () => {
     >;
 
     expect(properties["command"]?.description).toContain(
-      "One bash command, which may span lines",
+      "One shell command, which may span lines",
     );
     expect(bash?.description).toContain("find_files finds them by name");
     expect(bash?.description).toContain(

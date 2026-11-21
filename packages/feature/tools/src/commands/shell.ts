@@ -5,7 +5,13 @@
 import { accessSync, constants } from "node:fs";
 import { delimiter, join } from "node:path";
 import type { ShellAvailability } from "@zhiyin/contract";
+import type { ProcessContainment } from "@zhiyin/sandbox";
 import { staysInside } from "@zhiyin/workspace-containment";
+import {
+  SealedShell,
+  type SealedShellSetup,
+  type SealedUse,
+} from "./sealed-shell.js";
 
 /**
  * Candidate locations for a real bash, in the order they are trusted. An
@@ -88,37 +94,70 @@ export function shellAvailability(
 }
 
 /**
- * The bash commands run in, found once when the tools are built and again
- * when asked. Where commands cannot be contained, there is none, and asking
+ * The shell commands run in, found once when the tools are built and again
+ * when asked. With Zhiyin's own shell, its busybox-w32, commands run sealed
+ * off where a container can hold them, and a command with full access runs
+ * the same shell; without it, the bash found here runs every command with
+ * full access. Where commands cannot be contained, there is none, and asking
  * again does not change that.
  */
 export class CommandShell {
   #path: string | undefined;
   readonly #withheld: string | undefined;
+  readonly #sealed: SealedShell | undefined;
 
   /**
    * `given` is the shell to use, or `undefined` for none; when it is not
    * given at all, one is looked for on this computer. `uncontained` says why
-   * no command can be contained here.
+   * no command can be contained here. `sealed` is Zhiyin's own shell, which
+   * takes the place of both.
    */
   constructor(options: {
     readonly given?: { readonly shell: string | undefined };
     readonly uncontained?: string | undefined;
+    readonly sealed?: SealedShellSetup | undefined;
+    readonly containment?: ProcessContainment | undefined;
   }) {
     this.#withheld =
       options.uncontained === undefined
         ? undefined
         : `Zhiyin cannot contain what a command starts on this computer, so it runs none. ${options.uncontained}`;
+    this.#sealed =
+      options.sealed && !this.#withheld
+        ? new SealedShell(options.sealed, options.containment)
+        : undefined;
     this.#path = this.#withheld
       ? undefined
-      : options.given
-        ? options.given.shell
-        : resolveShell();
+      : this.#sealed
+        ? this.#sealed.busybox
+        : options.given
+          ? options.given.shell
+          : resolveShell();
   }
 
-  /** Where the bash is, or nothing when no command can run. */
+  /** Where the shell is, or nothing when no command can run. */
   get path(): string | undefined {
     return this.#path;
+  }
+
+  /** Zhiyin's own shell, when it was given. */
+  get sealed(): SealedShell | undefined {
+    return this.#sealed;
+  }
+
+  /** Whether commands run sealed off here, as far as is known now. */
+  use(): SealedUse {
+    return (
+      this.#sealed?.known() ?? {
+        sealed: false,
+        why: "Zhiyin's own shell is not part of this installation, so commands run in the bash found on this computer.",
+      }
+    );
+  }
+
+  /** The same, once the shell has been started in a container. */
+  async checkedUse(): Promise<SealedUse> {
+    return this.#sealed ? this.#sealed.check() : this.use();
   }
 
   availability(): ShellAvailability {
@@ -127,7 +166,8 @@ export class CommandShell {
   }
 
   recheck(environment: NodeJS.ProcessEnv = process.env): ShellAvailability {
-    if (!this.#withheld) this.#path = resolveShell(environment);
+    if (!this.#withheld && !this.#sealed)
+      this.#path = resolveShell(environment);
     return this.availability();
   }
 }

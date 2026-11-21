@@ -626,4 +626,29 @@ export const pinnedToolchains: readonly ToolchainSpec[] = [
       },
     ],
   },
+  {
+    // The Node and npm sealed-off commands run (ADR 0029): the current LTS,
+    // by the digest in the release's SHASUMS256.txt.
+    id: "node",
+    name: "Node.js",
+    version: "26.13.1",
+    sources: [
+      {
+        url: "https://nodejs.org/dist/v26.13.1/node-v26.13.1-win-x64.zip",
+        sha256:
+          "e2edda75bfb089654705cf65a13b58933bfd5f57148e8ebda916f58a2474f1f7",
+        bytes: 41166246,
+        executable: "node-v26.13.1-win-x64/node.exe",
+        hosts: ["nodejs.org"],
+      },
+      {
+        url: "https://cdn.npmmirror.com/binaries/node/v26.13.1/node-v26.13.1-win-x64.zip",
+        sha256:
+          "e2edda75bfb089654705cf65a13b58933bfd5f57148e8ebda916f58a2474f1f7",
+        bytes: 41166246,
+        executable: "node-v26.13.1-win-x64/node.exe",
+        hosts: ["cdn.npmmirror.com"],
+      },
+    ],
+  },
 ];

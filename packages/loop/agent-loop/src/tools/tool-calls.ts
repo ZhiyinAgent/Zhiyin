@@ -37,6 +37,11 @@ import { conversationMarks } from "./conversation-facts.js";
 import { changesFiles, changesNothing } from "./declared-effects.js";
 import { ActionBackup } from "./action-backup.js";
 import {
+  confirmedReach,
+  keepAccessGrant,
+  withGrantCard,
+} from "./reach-confirmation.js";
+import {
   declined,
   notRun,
   type Decided,
@@ -218,7 +223,18 @@ export class ToolCalls {
       specialistRunId,
     });
     if ("settled" in checked) return checked.settled;
-    const { args, inspection } = checked;
+    const { args } = checked;
+    const reached = await this.#reached(
+      taskId,
+      owner,
+      call,
+      args,
+      checked.inspection,
+      controller.signal,
+    );
+    if (!reached)
+      return { result: { ok: false, reason: "The task was cancelled." } };
+    const inspection = reached;
 
     if (owner === "built-in" && inspection.requiresApproval === false) {
       if (inspection.input)
@@ -346,6 +362,36 @@ export class ToolCalls {
   }
 
   /**
+   * A built-in call as it is decided, once what sealed-off commands reach is
+   * settled (ADR 0029): a grant the conversation has outgrown is confirmed
+   * first, and a call whose reach that changed is looked at again; a request
+   * for a website says what it lets out now. Nothing when the turn was
+   * cancelled meanwhile.
+   */
+  async #reached(
+    taskId: string,
+    owner: ToolOwner,
+    call: AssembledToolCall,
+    args: unknown,
+    inspection: AllowedInspection,
+    signal: AbortSignal,
+  ): Promise<AllowedInspection | undefined> {
+    if (owner !== "built-in") return inspection;
+    const context = {
+      deps: this.#deps,
+      records: this.#records,
+      waits: this.#waits,
+    };
+    const confirmed = await confirmedReach(context, taskId, inspection, signal);
+    if (confirmed === "cancelled") return undefined;
+    const current =
+      confirmed === "changed"
+        ? await this.#inspectTool(taskId, owner, call.name, args)
+        : inspection;
+    return withGrantCard(context, taskId, current.ok ? current : inspection);
+  }
+
+  /**
    * Why an approved call may no longer run, if it may not: it no longer
    * looks as it did when approved, its backup broke, or the folder a
    * sealed-off program runs in could not be kept just before it runs, which
@@ -363,12 +409,21 @@ export class ToolCalls {
     },
   ): Promise<string | undefined> {
     const { inspection, backups } = approved;
-    const current = await this.#inspectTool(
+    const looked = await this.#inspectTool(
       taskId,
       approved.owner,
       call.name,
       approved.args,
     );
+    // A website's card, as it was shown.
+    const current =
+      looked.ok && approved.owner === "built-in"
+        ? await withGrantCard(
+            { deps: this.#deps, records: this.#records, waits: this.#waits },
+            taskId,
+            looked,
+          )
+        : looked;
     approved.signal.throwIfAborted();
     if (!current.ok || !sameValue(current, inspection))
       return `${inspection.target || "Its target"} changed while this action waited for approval, so it was not run.`;
@@ -457,6 +512,13 @@ export class ToolCalls {
     });
     result = await backups.finish(result);
     if (result.ok) await this.#renewFileGrants(taskId, owner, decided);
+    // What the person allowed sealed-off commands, for the conversation.
+    if (result.ok && owner === "built-in")
+      await keepAccessGrant(
+        { deps: this.#deps, records: this.#records, waits: this.#waits },
+        taskId,
+        inspection,
+      );
     if (owner === "mcp" && !result.ok)
       await this.#deps.host.refreshConnections();
     // The document beside the conversation (ADR 0019): the main agent's

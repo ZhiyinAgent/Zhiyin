@@ -42,6 +42,8 @@ export type ToolDefinition = {
   readonly requiresWorkspace: boolean | ((args: unknown) => boolean);
   /** Withdrawn, dynamically, when no shell is currently resolved. */
   readonly requiresShell?: boolean;
+  /** Offered only where commands run sealed off. */
+  readonly requiresSealedShell?: boolean;
   readonly completeUserInput?: (
     args: unknown,
     response: UserInputResponse,
