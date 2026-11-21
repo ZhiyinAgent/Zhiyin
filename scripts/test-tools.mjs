@@ -2,7 +2,10 @@
  * Vitest's global setup: the programs some tests need, installed as the app
  * installs them, when `ZHIYIN_TEST_TOOLS` names a folder to keep them in.
  *
- * Typst, Tectonic and uv are downloaded once from their pinned addresses,
+ * Zhiyin's shell, busybox-w32, is named in `ZHIYIN_BUSYBOX` when its pinned
+ * build is where the app takes it from; the gate builds it first.
+ *
+ * Typst, Tectonic, uv and Node are downloaded once from their pinned addresses,
  * verified against their pinned digests, and installed there; the tests that
  * need one are told where it is. Blender's archive is downloaded too, for the
  * test that installs it, but no Blender is installed for the tests that run
@@ -13,8 +16,9 @@
  */
 
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -28,6 +32,7 @@ const variables = {
   typst: "ZHIYIN_TYPST",
   tectonic: "ZHIYIN_TECTONIC",
   uv: "ZHIYIN_UV",
+  node: "ZHIYIN_NODE",
 };
 
 /**
@@ -92,7 +97,28 @@ export async function prepareTestTools({ folder, specs, fetch, env }) {
     );
 }
 
+/**
+ * Names Zhiyin's shell in `ZHIYIN_BUSYBOX` when the folder the app takes it
+ * from holds the pinned build, which the gate makes before the tests.
+ */
+async function nameShell(env) {
+  if (env.ZHIYIN_BUSYBOX) return;
+  const { builtFiles } = await import("./busybox.mjs");
+  const { misplacedFiles } = await import("./verified-files.mjs");
+  const repository = fileURLToPath(new URL("..", import.meta.url));
+  const pins = JSON.parse(
+    await readFile(join(repository, "scripts", "busybox", "pins.json"), "utf8"),
+  );
+  const folder = join(repository, "apps", "desktop", "busybox");
+  const misplaced = await misplacedFiles({
+    files: builtFiles.map((file) => ({ file, sha256: pins.built[file] })),
+    folder,
+  });
+  if (!misplaced.length) env.ZHIYIN_BUSYBOX = folder;
+}
+
 export default async function setup() {
+  await nameShell(process.env);
   const folder = process.env.ZHIYIN_TEST_TOOLS;
   if (!folder) return;
   await prepareTestTools({

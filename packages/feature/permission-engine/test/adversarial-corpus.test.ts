@@ -92,7 +92,19 @@ const nothing: ActionEffects = {
   brings: "none",
 };
 
-/** What the shell tool declares of every command, whatever its text (ADR 0012). */
+/**
+ * What the shell tool declares of a command sealed off in its container,
+ * whatever its text (ADR 0029): it reads and changes the workspace, runs
+ * code sealed off, and sends only to the hosts on the conversation's list.
+ */
+const sealedShell: Partial<ActionEffects> = {
+  reads: "workspace",
+  changes: "workspace",
+  sends: "service",
+  runs: "sealed",
+};
+
+/** What the shell tool declares of a command with full access, whatever its text (ADR 0012). */
 const shell: Partial<ActionEffects> = {
   reads: "elsewhere",
   changes: "elsewhere",
@@ -457,13 +469,39 @@ const corpus: readonly CorpusCase[] = [
         "Show what changed.",
       ],
     ] as const
-  ).map(([what, command, purpose]): CorpusCase => ({
-    name: `${what} in the shell asks every time`,
-    rationale:
-      "The shell tool declares every command code with the person's full access: nothing in a command string, or the model's explanation of it, bounds what it reaches (ADR 0012).",
-    action: action("built-in", "bash", { command, purpose }, shell),
-    decision: decisions.fullAccess,
-  })),
+  ).flatMap(([what, command, purpose]): CorpusCase[] => [
+    {
+      name: `${what} with full access asks every time`,
+      rationale:
+        "The shell tool declares a command with full access as code with the person's full access: nothing in a command string, or the model's explanation of it, bounds what it reaches (ADR 0012).",
+      action: action(
+        "built-in",
+        "bash",
+        { command, purpose, full_access: true },
+        shell,
+      ),
+      decision: decisions.fullAccess,
+    },
+    {
+      name: `${what} sealed off is decided by its container, not its text`,
+      rationale:
+        "A sealed-off command declares what its container allows, which the tool's code sets: the workspace, copied first, and the hosts the person allowed. What the command says it does neither widens nor narrows that (ADR 0029).",
+      action: action("built-in", "bash", { command, purpose }, sealedShell),
+      decision: decisions.contained,
+    },
+    {
+      name: `${what} sealed off with a folder granted for changing asks for that folder`,
+      rationale:
+        "A folder outside the workspace that the container may change is covered only by a grant for that folder (ADR 0029, ADR 0012).",
+      action: action(
+        "built-in",
+        "bash",
+        { command, purpose },
+        { ...sealedShell, changes: "elsewhere" },
+      ),
+      decision: decisions.outsideFolder,
+    },
+  ]),
 ];
 
 describe("adversarial permission corpus", () => {

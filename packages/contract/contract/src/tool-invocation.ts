@@ -212,6 +212,8 @@ export type ToolInvocationResult =
       readonly commandChanges?: CommandFileChanges;
       /** As on a success: what the program could only read for its run. */
       readonly heldForRun?: string;
+      /** As on a success: what it returned is outside content, found once it ran. */
+      readonly brings?: "outside";
       /** The files an action wrote before it failed. */
       readonly produced?: readonly ProducedFile[];
       /**
@@ -282,6 +284,22 @@ export type ActionEffects = {
    */
   readonly uncopied?: readonly string[];
 };
+
+/** What allowing a request for more grants sealed-off commands (ADR 0029). */
+export type AccessGrant =
+  | {
+      readonly kind: "website";
+      /** As a person reads it, such as "example.com and every name below it". */
+      readonly label: string;
+      /** As a confinement names them, such as `example.com`, `*.example.com`. */
+      readonly hosts: readonly string[];
+    }
+  | {
+      readonly kind: "folder";
+      /** Its whole real path. */
+      readonly folder: string;
+      readonly access: "read" | "change";
+    };
 
 export type ToolCallInspection =
   | {
@@ -377,6 +395,20 @@ export type ToolCallInspection =
        * the workspace are trusted as a built-in tool's (ADR 0012).
        */
       readonly builtInConnection?: true;
+      /**
+       * Said by the tool that asks for more (ADR 0029): what the person
+       * grants the conversation's sealed-off commands when they allow the
+       * call, from fields Zhiyin checked itself. A website by the hosts it
+       * covers, or a folder by its whole real path, for reading or for
+       * changing. Kept only from a built-in tool.
+       */
+      readonly grants?: AccessGrant;
+      /**
+       * Said by the sealed-off shell: the call reaches what was granted to
+       * the conversation's commands, so each grant whose facts the
+       * conversation has outgrown is confirmed before it runs (ADR 0029).
+       */
+      readonly reachesGrants?: true;
       /**
        * Said by a built-in tool: each file its `changes` name outside the
        * workspace is the whole of what it changes there, so a grant for that

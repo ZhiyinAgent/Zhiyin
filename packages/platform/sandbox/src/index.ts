@@ -21,8 +21,14 @@ export {
 } from "./windows.js";
 export type { Confined, Confinement } from "./confinement.js";
 export { confine, forgetConfinement } from "./confinement.js";
+export { mayGrantFolder } from "./folder-grants.js";
+export { holdingContainer } from "./container-holds.js";
 export type { ProxyRoute } from "./egress/dial.js";
 export type { FurtherHosts, HostReach } from "./egress/host-proxy.js";
+export type { ShownPort } from "./egress/shown-ports.js";
+export type { LoopbackProxy } from "./egress/loopback-proxy.js";
+export { openLoopbackProxy } from "./egress/loopback-proxy.js";
+export type { PipeOpening } from "./pipe-openings.js";
 export { hostList, hostListProblem } from "./egress/hosts.js";
 export { printedText } from "./output.js";
 export { windowsEnvironment } from "./windows-environment.js";

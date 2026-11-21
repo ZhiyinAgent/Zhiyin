@@ -45,6 +45,7 @@
     "@zhiyin/plugins": "workspace:*",
     "@zhiyin/recovery": "workspace:*",
     "@zhiyin/rewind-planner": "workspace:*",
+    "@zhiyin/sandbox": "workspace:*",
     "@zhiyin/test-support": "workspace:*",
     "@zhiyin/toolchains": "workspace:*",
     "@zhiyin/tools": "workspace:*"

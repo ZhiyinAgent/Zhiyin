@@ -3,9 +3,11 @@ import type {
   MessageAttachment,
   ReasoningSelection,
   TaskAction,
+  ToolInvocationResult,
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { picturesPerMessage, VisibleError } from "@zhiyin/contract";
+import { evidenceText } from "./context/evidence.js";
 import { contextTarget } from "@zhiyin/context-budget";
 import { AuxiliaryWork } from "./auxiliary/auxiliary-work.js";
 import { sameValue } from "./canonical.js";
@@ -17,6 +19,7 @@ import { PluginActivation } from "./tools/plugin-activation.js";
 import { PendingHandoffs } from "./specialist/pending-handoffs.js";
 import { CommandEndings } from "./tools/command-endings.js";
 import { TurnRecords } from "./turn/turn-records.js";
+import { shellReach, type ShellReach } from "./tools/shell-reach.js";
 import { TurnWaits } from "./turn/turn-waits.js";
 import { TurnOwnership } from "./turn/turn-ownership.js";
 import { turnWriteGuard } from "./turn/turn-write-guard.js";
@@ -131,6 +134,22 @@ export class AgentLoop {
   }
 
   /**
+   * What this task's sealed-off commands reach beyond the workspace, by the
+   * grants it holds (ADR 0029). A conversation that is not open reaches
+   * nothing granted.
+   */
+  shellReach(taskId: string): ShellReach {
+    try {
+      return shellReach(
+        this.#records.task(taskId),
+        this.#deps.workspace.workspaceRoot(taskId),
+      );
+    } catch {
+      return { hosts: [], read: [], change: [], registries: true };
+    }
+  }
+
+  /**
    * This task's commands running as jobs changed. The list is kept with the
    * conversation, so that after a restart the model can be told they stopped.
    */
@@ -153,15 +172,18 @@ export class AgentLoop {
 
   /**
    * A job this task started ended, and this is what changed in its folder
-   * while it ran. It belongs to the action whose call started the job.
+   * while it ran, with the command's own answer. Both belong to the action
+   * whose call started the job, which keeps them as it would have had the
+   * command ended in time: what it brought, and the answer as evidence.
    */
   jobChanged(
     taskId: string,
     job: string,
     changes: CommandFileChanges,
+    outcome?: ToolInvocationResult,
   ): Promise<void> {
     return this.#activeTurns.outside(() =>
-      this.#keepJobChanges(taskId, job, changes),
+      this.#keepJobChanges(taskId, job, changes, outcome),
     );
   }
 
@@ -169,7 +191,16 @@ export class AgentLoop {
     taskId: string,
     job: string,
     changes: CommandFileChanges,
+    outcome: ToolInvocationResult | undefined,
   ): Promise<void> {
+    const ended = outcome
+      ? {
+          ...(outcome.brings === "outside"
+            ? { brings: "outside" as const }
+            : {}),
+          evidence: evidenceText({ ...outcome, images: undefined }),
+        }
+      : {};
     const found: { ran?: TaskAction | undefined } = {};
     const kept = await this.#records.changeOutsideTurns(taskId, (task) => {
       const started = task.actions.find(
@@ -185,7 +216,7 @@ export class AgentLoop {
             ...task,
             actions: task.actions.map((action) =>
               action === started
-                ? { ...action, commandChanges: changes }
+                ? { ...action, ...ended, commandChanges: changes }
                 : action,
             ),
           }

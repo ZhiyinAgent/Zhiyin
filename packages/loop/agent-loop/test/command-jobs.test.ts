@@ -8,7 +8,11 @@
 
 import { jobsWith } from "./stubs.js";
 import { describe, expect, it } from "vitest";
-import type { CommandFileChanges, RunningCommand } from "@zhiyin/contract";
+import type {
+  CommandFileChanges,
+  RunningCommand,
+  ToolInvocationResult,
+} from "@zhiyin/contract";
 import type { ModelRequest } from "@zhiyin/model-client";
 import {
   loopAndHost,
@@ -22,6 +26,7 @@ type JobChanges = (
   conversationId: string,
   job: string,
   changes: CommandFileChanges,
+  outcome: ToolInvocationResult,
 ) => void;
 
 /** What the job wrote while it ran. */
@@ -251,7 +256,10 @@ describe("a command that ends after its call returned", () => {
             void ended.then(() => {
               running = [];
               changed?.(taskId);
-              jobChanges?.(taskId, "J1", wrote);
+              jobChanges?.(taskId, "J1", wrote, {
+                ok: true,
+                value: { exitCode: 0 },
+              });
             });
             changed?.(taskId);
             return {

@@ -27,7 +27,8 @@
     "@zhiyin/text-diff": "workspace:*",
     "@zhiyin/tool-input": "workspace:*",
     "@zhiyin/workspace-containment": "workspace:*",
-    "@zhiyin/workspace-listing": "workspace:*"
+    "@zhiyin/workspace-listing": "workspace:*",
+    "tldts": "7.4.11"
   },
   "devDependencies": {
     "@zhiyin/test-support": "workspace:*"

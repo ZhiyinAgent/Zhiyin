@@ -55,6 +55,13 @@ import {
   type ListingSetup,
 } from "@zhiyin/workspace-listing";
 import type { ToolDefinition } from "../tool-definition.js";
+import {
+  nothingGranted,
+  type ConversationReach,
+  type ShellReach,
+} from "./reach.js";
+import type { SealedRun, SealedUse } from "./sealed-shell.js";
+import type { CommandShell } from "./shell.js";
 
 /**
  * Containment for one command's process tree, supplied by the application.
@@ -100,15 +107,54 @@ const commandEnvironment = () => ({
   PYTHONIOENCODING: "utf-8",
 });
 
+/** How jobs work, said in each description of the tool. */
+const jobsSaid =
+  "A command still running after 30 seconds carries on as a job, such as J1: the answer shows what it printed so far, job_output shows more or waits for it, stop_job stops it, and you are told when it ends. A conversation keeps at most three jobs running; while it has three, a further command runs to its end before answering.";
+
+/** Said after what the shell is, whichever it is. */
+const exitCodeSaid =
+  "A command's exit code does not prove it had the intended effect: check the effect itself, such as that a service stopped, and do not hide a failure behind a fallback that always succeeds.";
+
+/** What the rest of each description says, whichever way commands run. */
+const commonSaid = [
+  "It does not delete files: delete with delete_file, which moves them to the Recycle Bin. Python here is whichever the account has, if any: check which interpreters exist first, and never install packages into a global Python.",
+  "For files, find_files finds them by name, search_files finds text in them, and the other file tools list, read, write, edit and move them. For Python, use the Python tool when one is offered.",
+];
+
+/** What the shell is, for the model, which writes bash unless told. */
+const busyboxSaid =
+  "This computer runs Windows, and the shell is busybox sh, not bash: a POSIX shell with some of bash's extensions and no arrays, whose Unix tools (grep, sed, awk, find, tr, xargs, wc and the rest) are busybox's own. Bash-only syntax fails: rewrite it in POSIX sh.";
+
+/** The tool's description, by whether commands run sealed off here and why not. */
+function descriptionFor(use: SealedUse, busybox: boolean): string {
+  if (use.sealed)
+    return [
+      `Run one shell command in the workspace folder, for work no other tool covers, such as a build, a test suite, an install into the workspace or git. ${jobsSaid}`,
+      `${busyboxSaid} ${exitCodeSaid}`,
+      "A command runs sealed off, in a container of this conversation's own, without asking the person. It reads the workspace, Zhiyin's tools, Windows' own files and the folders granted for reading; it changes the workspace and the folders granted for changing, and each change is saved so going back undoes it; its home keeps tools' caches and settings (npm, pip, cargo) for the conversation; it reaches only the websites on the conversation's list, the package registries and Git hosts Zhiyin lists among them, over HTTPS through Zhiyin's proxy, and never a server of this computer's. /dev/null works, but a program that opens NUL itself fails sealed off.",
+      "A refusal is the container's, not a fault: a host the proxy refused is named in the answer, and Permission denied on a path outside what the command reaches means it was not given. Ask for a website or a folder with request_access. git runs through Zhiyin, in the workspace or a folder granted for changing, without the repository's hooks, filters, aliases that run commands or other programs, over HTTPS only and with none of the person's credentials.",
+      "show_ports shows ports of the container on this computer, such as a dev server's, while the command runs: the answer gives the address the person opens. A server and a test that calls it meet inside the container.",
+      "full_access: true runs the command with the person's full access instead, and the person approves it each time: only for what a container cannot do, such as installing for the whole computer, pushing with the person's credentials, a tool installed only in the person's profile, or a program that fails sealed off.",
+      ...commonSaid,
+    ].join("\n\n");
+  return [
+    `Run one shell command in the workspace folder, for work no other tool covers, such as a build, a test suite or a version-control command. It runs with the person's full access, can reach the network and start programs, and the person approves each command: ${use.why} ${jobsSaid}`,
+    `${
+      busybox
+        ? busyboxSaid
+        : "This computer runs Windows, and the shell is Git Bash: do not assume Linux utilities are installed."
+    } ${exitCodeSaid}`,
+    ...commonSaid,
+  ].join("\n\n");
+}
+
 const runCommandSpec: ToolSpec = {
   name: "bash",
   checksWork: "runs",
-  description: [
-    "Run one bash command in the workspace folder, for work no other tool covers, such as a build, a test suite or a version-control command. It runs with the person's full access, can reach the network and start programs, and the person approves each command. A command still running after 30 seconds carries on as a job, such as J1: the answer shows what it printed so far, job_output shows more or waits for it, stop_job stops it, and you are told when it ends. A conversation keeps at most three jobs running; while it has three, a further command runs to its end before answering.",
-    "This computer runs Windows, and the shell is Git Bash: do not assume Linux utilities are installed. A command's exit code does not prove it had the intended effect: check the effect itself, such as that a service stopped, and do not hide a failure behind a fallback that always succeeds.",
-    "It does not delete files: delete with delete_file, which moves them to the Recycle Bin. Python here is whichever the account has, if any: check which interpreters exist first, and never install packages into a global Python.",
-    "For files, find_files finds them by name, search_files finds text in them, and the other file tools list, read, write, edit and move them. For Python, use the Python tool when one is offered.",
-  ].join("\n\n"),
+  description: descriptionFor(
+    { sealed: false, why: "no command can be sealed off here." },
+    false,
+  ),
   inputSchema: {
     type: "object",
     properties: {
@@ -116,7 +162,19 @@ const runCommandSpec: ToolSpec = {
         type: "string",
         maxLength: maximumCommandLength,
         description:
-          "One bash command, which may span lines. The working directory is the workspace root.",
+          "One shell command, which may span lines. The working directory is the workspace root.",
+      },
+      full_access: {
+        type: "boolean",
+        description:
+          "Run with the person's full access, asked each time, for what a sealed-off command cannot do. Leave it out otherwise.",
+      },
+      show_ports: {
+        type: "array",
+        maxItems: 4,
+        items: { type: "integer", minimum: 1, maximum: 65535 },
+        description:
+          "Ports of the command's container to show on this computer while it runs, such as [5173] for a dev server.",
       },
       purpose: {
         type: "string",
@@ -140,6 +198,8 @@ type CommandArguments = {
   readonly command: string;
   readonly explanation: string;
   readonly timeoutMs: number;
+  readonly fullAccess: boolean;
+  readonly ports: readonly number[];
 };
 
 /** Why a call's input is refused, naming a limit it went past. */
@@ -164,12 +224,16 @@ function commandArguments(args: unknown): CommandArguments | undefined {
     readonly command: string;
     readonly purpose: string;
     readonly timeoutMs?: number;
+    readonly full_access?: boolean;
+    readonly show_ports?: readonly number[];
   }>(runCommandSpec.inputSchema, args);
   if (!input?.command.trim() || !input.purpose.trim()) return;
   return {
     command: input.command.trim(),
     explanation: input.purpose.trim().replace(/\s+/g, " "),
     timeoutMs: input.timeoutMs ?? defaultTimeoutMs,
+    fullAccess: input.full_access === true,
+    ports: [...new Set(input.show_ports ?? [])],
   };
 }
 
@@ -242,7 +306,62 @@ function deletionRefused(command: string) {
     : undefined;
 }
 
-function inspectRunCommand(args: unknown): ToolCallInspection {
+/**
+ * How a sealed-off command is decided (ADR 0029): by what its container
+ * allows, which this code sets, never by its text. It reads the workspace,
+ * and changes it and each folder granted for changing, all copied first; it
+ * runs code sealed off; and it sends only to the hosts on the conversation's
+ * list, which the person granted or Zhiyin lists, so where it sends is not
+ * the model's to choose. What it receives is known only once it ran.
+ */
+function inspectSealedCommand(
+  input: CommandArguments,
+  reach: ShellReach,
+  hosts: readonly string[],
+): ToolCallInspection {
+  const outside = reach.change;
+  return {
+    ok: true,
+    action: "Run a sealed-off command",
+    target: oneLine(input.command, shownCommandLength),
+    claim: input.explanation,
+    effects: effectsOf({
+      reads: "workspace",
+      changes: outside.length ? "elsewhere" : "workspace",
+      sends: hosts.length ? "service" : "none",
+      runs: "sealed",
+    }),
+    // Copied before it runs, so going back undoes what it changed; Git's
+    // folder and Startup folders are held from it (ADR 0012).
+    changesAnyFile: {
+      writable: [],
+      ...(outside.length ? { outside } : {}),
+    },
+    reachesGrants: true,
+    ...(hosts.length ? { destinations: hosts } : {}),
+    command: describeCommand(runCommandSpec.name, {
+      command: input.command,
+      timeoutMs: input.timeoutMs,
+      ...(input.ports.length ? { show_ports: input.ports } : {}),
+    }),
+    invocation: {
+      name: runCommandSpec.name,
+      arguments: [
+        { name: "command", value: input.command, runs: true },
+        {
+          name: "Stops after",
+          value: duration(input.timeoutMs),
+          readable: true,
+        },
+      ],
+    },
+  };
+}
+
+function inspectRunCommand(
+  args: unknown,
+  sealed?: { readonly reach: ShellReach; readonly hosts: readonly string[] },
+): ToolCallInspection {
   const input = commandArguments(args);
   if (!input) {
     return {
@@ -253,6 +372,15 @@ function inspectRunCommand(args: unknown): ToolCallInspection {
   }
   const refused = deletionRefused(input.command);
   if (refused) return refused;
+  if (input.ports.length && (input.fullAccess || !sealed))
+    return {
+      ok: false,
+      correctable: true,
+      reason:
+        "show_ports shows a sealed-off command's container; a command with full access listens on this computer itself.",
+    };
+  if (sealed && !input.fullAccess)
+    return inspectSealedCommand(input, sealed.reach, sealed.hosts);
   return {
     ok: true,
     action: "Run a command",
@@ -309,10 +437,13 @@ async function runShellCommand(
     signal,
     containment,
     context = {},
+    sealed,
   }: {
     readonly signal?: AbortSignal | undefined;
     readonly containment?: CommandContainment | undefined;
     readonly context?: CommandContext;
+    /** How the command starts sealed off; absent, it runs with full access. */
+    readonly sealed?: ((stop: AbortSignal) => Promise<SealedRun>) | undefined;
   } = {},
 ): Promise<ToolInvocationResult> {
   const input = commandArguments(args);
@@ -343,14 +474,26 @@ async function runShellCommand(
   const stopWithTurn = () => own.abort();
   signal?.addEventListener("abort", stopWithTurn, { once: true });
   let live: LiveRun | undefined;
+  const confined = await sealed?.(own.signal);
   const outcome: Promise<{
     readonly result: ToolInvocationResult;
     readonly ending: string;
   }> = runProcess({
-    executable: shell,
-    arguments: ["-c", input.command],
+    executable: confined?.executable ?? shell,
+    arguments: confined?.arguments ?? [
+      ...(shell.toLowerCase().endsWith("busybox.exe") ? ["sh"] : []),
+      "-c",
+      input.command,
+    ],
     cwd: root,
-    environment: commandEnvironment(),
+    environment: confined?.environment ?? commandEnvironment(),
+    ...(confined
+      ? {
+          confinement: confined.confinement,
+          openings: confined.openings,
+          ...(input.ports.length ? { shownPorts: input.ports } : {}),
+        }
+      : {}),
     timeoutMs: input.timeoutMs,
     signal: own.signal,
     ...(containment ? { containment } : {}),
@@ -366,7 +509,14 @@ async function runShellCommand(
     },
   })
     .then(async (result) => {
-      const ran = runResult(result, input, started, saved);
+      const ran = confined
+        ? sealedResult(
+            runResult(result, input, started, saved),
+            result,
+            confined,
+            live,
+          )
+        : runResult(result, input, started, saved);
       // A command that never started changed nothing.
       if (!listing || !before || result.failure)
         return { ...ran, ending: endingSentence(ran.ending, result) };
@@ -445,7 +595,11 @@ async function runShellCommand(
       status: "running",
       stdout: out.text,
       stderr: err.text,
-      note: `Still running as job ${job} after ${seconds} s. Use job_output to see more or wait for it, and stop_job to stop it. You will be told when it ends.`,
+      note: `Still running as job ${job} after ${seconds} s. Use job_output to see more or wait for it, and stop_job to stop it. You will be told when it ends.${
+        live?.ports.length
+          ? ` While it runs, ${live.ports.map((each) => `port ${each.port} is shown at ${each.address}`).join(", ")}: give the person that address.`
+          : ""
+      }`,
     },
     ...(listing ? { commandChanges: { status: "running", job } } : {}),
     ...detailsOf(
@@ -494,6 +648,90 @@ function runResult(
           : result.ending === "stopped"
             ? "was stopped with everything it started."
             : `finished with exit code ${result.exitCode}.`,
+  };
+}
+
+/** A path refused the shell, as busybox, Windows and the common runtimes say it. */
+const refusedPath = /Permission denied|Access is denied|EACCES|EPERM/;
+
+const askForMore =
+  "This command ran sealed off: it reads the workspace, Zhiyin's tools, Windows' own files and the folders granted, and changes the workspace and the folders granted for changing. If it needs a folder or a website more, ask with request_access. A program installed where Windows lets no container read it, as in Program Files when its installer gave no access to app containers, cannot be granted: run it with full_access, which the person approves. So does a program that opens NUL itself, or needs the person's own profile.";
+
+/**
+ * A sealed-off command's answer, with what the container kept from it said
+ * to the model (ADR 0029): each host Zhiyin's proxy refused, by name, and,
+ * for a refused path, how to ask for more. What any host sent makes the
+ * answer outside content.
+ */
+function sealedResult(
+  ran: { readonly result: ToolInvocationResult; readonly ending: string },
+  run: ProcessRun,
+  confined: SealedRun,
+  live: LiveRun | undefined,
+): { readonly result: ToolInvocationResult; readonly ending: string } {
+  if (run.failure === "confinement")
+    return {
+      result: {
+        ok: false,
+        reason:
+          `This command could not be sealed off, so it did not run. ${run.reason ?? ""} To run it anyway, run it with full_access: true, which the person approves.`.trim(),
+      },
+      ending: "could not be sealed off.",
+    };
+  const refusedHosts = [
+    ...new Set([
+      ...(run.network ?? [])
+        .filter((reach) => reach.refused)
+        .map((reach) =>
+          reach.port === 443 ? reach.host : `${reach.host}:${reach.port}`,
+        ),
+      ...confined.tally.refusedHosts,
+    ]),
+  ];
+  const received =
+    confined.tally.received ||
+    (run.network ?? []).some((reach) => reach.received > 0) ||
+    (run.furtherHosts?.received ?? 0) > 0;
+  const result = ran.result;
+  const value =
+    "value" in result && result.value && typeof result.value === "object"
+      ? (result.value as Record<string, unknown>)
+      : undefined;
+  if (!value) return ran;
+  const stderr = typeof value["stderr"] === "string" ? value["stderr"] : "";
+  const notes = [
+    ...(refusedHosts.length
+      ? [
+          `Zhiyin's proxy refused ${refusedHosts.join(", ")}: ${refusedHosts.length === 1 ? "it is" : "they are"} not on this conversation's list. Ask for a website with request_access if the work needs it.`,
+        ]
+      : []),
+    ...(refusedPath.test(stderr) ? [askForMore] : []),
+    ...confined.notes,
+  ];
+  const shown = live?.ports.length
+    ? {
+        ports: live.ports.map((each) => ({
+          port: each.port,
+          address: each.address,
+        })),
+      }
+    : {};
+  const withNotes = {
+    ...value,
+    ...(refusedHosts.length ? { refusedHosts } : {}),
+    ...shown,
+    ...(notes.length ? { sealedOff: notes.join(" ") } : {}),
+  };
+  return {
+    // A job's ending is all the model is told of it unasked.
+    ending: refusedHosts.length
+      ? `${ran.ending} Zhiyin's proxy refused it ${refusedHosts.join(", ")}.`
+      : ran.ending,
+    result: {
+      ...result,
+      value: withNotes,
+      ...(received ? { brings: "outside" as const } : {}),
+    } as ToolInvocationResult,
   };
 }
 
@@ -620,7 +858,9 @@ function commandResult(input: {
   if (
     /^(?:.*[/\\])?bash(?:\.exe)?: line \d+: .+: command not found\s*$/m.test(
       err.text,
-    )
+    ) ||
+    // busybox's shell says it its own way.
+    /^sh: (?:line \d+: )?[^:\n]+: not found\s*$/m.test(err.text)
   ) {
     return {
       ok: false,
@@ -636,13 +876,15 @@ function commandResult(input: {
 
 /** What running commands needs from the application. */
 export type RunCommandNeeds = {
-  /** The bash commands run in; the tool is withdrawn while there is none. */
-  readonly shell: { readonly path: string | undefined };
+  /** The shell commands run in; the tool is withdrawn while there is none. */
+  readonly shell: CommandShell;
   readonly containment: CommandContainment | undefined;
   readonly items: ConversationItems | undefined;
   readonly jobs: CommandJobs;
   readonly files: ListingSetup;
   readonly promoteAfterMs: number | undefined;
+  /** What each conversation granted its sealed-off commands. */
+  readonly reach: ConversationReach | undefined;
 };
 
 /** The shell command tool, as the registry offers it. */
@@ -653,16 +895,47 @@ export function runCommandTool({
   jobs,
   files,
   promoteAfterMs,
+  reach,
 }: RunCommandNeeds): ToolDefinition {
+  /** Whether a call runs sealed off, and with what it reaches. */
+  const sealedFor = async (conversationId: string | undefined) => {
+    const use = await shell.checkedUse();
+    const sealed = shell.sealed;
+    if (!use.sealed || !sealed || !conversationId) return undefined;
+    const granted = reach?.(conversationId) ?? nothingGranted;
+    return { sealed, reach: granted, hosts: sealed.hosts(granted) };
+  };
   return {
-    spec: runCommandSpec,
+    // Its description says whether commands run sealed off here, and why not.
+    get spec(): ToolSpec {
+      return {
+        ...runCommandSpec,
+        description: descriptionFor(shell.use(), shell.sealed !== undefined),
+      };
+    },
     requiresWorkspace: true,
     requiresShell: true,
-    inspect: async (args) => inspectRunCommand(args),
-    execute: (args, signal, conversationId, { root }) =>
-      runShellCommand(shell.path as string, root, args, {
+    inspect: async (args, conversationId) =>
+      inspectRunCommand(args, await sealedFor(conversationId)),
+    execute: async (args, signal, conversationId, { root }) => {
+      const sealed = await sealedFor(conversationId);
+      const input = commandArguments(args);
+      return runShellCommand(shell.path as string, root, args, {
         signal,
         containment,
+        ...(sealed && input && !input.fullAccess
+          ? {
+              sealed: (stop: AbortSignal) =>
+                sealed.sealed.run(
+                  input.command,
+                  root,
+                  conversationId as string,
+                  sealed.reach,
+                  stop,
+                  commandEnvironment(),
+                ),
+            }
+          : {}),
         context: {
           ...(conversationId ? { conversationId } : {}),
           ...(items ? { items } : {}),
@@ -670,6 +943,7 @@ export function runCommandTool({
           files,
           ...(promoteAfterMs === undefined ? {} : { promoteAfterMs }),
         },
-      }),
+      });
+    },
   };
 }

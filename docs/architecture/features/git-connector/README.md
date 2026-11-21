@@ -40,6 +40,12 @@ there is no second implementation of git's storage format to audit.
   and `close`.
 - `gitInstallUrl`, where Git for Windows is downloaded, offered when Git is
   missing.
+- `shellGit({ containment?, route?, resolveGit? })` answers the function that
+  runs one git command for a sealed-off shell, outside its container (ADR
+  0029): given the command's arguments, its folder, the folders the shell may
+  change, the hosts its conversation may reach, the conversation's home and
+  its standard input as a file, it answers git's exit code, what it printed,
+  each host the proxy refused it and whether any host sent it anything.
 - `gitProgramLocations(root)` names, from the files alone, Git's records in
   a folder, each as a `GitLocation` with how a sealed-off program is held
   from it (ADR 0012).
@@ -47,6 +53,46 @@ there is no second implementation of git's storage format to audit.
   `GitAutomationOptions`.
 
 ## Invariants
+
+### git for a sealed-off shell (ADR 0029)
+
+- It runs only in a folder the shell may change, and only on a repository
+  whose top, git folder, common folder and alternates are all inside those
+  folders. A path argument that leads elsewhere, and every global option but
+  those that change nothing of where git works or what it runs, such as
+  `-C`, `-c`, `--git-dir` and `--work-tree`, are refused before git starts.
+- git runs with the person's own access, so nothing outside those folders
+  reaches git through a junction or a symbolic link either: not into the
+  repository's objects, nor into what git prints. A path argument, an
+  option's value included, that leads out through one is refused before git
+  starts, and so is every command in a repository, or outside one in a
+  folder, that holds such a link anywhere, its git folder included, since
+  git follows a junction as a folder. A link that stays inside the folders
+  works. Each refusal says where the link leads and suggests full access.
+  The folder is checked just before git starts, while the shell that asked
+  is held still: every process of its container is suspended from before
+  the check until git ends, however it ends, so none can make a link in
+  between (the tools feature holds it, through the sandbox).
+- It runs none of the programs a repository's settings or the person's could
+  start. Every such setting is turned off for the command: hooks, the
+  filesystem monitor, the pager and editors, the SSH command, askpass and
+  proxy commands, external diff and textconv, signing programs, upload-pack
+  and receive-pack, and, by name from the repository's own settings, each
+  filter, diff and merge driver and each alias that runs a command; `diff`,
+  `log`, `show` and `blame` are given `--no-ext-diff` and `--no-textconv`.
+  The system settings are not read, and the person's are replaced by a file
+  in the conversation's home holding only their name and email. `git init`
+  copies nothing from a template folder, given one that is empty, and says
+  nothing of templates.
+- It uses no credential: no helper, no prompt. It reaches the network only
+  over HTTPS, through Zhiyin's proxy on this computer's loopback, to the hosts
+  the conversation may reach; with none, every protocol is refused.
+- Commands that start programs or reach beyond the repository by design,
+  such as `difftool`, `submodule`, `filter-branch`, `daemon` or `credential`,
+  and options naming a program, such as `--upload-pack` or `--exec`, are
+  refused.
+
+### The connector
 
 - Git's records in a folder are each git folder in it, held whole: its
   objects, refs, configuration and hooks, the top's and every repository's

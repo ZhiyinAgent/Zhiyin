@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { closeSync, createWriteStream, openSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,14 @@ import {
 } from "./output.js";
 import type { ProcessContainer } from "./windows.js";
 import { childEnvironment } from "./child-environment.js";
-import { confine, type Confined, type Confinement } from "./confinement.js";
+import {
+  confine,
+  containerOf,
+  networkOf,
+  type Confined,
+  type Confinement,
+} from "./confinement.js";
+import { containerHold, enterContainer } from "./container-holds.js";
 import type { ProxyRoute } from "./egress/dial.js";
 import type { FurtherHosts, HostReach } from "./egress/host-proxy.js";
 import {
@@ -22,6 +29,17 @@ import {
   withoutProxies,
   type RunNetwork,
 } from "./egress/run-network.js";
+import {
+  showPort,
+  shownPortRelay,
+  type ShownPort,
+} from "./egress/shown-ports.js";
+import {
+  openPipes,
+  type OpenPipes,
+  type PipeOpening,
+} from "./pipe-openings.js";
+import { windowsEnvironment } from "./windows-environment.js";
 
 export type ProcessContainment = {
   open(): ProcessContainer;
@@ -74,6 +92,8 @@ export type RunProcess = (options: {
    * way, without a model key Zhiyin was given.
    */
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  /** A file the program reads as its standard input; absent, it reads nothing. */
+  readonly input?: string;
   /** Characters kept of each stream, split between its start and its end. */
   readonly maximumOutputCharacters?: number;
   /** Bytes printed across both streams before the run is stopped. */
@@ -92,6 +112,16 @@ export type RunProcess = (options: {
    * it has printed so far, bounded as the finished run's are.
    */
   readonly onStart?: (live: LiveRun) => void;
+  /**
+   * For a confined run: pipes only its container may open, each named to the
+   * program in its variable, whose connections are handed to the caller.
+   */
+  readonly openings?: readonly PipeOpening[];
+  /**
+   * For a confined run: ports of its container shown on this computer's
+   * loopback while it runs, inward only. Where each is reached is in `LiveRun`.
+   */
+  readonly shownPorts?: readonly number[];
 }) => Promise<ProcessRun>;
 
 export type LiveRun = {
@@ -99,6 +129,8 @@ export type LiveRun = {
     readonly stdout: string;
     readonly stderr: string;
   }>;
+  /** Each port shown, and where this computer reaches it. */
+  readonly ports: readonly ShownPort[];
 };
 
 type RunOptions = Parameters<RunProcess>[0];
@@ -160,6 +192,17 @@ export const runProcess: RunProcess = async (options) => {
     return { exitCode: null, stdout: "", stderr: "", ending: "stopped" };
   if (options.confinement && !options.containment)
     return { exitCode: null, stdout: "", stderr: "", failure: "containment" };
+  if (
+    !options.confinement &&
+    (options.openings?.length || options.shownPorts?.length)
+  )
+    return {
+      exitCode: null,
+      stdout: "",
+      stderr: "",
+      failure: "confinement",
+      reason: "Only a confined run is given pipes or shown ports.",
+    };
 
   let confined: Confined | undefined;
   try {
@@ -199,7 +242,42 @@ async function runContained(
   const stdoutFile = join(directory, "stdout.txt");
   const stderrFile = join(directory, "stderr.txt");
   let network: RunNetwork | undefined;
+  let pipes: OpenPipes | undefined;
+  const shown: { readonly shown: ShownPort; close(): Promise<void> }[] = [];
+  // A hold on the container suspends this run's processes too.
+  const name = confined ? containerOf(confined) : undefined;
+  const leave = name ? enterContainer(name, container) : undefined;
   try {
+    if (confined)
+      try {
+        const { container: sid, home } = networkOf(confined);
+        if (options.openings?.length)
+          pipes = await openPipes(sid, options.openings);
+        for (const [at, port] of (options.shownPorts ?? []).entries()) {
+          const each = await showPort(sid, port);
+          shown.push(each);
+          // Started before the program, so a server it starts is reached as
+          // soon as it listens.
+          const relay = shownPortRelay(each.pipe, port);
+          container.launch({
+            executable: relay.executable,
+            arguments: relay.arguments,
+            cwd: home,
+            stdout: join(directory, `port-${at}-stdout.txt`),
+            stderr: join(directory, `port-${at}-stderr.txt`),
+            environment: windowsEnvironment(),
+            confined,
+          });
+        }
+      } catch (error) {
+        return {
+          exitCode: null,
+          stdout: "",
+          stderr: "",
+          failure: "confinement",
+          reason: error instanceof Error ? error.message : String(error),
+        };
+      }
     if (namesHosts(confined))
       try {
         network = await startRunNetwork(
@@ -222,11 +300,21 @@ async function runContained(
       }
     // A confined program is told of no proxy but Zhiyin's, the only one it
     // can reach.
-    const environment = network
+    const told = network
       ? network.environment(options.environment ?? process.env)
       : confined
         ? withoutProxies(options.environment ?? process.env)
         : options.environment;
+    const environment =
+      pipes && told ? { ...told, ...pipes.environment } : told;
+    // The last look at the holds is right before the launch, with no wait
+    // between, so a hold that begins after finds the program in the container.
+    for (
+      let hold = name ? containerHold(name) : undefined;
+      hold;
+      hold = containerHold(name!)
+    )
+      await hold;
     let child;
     try {
       child = container.launch({
@@ -235,6 +323,7 @@ async function runContained(
         cwd: options.cwd,
         stdout: stdoutFile,
         stderr: stderrFile,
+        ...(options.input ? { input: options.input } : {}),
         ...(environment ? { environment } : {}),
         ...(confined ? { confined } : {}),
       });
@@ -256,6 +345,7 @@ async function runContained(
         ]);
         return { stdout, stderr };
       },
+      ports: shown.map((each) => each.shown),
     });
     // The output goes to files, so it is measured there: past the limit the
     // tree is ended while it runs, before the disk fills.
@@ -296,7 +386,10 @@ async function runContained(
     };
   } finally {
     container.close();
+    leave?.();
     await network?.close();
+    await pipes?.close();
+    await Promise.all(shown.map((each) => each.close()));
     await removeOutputFolder(directory);
   }
 }
@@ -359,12 +452,15 @@ function runStreams(
 ): Promise<ProcessRun> {
   const limit = options.maximumOutputBytes ?? defaultOutputBytes;
   return new Promise<ProcessRun>((resolve) => {
+    const input = options.input ? openSync(options.input, "r") : undefined;
     const child = spawn(options.executable, [...options.arguments], {
       cwd: options.cwd,
       windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [input ?? "ignore", "pipe", "pipe"],
       env: childEnvironment(options.environment),
     });
+    // The program holds its own copy once it starts.
+    if (input !== undefined) closeSync(input);
     const stdout = new OutputEnds(edgeOf(options));
     const stderr = new OutputEnds(edgeOf(options));
     const run = endings(options, () => {
@@ -372,6 +468,7 @@ function runStreams(
     });
     options.onStart?.({
       printed: async () => ({ stdout: stdout.text(), stderr: stderr.text() }),
+      ports: [],
     });
     const receive = (ends: OutputEnds, copy?: Writable) => (chunk: Buffer) => {
       const before = stdout.total + stderr.total;

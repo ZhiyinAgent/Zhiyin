@@ -195,8 +195,13 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
   tests that did not run, how many, and what they need. A file may skip only
   where the reporter's list expects it to: a skip in any other file, or one
   where what the file needs is present, fails the run.
+- The gate builds Zhiyin's shell, busybox-w32 and the git hand-off, from its
+  pins before the tests when the build is not in place, keeping its downloads
+  in `ZHIYIN_TEST_TOOLS` or else `node_modules/.cache/zhiyin-tools`. The run
+  names it in `ZHIYIN_BUSYBOX` when the pinned build is there, so the tests of
+  sealed-off commands run on real app containers; in CI they may not skip.
 - With `ZHIYIN_TEST_TOOLS` naming a folder, the run first installs Typst,
-  Tectonic and uv there from their pinned downloads, verified as the app
+  Tectonic, uv and Node there from their pinned downloads, verified as the app
   verifies them, fetching again a kept download that fails that, and downloads
   Blender's archive for the test that installs it, so the tests that need them
   run. CI sets it, so there those tests may not skip. No Blender is installed

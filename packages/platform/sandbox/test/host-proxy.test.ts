@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { dial, hopsOf, unreachableAddress } from "../src/egress/dial.js";
 import { HostProxy } from "../src/egress/host-proxy.js";
 import { hostEntries } from "../src/egress/hosts.js";
+import { openLoopbackProxy } from "../src/index.js";
 import {
   echoServer,
   httpUpstream,
@@ -329,5 +330,45 @@ describe("where the proxy goes out", () => {
       { kind: "socks5", host: "::1", port: 1080 },
       { kind: "direct" },
     ]);
+  });
+});
+
+describe("the proxy of a program run outside the container for a sealed-off run", () => {
+  it("is reached on this computer's loopback, tunnels the hosts given and names the hosts it refused", async () => {
+    const http = await upstream(httpUpstream());
+    const proxy = await openLoopbackProxy(
+      ["pypi.org"],
+      async () => `PROXY 127.0.0.1:${http.port}`,
+    );
+    closing.push(() => proxy.close());
+    const port = Number(new URL(proxy.address).port);
+    const ask = async (target: string) => {
+      const socket = await new Promise<Socket>((resolve, reject) => {
+        const made = connect({ host: "127.0.0.1", port });
+        made.once("connect", () => resolve(made));
+        made.once("error", reject);
+      });
+      const heard = await exchange(
+        socket,
+        `CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`,
+      );
+      socket.destroy();
+      return heard.split("\r\n")[0];
+    };
+
+    expect(proxy.address).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(await ask("pypi.org:443")).toBe(
+      "HTTP/1.1 200 Connection established",
+    );
+    expect(await ask("example.org:443")).toBe(
+      "HTTP/1.1 403 example.org:443 refused",
+    );
+    expect(proxy.reached()).toContainEqual(
+      expect.objectContaining({
+        host: "example.org",
+        port: 443,
+        refused: "not among the hosts this run may reach",
+      }),
+    );
   });
 });

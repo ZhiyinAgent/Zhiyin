@@ -1,6 +1,7 @@
 # 0012. The person is asked only for what Zhiyin can neither prevent nor undo
 
-Status: accepted
+Status: accepted. Its section on the shell, and its rejection of a shell sealed
+off in an app container, are superseded by 0029.
 
 ## Decision
 

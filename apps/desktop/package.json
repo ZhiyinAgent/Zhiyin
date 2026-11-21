@@ -13,7 +13,7 @@
     "build": "node ../../scripts/dictionaries.mjs && node ../../scripts/fonts.mjs && electron-vite build",
     "install:electron": "node node_modules/electron/install.js",
     "typecheck": "tsc --noEmit",
-    "package": "node ../../scripts/dictionaries.mjs && node ../../scripts/fonts.mjs && electron-vite build && electron-builder --publish never"
+    "package": "node ../../scripts/dictionaries.mjs && node ../../scripts/fonts.mjs && node ../../scripts/busybox.mjs && electron-vite build && electron-builder --publish never"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "7.0.1",

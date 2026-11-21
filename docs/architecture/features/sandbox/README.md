@@ -68,7 +68,19 @@ a process that reaches only the folders it is given (ADR 0006).
   and received, or why it was refused or could not be reached. Past a
   hundred, it answers `furtherHosts`: the requests to the other hosts
   refused, those that could not be reached, and the tunnels opened with the
-  bytes they carried, counted together.
+  bytes they carried, counted together. `input` names a file the program
+  reads as its standard input, in place of an empty one. A confined run may
+  be given `openings`, each a `PipeOpening`: a variable that names to the
+  program a pipe only its container may open, and what to do with each
+  connection made to it; and `shownPorts`, ports the program listens on
+  inside its container, each shown at an address on this computer while it
+  runs, which its `LiveRun` answers as `ports`. A run that is not confined is
+  given neither, and answers `confinement`.
+- `openLoopbackProxy(hosts, route?)` opens Zhiyin's proxy on this computer's
+  loopback for a program that is not confined, such as git run on a sealed-off
+  shell's behalf: it tunnels to the hosts named and refuses the rest, and
+  answers its `address`, what it `reached()` by host, what went to further
+  hosts, and `close()`.
 - A `ProcessContainment` may carry `route(url)`, which answers how this
   computer reaches a URL in a PAC script's words (`DIRECT`, `PROXY host:port`,
   `SOCKS5 host:port`): the way a confined run's proxy goes out. The
@@ -86,6 +98,18 @@ a process that reaches only the folders it is given (ADR 0006).
   cannot be given.
 - `forgetConfinement(purpose, home)` removes the container of a home removed
   for good, with the folder Windows keeps for it in the person's profile.
+- `holdingContainer(purpose, home, work)` runs `work` with every process of
+  the confined runs in the container a home's runs of `purpose` share
+  suspended, those they start meanwhile included, and resumes them when it
+  settles, also when it throws or is stopped. A confined run starts its
+  program only when no hold on its container is under way. Holds on one
+  container run one at a time; one rejects, running nothing, when a process
+  in the container cannot be suspended. A process Windows is already ending
+  runs no more of its code and is passed over, so a container whose commands
+  keep starting short-lived processes is held every time.
+- `mayGrantFolder(path)` says whether a folder can be given to a container:
+  whether this account may change who opens it, which only an administrator
+  may for Program Files and Windows' own folders.
 - `removeUnusedContainers(purposes?)` removes Zhiyin's containers whose home
   is gone, of the purposes named or of all, and answers how many went. The
   app runs it as it starts.
@@ -123,7 +147,8 @@ a process that reaches only the folders it is given (ADR 0006).
   `ContainedProcessOptions`, `ContainerOptions`, `ProcessPipes`,
   `ContainmentAvailability`, `Confinement`, `Confined`,
   `ProcessContainment`, `ProcessRun`, `RunProcess`, `LiveRun`,
-  `FurtherHosts`, `HostReach`, `WindowsFiles`, `Opening`.
+  `FurtherHosts`, `HostReach`, `WindowsFiles`, `Opening`, `PipeOpening`,
+  `ShownPort`, `LoopbackProxy`.
 
 ## Invariants
 
@@ -163,6 +188,15 @@ a process that reaches only the folders it is given (ADR 0006).
   what the run reached. It names the first hundred hosts a run asks for and
   counts the requests to the rest together, so what it keeps of a run is
   bounded however many hosts the run asks for. A program that ignores the proxy reaches nothing.
+- **A pipe opened to a confined run is its container's alone.** Its name is
+  unguessable and its permissions give the run's container, and Zhiyin, the
+  right to open it; a program in another container is refused it. It closes
+  when the run ends.
+- **A port shown is the container's, reached from this computer only.** A
+  relay inside the container, started before the program, carries each
+  connection made to the shown address on this computer's loopback to the
+  port inside, over a pipe only that container may open; nothing else is
+  given the container's loopback, and the address closes when the run ends.
 - **The proxy never reaches this computer's loopback.** It refuses loopback,
   unassigned and link-local addresses, whether named or resolved, and
   `localhost` is not a host a run can be given. An address this computer has

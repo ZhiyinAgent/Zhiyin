@@ -11,6 +11,11 @@ const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000;
 const JOB_OBJECT_LIMIT_PROCESS_MEMORY = 0x100;
 const PROCESS_SET_QUOTA = 0x0100;
 const PROCESS_TERMINATE = 0x0001;
+const PROCESS_SUSPEND_RESUME = 0x0800;
+const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+const JobObjectBasicProcessIdList = 3;
+/** NTSTATUS 0xC000010A, as the signed 32-bit value NtSuspendProcess returns. */
+const STATUS_PROCESS_IS_TERMINATING = 0xc000010a | 0;
 export const BELOW_NORMAL_PRIORITY_CLASS = 0x00004000;
 export const CREATE_SUSPENDED = 0x00000004;
 export const CREATE_NO_WINDOW = 0x08000000;
@@ -57,6 +62,22 @@ export type Win32 = {
   readonly setLimits: (job: unknown, processMemoryLimit?: number) => boolean;
   readonly openProcess: (pid: number) => unknown;
   readonly assign: (job: unknown, process: unknown) => boolean;
+  /** The ids of the processes in a job now, or nothing when Windows will not say. */
+  readonly jobProcessIds: (job: unknown) => number[] | undefined;
+  /** A process opened to be suspended and resumed, or nothing. */
+  readonly openToSuspend: (pid: number) => unknown;
+  /** Whether an open process is in the job. */
+  readonly inJob: (process: unknown, job: unknown) => boolean;
+  /**
+   * Suspends every thread of an open process, counted as `SuspendThread`
+   * counts. A process Windows is already ending cannot be, and runs no more
+   * of its code.
+   */
+  readonly suspendProcess: (
+    process: unknown,
+  ) => "suspended" | "ending" | "refused";
+  /** Takes back one suspension of every thread of an open process. */
+  readonly resumeProcess: (process: unknown) => boolean;
   readonly closeHandle: (handle: unknown) => boolean;
   /** A handle, or nothing when Windows could not open it. */
   readonly createFile: (
@@ -223,7 +244,20 @@ export function win32(): Win32 {
     const DeleteProcThreadAttributeList = kernel32.func(
       "void DeleteProcThreadAttributeList(void*)",
     );
+    const QueryInformationJobObject = kernel32.func(
+      "bool QueryInformationJobObject(void*, int, void*, uint32, void*)",
+    );
+    const IsProcessInJob = kernel32.func(
+      "bool IsProcessInJob(void*, void*, _Out_ int*)",
+    );
+    // Not in the Windows SDK's documentation, but exported by ntdll since
+    // Windows XP and what Sysinternals' PsSuspend calls: each suspends or
+    // resumes every thread of the process, as SuspendThread counts.
+    const ntdll = koffi.load("ntdll.dll");
+    const NtSuspendProcess = ntdll.func("int32 NtSuspendProcess(void*)");
+    const NtResumeProcess = ntdll.func("int32 NtResumeProcess(void*)");
     const extendedSize = koffi.sizeof(EXTENDED);
+    const pointerSize = koffi.sizeof("uintptr_t");
 
     loaded = {
       securityAttributesSize: files.securityAttributesSize,
@@ -335,6 +369,44 @@ export function win32(): Win32 {
       openProcess: (pid) =>
         OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, false, pid),
       assign: (job, target) => AssignProcessToJobObject(job, target),
+      jobProcessIds(job) {
+        // JOBOBJECT_BASIC_PROCESS_ID_LIST: two DWORD counts, then the ids,
+        // each a ULONG_PTR. A list larger than the buffer is asked for again.
+        for (let room = 64; room <= 65_536; room *= 4) {
+          const buffer = Buffer.alloc(8 + room * pointerSize);
+          const asked = QueryInformationJobObject(
+            job,
+            JobObjectBasicProcessIdList,
+            buffer,
+            buffer.length,
+            null,
+          );
+          const assigned = buffer.readUInt32LE(0);
+          const listed = buffer.readUInt32LE(4);
+          if (asked && listed >= assigned)
+            return Array.from({ length: listed }, (_, at) =>
+              Number(buffer.readBigUInt64LE(8 + at * pointerSize)),
+            );
+          if (!asked && assigned <= room) return undefined;
+        }
+        return undefined;
+      },
+      openToSuspend: (pid) =>
+        OpenProcess(
+          PROCESS_SUSPEND_RESUME | PROCESS_QUERY_LIMITED_INFORMATION,
+          false,
+          pid,
+        ),
+      inJob(process, job) {
+        const result = [0];
+        return Boolean(IsProcessInJob(process, job, result)) && result[0] !== 0;
+      },
+      suspendProcess(process) {
+        const status = NtSuspendProcess(process) as number;
+        if (status === 0) return "suspended";
+        return status === STATUS_PROCESS_IS_TERMINATING ? "ending" : "refused";
+      },
+      resumeProcess: (process) => NtResumeProcess(process) === 0,
       closeHandle: (handle) => CloseHandle(handle),
       createFile: (path, access, share, security, creation, flags) =>
         files.open(path, access, share, creation, flags, security).handle,

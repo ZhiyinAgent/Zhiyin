@@ -379,9 +379,7 @@ export class TurnRecords {
       ...(result?.commandChanges
         ? { commandChanges: result.commandChanges }
         : {}),
-      ...(result?.ok && result.brings === "outside"
-        ? { brings: "outside" as const }
-        : {}),
+      ...(result?.brings === "outside" ? { brings: "outside" as const } : {}),
       ...(pictures.length || result?.details
         ? { details: [...pictures, ...(result?.details ?? [])] }
         : {}),

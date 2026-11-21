@@ -84,7 +84,19 @@ export class ToolTable implements ToolRegistry {
         (definition) => available || definition.requiresWorkspace !== true,
       )
       .filter((definition) => this.#shell.path || !definition.requiresShell)
+      .filter(
+        (definition) =>
+          this.#shell.use().sealed || !definition.requiresSealedShell,
+      )
       .map(({ spec }) => spec);
+  }
+
+  /** Whether a tool is withdrawn now, for want of a shell or of a sealed-off one. */
+  #withdrawn(definition: ToolDefinition | undefined): boolean {
+    return (
+      (definition?.requiresShell === true && !this.#shell.path) ||
+      (definition?.requiresSealedShell === true && !this.#shell.use().sealed)
+    );
   }
 
   shellAvailability(): ShellAvailability {
@@ -106,7 +118,7 @@ export class ToolTable implements ToolRegistry {
     const folder = this.#folders.folderOf(conversationId);
     if (definition && needsWorkspace(definition, args) && !folder.available)
       return { ok: false, reason: "Choose a folder before using files." };
-    if (definition?.requiresShell && !this.#shell.path)
+    if (this.#withdrawn(definition))
       return { ok: false, reason: `The tool “${name}” is not available.` };
     return definition
       ? definition.inspect(args, conversationId, folder)
@@ -124,7 +136,7 @@ export class ToolTable implements ToolRegistry {
     const folder = this.#folders.folderOf(conversationId);
     if (definition && needsWorkspace(definition, args) && !folder.available)
       return { ok: false, reason: "Choose a folder before using files." };
-    if (definition?.requiresShell && !this.#shell.path)
+    if (this.#withdrawn(definition))
       return { ok: false, reason: `The tool “${name}” is not available.` };
     return definition
       ? definition.execute(args, signal, conversationId, folder, answerTokens)

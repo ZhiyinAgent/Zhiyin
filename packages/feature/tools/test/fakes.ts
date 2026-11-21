@@ -24,6 +24,7 @@ export function jobsWith(overrides: Partial<ShellCommands>): ShellCommands {
     commandOutput: async () => undefined,
     stopCommandForPerson: async () => {},
     stopCommands: async () => {},
+    forgetConversation: async () => {},
     stopAllCommands: async () => {},
     ...overrides,
   };

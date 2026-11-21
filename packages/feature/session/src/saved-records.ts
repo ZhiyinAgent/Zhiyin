@@ -24,6 +24,9 @@ const permissionKind = oneOf<ConversationPermission["kind"]>({
   "outside-folder": true,
   "uncopied-file": true,
   destination: true,
+  "reach-host": true,
+  "reach-folder": true,
+  "reach-registries": true,
 });
 const undoneFileStatus = oneOf<TaskUndo["files"][number]["status"]>({
   restored: true,
@@ -142,7 +145,13 @@ export function validConversationPermission(value: unknown): boolean {
     optionalText(value.digest) &&
     optionalText(value.standing) &&
     optionalText(value.identity) &&
-    optionalText(value.destination)
+    optionalText(value.destination) &&
+    (value.hosts === undefined || listOf(value.hosts, text)) &&
+    (value.facts === undefined ||
+      (isRecord(value.facts) &&
+        typeof value.facts.outsideContent === "boolean" &&
+        typeof value.facts.privateWithinReach === "boolean")) &&
+    (value.declined === undefined || value.declined === true)
   );
 }
 

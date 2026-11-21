@@ -498,6 +498,42 @@ export const expected = new Map([
       without: (env) => !(env.ZHIYIN_TYPST && env.ZHIYIN_TECTONIC) && !env.CI,
     },
   ],
+  // Zhiyin's shell, which the gate builds from its pins before the tests.
+  [
+    "packages/feature/tools/system-boundary/sealed-shell.test.ts",
+    {
+      needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",
+      without: (env) => !env.ZHIYIN_BUSYBOX && !env.CI,
+    },
+  ],
+  [
+    "apps/desktop/system-boundary/sealed-git.test.ts",
+    {
+      needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",
+      without: (env) => !env.ZHIYIN_BUSYBOX && !env.CI,
+    },
+  ],
+  [
+    "apps/desktop/system-boundary/sealed-git-hold.test.ts",
+    {
+      needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",
+      without: (env) => !env.ZHIYIN_BUSYBOX && !env.CI,
+    },
+  ],
+  [
+    "packages/core/core/system-boundary/sealed-going-back.test.ts",
+    {
+      needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",
+      without: (env) => !env.ZHIYIN_BUSYBOX && !env.CI,
+    },
+  ],
+  [
+    "packages/feature/tools/system-boundary/sealed-node.test.ts",
+    {
+      needs: "Zhiyin's busybox and Node (ZHIYIN_BUSYBOX, ZHIYIN_NODE)",
+      without: (env) => !(env.ZHIYIN_BUSYBOX && env.ZHIYIN_NODE) && !env.CI,
+    },
+  ],
   [
     "packages/feature/python-sandbox/test/real-uv.test.ts",
     {

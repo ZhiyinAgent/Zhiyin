@@ -29,6 +29,7 @@ gets `Status: superseded by NNNN`; a new record follows the
 
 - [0012](0012-the-person-is-asked-only-for-what-zhiyin-can-neither-prevent-nor-undo.md): the person is asked only for what Zhiyin can neither prevent nor undo.
 - [0013](0013-file-changes-are-backed-up-and-going-back-restores-only-what-was-backed-up.md): file changes are backed up, and going back restores only what was backed up.
+- [0029](0029-shell-commands-run-sealed-off-and-reach-further-only-by-what-the-person-grants.md): shell commands run sealed off, and reach further only by what the person grants.
 - [0030](0030-going-back-undoes-files-and-memory-as-the-person-chooses-each.md): going back undoes files and memory as the person chooses each.
 
 ## Models and requests

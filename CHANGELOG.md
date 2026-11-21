@@ -4,6 +4,30 @@ What changed for people using Zhiyin, newest release first.
 
 ## Unreleased
 
+### Shell commands
+
+- The agent's shell commands now run sealed off in an app container, without
+  asking each time. They read and change the workspace and the folders you
+  granted, and reach only the websites on the conversation's list. The shell
+  is Zhiyin's own busybox-w32, so bash-only syntax is rewritten.
+- git works from the sealed shell through Zhiyin, with the hooks, filters and
+  other programs a repository's settings name turned off. A path that leads
+  through a link outside the allowed folders is refused, and the
+  conversation's commands are paused while git runs for them.
+- When the agent needs a website or a folder beyond that, it asks once with a
+  card built from what Zhiyin checked; its button says "Allow for this
+  conversation", which is how long the grant lasts. It can be taken back.
+  Three refusals in a row end the turn.
+- Once the conversation has read something from outside with something
+  private within reach, one card asks whether to keep each website and
+  folder commands may reach, listed one per line, with "Keep for this
+  conversation" or "Take back".
+- A server the agent starts can be shown to you on request.
+- Commands that need your full access, such as installing for the whole
+  computer or pushing with your credentials, still ask every time.
+- Sealed commands use Zhiyin's own Node, installed on first use.
+- busybox-w32's source and Zhiyin's patches ship inside the installer.
+
 ### Going back and undo
 
 - Going back to a message, and undoing a turn, now offer "Undo everything",

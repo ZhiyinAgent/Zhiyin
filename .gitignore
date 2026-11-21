@@ -12,6 +12,9 @@ apps/desktop/dictionaries/
 # The fallback font, fetched by scripts/fonts.mjs when the app is built
 apps/desktop/fonts/
 
+# Zhiyin's shell, built by scripts/busybox.mjs when the app is packaged
+apps/desktop/busybox/
+
 # Secrets and local settings
 .env
 .env.local

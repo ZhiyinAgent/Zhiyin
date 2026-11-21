@@ -38,8 +38,10 @@ These invariants hold, each covered by a test:
   whatever it declares.
 - Authority follows a declaration made by code the app owns, never a tool's
   name or its own annotations.
-- A shell action never gains authority from its text: every one asks, whatever
-  it looks like (ADR 0012). Do not add command classification.
+- A shell action never gains authority from its text: a command with full
+  access asks every time, whatever it looks like (ADR 0012), and a sealed-off
+  one is decided by what its container allows, which the tool's code
+  declares (ADR 0029). Do not add command classification.
 - Containment is computed by the code that enforces it and carried in the
   action. Never re-derive it here from the displayed target.
 - A decision's reason is a policy reason, for audit and failure handling. The

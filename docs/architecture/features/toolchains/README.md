@@ -3,7 +3,8 @@
 ## Purpose
 
 Installs the external programs some connectors need (Typst, Tectonic, Blender and `uv`)
-when the person asks, from pinned addresses and checked against pinned
+when the person asks, and Zhiyin's own Node, which sealed-off shell commands
+run (ADR 0029), when the first of them runs; each from pinned addresses and checked against pinned
 fingerprints. Each comes first from its own project, and from a mirror when
 that cannot be reached, as from many networks in mainland China (ADR 0027). A connector says what it needs, the person agrees to the
 download, and only a complete, verified install is ever used (ADR 0017).
@@ -36,8 +37,9 @@ download, and only a complete, verified install is ever used (ADR 0017).
   sources in the order they are tried, each with its URL, SHA-256, size, the
   program's path inside its archive, and its hosts. Every source is an https
   download for Windows x64 from the host it names first. The first is the
-  project's own: its GitHub release, or for Blender its own download site.
-  Then a mirror: Tsinghua University's copy of the same Blender zip; for
+  project's own: its GitHub release, or for Blender and Node its own
+  download site. Then a mirror: Tsinghua University's copy of the same Blender
+  zip; npmmirror's copy of the same Node zip; for
   `uv`, Astral's own wheel of the same release on Tsinghua's copy of the
   Python Package Index, which holds the same `uv.exe` at another path; and
   for Typst and Tectonic, Zhiyin's unchanged copies on

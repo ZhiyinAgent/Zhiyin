@@ -814,7 +814,19 @@ function validApprovalRequest(prompt: unknown): boolean {
           (rule.choice === "file" || rule.choice === "folder") &&
           typeof rule.label === "string" &&
           (rule.withoutBackup === undefined || rule.withoutBackup === true),
-      ))
+      )) &&
+    (prompt.reach === undefined ||
+      (isRecord(prompt.reach) &&
+        (prompt.reach.kind === "grant" ||
+          (prompt.reach.kind === "confirm" &&
+            listOf(
+              prompt.reach.places,
+              (place) =>
+                isRecord(place) &&
+                typeof place.label === "string" &&
+                (place.kind === "website" || place.kind === "folder"),
+            ) &&
+            typeof prompt.reach.since === "string"))))
   );
 }
 

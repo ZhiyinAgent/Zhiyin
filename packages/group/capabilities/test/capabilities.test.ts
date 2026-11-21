@@ -6,6 +6,7 @@ import type {
   McpServerState,
   OfferedConnection,
   ToolchainState,
+  ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
 import {
@@ -219,6 +220,7 @@ function jobsWith(overrides: Partial<ShellCommands>): ShellCommands {
     commandOutput: async () => undefined,
     stopCommandForPerson: async () => {},
     stopCommands: async () => {},
+    forgetConversation: async () => {},
     stopAllCommands: async () => {},
     ...overrides,
   };
@@ -1190,6 +1192,31 @@ describe("a call handed back", () => {
     expect(stopped).toEqual(["conversation-1", "conversation-2", "everyone"]);
   });
 
+  it("has a deleted conversation's commands forget what they kept for it once they have stopped", async () => {
+    const asked: string[] = [];
+    const { capabilities } = membersRecording({
+      overrides: {
+        commands: jobsWith({
+          stopCommands: async (conversationId) => {
+            asked.push(`stop ${conversationId}`);
+          },
+          forgetConversation: async (conversationId) => {
+            asked.push(`forget ${conversationId}`);
+          },
+        }),
+      },
+    });
+
+    await capabilities.stopConversation("conversation-1");
+    await capabilities.forgetConversation("conversation-2");
+
+    expect(asked).toEqual([
+      "stop conversation-1",
+      "stop conversation-2",
+      "forget conversation-2",
+    ]);
+  });
+
   it("passes on a command that ended by itself to whoever listens", () => {
     let announce:
       | ((conversationId: string, notice: string, wakes: boolean) => void)
@@ -1219,12 +1246,13 @@ describe("a call handed back", () => {
     ]);
   });
 
-  it("passes on what changed in the folder while a job ran, once it ended", () => {
+  it("passes on what changed in the folder while a job ran, with its answer, once it ended", () => {
     let seen:
       | ((
           conversationId: string,
           job: string,
           changes: CommandFileChanges,
+          outcome: ToolInvocationResult,
         ) => void)
       | undefined;
     const { capabilities } = membersRecording({
@@ -1243,12 +1271,18 @@ describe("a call handed back", () => {
       files: [{ path: "late.txt", change: "created" }],
     };
 
-    capabilities.onJobChanges((conversationId, job, found) =>
-      heard.push([conversationId, job, found]),
-    );
-    seen?.("conversation-1", "J1", changes);
+    const outcome: ToolInvocationResult = {
+      ok: true,
+      value: { exitCode: 0, refusedHosts: ["example.org"] },
+      brings: "outside",
+    };
 
-    expect(heard).toEqual([["conversation-1", "J1", changes]]);
+    capabilities.onJobChanges((conversationId, job, found, answer) =>
+      heard.push([conversationId, job, found, answer]),
+    );
+    seen?.("conversation-1", "J1", changes, outcome);
+
+    expect(heard).toEqual([["conversation-1", "J1", changes, outcome]]);
   });
 
   it("shows a conversation's running commands, and stops one for the person", async () => {

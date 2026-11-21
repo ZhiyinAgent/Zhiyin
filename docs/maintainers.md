@@ -16,6 +16,20 @@ installer, its block map and `latest.yml` beside it. A maintainer then signs
 and publishes it (see "Releases and updates"). The installer is not
 code-signed; that needs its own decision record before it is added.
 
+Packaging builds Zhiyin's shell first with `scripts/busybox.mjs` (ADR 0029):
+busybox-w32 at the pinned commit with Zhiyin's patches, and the `git` that
+hands git to Zhiyin, both with the pinned w64devkit, from downloads kept only
+when their SHA-256 is the pinned one. A build whose files differ from the
+SHA-256 recorded in `scripts/busybox/pins.json` fails and keeps nothing.
+After a deliberate change of a pin, a patch or `git-handoff.c`,
+`node scripts/busybox.mjs --record` builds again and records the new hashes;
+`--check <folder>` checks a packaged app's `busybox` folder, which the full
+gate does. busybox-w32 is GPL-2.0: the installer carries its complete source
+in `resources\busybox\source\`, busybox-w32's tarball as pinned with
+Zhiyin's patches, `git-handoff.c` and the pins, and the check fails when one
+is missing or the tarball's SHA-256 is not the pinned one. Its notice is in
+`NOTICE` and `THIRD_PARTY_LICENSES.md`.
+
 ## Releases and updates
 
 Installed copies update themselves (ADR 0027). They read the repository's

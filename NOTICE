@@ -1,2 +1,11 @@
 Zhiyin
 Copyright 2026 Bastien HOTTELET
+
+The packaged application includes busybox-w32, a separate program
+distributed under the GNU General Public License, version 2. The installed
+application carries its complete source in resources\busybox\source\, in
+the folder Zhiyin is installed in: busybox-w32's source at commit
+5f09fb446adf81d005f0aad9dc47eca19ac3b74c, exactly as downloaded from
+https://github.com/rmyorston/busybox-w32, Zhiyin's patches to it, and how it
+is built. They are also in this repository under scripts/busybox/. See
+THIRD_PARTY_LICENSES.md.

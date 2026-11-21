@@ -171,6 +171,7 @@ export class TurnWaits {
       conversationRule,
       fileRules,
       why,
+      reach,
     }: {
       readonly inspection: Extract<ToolCallInspection, { readonly ok: true }>;
       readonly presentation: PresentedAction;
@@ -188,6 +189,14 @@ export class TurnWaits {
       readonly fileRules?: FileOffer | undefined;
       /** Why the person is asked, from the policy (ADR 0012). */
       readonly why?: ApprovalRequest["why"];
+      /**
+       * The places a confirmation of what commands reach keeps or takes
+       * back; a request that grants one more is known from its inspection.
+       */
+      readonly reach?: Extract<
+        ApprovalRequest["reach"],
+        { readonly kind: "confirm" }
+      >;
     },
   ): Promise<ApprovalAnswer> {
     return this.#withPromptSlot(taskId, async () => {
@@ -259,6 +268,11 @@ export class TurnWaits {
             ...(fileRules && fileChoices(fileRules).length
               ? { fileRules: fileChoices(fileRules) }
               : {}),
+            ...(reach
+              ? { reach }
+              : inspection.grants
+                ? { reach: { kind: "grant" as const } }
+                : {}),
           },
         },
       });

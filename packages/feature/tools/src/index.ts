@@ -19,6 +19,17 @@ export type {
   CommandContainment,
 } from "./commands/run-command.js";
 export type { RecycleBin } from "@zhiyin/files";
+export type { ConversationReach, ShellReach } from "./commands/reach.js";
+export { packageRegistries } from "./commands/reach.js";
+export type {
+  SealedShellSetup,
+  SealedToolchain,
+} from "./commands/sealed-shell.js";
+export type {
+  ShellGit,
+  ShellGitAnswer,
+  ShellGitCall,
+} from "./commands/git-handoff.js";
 
 export {
   CanvasPictureFitting,

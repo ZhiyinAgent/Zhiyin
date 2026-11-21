@@ -45,6 +45,33 @@ function ConversationPermissionsExample() {
       at: "2026-09-29T19:00:00.000Z",
       file: "D:\\Shared\\notes\\plan.md",
     },
+    {
+      id: "permission-reach-host",
+      kind: "reach-host",
+      toolName: "bash",
+      label: "Commands may reach data.gouv.fr and every name below it",
+      at: "2026-09-29T19:00:00.000Z",
+      hosts: ["data.gouv.fr", "*.data.gouv.fr"],
+      facts: { outsideContent: false, privateWithinReach: true },
+    },
+    {
+      id: "permission-reach-folder",
+      kind: "reach-folder",
+      toolName: "bash",
+      label: "Commands may read D:\\Données\\relevés-2026",
+      at: "2026-09-29T19:00:00.000Z",
+      folder: "D:\\Données\\relevés-2026",
+      facts: { outsideContent: false, privateWithinReach: false },
+    },
+    {
+      id: "permission-registries",
+      kind: "reach-registries",
+      toolName: "bash",
+      label: "Package registries and Git hosts",
+      at: "2026-09-29T19:00:00.000Z",
+      facts: { outsideContent: true, privateWithinReach: true },
+      declined: true,
+    },
   ]);
   return (
     <>
@@ -87,6 +114,58 @@ const longPage = Array.from({ length: 1_200 }, (_, line) =>
 );
 
 export const approvalsEntries: ComponentCatalogEntry[] = [
+  {
+    id: "permission-reach",
+    title: "Permission for sealed-off commands",
+    description:
+      "What a request for sealed-off commands to reach more shows, from fields Zhiyin checked: a website by its registrable domain, saying what it lets out while something private is within reach; a folder by its whole path, to read or to change; and the one card that confirms what the conversation outgrew, naming every grant it affects.",
+    render: () => (
+      <div className="lab-stack">
+        <ApprovalPrompt
+          title="Let commands reach a website"
+          claim="Download the 2026 air-quality dataset the script reads."
+          target="data.gouv.fr and every name below it"
+          detail="Commands in this conversation may connect to data.gouv.fr and every name below it until the conversation ends or you take it back. Something private is within this conversation's reach, so what the conversation can read could be sent to anyone who uses that website: Zhiyin sees which website a command reaches, never what it sends."
+          reach={{ kind: "grant" }}
+          onDecision={() => undefined}
+        />
+        <ApprovalPrompt
+          title="Let commands change a folder"
+          claim="Write the cleaned tables beside the raw ones."
+          target="D:\Données\relevés-2026\tables nettoyées après la deuxième campagne de mesures"
+          detail="Sealed-off commands in this conversation may read and change every file in D:\Données\relevés-2026\tables nettoyées après la deuxième campagne de mesures, outside the folder you selected, until the conversation ends or you take it back. Each change is saved first, so going back undoes it."
+          reach={{ kind: "grant" }}
+          onDecision={() => undefined}
+        />
+        <ApprovalPrompt
+          title="Keep letting commands reach these?"
+          target="Commands may reach data.gouv.fr and every name below it; Commands may read D:\Données\relevés-2026; Commands may reach the package registries and Git hosts Zhiyin lists"
+          reach={{
+            kind: "confirm",
+            since:
+              "This conversation has now read content from outside, and something private is within reach: a command could send what it reads to these places, or download something that steers the work.",
+            places: [
+              {
+                label:
+                  "Commands may reach data.gouv.fr and every name below it",
+                kind: "website",
+              },
+              {
+                label: "Commands may read D:\\Données\\relevés-2026",
+                kind: "folder",
+              },
+              {
+                label:
+                  "Commands may reach the package registries and Git hosts Zhiyin lists",
+                kind: "website",
+              },
+            ],
+          }}
+          onDecision={() => undefined}
+        />
+      </div>
+    ),
+  },
   {
     id: "permission",
     title: "Permission",

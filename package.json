@@ -60,6 +60,7 @@
       "chcp",
       "fsutil",
       "icacls",
+      "net",
       "netstat",
       "rclone",
       "reg",

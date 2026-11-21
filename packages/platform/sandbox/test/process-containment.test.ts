@@ -122,6 +122,45 @@ describe.runIf(process.platform === "win32")("process containment", () => {
   );
 
   it(
+    "suspends a container whose processes keep starting ones that end at once, every time it is asked",
+    { timeout: 60_000 },
+    async () => {
+      const directory = await workingDirectory();
+      const container = openProcessContainer();
+      container.launch({
+        executable: join(
+          process.env.SystemRoot ?? "C:\\Windows",
+          "System32",
+          "cmd.exe",
+        ),
+        arguments: ["/d", "/c", join(fixtures, "short-lived.cmd")],
+        cwd: directory,
+        stdout: join(directory, "stdout.txt"),
+        stderr: join(directory, "stderr.txt"),
+      });
+      try {
+        await new Promise((started) => setTimeout(started, 500));
+        let suspensions = 0;
+        const refusals: string[] = [];
+        const end = Date.now() + 5_000;
+        while (Date.now() < end) {
+          suspensions += 1;
+          try {
+            container.suspend!().resume();
+          } catch (error) {
+            refusals.push(String(error));
+          }
+        }
+
+        expect(suspensions).toBeGreaterThan(100);
+        expect(refusals.slice(0, 3)).toEqual([]);
+      } finally {
+        container.close();
+      }
+    },
+  );
+
+  it(
     "kills a contained tree when the owning process dies abruptly",
     { timeout: 30_000 },
     async () => {

@@ -1,0 +1,68 @@
+Subject: [PATCH] win32: wait for an exec'd command when the parent is hidden
+
+The shell runs the last command of 'sh -c' with exec, which busybox-w32
+emulates by starting the command and waiting for it, unless getppid()
+returns 1: then nothing is taken to wait for the exit code, and the shell
+exits at once.  getppid() looks for the parent in a snapshot of the
+processes this one may see, and a process in an app container doesn't see
+a parent outside it.  'sh -c "true && node -v"' then exits with status 0
+before node has printed anything, and whatever waits for the shell, such as
+a job object closed when it exits, ends node too.
+
+Ask Windows for the parent's PID instead, and take the parent as gone only
+when no process has that PID.  A parent that is there but may not be
+opened has not gone.
+---
+--- a/win32/process.c
++++ b/win32/process.c
+@@ -490,12 +490,49 @@
+ 	return status << 8;
+ }
+
++/*
++ * Whether the process that started this one has gone, so nothing waits for
++ * this one's exit code.  getppid() can't tell: it finds the parent in a
++ * snapshot of the processes this one may see, and a process in an app
++ * container may not see a parent outside it.  Ask Windows for the parent's
++ * PID instead; a parent that is there but may not be opened has not gone.
++ */
++static int parent_gone(void)
++{
++	typedef struct {
++		LONG_PTR ExitStatus;
++		PVOID PebBaseAddress;
++		ULONG_PTR AffinityMask;
++		LONG_PTR BasePriority;
++		ULONG_PTR UniqueProcessId;
++		ULONG_PTR InheritedFromUniqueProcessId;
++	} basic_information;
++	DECLARE_PROC_ADDR(LONG, NtQueryInformationProcess, HANDLE, int, PVOID,
++			ULONG, PULONG);
++	basic_information info;
++	HANDLE parent;
++	DWORD wait;
++
++	if (!INIT_PROC_ADDR(ntdll.dll, NtQueryInformationProcess) ||
++			NtQueryInformationProcess(GetCurrentProcess(), 0, &info,
++					sizeof(info), NULL) != 0)
++		return getppid() == 1;
++
++	parent = OpenProcess(SYNCHRONIZE, FALSE,
++				(DWORD)info.InheritedFromUniqueProcessId);
++	if (!parent)
++		return GetLastError() == ERROR_INVALID_PARAMETER;
++	wait = WaitForSingleObject(parent, 0);
++	CloseHandle(parent);
++	return wait == WAIT_OBJECT_0;
++}
++
+ static NORETURN void wait_for_child(HANDLE child, const char *cmd)
+ {
+ 	DWORD code;
+ 	int status;
+
+-	if (getppid() == 1)
++	if (parent_gone())
+ 		exit(0);
+
+ 	kill_child_ctrl_handler(GetProcessId(child));

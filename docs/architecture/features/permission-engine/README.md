@@ -142,10 +142,14 @@ even where a conversation permission covers it.
   combination of effects, the engine says a kind of grant may cover a call
   exactly when the grant rules offer a grant of that kind, given the paths
   and connection a grant is bound to.
-- A shell command always asks: the shell tool declares every command code
-  with the person's full access. Nothing in a command string bounds what it
-  reaches, so no text earns it automatic approval (ADR 0012). Looking around
-  the workspace goes through the typed read tools instead.
+- A shell command is decided by what its tool's code declares, never by its
+  text. A command with full access declares code with the person's full
+  access, so it always asks: nothing in a command string bounds what it
+  reaches (ADR 0012). A sealed-off command declares what its container
+  allows: it reads and changes the workspace, runs code sealed off and sends
+  to the hosts on its conversation's list, so it runs without a question; a
+  folder outside the workspace it may change is covered only by a grant for
+  that folder (ADR 0029).
 - Every decision carries a plain reason for audit and failure handling, never
   a rule object or internal code. The wording a person sees on an approval is
   written elsewhere (ADR 0014).
@@ -164,7 +168,8 @@ even where a conversation permission covers it.
   call whose own code says it is asked every time is asked about and never
   covered, whatever it is called and whatever its effects: deletions for good
   and outside the workspace, moves across the workspace's edge, shell
-  commands, changes to a Python environment and a script whose environment
+  commands with full access, requests for sealed-off commands to reach more,
+  changes to a Python environment and a script whose environment
   is made first, and git's staging, committing, stashing and branch creating
   and switching (ADR 0012). No tool's name decides it.
 - A change in the workspace by a built-in tool that says a file grant covers

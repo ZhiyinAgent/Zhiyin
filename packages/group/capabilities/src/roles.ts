@@ -278,12 +278,16 @@ export interface CommandWatch {
   stopCommandForPerson(conversationId: string, jobId: string): Promise<void>;
   /** Told when a conversation's running jobs change. */
   onCommandsChanged(watcher: (conversationId: string) => void): void;
-  /** Told what changed in the folder while a job ran, once it has ended. */
+  /**
+   * Told what changed in the folder while a job ran, once it has ended, with
+   * the command's own answer.
+   */
   onJobChanges(
     watcher: (
       conversationId: string,
       job: string,
       changes: CommandFileChanges,
+      outcome: ToolInvocationResult,
     ) => void,
   ): void;
   /**

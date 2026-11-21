@@ -118,6 +118,29 @@ export class HostProxy {
     return proxy;
   }
 
+  /**
+   * A proxy for a program Zhiyin runs outside any container, such as git for
+   * a sealed-off shell: on this computer's loopback, at the port answered,
+   * taking the same hosts and refusing the rest.
+   */
+  static async onLoopback(options: {
+    readonly hosts: readonly HostEntry[];
+    readonly route?: ProxyRoute;
+  }): Promise<{ readonly proxy: HostProxy; readonly port: number }> {
+    const proxy = new HostProxy("", options.hosts, options.route);
+    // No relay speaks to it, so a greeting starts nothing.
+    proxy.#relay = undefined;
+    const port = await new Promise<number>((resolve, reject) => {
+      proxy.#server.once("error", reject);
+      proxy.#server.listen(0, "127.0.0.1", () => {
+        proxy.#server.off("error", reject);
+        const address = proxy.#server.address();
+        resolve(typeof address === "object" && address ? address.port : 0);
+      });
+    });
+    return { proxy, port };
+  }
+
   /** The loopback port the relay listens on, once it has said it. */
   relayPort(): Promise<number> {
     return this.#relayPort;

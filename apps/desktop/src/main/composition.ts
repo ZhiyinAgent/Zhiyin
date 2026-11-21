@@ -6,6 +6,7 @@
  * system's credential store.
  */
 
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AgentLoop } from "@zhiyin/agent-loop";
 import {
@@ -21,7 +22,11 @@ import {
   joinedConnections,
   needing,
 } from "@zhiyin/capabilities";
-import { gitAutomation, gitProgramLocations } from "@zhiyin/git-connector";
+import {
+  gitAutomation,
+  gitProgramLocations,
+  shellGit,
+} from "@zhiyin/git-connector";
 import { documentCompilers, documentPrograms } from "@zhiyin/document-compiler";
 import { pythonEnvironments, pythonPrograms } from "@zhiyin/python-sandbox";
 import {
@@ -98,7 +103,11 @@ import {
 import { ConversationRewind } from "@zhiyin/rewind-planner";
 import { FileRecovery, RunBackups } from "@zhiyin/recovery";
 import { ComposedRewind, FileRewindJournal } from "@zhiyin/rewind";
-import { CanvasPictureFitting, WorkspaceTools } from "@zhiyin/tools";
+import {
+  CanvasPictureFitting,
+  WorkspaceTools,
+  type ShellReach,
+} from "@zhiyin/tools";
 import {
   ComparisonThreads,
   type ComparisonThread,
@@ -159,6 +168,12 @@ export type Surroundings = {
   readonly blenderSessionScript?: string;
   /** The script the CAD studio's Python runs; without it there is no studio. */
   readonly cadHarness?: string;
+  /**
+   * Zhiyin's shell, the folder holding `busybox.exe` and the `git` that hands
+   * git to Zhiyin (ADR 0029); without it, commands run in the bash found here
+   * with full access.
+   */
+  readonly busyboxDirectory?: string;
   readonly workspaceDirectory: string | undefined;
   readonly version: string;
   /**
@@ -385,6 +400,7 @@ export function buildCore({
   builtInPluginsDirectory,
   blenderSessionScript,
   cadHarness,
+  busyboxDirectory,
   workspaceDirectory,
   version,
   testing = {},
@@ -494,10 +510,42 @@ export function buildCore({
     start: startDrawing,
     containment,
   });
+  // What each conversation granted its sealed-off commands, kept by the
+  // agent loop, which is built once the core is.
+  let reachOf: ((conversationId: string) => ShellReach) | undefined;
   // No folder of its own: each conversation enters its own (ADR 0008).
   const workspace = new WorkspaceTools(undefined, {
     containment,
     protect: ownFolders,
+    // Zhiyin's own shell, sealed off in a container of each conversation's
+    // own; git runs outside it, through the person's Git (ADR 0029). A
+    // build without it runs commands in the bash found here.
+    ...(busyboxDirectory && existsSync(join(busyboxDirectory, "busybox.exe"))
+      ? {
+          sealedShell: {
+            busybox: join(busyboxDirectory, "busybox.exe"),
+            handoff: join(busyboxDirectory, "git"),
+            homes: join(dataDirectory, "shell-homes"),
+            git: shellGit({
+              containment,
+              ...(proxyRoute ? { route: proxyRoute } : {}),
+            }),
+            // Zhiyin's own Node, a toolchain like uv (ADR 0027); a command
+            // with full access runs the person's.
+            node: {
+              executable: () => toolchains.executable("node"),
+              install: () => toolchains.install("node"),
+            },
+          },
+          reach: (conversationId: string) =>
+            reachOf?.(conversationId) ?? {
+              hosts: [],
+              read: [],
+              change: [],
+              registries: true,
+            },
+        }
+      : {}),
     // A PDF the model reads is read in a contained process, as one the person
     // sees is drawn in one (ADR 0019).
     pdfPages,
@@ -927,6 +975,7 @@ export function buildCore({
         now,
         host,
       });
+      reachOf = (conversationId) => loop.shellReach(conversationId);
       // A command carried on as a job reports its end to its conversation.
       capabilities.onCommandEnded((taskId, notice, wakes) =>
         loop.commandEnded(taskId, notice, wakes),
@@ -937,7 +986,8 @@ export function buildCore({
       );
       // What a job changed reaches the action that started it.
       capabilities.onJobChanges(
-        (taskId, job, changes) => void loop.jobChanged(taskId, job, changes),
+        (taskId, job, changes, outcome) =>
+          void loop.jobChanged(taskId, job, changes, outcome),
       );
       return loop;
     },

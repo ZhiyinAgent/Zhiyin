@@ -57,6 +57,12 @@ export interface ProcessContainer {
   /** Starts a process suspended, assigns it, then permits its first instruction. */
   launch(options: ContainedProcessOptions): ContainedProcess;
   /**
+   * Suspends every process in the container, those they start while it is
+   * done included, and answers how to resume them. Throws, with all resumed,
+   * when one in it cannot be suspended.
+   */
+  suspend?(): { resume(): void };
+  /**
    * Terminates everything in the container. Idempotent. The same termination
    * happens without this call if the owning process dies, which is the point:
    * containment survives our own crash.
@@ -70,6 +76,8 @@ export type ContainedProcessOptions = {
   readonly cwd: string;
   readonly stdout: string;
   readonly stderr: string;
+  /** A file the process reads as its standard input; absent, it reads nothing. */
+  readonly input?: string;
   /**
    * Everything the process is given, replacing ours. Absent, it inherits
    * Zhiyin's own environment. Either way, without a model key Zhiyin was
@@ -147,6 +155,7 @@ function refuseNul(options: ContainedProcessOptions): void {
     ["folder", options.cwd],
     ["output file", options.stdout],
     ["error file", options.stderr],
+    ["input file", options.input ?? ""],
     ...options.arguments.map((value): [string, string] => ["argument", value]),
     ...Object.entries(options.environment ?? {}).flatMap(
       ([name, value]): [string, string][] => [
@@ -331,6 +340,72 @@ export type ContainerOptions = {
   readonly processMemoryLimit?: number;
 };
 
+/** A container's processes, suspended until `resume` is called; calling it again does nothing. */
+type Suspension = { resume(): void };
+
+/** Passes over a job's list before a list that keeps growing is given up on. */
+const mostSuspensionPasses = 64;
+
+/**
+ * Suspends each process in `job`. Its list is read again after each pass,
+ * since a process not yet suspended can start another, until a pass finds
+ * none new. A process is suspended only once it is known to be in the job, so
+ * an id another process took after one in the job ended is passed over. One
+ * Windows is ending stays listed until it has ended, and runs no more of its
+ * code, so it is passed over; it is kept open meanwhile, so its id cannot pass
+ * to a new process in the job while this runs. One still listed that cannot
+ * be opened or suspended fails the whole.
+ */
+function suspendJob(api: Win32, job: unknown): Suspension {
+  const held = new Map<number, unknown>();
+  const ending = new Map<number, unknown>();
+  const resume = () => {
+    for (const handle of held.values()) {
+      api.resumeProcess(handle);
+      api.closeHandle(handle);
+    }
+    held.clear();
+    for (const handle of ending.values()) api.closeHandle(handle);
+    ending.clear();
+  };
+  try {
+    const missed = new Set<number>();
+    for (let pass = 0; ; pass += 1) {
+      const ids = api.jobProcessIds(job);
+      if (!ids) throw new Error("Windows did not list the job's processes.");
+      const fresh = ids.filter((pid) => !held.has(pid) && !ending.has(pid));
+      if (!fresh.length) return { resume };
+      if (pass === mostSuspensionPasses)
+        throw new Error("The job's processes kept starting others.");
+      for (const pid of fresh) {
+        // OpenProcess answers NULL, never INVALID_HANDLE_VALUE, when it fails.
+        const handle = api.openToSuspend(pid);
+        const outcome =
+          handle && api.inJob(handle, job)
+            ? api.suspendProcess(handle)
+            : "refused";
+        if (outcome === "suspended") {
+          held.set(pid, handle);
+          continue;
+        }
+        if (outcome === "ending") {
+          ending.set(pid, handle);
+          continue;
+        }
+        if (handle) api.closeHandle(handle);
+        // A process that ended is gone from the next list; one still there
+        // was refused.
+        if (missed.has(pid))
+          throw new Error(`Process ${pid} in the job could not be suspended.`);
+        missed.add(pid);
+      }
+    }
+  } catch (error) {
+    resume();
+    throw error;
+  }
+}
+
 export function openProcessContainer(
   options: ContainerOptions = {},
 ): ProcessContainer {
@@ -409,9 +484,9 @@ export function containerOver(
             FILE_ATTRIBUTE_NORMAL,
           ),
           api.createFile(
-            "NUL",
+            options.input ?? "NUL",
             GENERIC_READ,
-            0,
+            options.input ? FILE_SHARE_READ : 0,
             security,
             OPEN_EXISTING,
             FILE_ATTRIBUTE_NORMAL,
@@ -556,6 +631,11 @@ export function containerOver(
           return waited;
         },
       };
+    },
+    suspend() {
+      // A closed container holds no process.
+      if (closed) return { resume: () => {} };
+      return suspendJob(api, job);
     },
     close() {
       if (closed) return;
