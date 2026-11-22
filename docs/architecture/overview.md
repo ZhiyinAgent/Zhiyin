@@ -114,6 +114,8 @@ the list to the folders.
 
 - `credential-store`: Windows Credential Manager.
 - `file-kinds`: what a file is, from its bytes.
+- `file-watch`: files held so their first write waits until they are saved,
+  and what changed in a folder, from the NTFS change journal.
 - `files`: replacing a file whole, so it is never read half written; the
   files a studio wrote, known by their content; and the Recycle Bin, with
   whether Windows would take a path.
@@ -146,7 +148,8 @@ the list to the folders.
   deciding.
 - `plugins`: plugin packages and what a person switches on.
 - `python-sandbox`: Python environments for data work.
-- `recovery`: copies of what a change will overwrite, put back on request.
+- `recovery`: each file as each turn found it, saved when first written, put
+  back on request, within the undo budget.
 - `rewind-planner`: planning going back to an earlier message, or undoing a
   turn's file changes.
 - `session`: conversations and choices on disk.
@@ -187,7 +190,10 @@ the list to the folders.
    window and passes it to the core.
 2. **The core** checks the command's shape, saves the message through the
    session, and starts a turn in the agent loop. Every change it makes is
-   sent to the window as an event, and the window redraws from those.
+   sent to the window as an event, and the window redraws from those. As the
+   turn starts, recovery watches the files of the conversation's folder, and
+   of each folder outside it the conversation was granted for changes, so
+   whatever first writes one in the turn waits until it is saved (ADR 0031).
 3. **The agent loop** builds the request. Its start stays the same from one
    request to the next, so the provider can serve it from its cache: the
    instructions, the folder's top-level listing, memory, the directory of
@@ -202,9 +208,10 @@ the list to the folders.
 6. **The permission engine** decides from those effects whether it runs
    without asking. When the person must decide, the loop waits, and the
    window shows the question.
-7. **The member runs the call.** A change to the folder is backed up first
-   by recovery; a program runs contained, its processes owned by a Job
-   Object. The result goes back to the model as typed data.
+7. **The member runs the call.** A declared change to the folder is backed
+   up first by recovery, and any other first write is saved as it happens; a
+   program runs contained, its processes owned by a Job Object. The result
+   goes back to the model as typed data.
 8. **The loop repeats** from step 3 until the model has nothing left to do,
    then settles the turn. The conversation is saved as it goes, so a crash
    loses at most the save under way.

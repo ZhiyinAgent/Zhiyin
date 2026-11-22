@@ -2,8 +2,9 @@
  * The Windows calls made on files and their permissions, declared once and
  * loaded on first use: opening a file, opening an entry itself without
  * following a link, saying whether an open entry is a link, reading its
- * permissions as text, reading an open file, replacing, deleting and moving
- * a file, and Windows' own words for an error.
+ * permissions as text, reading an open file, saying where an open entry
+ * really is, replacing, deleting and moving a file, and Windows' own words
+ * for an error.
  */
 
 import koffi from "koffi";
@@ -23,6 +24,8 @@ const FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
 const FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400;
 /** A reparse tag that names another place: a junction or a symbolic link. */
 const NAME_SURROGATE = 0x20000000;
+/** A path by its drive letter, normalized, in `GetFinalPathNameByHandleW`. */
+const VOLUME_NAME_DOS = 0;
 const FORMAT_MESSAGE_FROM_SYSTEM = 0x00001000;
 const FORMAT_MESSAGE_IGNORE_INSERTS = 0x00000200;
 
@@ -89,6 +92,12 @@ export type WindowsFiles = {
     replacement: string,
     previous: string,
   ) => boolean;
+  /**
+   * Where an open entry really is, as Windows names it by its handle, every
+   * link on the way resolved: a drive path, or `\\server\share` for a share.
+   * Nothing when Windows cannot say.
+   */
+  readonly finalPath: (handle: unknown) => string | undefined;
   /** Deletes a file as `DeleteFileW` does. */
   readonly remove: (path: string) => boolean;
   /** Moves a file as `MoveFileExW` does, with its flags. */
@@ -135,6 +144,9 @@ export function windowsFiles(): WindowsFiles {
   const LocalFree = kernel32.func("void* LocalFree(void*)");
   const FormatMessageW = kernel32.func(
     "uint32 FormatMessageW(uint32, void*, uint32, uint32, void*, uint32, void*)",
+  );
+  const GetFinalPathNameByHandleW = kernel32.func(
+    "uint32 GetFinalPathNameByHandleW(void*, void*, uint32, uint32)",
   );
   const GetFileInformationByHandleEx = kernel32.func(
     "bool GetFileInformationByHandleEx(void*, int, void*, uint32)",
@@ -266,6 +278,30 @@ export function windowsFiles(): WindowsFiles {
     },
     replace: (target, replacement, previous) =>
       ReplaceFileW(target, replacement, previous, 0, null, null) as boolean,
+    finalPath(handle) {
+      // Characters, the terminating one included, as Windows counts them.
+      let room = 512;
+      for (;;) {
+        const name = Buffer.alloc(room * 2);
+        const length = GetFinalPathNameByHandleW(
+          handle,
+          name,
+          room,
+          VOLUME_NAME_DOS,
+        ) as number;
+        if (length === 0) return undefined;
+        if (length >= room) {
+          room = length + 1;
+          continue;
+        }
+        const named = name.toString("utf16le", 0, length * 2);
+        return named.startsWith("\\\\?\\UNC\\")
+          ? `\\\\${named.slice(8)}`
+          : named.startsWith("\\\\?\\")
+            ? named.slice(4)
+            : named;
+      }
+    },
     remove: (path) => DeleteFileW(path) as boolean,
     move: (from, to, flags) => MoveFileExW(from, to, flags) as boolean,
     close: (handle) => {

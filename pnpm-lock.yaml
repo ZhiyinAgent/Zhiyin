@@ -166,6 +166,9 @@ importers:
       '@zhiyin/document-viewer':
         specifier: workspace:*
         version: link:../../packages/feature/document-viewer
+      '@zhiyin/file-watch':
+        specifier: workspace:*
+        version: link:../../packages/platform/file-watch
       '@zhiyin/files':
         specifier: workspace:*
         version: link:../../packages/platform/files
@@ -358,6 +361,9 @@ importers:
       '@zhiyin/document-compiler':
         specifier: workspace:*
         version: link:../../feature/document-compiler
+      '@zhiyin/file-watch':
+        specifier: workspace:*
+        version: link:../../platform/file-watch
       '@zhiyin/files':
         specifier: workspace:*
         version: link:../../platform/files
@@ -763,6 +769,9 @@ importers:
       '@zhiyin/conversation-rules':
         specifier: workspace:*
         version: link:../../pure/conversation-rules
+      '@zhiyin/file-watch':
+        specifier: workspace:*
+        version: link:../../platform/file-watch
       '@zhiyin/files':
         specifier: workspace:*
         version: link:../../platform/files
@@ -775,6 +784,9 @@ importers:
       '@zhiyin/workspace-containment':
         specifier: workspace:*
         version: link:../../platform/workspace-containment
+      '@zhiyin/workspace-listing':
+        specifier: workspace:*
+        version: link:../../platform/workspace-listing
     devDependencies:
       '@zhiyin/test-support':
         specifier: workspace:*
@@ -1067,6 +1079,19 @@ importers:
 
   packages/platform/file-kinds: {}
 
+  packages/platform/file-watch:
+    dependencies:
+      koffi:
+        specifier: 3.2.1
+        version: 3.2.1
+    devDependencies:
+      '@zhiyin/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
+      '@zhiyin/test-support':
+        specifier: workspace:*
+        version: link:../../test-helper/test-support
+
   packages/platform/files:
     dependencies:
       '@zhiyin/one-at-a-time':
@@ -1125,6 +1150,9 @@ importers:
       '@zhiyin/contract':
         specifier: workspace:*
         version: link:../../contract/contract
+      koffi:
+        specifier: 3.2.1
+        version: 3.2.1
     devDependencies:
       '@zhiyin/sandbox':
         specifier: workspace:*

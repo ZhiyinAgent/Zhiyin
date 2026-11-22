@@ -6,10 +6,22 @@
  */
 
 import { readFile, realpath } from "node:fs/promises";
+import { resolve } from "node:path";
 import { type RewindFileEffect, type TaskAction } from "@zhiyin/contract";
 import { ranToItsEnd } from "@zhiyin/conversation-rules";
 import type { CapturedFile, Manifest } from "./records.js";
-import { currentDigest, digest, safeAbsolute } from "./workspace-files.js";
+import {
+  currentDigest,
+  digest,
+  fileBytes,
+  isLinkDigest,
+  linkOnPath,
+  safeAbsolute,
+} from "./workspace-files.js";
+
+/** Why a file is left as it is when a link now stands on its way. */
+export const throughLinkReason =
+  "A folder on the way to this file is now a junction or a symbolic link, which may lead outside the folder, so nothing was read or written there.";
 
 export type RestoreTarget = {
   readonly path: string;
@@ -17,7 +29,10 @@ export type RestoreTarget = {
   readonly expected: "absent" | string;
   readonly restored: "absent" | string;
   readonly action: "restore" | "remove";
+  /** The copy kept whole beside its action. */
   readonly backup?: string;
+  /** Or the version kept in the store of pieces, by its digest. */
+  readonly content?: string;
 };
 
 export type RecoveryReview = {
@@ -47,8 +62,14 @@ export type FileVersions =
 export type ReviewedStore = {
   /** The manifest kept for an action, prepared or committed. */
   readonly manifest: (actionId: string) => Promise<Manifest | undefined>;
-  /** Where the copy of a file kept for an action lies, if it has one. */
-  readonly copyOf: (actionId: string, file: CapturedFile) => string | undefined;
+  /**
+   * Where the copy of a file kept for an action lies, if it has one: a whole
+   * copy's path, or a version in the store of pieces.
+   */
+  readonly copyOf: (
+    actionId: string,
+    file: CapturedFile,
+  ) => { readonly backup: string } | { readonly content: string } | undefined;
 };
 
 /**
@@ -197,21 +218,43 @@ export async function reviewActions(
     const last = versions.at(-1)!;
     // The file is put back from the copy taken before the first change; a
     // created file needs none, and never had one to lose.
-    if (first.evicted) {
+    if (first.evicted || first.linkOnly) {
       files.push({
         path,
         action: "unknown",
         status: "unprotected",
-        reason:
-          first.reason ??
-          "The retained recovery copy expired or was evicted by storage limits.",
+        reason: first.linkOnly
+          ? "Only the file as each turn found it is kept, and this change began partway through a turn."
+          : (first.reason ??
+            "The retained recovery copy expired or was evicted by storage limits."),
       });
       continue;
     }
     const absolute = await safeAbsolute(root, path).catch(() => undefined);
+    // A folder on its way that is now a link leads elsewhere: nothing there
+    // is read, nor written by going back.
+    if (
+      !absolute &&
+      (await linkOnPath(root, resolve(root, path)).catch(() => false))
+    ) {
+      files.push({
+        path,
+        action: first.before === "absent" ? "remove" : "restore",
+        status: "conflict",
+        reason: throughLinkReason,
+      });
+      continue;
+    }
     const expected = last.after === "absent" ? "absent" : last.afterDigest;
-    const restored = first.before === "absent" ? "absent" : first.beforeDigest;
-    const current = absolute ? await currentDigest(absolute) : "other";
+    // A change that found the file changed since its turn began is undone to
+    // the file as the turn found it.
+    const restored =
+      first.before === "absent"
+        ? "absent"
+        : first.turnStart
+          ? first.content
+          : first.beforeDigest;
+    const current = absolute ? await currentDigest(root, absolute) : "other";
     const action = first.before === "absent" ? "remove" : "restore";
     // Each change must start from what the one before it left: a file
     // edited in between holds work that is not the turn's to discard.
@@ -256,14 +299,14 @@ export async function reviewActions(
       continue;
     }
     files.push({ path, action, status: "recoverable" });
-    const backup = store.copyOf(kept[0]!.actionId, first);
+    const copy = store.copyOf(kept[0]!.actionId, first);
     targets.push({
       path,
       absolute,
       expected,
       restored,
       action,
-      ...(backup ? { backup } : {}),
+      ...(copy ?? {}),
     });
   }
   return { id: reviewId, workspaceRoot: root, files, targets };
@@ -276,6 +319,8 @@ export async function reviewActions(
 export async function versionsIn(
   reviewed: RecoveryReview,
   path: string,
+  /** Reads a version kept in the store of pieces. */
+  readVersion: (digest: string) => Promise<Uint8Array>,
 ): Promise<FileVersions> {
   const named = path.replaceAll("\\", "/");
   const file = reviewed.files.find((item) => item.path === named);
@@ -290,13 +335,25 @@ export async function versionsIn(
       ok: false,
       reason: file?.reason ?? "No copy was kept before the change.",
     };
-  const after = await readFile(target.absolute).catch(() => undefined);
+  // A link has no contents to show, and nothing is read through one.
+  if (isLinkDigest(target.expected) || isLinkDigest(target.restored))
+    return {
+      ok: false,
+      reason: `${named} is a junction or a symbolic link before or after the change, which has no contents to show.`,
+    };
+  if (await linkOnPath(reviewed.workspaceRoot, target.absolute, true))
+    return changedSince;
+  const after = await fileBytes(reviewed.workspaceRoot, target.absolute).catch(
+    () => undefined,
+  );
   if (!after || digest(after) !== target.expected) return changedSince;
   if (target.action === "remove")
     return { ok: true, after: new Uint8Array(after) };
   const before = target.backup
     ? await readFile(target.backup).catch(() => undefined)
-    : undefined;
+    : target.content
+      ? await readVersion(target.content).catch(() => undefined)
+      : undefined;
   if (!before || digest(before) !== target.restored)
     return { ok: false, reason: "The copy kept before the change is gone." };
   return {

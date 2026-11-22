@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@vscode/ripgrep": "1.18.0",
-    "@zhiyin/contract": "workspace:*"
+    "@zhiyin/contract": "workspace:*",
+    "koffi": "3.2.1"
   },
   "devDependencies": {
     "@zhiyin/sandbox": "workspace:*",

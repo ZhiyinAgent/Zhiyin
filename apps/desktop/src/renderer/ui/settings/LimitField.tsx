@@ -2,15 +2,17 @@ import { useId, useState } from "react";
 import styles from "./settings.module.css";
 
 /**
- * A whole number typed in, saved once it is left or entered. One outside its
- * range says the range and is not saved; Escape puts back what was saved.
- * What was typed stays shown until the save settles, then the saved value.
+ * A whole number typed in, or one with a tenth where `tenths` allows it,
+ * saved once it is left or entered. One outside its range says the range and
+ * is not saved; Escape puts back what was saved. What was typed stays shown
+ * until the save settles, then the saved value.
  */
 export function LimitField({
   value,
   least,
   most,
   unit,
+  tenths = false,
   labelledBy,
   describedBy,
   onSave,
@@ -20,6 +22,7 @@ export function LimitField({
   most: number;
   /** After the number, as "rounds" or "USD". */
   unit: string;
+  tenths?: boolean;
   labelledBy: string;
   describedBy: string;
   /** Settles once the change is saved or its failure shown. */
@@ -32,7 +35,9 @@ export function LimitField({
   async function commit() {
     if (draft === undefined) return;
     const typed = draft.trim();
-    const number = /^\d+$/.test(typed) ? Number(typed) : Number.NaN;
+    const number = (tenths ? /^\d+(\.\d)?$/ : /^\d+$/).test(typed)
+      ? Number(typed)
+      : Number.NaN;
     if (!(number >= least && number <= most)) {
       setInvalid(true);
       return;
@@ -41,16 +46,16 @@ export function LimitField({
     setDraft(undefined);
   }
 
-  const range = `A whole number from ${least.toLocaleString("en-US")} to ${most.toLocaleString("en-US")}.`;
+  const range = `A ${tenths ? "number, to a tenth," : "whole number"} from ${least.toLocaleString("en-US")} to ${most.toLocaleString("en-US")}.`;
   return (
     <div className={styles["limit-field"]}>
       <span className={styles["limit-field__entry"]}>
         <input
           type="number"
-          inputMode="numeric"
+          inputMode={tenths ? "decimal" : "numeric"}
           min={least}
           max={most}
-          step={1}
+          step={tenths ? 0.1 : 1}
           value={draft ?? String(value)}
           aria-labelledby={labelledBy}
           aria-describedby={invalid ? `${describedBy} ${rangeId}` : describedBy}

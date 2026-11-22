@@ -190,7 +190,8 @@ export type RipgrepContext = {
 
 /**
  * Runs ripgrep in `cwd` and hands each line it printed to `line`, in order,
- * once it has ended. A run that takes too long or prints more than a run may is
+ * once it has ended; a line handed over waits for what `line` answers before
+ * the next is read. A run that takes too long or prints more than a run may is
  * stopped, and what it printed until then is still handed over, except a last
  * line it was stopped in the middle of.
  */
@@ -199,7 +200,7 @@ export async function ripgrep(
     readonly args: readonly string[];
     readonly cwd: string;
     readonly signal?: AbortSignal | undefined;
-    readonly line: (text: string) => void;
+    readonly line: (text: string) => void | Promise<void>;
   },
 ): Promise<RipgrepRun> {
   const run = await options.run({
@@ -220,10 +221,10 @@ export async function ripgrep(
       });
       let previous: string | undefined;
       for await (const text of lines) {
-        if (previous !== undefined) options.line(previous);
+        if (previous !== undefined) await options.line(previous);
         previous = text;
       }
-      if (previous !== undefined && whole) options.line(previous);
+      if (previous !== undefined && whole) await options.line(previous);
     },
   });
   return {

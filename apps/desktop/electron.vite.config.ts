@@ -119,7 +119,8 @@ export default defineConfig({
       rollupOptions: {
         // The drawing process is started from its own script, and draws on a
         // thread started from another (ADR 0019). Pictures' pixels are
-        // compared on a thread of the main process, from a third.
+        // compared on a thread of the main process, from a third, and the
+        // files a turn may change are held on a fourth (ADR 0031).
         input: {
           index: resolve(__dirname, "src/main/index.ts"),
           drawing: resolve(__dirname, "src/drawing/index.ts"),
@@ -128,6 +129,7 @@ export default defineConfig({
             __dirname,
             "src/comparing/picture-thread.ts",
           ),
+          "watch-thread": resolve(__dirname, "src/watching/watch-thread.ts"),
         },
         external,
       },

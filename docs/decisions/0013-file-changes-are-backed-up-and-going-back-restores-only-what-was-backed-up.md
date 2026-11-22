@@ -1,7 +1,8 @@
 # 0013. File changes are backed up, and going back restores only what was backed up
 
 Status: accepted. Its rule that a rewind keeps the current files unless the
-person asks is superseded by 0030.
+person asks is superseded by 0030; how a program's folder is backed up, the
+limits, and what is said when a file cannot be copied are superseded by 0031.
 
 ## Decision
 

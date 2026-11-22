@@ -82,6 +82,7 @@ export type {
   CommandFileChanges,
   FileChange,
   ListedFile,
+  ListingPart,
   ListWorkspace,
   WorkspaceListing,
 } from "./file-change.js";

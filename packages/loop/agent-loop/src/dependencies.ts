@@ -17,7 +17,12 @@ import type { KeptStore } from "@zhiyin/session";
 import type { ModelClient } from "@zhiyin/model-client";
 import type { UsageTelemetry } from "@zhiyin/usage";
 import type { ViewValidator } from "@zhiyin/views";
-import type { FileBackups, Rewind, RunBackups } from "@zhiyin/rewind";
+import type {
+  FileBackups,
+  Rewind,
+  RunBackups,
+  TurnFiles,
+} from "@zhiyin/rewind";
 import type { Memory } from "@zhiyin/memory";
 import type { WorkLimits } from "./turn/work-limits.js";
 import type { AfterCallHook } from "./tools/after-calls.js";
@@ -50,6 +55,12 @@ export interface AgentLoopDependencies {
     RunBackups,
     "backUp" | "start" | "finish" | "waiting" | "discard"
   >;
+  /**
+   * Keeps each file of the conversation's folder as a turn found it, saved
+   * when the turn first writes it (ADR 0031). Without it, a run's folder is
+   * copied as the run is readied, and `prepare_change` is not offered.
+   */
+  readonly turnFiles?: TurnFiles;
   readonly corrections: CorrectionsLog;
   readonly kept: KeptStore;
   readonly model: ModelClient;

@@ -499,14 +499,16 @@ with the reason, and checking for a shell again does not change it.
   and modification time, so it also sees changes made by anything else while
   the command ran. Hidden files are listed; the folders searches skip, `.git`
   among them, and the files the workspace's ignore files list are not.
-- A listing is offered as `listWorkspace`, for what copies a folder before a
-  script or command runs in it. It lists the files the ignore files list too,
-  since those are often the data a script works on; the folders searches
-  skip, which an install or a build makes again, and `.git` stay out. A command says it may change any
-  file in the workspace, so its folder is copied before it runs. Nothing is
-  held from a command with full access; a sealed-off one runs sealed, so what
-  holds a sealed-off program's `.git` and Startup folders holds its too
-  (ADR 0012).
+- A listing is offered as `listWorkspace`, for what keeps a folder's files as
+  a turn or a run found them. It lists every file, however many, the files
+  the ignore files list too, since those are often the data a script works
+  on; the folders searches skip, which an install or a build makes again,
+  and `.git` stay out. A junction or symbolic link is listed as itself and
+  never followed, and the listing can be asked for part of a folder. A
+  command says it may change any file in the workspace, so its folder is
+  copied before it runs. Nothing is held from a command with full access; a
+  sealed-off one runs sealed, so what holds a sealed-off program's `.git` and
+  Startup folders holds its too (ADR 0012).
 
 ### Documents and pictures (ADR 0019)
 

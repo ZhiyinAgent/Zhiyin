@@ -5,6 +5,7 @@ import type {
 import { ClarificationPrompt } from "./ClarificationPrompt.js";
 import { FolderInstructionsPrompt } from "./FolderInstructionsPrompt.js";
 import { QuizPrompt } from "./QuizPrompt.js";
+import { UndoRoomPrompt } from "./UndoRoomPrompt.js";
 import { WorkBudgetPrompt } from "./WorkBudgetPrompt.js";
 
 export { InteractionCard } from "./InteractionCard.js";
@@ -22,6 +23,8 @@ export function UserInputPrompt({
     <WorkBudgetPrompt prompt={prompt} onSubmit={onSubmit} />
   ) : prompt.kind === "folderInstructions" ? (
     <FolderInstructionsPrompt prompt={prompt} onSubmit={onSubmit} />
+  ) : prompt.kind === "undoRoom" ? (
+    <UndoRoomPrompt prompt={prompt} onSubmit={onSubmit} />
   ) : prompt.kind === "quiz" ? (
     <QuizPrompt prompt={prompt} onSubmit={onSubmit} />
   ) : (

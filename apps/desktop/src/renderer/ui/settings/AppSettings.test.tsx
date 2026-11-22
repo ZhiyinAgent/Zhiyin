@@ -180,6 +180,131 @@ describe("the data folder in settings", () => {
   });
 });
 
+describe("the room for going back in settings", () => {
+  const budget = {
+    budgetBytes: 50_000_000_000,
+    usedBytes: 3_400_000_000,
+    chosen: false,
+  };
+
+  it("says how much room is kept for going back, how much is in use, and what goes first", () => {
+    render(
+      <AppSettings
+        notifications
+        undoBudget={budget}
+        onUndoBudget={vi.fn(async () => undefined)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const field = screen.getByRole("spinbutton", {
+      name: "Room for going back",
+    });
+    expect(field).toHaveValue(50);
+    expect(field).toHaveAccessibleDescription(
+      "Earlier versions of the files tasks change are kept so going back can restore them, in up to 50 GB. 3.4 GB is in use. When it fills, the oldest versions go first; a file as it was before its conversation changed it goes only if you agree.",
+    );
+  });
+
+  it("shows a room under 10 GB to a tenth, as its sentence says it, and saves a tenth typed in", async () => {
+    const onUndoBudget = vi.fn(async () => undefined);
+    render(
+      <AppSettings
+        notifications
+        undoBudget={{ ...budget, budgetBytes: 8_412_000_000 }}
+        onUndoBudget={onUndoBudget}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const field = screen.getByRole("spinbutton", {
+      name: "Room for going back",
+    });
+    expect(field).toHaveValue(8.4);
+    expect(field).toHaveAccessibleDescription(
+      expect.stringContaining("in up to 8.4 GB."),
+    );
+    fireEvent.change(field, { target: { value: "6.5" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(onUndoBudget).toHaveBeenCalledWith(6_500_000_000),
+    );
+  });
+
+  it("writes the room's sentence with the system's decimal comma, as the field beside it shows it", () => {
+    vi.spyOn(navigator, "language", "get").mockReturnValue("fr-FR");
+    render(
+      <AppSettings
+        notifications
+        undoBudget={{ ...budget, budgetBytes: 8_412_000_000 }}
+        onUndoBudget={vi.fn(async () => undefined)}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: "Room for going back" }),
+    ).toHaveAccessibleDescription(
+      expect.stringContaining("in up to 8,4 GB. 3,4 GB is in use."),
+    );
+    vi.restoreAllMocks();
+  });
+
+  it("saves a new room in gigabytes once it is entered", async () => {
+    const onUndoBudget = vi.fn(async () => undefined);
+    render(
+      <AppSettings
+        notifications
+        undoBudget={budget}
+        onUndoBudget={onUndoBudget}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const field = screen.getByRole("spinbutton", {
+      name: "Room for going back",
+    });
+    fireEvent.change(field, { target: { value: "20" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(onUndoBudget).toHaveBeenCalledWith(20_000_000_000),
+    );
+  });
+
+  it("says when the room was not saved", async () => {
+    render(
+      <AppSettings
+        notifications
+        undoBudget={budget}
+        onUndoBudget={vi.fn(async () => {
+          throw new Error("The budget could not be saved.");
+        })}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const field = screen.getByRole("spinbutton", {
+      name: "Room for going back",
+    });
+    fireEvent.change(field, { target: { value: "20" } });
+    fireEvent.blur(field);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The budget could not be saved.",
+    );
+  });
+
+  it("is not shown until the room is known", () => {
+    render(<AppSettings notifications onClose={vi.fn()} />);
+
+    expect(
+      screen.queryByRole("spinbutton", { name: "Room for going back" }),
+    ).toBeNull();
+  });
+});
+
 describe("the appearance in settings", () => {
   it("offers Match Windows, Light and Dark, and saves the one chosen", async () => {
     const onAppearance = vi.fn(async () => undefined);

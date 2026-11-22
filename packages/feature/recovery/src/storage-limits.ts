@@ -1,231 +1,259 @@
 /**
- * The storage limits applied to what recovery keeps: the age of an action's
- * copies, the versions kept of each file, and the total, within which a copy
- * of a folder about to be changed is also made room for.
+ * The undo budget (ADR 0031): what recovery keeps takes no more room than the
+ * person allows. When it would, versions are let go of in this order: the
+ * record of what was known of a folder, which only spares watching it again;
+ * versions between a file's first and latest, oldest first; then latest
+ * versions. A file's version from before its conversation first changed it
+ * is let go of only when the person agreed to. A version several changes
+ * share goes only with the last of them.
  */
 
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { ContentStore } from "./content-store.js";
+import type { FirstWrites } from "./first-writes.js";
 import type { FolderCopies } from "./folder-copies.js";
-import { folderKey } from "./folder-mirrors.js";
+import type { PieceStore } from "./pieces/piece-store.js";
 import type { CapturedFile, Manifest } from "./records.js";
 
 export type RecoveryLimits = {
+  /** The undo budget: the most room what recovery keeps may take, in bytes. */
   readonly totalBytes: number;
+  /**
+   * The largest file read to know it again after a shell command whose
+   * folder was not watched: such a file keeps no version, only its digest.
+   */
   readonly fileBytes: number;
-  readonly versionsPerPath: number;
-  readonly maximumAgeMs: number;
 };
 
-const mib = 1024 * 1024;
+/** 50 GB, the most the budget is by default. */
+const largestDefault = 50_000_000_000;
 
 /**
- * What recovery may keep in all, given the free space on its disk: a tenth of
- * it, never under 256 MiB nor over 4 GiB (ADR 0013).
+ * The budget a person has not set: a tenth of the free space on recovery's
+ * drive when recovery is first used, and never more than 50 GB.
  */
-export function recoveryTotal(freeBytes: number): number {
-  return Math.min(4096 * mib, Math.max(256 * mib, Math.floor(freeBytes / 10)));
+export function defaultBudget(freeBytes: number): number {
+  return Math.min(largestDefault, Math.floor(freeBytes / 10));
 }
 
-type KeptAction = { readonly folder: string; readonly manifest: Manifest };
-
-/** What applying the limits reads and changes. */
-export type KeptStore = {
-  /** Every kept action's manifest by its folder. */
-  readonly kept: () => Promise<Map<string, Manifest>>;
-  readonly limits: RecoveryLimits;
-  readonly now: () => Date;
-  /** Whether an action in this folder is being prepared or awaits its run. */
-  readonly inUse: (folder: string) => boolean;
-  readonly contents: ContentStore;
-  readonly copies: FolderCopies;
-  readonly writeManifest: (folder: string, manifest: Manifest) => Promise<void>;
+/** A version let go of, said in the conversation it belongs to. */
+export type ReleasedVersion = {
+  readonly conversationId?: string;
+  readonly actionId: string;
+  readonly path: string;
 };
 
-/**
- * What names a file's copy within its action: its own file, or its place in
- * the action when the copy is kept by its contents.
- */
-const copyOf = (file: CapturedFile): string | undefined =>
-  file.backup ?? (file.content ? `content:${file.path}` : undefined);
+/** What applying the budget reads and changes. */
+export type KeptStore = {
+  readonly kept: () => Promise<Map<string, Manifest>>;
+  readonly budget: number;
+  /** Whether an action in this folder is being prepared or awaits its run. */
+  readonly inUse: (folder: string) => boolean;
+  readonly pieces: PieceStore;
+  readonly copies: FolderCopies;
+  readonly writes: FirstWrites;
+  readonly writeManifest: (folder: string, manifest: Manifest) => Promise<void>;
+  /** Contents kept for a capture whose record is not written yet. */
+  readonly capturing: ReadonlySet<string>;
+};
+
+/** One version as an action keeps it. */
+type Entry = {
+  readonly folder: string;
+  readonly manifest: Manifest;
+  readonly file: CapturedFile;
+  /** What takes its room: its own copy, or contents in the store of pieces. */
+  readonly unit: string;
+  readonly bytes: number;
+  readonly order: number;
+};
+
+/** How readily a version goes: lower first. */
+const stages = { between: 1, latest: 2, original: 3 } as const;
+
+const unitOf = (folder: string, file: CapturedFile) =>
+  file.content ? `content:${file.content}` : `file:${folder}:${file.backup}`;
 
 /**
- * Applies the limits, sparing `spared`, the action just committed, whatever
- * goes. Given `room`, makes room for a folder's copy as well: what the copy
- * of any other folder holds goes first, being only a shortcut, then the
- * oldest copies. Answers the bytes left under the total.
+ * Applies the budget, sparing `spared`, the action just committed, and the
+ * actions in use, and making room for `reserve` bytes more. Lets go of
+ * originals only with `originals`. Answers the room left and what went.
  */
 export async function applyLimits(
   store: KeptStore,
   spared?: string,
-  room?: {
-    readonly reserve: number;
-    readonly folder: string;
-    readonly keep: ReadonlySet<string>;
-  },
-): Promise<number> {
+  {
+    reserve = 0,
+    originals = false,
+    purge = false,
+  }: {
+    readonly reserve?: number;
+    readonly originals?: boolean;
+    /** Removes what goes from the store's files at once, as deleting a conversation does. */
+    readonly purge?: boolean;
+  } = {},
+): Promise<{ readonly left: number; readonly released: ReleasedVersion[] }> {
   const kept = await store.kept();
-  const cutoff = store.now().getTime() - store.limits.maximumAgeMs;
+  // Saves no run will be weighed from again are in an action's record, or
+  // of none.
+  const oldest = await store.copies.oldestNeeded();
+  await store.writes.forgetBefore(oldest);
   const untouchable = (folder: string) =>
     folder === spared || store.inUse(folder);
-  for (const [folder, manifest] of [...kept]) {
-    if (untouchable(folder) || Date.parse(manifest.createdAt) >= cutoff)
-      continue;
-    await rm(folder, { recursive: true, force: true });
-    kept.delete(folder);
-  }
-  const loaded: KeptAction[] = [...kept].map(([folder, manifest]) => ({
-    folder,
-    manifest,
-  }));
-  const expired = new Set<string>();
-
-  const versions = new Map<
-    string,
-    {
-      readonly folder: string;
-      readonly copy: string;
-      readonly createdAt: string;
-      readonly order: number;
-    }[]
-  >();
-  for (const [order, item] of loaded.entries()) {
-    if (item.manifest.phase !== "committed") continue;
-    for (const file of item.manifest.files) {
-      const copy = copyOf(file);
-      if (file.status !== "protected" || !copy) continue;
-      const identity = `${item.manifest.workspaceRoot}\u0000${file.path}`;
-      versions.set(identity, [
-        ...(versions.get(identity) ?? []),
-        {
-          folder: item.folder,
-          copy,
-          createdAt: item.manifest.createdAt,
-          order,
-        },
-      ]);
-    }
-  }
-  for (const entries of versions.values()) {
-    // Newest first, the action just committed first of all. Of two taken
-    // at the same moment in this session, the one prepared later is the
-    // newer.
-    entries.sort(
-      (a, b) =>
-        Number(b.folder === spared) - Number(a.folder === spared) ||
-        Date.parse(b.createdAt) - Date.parse(a.createdAt) ||
-        b.order - a.order,
-    );
-    for (const entry of entries.slice(store.limits.versionsPerPath))
-      if (!untouchable(entry.folder))
-        expired.add(`${entry.folder}:${entry.copy}`);
-  }
-
-  // What takes room: a copy in an action's own folder, or contents in the
-  // shared store, counted once however many name them.
-  const contents = await store.contents.sizes();
-  const named = new Map<string, number>();
-  const bytesOf = (unit: string, fallback: number) =>
-    unit.startsWith("content:") ? (contents.get(unit.slice(8)) ?? 0) : fallback;
-  let total = 0;
-  const name = (unit: string, bytes: number) => {
-    const count = named.get(unit) ?? 0;
-    if (count === 0) total += bytesOf(unit, bytes);
-    named.set(unit, count + 1);
+  const entries: Entry[] = [];
+  let order = 0;
+  for (const [folder, manifest] of kept)
+    for (const file of manifest.files)
+      if (
+        file.status === "protected" &&
+        (file.backup || file.content) &&
+        !file.evicted
+      )
+        entries.push({
+          folder,
+          manifest,
+          file,
+          unit: unitOf(folder, file),
+          bytes: file.bytes ?? 0,
+          order: order++,
+        });
+  // Asked of each version the store holds, so the sets it asks stay apart.
+  const live = () => {
+    const kept = new Set<string>();
+    for (const entry of entries)
+      if (entry.file.content && !released.has(entry))
+        kept.add(entry.file.content);
+    const parts: { has(digest: string): boolean }[] = [
+      kept,
+      store.copies.inUse(),
+      store.writes.digests(oldest),
+      store.capturing,
+      ...mirrored,
+    ];
+    return { has: (digest: string) => parts.some((part) => part.has(digest)) };
   };
-  const unname = (unit: string, bytes: number) => {
-    const count = (named.get(unit) ?? 0) - 1;
-    named.set(unit, count);
-    if (count === 0) total -= bytesOf(unit, bytes);
-  };
-  const unitOf = (folder: string, file: CapturedFile) =>
-    file.content
-      ? `content:${file.content}`
-      : `file:${folder}:${file.backup ?? ""}`;
-  const retained = loaded
-    .flatMap((item) =>
-      item.manifest.files.flatMap((file) => {
-        const copy = copyOf(file);
-        return file.status === "protected" &&
-          copy &&
-          !expired.has(`${item.folder}:${copy}`)
-          ? [
-              {
-                folder: item.folder,
-                copy,
-                unit: unitOf(item.folder, file),
-                bytes: file.bytes ?? 0,
-                createdAt: item.manifest.createdAt,
-              },
-            ]
-          : [];
-      }),
-    )
-    .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-  // The copies that keep each unit, oldest first, so weighing one does not
-  // search every copy again.
-  const keeping = new Map<string, (typeof retained)[number][]>();
-  for (const entry of retained) {
-    name(entry.unit, entry.bytes);
-    const holding = keeping.get(entry.unit);
-    if (holding) holding.push(entry);
-    else keeping.set(entry.unit, [entry]);
-  }
+  const released = new Set<Entry>();
   const mirrors = await store.copies.mirrors();
-  for (const mirror of mirrors)
-    for (const digest of mirror.digests) name(`content:${digest}`, 0);
-  for (const digest of [...store.copies.inUse(), ...(room?.keep ?? [])])
-    name(`content:${digest}`, 0);
+  let mirrored = mirrors.map((mirror) => mirror.digests);
+  // Over the budget, what goes leaves the store's files at once, so the room
+  // it frees is counted before anything more goes.
+  const used = async (compact = false) => {
+    await store.pieces.retain(live(), { purge, compact: compact || purge });
+    let own = 0;
+    for (const entry of entries)
+      if (entry.file.backup && !released.has(entry)) own += entry.bytes;
+    return (await store.pieces.used()) + own;
+  };
+  let now = await used();
+  const over = () => now + reserve > store.budget;
+  const result: ReleasedVersion[] = [];
+  if (over()) now = await used(true);
+  if (!over()) return { left: store.budget - now, released: result };
 
-  const over = () => total + (room?.reserve ?? 0) > store.limits.totalBytes;
-  // The copies of other folders only spare copying them again.
-  const own = room ? folderKey(room.folder) : undefined;
-  const dropped: string[] = [];
+  // What was known of a folder only spares watching its files again.
   for (const mirror of [...mirrors].sort((a, b) => a.usedAt - b.usedAt)) {
     if (!over()) break;
-    if (mirror.waiting || mirror.key === own) continue;
-    dropped.push(mirror.key);
-    for (const digest of mirror.digests) unname(`content:${digest}`, 0);
-  }
-  // Past the total, the oldest copies go first; those of an action in use
-  // stay, counted. Contents several changes keep are let go of together,
-  // at the oldest's turn, and only when that frees their room: a change
-  // keeps its copy while anything else still needs the same contents.
-  const weighed = new Set<string>();
-  for (const entry of retained) {
-    if (!over()) break;
-    if (weighed.has(entry.unit)) continue;
-    weighed.add(entry.unit);
-    const holders = (keeping.get(entry.unit) ?? []).filter(
-      (other) => !expired.has(`${other.folder}:${other.copy}`),
-    );
-    if (
-      holders.some((other) => untouchable(other.folder)) ||
-      (named.get(entry.unit) ?? 0) > holders.length
-    )
-      continue;
-    for (const other of holders) {
-      expired.add(`${other.folder}:${other.copy}`);
-      unname(other.unit, other.bytes);
-    }
+    if (mirror.waiting) continue;
+    await store.copies.dropMirror(mirror.key);
+    mirrored = (await store.copies.mirrors()).map((other) => other.digests);
+    now = await used(true);
   }
 
-  for (const key of dropped) await store.copies.dropMirror(key);
-  for (const item of loaded) {
-    let changed = false;
+  // Each file's changes in order, within its conversation: the first is the
+  // file as it was before, kept or, for a file the changes made, nothing.
+  const changes: { file: CapturedFile; manifest: Manifest; order: number }[] =
+    [];
+  let seen = 0;
+  for (const manifest of kept.values())
+    if (manifest.phase === "committed")
+      for (const file of manifest.files)
+        if (file.status === "protected" || file.evicted)
+          changes.push({ file, manifest, order: seen++ });
+  changes.sort(
+    (a, b) =>
+      Date.parse(a.manifest.createdAt) - Date.parse(b.manifest.createdAt) ||
+      a.order - b.order,
+  );
+  const groups = new Map<string, CapturedFile[]>();
+  for (const { file, manifest } of changes) {
+    const key = [
+      manifest.conversationId ?? "",
+      manifest.workspaceRoot.toLowerCase(),
+      file.path,
+    ].join("\u0000");
+    groups.set(key, [...(groups.get(key) ?? []), file]);
+  }
+  const stageByFile = new Map<CapturedFile, number>();
+  for (const versions of groups.values())
+    versions.forEach((file, index) =>
+      stageByFile.set(
+        file,
+        index === 0
+          ? stages.original
+          : index === versions.length - 1
+            ? stages.latest
+            : stages.between,
+      ),
+    );
+  // A copy of an action still awaiting its run is its file's newest.
+  const stageOf = new Map<Entry, number>(
+    entries.map((entry) => [
+      entry,
+      stageByFile.get(entry.file) ?? stages.original,
+    ]),
+  );
+  // A unit goes at the stage of the holder that keeps it longest.
+  const holders = new Map<string, Entry[]>();
+  for (const entry of entries)
+    holders.set(entry.unit, [...(holders.get(entry.unit) ?? []), entry]);
+  const units = [...holders]
+    .filter(([, held]) => !held.some((entry) => untouchable(entry.folder)))
+    .map(([unit, held]) => ({
+      unit,
+      held,
+      stage: Math.max(...held.map((entry) => stageOf.get(entry)!)),
+      oldest: Math.min(
+        ...held.map((entry) => Date.parse(entry.manifest.createdAt)),
+      ),
+    }))
+    .filter((unit) => originals || unit.stage < stages.original)
+    .sort((a, b) => a.stage - b.stage || a.oldest - b.oldest);
+
+  for (const unit of units) {
+    if (!over()) break;
+    for (const entry of unit.held) {
+      released.add(entry);
+      result.push({
+        ...(entry.manifest.conversationId
+          ? { conversationId: entry.manifest.conversationId }
+          : {}),
+        actionId: entry.manifest.actionId,
+        path: entry.file.path,
+      });
+    }
+    now = await used(true);
+  }
+
+  // Each record stays without the versions let go of: going back past it
+  // still needs to know what each change left.
+  const byFolder = new Map<string, Set<Entry>>();
+  for (const entry of released)
+    byFolder.set(
+      entry.folder,
+      (byFolder.get(entry.folder) ?? new Set()).add(entry),
+    );
+  for (const [folder, gone] of byFolder) {
+    const manifest = [...gone][0]!.manifest;
     const files = await Promise.all(
-      item.manifest.files.map(async (file) => {
-        const copy = copyOf(file);
-        if (!copy || !expired.has(`${item.folder}:${copy}`)) return file;
-        changed = true;
-        if (file.backup)
-          await rm(join(item.folder, file.backup), { force: true });
+      manifest.files.map(async (file) => {
+        const entry = [...gone].find((each) => each.file === file);
+        if (!entry) return file;
+        if (file.backup) await rm(join(folder, file.backup), { force: true });
         return {
           path: file.path,
           status: "unprotected" as const,
           reason:
-            "The retained recovery copy expired or was evicted by storage limits.",
+            "The version kept before this change was let go of to stay within the undo budget.",
           evicted: true as const,
           before: file.before,
           ...(file.beforeDigest ? { beforeDigest: file.beforeDigest } : {}),
@@ -234,14 +262,7 @@ export async function applyLimits(
         };
       }),
     );
-    if (!changed) continue;
-    // The record stays without its copies: going back past it still needs
-    // to know what each change left. It goes with its age or conversation.
-    await store.writeManifest(item.folder, { ...item.manifest, files });
+    await store.writeManifest(folder, { ...manifest, files });
   }
-  // Contents nothing names any more go.
-  for (const digest of [...contents.keys()])
-    if (!((named.get(`content:${digest}`) ?? 0) > 0))
-      await store.contents.remove(digest);
-  return Math.max(0, store.limits.totalBytes - total);
+  return { left: Math.max(0, store.budget - now), released: result };
 }

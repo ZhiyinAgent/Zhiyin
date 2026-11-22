@@ -521,6 +521,13 @@ export const expected = new Map([
     },
   ],
   [
+    "packages/core/core/system-boundary/sealed-granted-going-back.test.ts",
+    {
+      needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",
+      without: (env) => !env.ZHIYIN_BUSYBOX && !env.CI,
+    },
+  ],
+  [
     "packages/core/core/system-boundary/sealed-going-back.test.ts",
     {
       needs: "Zhiyin's busybox (ZHIYIN_BUSYBOX)",

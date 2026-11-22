@@ -92,6 +92,8 @@ export type WindowCommands = Pick<
       | "setReviewerModel"
       | "reviewerModelSettings"
       | "setWorkPauses"
+      | "undoBudget"
+      | "setUndoBudget"
       | "setMcpServerToolTreatment"
       | "openDataFolder"
       | "openMemoryFolder"

@@ -30,6 +30,11 @@ export type TurnFile = {
   readonly declared: boolean;
   /** Seen changing while a command ran, or while one that finished later did. */
   readonly command?: "during" | "later";
+  /**
+   * For a file only commands changed: it was saved before the first of them
+   * (ADR 0031), so undo can put it back.
+   */
+  readonly kept?: true;
 };
 
 type Seen = {
@@ -151,6 +156,7 @@ export function changedFiles(actions: readonly TaskAction[]): TurnFile[] {
         change: { path, change: listedKind(file.listed!) },
         declared: false,
         ...command,
+        ...(file.listed!.first.kept ? { kept: true as const } : {}),
       };
     const change = merged(file.first, file.last, file);
     const counted = lineCounts(change, file.first, file.last);
@@ -292,7 +298,8 @@ function movedHere(
  * it, a command too. The undo's own review says what each file comes to.
  */
 export function undoable(file: TurnFile): boolean {
-  if (!file.declared) return file.change.change === "created";
+  if (!file.declared)
+    return file.change.change === "created" || file.kept === true;
   return (
     !file.noCopy &&
     (file.change.change === "created" ||

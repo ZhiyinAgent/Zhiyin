@@ -1,7 +1,9 @@
 # 0012. The person is asked only for what Zhiyin can neither prevent nor undo
 
 Status: accepted. Its section on the shell, and its rejection of a shell sealed
-off in an app container, are superseded by 0029.
+off in an app container, are superseded by 0029; the copy before each run, the
+folder of more than 20,000 files that asks, and the file past the backup limits
+held read-only for the run are superseded by 0031.
 
 ## Decision
 

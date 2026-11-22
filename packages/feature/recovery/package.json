@@ -16,10 +16,12 @@
   "dependencies": {
     "@zhiyin/contract": "workspace:*",
     "@zhiyin/conversation-rules": "workspace:*",
+    "@zhiyin/file-watch": "workspace:*",
     "@zhiyin/files": "workspace:*",
     "@zhiyin/one-at-a-time": "workspace:*",
     "@zhiyin/sandbox": "workspace:*",
-    "@zhiyin/workspace-containment": "workspace:*"
+    "@zhiyin/workspace-containment": "workspace:*",
+    "@zhiyin/workspace-listing": "workspace:*"
   },
   "devDependencies": {
     "@zhiyin/test-support": "workspace:*"

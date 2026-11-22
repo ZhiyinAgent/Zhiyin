@@ -857,6 +857,48 @@ describe("the files a turn's commands changed", () => {
     ).toBeVisible();
   });
 
+  it("says nothing of a missing copy for a file saved before the command, and offers its undo", async () => {
+    render(
+      <TurnFiles
+        actions={[
+          command("convert", {
+            status: "checked",
+            files: [
+              { path: "data.csv", change: "updated", kept: true },
+              { path: "big.bin", change: "updated" },
+            ],
+          }),
+        ]}
+        running={false}
+        onPreviewUndo={async () => ({
+          id: "undo-1",
+          taskId: "task-1",
+          messageId: "u1",
+          files: [
+            { path: "data.csv", action: "restore", status: "recoverable" },
+          ],
+          memory: [],
+        })}
+        onCommitUndo={vi.fn()}
+      />,
+    );
+
+    const saved = within(panel()).getByText("data.csv").closest("li");
+    expect(saved).toHaveTextContent("Changed by a command");
+    expect(saved).not.toHaveTextContent("no copy was kept");
+    expect(
+      within(panel()).getByText("big.bin").closest("li"),
+    ).toHaveTextContent("Changed by a command, so no copy was kept");
+    fireEvent.click(
+      within(panel()).getByRole("button", { name: "Undo these changes" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Undo these changes" }),
+    ).toHaveTextContent(
+      "Files a command changed stay as they are, as no copy was kept of them.",
+    );
+  });
+
   it("offers no undo for a turn whose commands only changed or deleted files", () => {
     render(
       <TurnFiles
@@ -998,11 +1040,10 @@ describe("the files a turn's commands changed", () => {
     fireEvent.click(
       within(panel()).getByRole("button", { name: "Undo these changes" }),
     );
+    // plan.md has its copy and out.csv is removed: no file lacks a copy.
     expect(
       await screen.findByRole("dialog", { name: "Undo these changes" }),
-    ).toHaveTextContent(
-      "Files a command changed stay as they are, as no copy was kept of them.",
-    );
+    ).not.toHaveTextContent("no copy was kept");
   });
 
   it("is shown for files only a command changed, and not for an edit that did not run", () => {

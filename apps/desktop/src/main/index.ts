@@ -483,6 +483,15 @@ void app.whenReady().then(async () => {
     // Built beside this file, as an entry of its own.
     startDrawing: drawingProcesses(join(here, "drawing.js")),
     startComparing: () => new Worker(join(here, "picture-thread.js")),
+    // Holding files never keeps Zhiyin from quitting; Windows lets go of
+    // them as the process ends.
+    startWatching: (data) => {
+      const thread = new Worker(join(here, "watch-thread.js"), {
+        workerData: data,
+      });
+      thread.unref();
+      return thread;
+    },
     pixelDensity: () =>
       window.isDestroyed()
         ? screen.getPrimaryDisplay().scaleFactor

@@ -34,6 +34,12 @@ export const stubCommands: CoreApi = {
   setReviewerModel: async () => {},
   reviewerModelSettings: async () => null,
   setWorkPauses: async () => {},
+  undoBudget: async () => null,
+  setUndoBudget: async (bytes) => ({
+    budgetBytes: bytes,
+    usedBytes: 0,
+    chosen: true,
+  }),
   openDataFolder: async () => {},
   openMemoryFolder: async () => {},
   showInFolder: async () => {},

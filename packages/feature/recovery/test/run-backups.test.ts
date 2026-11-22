@@ -59,7 +59,7 @@ async function fixture(refuse?: string) {
   const recording = holdsRecording(refuse);
   const gitConfig: HeldPath = { path: join(root, ".git"), hold: "tree" };
   const runs = new RunBackups(
-    new FileRecovery(storage, { list, limits: { fileBytes: 100 } }),
+    new FileRecovery(storage, { list, limits: { totalBytes: 100 } }),
     { holds: recording.holds, programLocations: async () => [gitConfig] },
   );
   const heldNames = () =>
@@ -87,7 +87,7 @@ describe("a sealed-off run", () => {
       held: [
         {
           path: "big.parquet",
-          reason: expect.stringContaining("recovery limit"),
+          reason: expect.stringContaining("undo budget"),
           kind: "uncopied",
         },
         {
@@ -163,7 +163,26 @@ describe("a shell command", () => {
     expect(during).toEqual([]);
     expect(changes).toEqual({
       status: "checked",
-      files: [{ path: "notes.txt", change: "updated" }],
+      files: [{ path: "notes.txt", change: "updated", kept: true }],
+    });
+  });
+
+  it("says which files it changed were saved before it, so undo can put them back", async () => {
+    const { root, runs } = await fixture();
+    await runs.backUp("run-1", root, "conversation-1");
+    await runs.start("run-1", { sealed: false, writable: [] });
+
+    await writeFile(join(root, "notes.txt"), "changed by the command");
+    await writeFile(join(root, "big.parquet"), "c".repeat(300));
+    const changes = await runs.finish("run-1");
+
+    // big.parquet did not fit the undo budget, so nothing of it was saved.
+    expect(changes).toEqual({
+      status: "checked",
+      files: [
+        { path: "big.parquet", change: "updated" },
+        { path: "notes.txt", change: "updated", kept: true },
+      ],
     });
   });
 });
@@ -198,7 +217,7 @@ describe("a run Zhiyin stopped with", () => {
 
     const restarted = new FileRecovery(storage, {
       list,
-      limits: { fileBytes: 100 },
+      limits: { totalBytes: 100 },
     });
     const review = await restarted.review("review", root, [
       {
@@ -246,7 +265,7 @@ async function withElsewhere(
   const recording = holdsRecording(options.refuse);
   const recovery = new FileRecovery(storage, {
     list: listing,
-    limits: { fileBytes: 100 },
+    limits: { totalBytes: 100 },
   });
   const startup = options.startup?.(elsewhere);
   const runs = new RunBackups(recovery, {
@@ -286,9 +305,9 @@ describe("a sealed-off run given a folder outside the workspace", () => {
     expect(changes).toEqual({
       status: "checked",
       files: [
-        { path: "notes.txt", change: "updated" },
+        { path: "notes.txt", change: "updated", kept: true },
         { path: join(elsewhere, "made.txt"), change: "created" },
-        { path: join(elsewhere, "notes.txt"), change: "updated" },
+        { path: join(elsewhere, "notes.txt"), change: "updated", kept: true },
       ],
     });
     expect(await readFile(join(root, "notes.txt"), "utf8")).toBe(
@@ -319,12 +338,12 @@ describe("a sealed-off run given a folder outside the workspace", () => {
       held: expect.arrayContaining([
         {
           path: "big.parquet",
-          reason: expect.stringContaining("recovery limit"),
+          reason: expect.stringContaining("undo budget"),
           kind: "uncopied",
         },
         {
           path: join(elsewhere, "big.parquet"),
-          reason: expect.stringContaining("recovery limit"),
+          reason: expect.stringContaining("undo budget"),
           kind: "uncopied",
         },
         {

@@ -769,7 +769,15 @@ export function validateCommand(
         (args[0] === null || isReviewerModelChoice(args[0]));
       break;
     case CHANNEL.reviewerModelSettings:
+    case CHANNEL.undoBudget:
       valid = args.length === 0;
+      break;
+    case CHANNEL.setUndoBudget:
+      valid =
+        args.length === 1 &&
+        typeof args[0] === "number" &&
+        Number.isSafeInteger(args[0]) &&
+        args[0] >= 0;
       break;
     case CHANNEL.setWorkPauses:
       valid = args.length === 1 && isWorkPauses(args[0]);

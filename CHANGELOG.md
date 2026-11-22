@@ -28,6 +28,33 @@ What changed for people using Zhiyin, newest release first.
 - Sealed commands use Zhiyin's own Node, installed on first use.
 - busybox-w32's source and Zhiyin's patches ship inside the installer.
 
+### Undo for files of any size
+
+- Going back restores each file as it was when that message was sent,
+  whatever its size: a 5 GB dataset is undone like a small text file, in
+  the workspace and in folders you granted for changing.
+- A file is saved the moment something first writes to it in a turn, by any
+  program, including a job or a specialist working between turns; a program
+  that puts the old date back is still caught.
+- Versions share pieces and keep only what changed, compressed: in our tests
+  a database took 14% of the space of whole copies, a Blender scene 7%.
+- Folders of any number of files are covered. Past 20,000 watched files, the
+  largest ones are held read-only for sealed commands until the agent saves
+  one with `prepare_change`.
+- Undoing a turn also puts back the files its commands changed or deleted,
+  where they were saved first; the card says "no copy was kept" only of the
+  others.
+- Settings has "Room for going back", by default the smaller of 50 GB and a
+  tenth of free space, set to a tenth of a gigabyte. When it fills, the
+  oldest in-between versions go
+  first; a file's original is never dropped without asking, and you are asked
+  only when a file can't be saved within it.
+- A SQLite database with its journal files, or a zarr store, is restored all
+  or none.
+- Zhiyin never reads, saves or writes through a junction or symbolic link in
+  those folders; a file whose way passes through one is left as it is and
+  reported.
+
 ### Going back and undo
 
 - Going back to a message, and undoing a turn, now offer "Undo everything",

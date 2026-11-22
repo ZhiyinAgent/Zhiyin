@@ -4,6 +4,8 @@ import type {
   ReasoningSelection,
   TaskAction,
   ToolInvocationResult,
+  UndoRoomChoice,
+  UndoRoomRequest,
   WorkspaceTask,
 } from "@zhiyin/contract";
 import { picturesPerMessage, VisibleError } from "@zhiyin/contract";
@@ -12,7 +14,7 @@ import { contextTarget } from "@zhiyin/context-budget";
 import { AuxiliaryWork } from "./auxiliary/auxiliary-work.js";
 import { sameValue } from "./canonical.js";
 import { ToolCalls } from "./tools/tool-calls.js";
-import { keepWhatRanChanged } from "./tools/action-backup.js";
+import { keepWhatRanChanged, withKept } from "./tools/action-backup.js";
 import { SpecialistExecution } from "./specialist/specialist-execution.js";
 import { onReviewerModel } from "./specialist/on-reviewer-model.js";
 import { PluginActivation } from "./tools/plugin-activation.js";
@@ -27,6 +29,7 @@ import { TurnLoop } from "./turn/turn-loop.js";
 import { ContextGuard } from "./context/context-guard.js";
 import { condenseBetweenTurns } from "./context/between-turns.js";
 import { beginUserTurn } from "./turn/start-turn.js";
+import { withTurnFiles } from "./turn/turn-files.js";
 import { modelText } from "./context/attachments.js";
 import { settledAfterRestart, settledWhenTurnEnded } from "./turn/settling.js";
 import { isOwnDefect } from "./turn/turn-recovery.js";
@@ -201,13 +204,23 @@ export class AgentLoop {
           evidence: evidenceText({ ...outcome, images: undefined }),
         }
       : {};
+    const runningAs = (action: TaskAction) =>
+      action.commandChanges?.status === "running" &&
+      action.commandChanges.job === job;
+    // Against the copy of its folder taken before it ran, when one was, which
+    // also says which files undo can put back; as the command left them
+    // otherwise.
+    // A job of a conversation since deleted, or of no conversation, is not kept.
+    if (!this.#deps.host.find(taskId)) return;
+    const waiting = this.#records.task(taskId).actions.find(runningAs);
+    const recorded =
+      waiting && this.#deps.runs.waiting(waiting.id)
+        ? await this.#deps.runs.finish(waiting.id)
+        : undefined;
+    const shown = recorded ? withKept(changes, recorded) : changes;
     const found: { ran?: TaskAction | undefined } = {};
     const kept = await this.#records.changeOutsideTurns(taskId, (task) => {
-      const started = task.actions.find(
-        (action) =>
-          action.commandChanges?.status === "running" &&
-          action.commandChanges.job === job,
-      );
+      const started = task.actions.find(runningAs);
       // The change may be made again on a later write; one that finds it
       // already made keeps the action the first one found.
       if (started) found.ran = started;
@@ -216,7 +229,7 @@ export class AgentLoop {
             ...task,
             actions: task.actions.map((action) =>
               action === started
-                ? { ...action, ...ended, commandChanges: changes }
+                ? { ...action, ...ended, commandChanges: shown }
                 : action,
             ),
           }
@@ -224,16 +237,12 @@ export class AgentLoop {
     });
     if (!kept) return;
     const { ran } = found;
-    // Against the copy of its folder taken before it ran, when one was; as
-    // the command left them otherwise.
     if (ran)
       await keepWhatRanChanged(this.#deps.backups, {
         actionId: ran.id,
         folder: ran.folder ?? this.#deps.workspace.workspaceRoot(taskId),
         taskId,
-        recorded: this.#deps.runs.waiting(ran.id)
-          ? await this.#deps.runs.finish(ran.id)
-          : undefined,
+        recorded: ran.id === waiting?.id ? recorded : undefined,
         changes,
       });
     await this.#records.announceWritten(taskId, writtenFiles([], changes));
@@ -400,13 +409,39 @@ export class AgentLoop {
       // The turn's work, naming beside it included, is the turn's own.
       await this.#activeTurns.within(controller, async () => {
         const naming = started.shouldGenerateInitialTitle ? name() : undefined;
-        await this.#turnLoop.run(taskId, controller, ledger);
+        await withTurnFiles(
+          this.#deps,
+          taskId,
+          () => this.#records.task(taskId).conversationPermissions,
+          (renewFiles) =>
+            this.#turnLoop.run(taskId, controller, ledger, { renewFiles }),
+        );
         // What waited when the person stopped the turn waits for their next
         // message, rather than starting a turn they just stopped.
         if (!controller.signal.aborted) this.#wakes.wakeIfQueued(taskId);
         if ((await naming) === "gaveWay") await name();
       });
     };
+  }
+
+  /**
+   * Asks the person, in the conversation whose turn is writing, what to do
+   * with a first write the undo budget has no room to save (ADR 0031). With
+   * no turn running there, or once it is stopped, the write is refused, so
+   * nothing is lost without a backup unasked.
+   */
+  async askUndoRoom(
+    taskId: string,
+    file: Omit<UndoRoomRequest, "kind" | "title">,
+  ): Promise<UndoRoomChoice> {
+    const controller = this.#activeTurns.controller(taskId);
+    if (!controller || controller.signal.aborted) return "refuse";
+    const choice = await this.#waits.waitForUndoRoom(
+      taskId,
+      file,
+      controller.signal,
+    );
+    return choice === "cancelled" ? "refuse" : choice;
   }
 
   /**
@@ -496,10 +531,17 @@ export class AgentLoop {
       throw error;
     }
     await this.#activeTurns.within(controller, () =>
-      this.#turnLoop.run(taskId, controller, ledger, {
-        initialDelegatedChildren:
-          this.#records.task(taskId).specialistRuns.length,
-      }),
+      withTurnFiles(
+        this.#deps,
+        taskId,
+        () => this.#records.task(taskId).conversationPermissions,
+        (renewFiles) =>
+          this.#turnLoop.run(taskId, controller, ledger, {
+            initialDelegatedChildren:
+              this.#records.task(taskId).specialistRuns.length,
+            renewFiles,
+          }),
+      ),
     );
     return !controller.signal.aborted;
   }

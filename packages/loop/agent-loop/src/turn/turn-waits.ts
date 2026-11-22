@@ -5,6 +5,8 @@ import type {
   ToolCallInspection,
   ToolInvocationResult,
   UserInputRequest,
+  UndoRoomChoice,
+  UndoRoomRequest,
   UserInputResponse,
   WorkBudgetRequest,
 } from "@zhiyin/contract";
@@ -27,6 +29,7 @@ export type TurnWaitsDependencies = Pick<
 
 const workBudgetQuestionId = "work-budget";
 const folderInstructionsQuestionId = "folder-instructions";
+const undoRoomQuestionId = "undo-room";
 export type ApprovalAnswer =
   | "allow"
   | "allow-conversation"
@@ -287,7 +290,11 @@ export class TurnWaits {
 
   async waitForUserInput(
     taskId: string,
-    request: UserInputRequest | WorkBudgetRequest | FolderInstructionsRequest,
+    request:
+      | UserInputRequest
+      | WorkBudgetRequest
+      | FolderInstructionsRequest
+      | UndoRoomRequest,
     complete: (response: UserInputResponse) => Promise<ToolInvocationResult>,
     signal: AbortSignal,
   ): Promise<
@@ -399,10 +406,31 @@ export class TurnWaits {
     );
   }
 
+  /**
+   * Asks what to do with a write the undo budget has no room to save first
+   * (ADR 0031). The program that writes waits for the answer meanwhile.
+   */
+  waitForUndoRoom(
+    taskId: string,
+    file: Omit<UndoRoomRequest, "kind" | "title">,
+    signal: AbortSignal,
+  ): Promise<UndoRoomChoice | "cancelled"> {
+    return this.#choose(
+      taskId,
+      { kind: "undoRoom", title: "No room to keep this file first", ...file },
+      {
+        questionId: undoRoomQuestionId,
+        choices: ["without", "make-room", "refuse"],
+        refusal: "Choose Change without a backup, Make room, or Refuse.",
+        signal,
+      },
+    );
+  }
+
   /** One question with a fixed set of answers, and the one chosen. */
   async #choose<Choice extends string>(
     taskId: string,
-    request: WorkBudgetRequest | FolderInstructionsRequest,
+    request: WorkBudgetRequest | FolderInstructionsRequest | UndoRoomRequest,
     {
       questionId,
       choices,

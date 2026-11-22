@@ -49,9 +49,9 @@ worst case, and the strictest part of what it does decides it.
   code with your account's full access, such as a shell command or a Git
   change, which runs the repository's own hooks and filters; deleting for
   good, or any other change Zhiyin cannot put back, unless all it cannot put
-  back is one file too large to copy; acting as you on an account in a way
-  that cannot be taken back, such as merging or pushing, or without naming
-  where; installing packages, or making or rebuilding a Python environment,
+  back is one file too large for the undo budget; acting as you on an account
+  in a way that cannot be taken back, such as merging or pushing, or without
+  naming where; installing packages, or making or rebuilding a Python environment,
   whose code later scripts run; deleting or moving anything outside the
   folder you chose; and anything that leaves something to run later on its
   own, such as a file in a `.git` or Startup folder.
@@ -59,9 +59,10 @@ worst case, and the strictest part of what it does decides it.
   file or folder outside the folder you chose, by that file or folder, never
   a whole drive, your user folder or one holding it; acting as you on an
   account, by the place it lands, such as one repository; changing one file
-  too large to copy, by that file; and each tool of a connector you added,
-  unless you chose beside its switch that it only reads, which is your word
-  and not something Zhiyin can check, or that it is asked about every time.
+  too large for the undo budget, by that file; and each tool of a connector
+  you added, unless you chose beside its switch that it only reads, which is
+  your word and not something Zhiyin can check, or that it is asked about
+  every time.
 - **Sending what the model wrote to a destination it chose** runs, unless
   the conversation holds both content someone else wrote and something
   private; then it asks every time. Such a send is text typed into a page,
@@ -90,8 +91,8 @@ changed while it waited, it does not run.
 
 A grant for the conversation takes one click and names how far it reaches. A
 grant for a file outside the folder you chose ends once the file is changed
-outside Zhiyin, and one for a file too large to copy once its size or time of
-change differs from how the conversation left it. A grant for a place on an
+outside Zhiyin, and one for a file too large for the undo budget once its
+size or time of change differs from how the conversation left it. A grant for a place on an
 account covers that place alone, across the connector's tools. No grant
 covers a file in a `.git` or Startup folder, whose contents run later. Every
 grant can be taken back under Permissions, in the conversation's menu.
@@ -115,9 +116,14 @@ Git's tools act only on the repository the folder holds: where a repository's
 own files send git to another folder, or to another repository's history or
 objects, through its settings, a file or a link, they run nothing.
 
-Before a file changes, Zhiyin keeps a copy, so going back in a conversation or
-undoing a turn can restore it. Copies are bounded: 256 MiB per file and
-4 GiB in all, less when the disk is short of space, kept for 30 days. Deletions go to the Recycle Bin by default,
+Zhiyin keeps each file of the folder you chose, and of each folder outside it
+you allowed the conversation to change, as each message found it, saved the
+first time anything writes it during the turn, so going back in a
+conversation or undoing a turn can restore it. What is kept takes no more
+room than the undo budget you set in Settings, at first the smaller of 50 GB
+and a tenth of the disk's free space; to fit it, older versions are let go
+of, and the file as it was before the conversation first changed it goes only
+when you say so. Deletions go to the Recycle Bin by default,
 and the approval says which items would be deleted for good, either because
 the model asked for that or because Windows will not take them. Going back
 and undoing cover files on this computer; what a connector or a website did
@@ -140,17 +146,29 @@ every way: any program can delete files. A script the model wrote earlier,
 code that hides the call, or a command that overwrites a file still deletes
 without being caught, and only your approval of the command covers it.
 
-Before a command runs, Zhiyin brings its copy of the folder you chose up to
-date, and after it, records every file the command created, changed or
-deleted there, so going back or undoing the turn puts each back. The copy
-includes files Git ignores, but leaves out `.git` and the folders tools
-rebuild (`node_modules`, `build`, `dist`, `out`, `.next`, `.venv` and
-`__pycache__`), and a file past the copy limits above is not copied, so a
-change to it cannot be put back. A folder of more than 20,000 files is not
-copied at all. When no copy could be taken, Zhiyin lists by name the files
-that changed while the command ran, where it can, and going back can only
-remove those the command created. Nothing a command does outside the folder
-is copied or listed, and none of it can be undone.
+After a command runs, Zhiyin records every file the command created, changed
+or deleted in the folder you chose, against the files as the turn found them,
+so going back or undoing the turn puts each back. This covers files Git
+ignores, however many the folder holds, but leaves out `.git` and the folders
+tools rebuild (`node_modules`, `build`, `dist`, `out`, `.next`, `.venv` and
+`__pycache__`). A first write the undo budget has no room for asks you first:
+change the file without a way back, make room, or refuse the write. Zhiyin
+watches up to 20,000 files at once; past that, it saves the smallest at once
+until the rest fit, and the largest left over cannot be put back unless the
+model saves each with `prepare_change` before changing it. When the folder
+could not be watched, Zhiyin lists by name the files that changed while the
+command ran, where it can, and going back can only remove those the command
+created. Nothing a command does outside the folder is kept or listed, and
+none of it can be undone. A junction or symbolic link in the folder, which a
+command can make pointing anywhere, is recorded and put back as a link and
+never followed: Zhiyin does not read, save or watch what it leads to, and a
+file whose path now passes through one, such as a folder replaced by a
+junction to your `.ssh` folder, is left as a conflict with nothing written
+there. While a file is put back, the folders on its way are held open so
+that nothing can rename them or swap one for a link, and each is checked on
+that handle; a file is saved only from a handle checked to be the file its
+path names through real folders. A link swapped in at any moment is caught,
+not only one made before the check.
 
 ### Python
 
@@ -160,10 +178,10 @@ its environment and its own code, and changes only the folder you chose:
 Windows refuses it every other file your account can reach, for reading as
 for writing, and holds a program it starts, a shell included, to the same
 limits. A file kept elsewhere has to be copied into the folder before a script
-can read it. Zhiyin copies the folder before a script runs, as it does for a
-command, so going back puts back what the script changed; a file it could not
-copy is read-only to the script for that run, unless the call names it, which
-asks. A script run from a file in the folder is shown as the code the file
+can read it. Zhiyin records what a script changed as it does for a command,
+so going back puts back what the script changed; a file it could not save
+first is read-only to the script for that run, unless the call names it,
+which asks, or the model saves it with `prepare_change`. A script run from a file in the folder is shown as the code the file
 holds and runs from a copy of it; if the file changes between being shown and
 running, it does not run. A script reaches no network unless its request
 names hosts, and then only those hosts, over HTTPS, through a proxy in Zhiyin

@@ -2,11 +2,12 @@
 
 const kilobyte = 1024;
 const megabyte = 1024 * 1024;
+const gigabyte = 1024 * megabyte;
 
 /**
- * "1 byte", "240 bytes", "1.5 KB", "47 KB", "10.0 MB". Below ten kilobytes a
- * tenth is kept, since whole ones would overstate a small file by up to a
- * third.
+ * "1 byte", "240 bytes", "1.5 KB", "47 KB", "10.0 MB", "5.0 GB". Below ten
+ * kilobytes a tenth is kept, since whole ones would overstate a small file by
+ * up to a third.
  */
 export function fileSize(bytes: number): string {
   if (bytes < kilobyte) return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
@@ -16,7 +17,8 @@ export function fileSize(bytes: number): string {
       ? `${Number(kilobytes.toFixed(1))} KB`
       : `${Math.round(kilobytes)} KB`;
   }
-  return `${(bytes / megabyte).toFixed(1)} MB`;
+  if (bytes < gigabyte) return `${(bytes / megabyte).toFixed(1)} MB`;
+  return `${(bytes / gigabyte).toFixed(1)} GB`;
 }
 
 /**

@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import type { JournalPoint } from "@zhiyin/file-watch";
 import { replaceFile } from "@zhiyin/files";
 import type { Known, RunCopy } from "./run-changes.js";
 
@@ -24,6 +25,8 @@ export type Pending = RunCopy & {
   readonly uncopied: ReadonlyMap<string, string>;
   /** Whether it was taken as the run began, rather than before approval. */
   readonly begun: boolean;
+  /** Where the drive's change journal stood as the copy was taken. */
+  readonly point?: JournalPoint;
 };
 
 /** A run that ended while an earlier one in its folder went on. */
@@ -47,6 +50,7 @@ type WrittenRun =
       readonly without?: readonly string[];
       readonly seq: number;
       readonly begun?: true;
+      readonly point?: JournalPoint;
       readonly files: readonly (readonly [string, Known])[];
       readonly uncopied: readonly (readonly [string, string])[];
     }
@@ -117,6 +121,7 @@ export class RunJournal {
       ...(pending.without.length ? { without: [...pending.without] } : {}),
       seq: pending.seq,
       ...(pending.begun ? { begun: true as const } : {}),
+      ...(pending.point ? { point: pending.point } : {}),
       files: [...pending.files],
       uncopied: [...pending.uncopied],
     });

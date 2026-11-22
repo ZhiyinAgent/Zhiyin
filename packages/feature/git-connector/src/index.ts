@@ -11,6 +11,7 @@ export type { GitContainer, GitContainment } from "./run-git.js";
 export { gitProgramLocations, type GitLocation } from "./program-locations.js";
 export {
   shellGit,
+  type LinksIn,
   type ShellGitAnswer,
   type ShellGitCall,
 } from "./shell-git.js";

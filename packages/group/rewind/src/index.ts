@@ -17,4 +17,5 @@ export type {
   RunBackup,
   RunBackups,
   RunStart,
+  TurnFiles,
 } from "@zhiyin/recovery";

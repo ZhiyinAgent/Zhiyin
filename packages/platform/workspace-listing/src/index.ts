@@ -15,6 +15,7 @@ export {
   type RipgrepContext,
   type RunProgram,
 } from "./ripgrep.js";
+export { linkAt, walkEveryFolder } from "./folder-walk.js";
 export {
   compareListings,
   defaultCheckedUpTo,

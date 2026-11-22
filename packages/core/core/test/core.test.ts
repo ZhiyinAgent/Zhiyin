@@ -45,7 +45,8 @@ function recordingCore(
       emitted.push({ kind: "workspaceSnapshot", data: this.snapshot() });
     },
     settings: { current: () => ({ model: "a-model" }) },
-    shutdown: note("shutdown"),
+    // Everything closed in time.
+    shutdown: note("shutdown", []),
     selectWorkspace: note("selectWorkspace"),
     renameTask: note("renameTask"),
     turns: { cancel: note("cancel") },

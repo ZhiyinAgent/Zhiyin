@@ -59,6 +59,8 @@ const calls: { readonly [Name in CommandName]: Parameters<Commands[Name]> } = {
   ],
   reviewerModelSettings: [],
   setWorkPauses: [{ rounds: 50, minutes: 30, dollars: 10, yuan: 70 }],
+  undoBudget: [],
+  setUndoBudget: [20_000_000_000],
   setAppearance: ["system"],
   setLook: [{ look: "neutral", strength: "vivid" }],
   setSpelling: [{ enabled: true, languages: ["en-GB", "fr"] }],
@@ -264,5 +266,12 @@ describe("the shape a command's arguments are held to", () => {
       ["lookAtScene", [{ kind: "view", view: "inside" }]],
     ] as const)
       expect(allowed(name, args)).toBe(false);
+  });
+
+  it("holds an undo budget to a whole number of bytes, none below nothing", () => {
+    expect(allowed("setUndoBudget", [0])).toBe(true);
+    expect(allowed("setUndoBudget", [-1])).toBe(false);
+    expect(allowed("setUndoBudget", [1.5])).toBe(false);
+    expect(allowed("setUndoBudget", ["50 GB"])).toBe(false);
   });
 });

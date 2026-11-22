@@ -10,9 +10,11 @@ import {
   type Commands,
   type RunningCommand,
   type ShellAvailability,
+  type UndoBudgetState,
   type ViewCheckOutcome,
 } from "@zhiyin/contract";
 import type { ModelSettings } from "./model-settings.js";
+import { closeInTurn } from "./closing.js";
 import { validateCommand } from "./validation.js";
 import type { Workspace, WorkspaceTurns } from "./workspace.js";
 
@@ -150,6 +152,19 @@ export type CoreDependencies = {
   readonly windowControls?: { readonly dim: (dimmed: boolean) => void };
   /** Where Zhiyin keeps its data: conversations, pictures, file copies. */
   readonly dataFolder: string;
+  /**
+   * The undo budget the versions kept for going back are held to (ADR
+   * 0031). Absent, as in tests, nothing is offered.
+   */
+  readonly undo?: {
+    undoBudget(): Promise<UndoBudgetState>;
+    setUndoBudget(bytes: number): Promise<UndoBudgetState>;
+    /**
+     * Lets go of every file watched for going back. Until it does, the
+     * thread that watches them keeps the app from ending.
+     */
+    close(): Promise<void>;
+  };
   readonly version: string;
   /** Absent, as in tests, Zhiyin does not update itself. */
   readonly updates?: CoreUpdates;
@@ -271,6 +286,12 @@ export class Core {
         return choice ? workspace.settings.reviewerSettings(choice) : null;
       },
       setWorkPauses: (pauses) => workspace.choices.setWorkPauses(pauses),
+      undoBudget: async () => (await deps.undo?.undoBudget()) ?? null,
+      setUndoBudget: (bytes) => {
+        if (!deps.undo)
+          throw new VisibleError("Nothing is kept for going back here.");
+        return deps.undo.setUndoBudget(bytes);
+      },
       setAppearance: (appearance) => workspace.setAppearance(appearance),
       setLook: (choice) => workspace.setLook(choice),
       setSpelling: (choice) => workspace.setSpelling(choice),
@@ -481,11 +502,17 @@ export class Core {
    * has stopped being waited for. Answers what had not finished closing.
    */
   async shutdown(): Promise<readonly string[]> {
-    const { workspace, ownership, updates } = this.#deps;
+    const { workspace, ownership, updates, undo } = this.#deps;
     updates?.stop();
     const unfinished = await workspace.shutdown();
+    // Once no turn writes any longer.
+    const watching = undo
+      ? await closeInTurn([
+          ["files watched for going back", () => undo.close()],
+        ])
+      : [];
     await ownership.release();
-    return unfinished;
+    return [...unfinished, ...watching];
   }
 
   /**

@@ -120,8 +120,32 @@ export type FolderInstructionsRequest = {
   readonly sentThroughLine?: number;
 };
 
+/**
+ * A turn's first write to a file whose version from before it does not fit
+ * what is left of the undo budget (ADR 0031). The program writing waits for
+ * the answer: change it without a backup, make room by letting go of older
+ * versions, the conversation's originals included, or refuse the write.
+ */
+export type UndoRoomRequest = {
+  readonly kind: "undoRoom";
+  readonly title: string;
+  /** The file's path inside the conversation's folder. */
+  readonly path: string;
+  /** The file's size, in bytes. */
+  readonly bytes: number;
+  /** What is left of the budget, and the whole budget, in bytes. */
+  readonly roomBytes: number;
+  readonly budgetBytes: number;
+};
+
+/** The answers to an undo room question, by the id each is given. */
+export type UndoRoomChoice = "without" | "make-room" | "refuse";
+
 export type PendingUserInputRequest = (
-  UserInputRequest | WorkBudgetRequest | FolderInstructionsRequest
+  | UserInputRequest
+  | WorkBudgetRequest
+  | FolderInstructionsRequest
+  | UndoRoomRequest
 ) & {
   readonly id: string;
 };

@@ -134,6 +134,8 @@ export type LoopTestDependencies = Omit<
     readonly recovery: Recovery;
     /** Where interrupted rewinds are kept; in memory unless a test says. */
     readonly journal?: RewindJournal;
+    /** How runs are readied, as the app gives them holds; none unless a test says. */
+    readonly runs?: ConstructorParameters<typeof RunBackups>[1];
   };
 
 export function loopFrom({
@@ -146,6 +148,7 @@ export function loopFrom({
   rewind,
   recovery,
   journal,
+  runs,
   ...dependencies
 }: LoopTestDependencies): TestApp {
   const members = watchedEach({
@@ -176,7 +179,8 @@ export function loopFrom({
     commands: capabilities,
     rewind: new ComposedRewind(members),
     backups: members.recovery,
-    runs: new RunBackups(members.recovery),
+    runs: new RunBackups(members.recovery, runs),
+    turnFiles: members.recovery,
   };
   return appFrom(
     new Workspace(shared, (host) => new AgentLoop({ ...shared, host })),
@@ -195,6 +199,9 @@ export type TestApp = Workspace &
     | "resolveApproval"
     | "resolveUserInput"
     | "commandsChanged"
+    | "jobChanged"
+    | "askUndoRoom"
+    | "shellReach"
   >;
 
 const turnCommands = new Set([
@@ -203,6 +210,9 @@ const turnCommands = new Set([
   "resolveApproval",
   "resolveUserInput",
   "commandsChanged",
+  "jobChanged",
+  "askUndoRoom",
+  "shellReach",
 ]);
 
 /** One object with both halves' commands, each bound to the half that owns it. */

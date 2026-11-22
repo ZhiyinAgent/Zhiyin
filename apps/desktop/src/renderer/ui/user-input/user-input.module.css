@@ -101,6 +101,17 @@
   margin-left: auto;
 }
 
+/* Three answers: on a narrow window they wrap, right-aligned, rather than
+   squeezing their names. */
+.undo-room__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.work-budget__text code {
+  overflow-wrap: anywhere;
+}
+
 /* Asked above the composer, in whatever height the window leaves: the title
    and the two answers stay in view, and the explanation and the file's text
    scroll between them. */

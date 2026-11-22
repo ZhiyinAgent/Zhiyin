@@ -40,12 +40,16 @@ there is no second implementation of git's storage format to audit.
   and `close`.
 - `gitInstallUrl`, where Git for Windows is downloaded, offered when Git is
   missing.
-- `shellGit({ containment?, route?, resolveGit? })` answers the function that
-  runs one git command for a sealed-off shell, outside its container (ADR
-  0029): given the command's arguments, its folder, the folders the shell may
-  change, the hosts its conversation may reach, the conversation's home and
-  its standard input as a file, it answers git's exit code, what it printed,
-  each host the proxy refused it and whether any host sent it anything.
+- `shellGit({ containment?, route?, resolveGit?, linksIn? })` answers the
+  function that runs one git command for a sealed-off shell, outside its
+  container (ADR 0029): given the command's arguments, its folder, the
+  folders the shell may change, the hosts its conversation may reach, the
+  conversation's home and its standard input as a file, it answers git's exit
+  code, what it printed, each host the proxy refused it and whether any host
+  sent it anything. `linksIn`, a `LinksIn` handed in by the composition root,
+  names the links anywhere in a folder, `.git` and `node_modules` included,
+  so a folder need not be walked whole for each command; absent, or when it
+  cannot say, the folder is walked.
 - `gitProgramLocations(root)` names, from the files alone, Git's records in
   a folder, each as a `GitLocation` with how a sealed-off program is held
   from it (ADR 0012).

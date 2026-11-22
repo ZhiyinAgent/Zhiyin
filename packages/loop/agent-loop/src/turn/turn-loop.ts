@@ -46,6 +46,8 @@ import { Delegation } from "../specialist/delegation.js";
 import { PluginActivation } from "../tools/plugin-activation.js";
 import { CatalogTools } from "../tools/catalog-tools.js";
 import { SetupCards } from "../tools/setup-card.js";
+import { PrepareChange } from "../tools/prepare-change.js";
+import { shellReach } from "../tools/shell-reach.js";
 import { PendingHandoffs } from "../specialist/pending-handoffs.js";
 import type { CommandEndings } from "../tools/command-endings.js";
 import { TurnRecords } from "./turn-records.js";
@@ -104,6 +106,7 @@ export type TurnLoopDependencies = Pick<
   | "recordDefect"
   | "reviews"
   | "timeZone"
+  | "turnFiles"
   | "workspace"
 > &
   ModelRoundDependencies &
@@ -151,6 +154,8 @@ type Turn = {
    * with the least reasoning the model can be asked for.
    */
   answerNow: boolean;
+  /** Begins the turn's files again from now, as at a message handed over. */
+  readonly renewFiles: () => Promise<void>;
 };
 
 export class TurnLoop {
@@ -256,6 +261,12 @@ export class TurnLoop {
     options?: {
       /** Specialist count carried across a background wake. */
       readonly initialDelegatedChildren?: number;
+      /**
+       * Begins the turn's files again, as a message the person added while
+       * it ran is handed over, so going back to that message puts back each
+       * file as it found them.
+       */
+      readonly renewFiles?: () => Promise<void>;
     },
   ): Promise<void> {
     try {
@@ -449,6 +460,7 @@ export class TurnLoop {
       connectionRecoveries: 0,
       overthought: false,
       answerNow: false,
+      renewFiles: options?.renewFiles ?? (async () => {}),
     };
     current.turn = turn;
     return turn;
@@ -524,6 +536,20 @@ export class TurnLoop {
           taskId,
           directory: () => offer.pluginDirectory,
         }),
+        ...(this.#deps.turnFiles
+          ? [
+              new PrepareChange(
+                this.#deps.turnFiles,
+                this.#deps.workspace,
+                taskId,
+                () =>
+                  shellReach(
+                    this.#records.task(taskId),
+                    this.#deps.workspace.workspaceRoot(taskId),
+                  ).change,
+              ),
+            ]
+          : []),
       ],
     });
   }
@@ -558,8 +584,10 @@ export class TurnLoop {
       kept: this.#deps.kept,
       signal: controller.signal,
     });
-    if (await deliverGuidance(taskId, this.#records, turn.history))
+    if (await deliverGuidance(taskId, this.#records, turn.history)) {
       turn.guard.reset();
+      await turn.renewFiles();
+    }
     const fixed = offering.fixedMessages;
     const plan = {
       fixed,
@@ -714,6 +742,7 @@ export class TurnLoop {
       });
     if (await deliverGuidance(taskId, this.#records, turn.history)) {
       guard.reset();
+      await turn.renewFiles();
       return "resumed";
     }
     if (!incomplete && !reportOnly) {

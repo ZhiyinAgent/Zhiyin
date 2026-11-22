@@ -18,8 +18,10 @@ import { join } from "node:path";
 import type {
   CommandFileChange,
   CommandFileChanges,
+  ListingPart,
   WorkspaceListing,
 } from "@zhiyin/contract";
+import { walkFolder } from "./folder-walk.js";
 import {
   byPath,
   printedPath,
@@ -44,28 +46,70 @@ export type ListingSetup = {
   readonly kept: number;
 };
 
-type Entry = { readonly size: number; readonly modified: number };
+/** A file listed: its size, time of last change, and identity on its volume. */
+type Entry = {
+  readonly size: number;
+  readonly modified: number;
+  readonly id: string;
+};
 type Listing = WorkspaceListing;
 
 const unlisted = "Zhiyin could not list this folder's files.";
+
+/** Files whose size and time are read at once while a folder is listed. */
+const readAtOnce = 64;
 
 /**
  * The folder's files with their size and time of last change, or why not.
  * A copy taken before a run lists what Git ignores too: that is often the
  * data a script works on. The folders an install or a build makes again, and
- * Git's own, stay out either way.
+ * Git's own, stay out either way. `all` lists every file however many there
+ * are, walking the folder itself, as keeping each file as a turn found it
+ * needs: what the ignore files list is in, a junction or symbolic link is
+ * listed as one and never followed, each folder comes with its identity, and
+ * `part` lists only part of the folder. Otherwise a folder past the setup's
+ * bound is not listed, and each file's size and time is read as ripgrep
+ * names it, a few at once.
  */
 export async function listFiles(
   files: ListingSetup,
   root: string,
-  { ignored = false }: { readonly ignored?: boolean } = {},
+  {
+    ignored = false,
+    all = false,
+    part,
+  }: {
+    readonly ignored?: boolean;
+    readonly all?: boolean;
+    readonly part?: ListingPart;
+  } = {},
 ): Promise<Listing> {
+  if (all) return walkFolder(root, part);
   if (!files.search) return { ok: false, reason: unlisted };
+  const upTo = files.upTo;
   const tooMany = {
     ok: false,
     reason: `This folder has more than ${files.upTo.toLocaleString("en-US")} files, too many to check what commands change.`,
   } as const;
-  const paths: string[] = [];
+  const listed = new Map<string, Entry>();
+  let named = 0;
+  const reading = new Set<Promise<void>>();
+  const read = (path: string) => {
+    const one = stat(join(root, path), { bigint: true })
+      .then(
+        (found) => {
+          listed.set(path, {
+            size: Number(found.size),
+            modified: Number(found.mtimeNs) / 1e6,
+            id: String(found.ino),
+          });
+        },
+        // A file gone between the listing and this is gone from the listing.
+        () => undefined,
+      )
+      .finally(() => reading.delete(one));
+    reading.add(one);
+  };
   const run = await ripgrep({
     ...files.search,
     // Hidden files are a person's files like any other, and a command often
@@ -79,23 +123,19 @@ export async function listFiles(
     cwd: root,
     // No path is a kilobyte long, so a listing this size is past the bound.
     maximumOutputBytes: files.upTo * 1024,
-    line: (text) => paths.push(printedPath(text)),
+    line: async (text) => {
+      named += 1;
+      if (named > upTo) return;
+      read(printedPath(text));
+      if (reading.size >= readAtOnce) await Promise.race(reading);
+    },
   }).catch(() => undefined);
-  if (paths.length > files.upTo) return tooMany;
+  await Promise.all(reading);
+  if (named > upTo) return tooMany;
   // ripgrep answers 1 when the folder has no files, and 2 when it could not
   // read some of them: what it could read is still a listing.
   if (!run?.complete || (run.exitCode ?? 2) > 2)
     return { ok: false, reason: unlisted };
-  const listed = new Map<string, Entry>();
-  for (let start = 0; start < paths.length; start += 64)
-    await Promise.all(
-      paths.slice(start, start + 64).map(async (path) => {
-        // A file gone between the listing and this is gone from the listing.
-        const found = await stat(join(root, path)).catch(() => undefined);
-        if (found)
-          listed.set(path, { size: found.size, modified: found.mtimeMs });
-      }),
-    );
   return { ok: true, files: listed };
 }
 

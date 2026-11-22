@@ -12,10 +12,25 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function coreWith(shutdownAll: () => Promise<void>) {
+function coreWith(
+  shutdownAll: () => Promise<void>,
+  closeUndo: () => Promise<void> = async () => {},
+) {
   const dependencies = stubDependencies(() => {});
   const released: string[] = [];
   const core = new Core({
+    undo: {
+      undoBudget: async () => ({ budgetBytes: 0, usedBytes: 0, chosen: false }),
+      setUndoBudget: async () => ({
+        budgetBytes: 0,
+        usedBytes: 0,
+        chosen: false,
+      }),
+      close: async () => {
+        released.push("files watched for going back");
+        await closeUndo();
+      },
+    },
     workspace: loopFrom({
       ...dependencies,
       mcp: { ...dependencies.mcp, shutdownAll },
@@ -58,7 +73,7 @@ describe("quitting", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(unfinished).toEqual(["browsers and connections"]);
-    expect(released).toEqual(["released"]);
+    expect(released).toEqual(["files watched for going back", "released"]);
   });
 
   it("does not wait at all when everything closes", async () => {
@@ -66,6 +81,23 @@ describe("quitting", () => {
     const { core, released } = coreWith(async () => {});
 
     await expect(core.shutdown()).resolves.toEqual([]);
-    expect(released).toEqual(["released"]);
+    expect(released).toEqual(["files watched for going back", "released"]);
+  });
+
+  it("lets go of the files watched for going back, giving up on them after five seconds", async () => {
+    vi.useFakeTimers();
+    const { core, released } = coreWith(
+      async () => {},
+      () => new Promise<void>(() => {}),
+    );
+
+    let unfinished: readonly string[] | undefined;
+    void core.shutdown().then((names) => {
+      unfinished = names;
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(unfinished).toEqual(["files watched for going back"]);
+    expect(released).toEqual(["files watched for going back", "released"]);
   });
 });

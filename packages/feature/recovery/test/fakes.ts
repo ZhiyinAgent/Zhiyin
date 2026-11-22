@@ -41,6 +41,16 @@ export function fakeRecovery(answers: Partial<Recovery> = {}): Recovery {
     }),
     cleanup: async () => {},
     forgetConversation: async () => {},
+    beginTurn: async () => ({ folders: [] }),
+    endTurn: async () => {},
+    prepareChange: async () => ({ ok: true }),
+    forgetActions: async () => {},
+    undoBudget: async () => ({ budgetBytes: 0, usedBytes: 0, chosen: false }),
+    setUndoBudget: async (bytes) => ({
+      budgetBytes: bytes,
+      usedBytes: 0,
+      chosen: true,
+    }),
     ...answers,
   };
 }

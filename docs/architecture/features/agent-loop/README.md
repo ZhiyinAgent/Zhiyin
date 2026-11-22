@@ -61,7 +61,16 @@ should last.
   hands them in as `backups` and `runs`, typed through the rewind group.
   The loop decides when they are taken: a change with no folder, or whose
   copy cannot be stored, is backed up as unprotected, and a command's changes
-  that cannot be recorded leave its action to finish.
+  that cannot be recorded leave its action to finish. It also says when a
+  turn's files are kept (ADR 0031): a turn begins them over the
+  conversation's folder and each folder outside it the conversation was
+  granted for changes, by a file tool's grant or by `request_access`, and
+  begins them again as it delivers a message the person added, so going back
+  to that message puts back each file as the message found it. A folder
+  granted during a turn is kept so from the next message on; until then each
+  run's copy keeps it. `prepare_change` saves a file of the conversation's
+  folder, or one of a folder granted for sealed-off commands to change, named
+  by its whole path.
 
 ## Public interface
 

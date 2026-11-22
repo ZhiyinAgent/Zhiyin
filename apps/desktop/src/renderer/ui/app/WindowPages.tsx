@@ -14,6 +14,7 @@ import {
 } from "../model/index.js";
 import { UsagePanel } from "../usage/index.js";
 import { MemoryPage } from "../memory/index.js";
+import { useUndoBudget } from "../settings/index.js";
 import { SettingsWithModelList } from "./SettingsWithModelList.js";
 import { listedConversations, type WindowState } from "./windowState.js";
 import styles from "./app.module.css";
@@ -69,6 +70,8 @@ type SurfaceCommands = Pick<
       | "setReviewerModel"
       | "reviewerModelSettings"
       | "setWorkPauses"
+      | "undoBudget"
+      | "setUndoBudget"
       | "setMcpServerToolTreatment"
       | "openDataFolder"
       | "openMemoryFolder"
@@ -122,6 +125,10 @@ export function WindowPages({
   const reviewerLabel = useReviewerLabel(
     state.surface === "settings" ? state.reviewerModel : undefined,
     commands.reviewerModelSettings,
+  );
+  const undo = useUndoBudget(
+    state.surface === "settings" ? commands.undoBudget : undefined,
+    commands.setUndoBudget,
   );
   const memoryEntry =
     typeof state.surfaceAt === "number" ? state.surfaceAt : undefined;
@@ -279,6 +286,8 @@ export function WindowPages({
               : {})}
             onWorkPauses={commands.setWorkPauses}
             onOpenDataFolder={commands.openDataFolder}
+            undoBudget={undo.budget}
+            onUndoBudget={undo.save}
             {...(onUpdateConversations
               ? {
                   waitingForUpdate: listedConversations(state).filter(

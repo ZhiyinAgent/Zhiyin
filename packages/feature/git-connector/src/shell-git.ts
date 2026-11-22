@@ -52,6 +52,16 @@ import {
 import { holds } from "@zhiyin/workspace-containment";
 import { resolveGit } from "./resolve-git.js";
 
+/**
+ * The junctions and symbolic links anywhere in a folder, each by its whole
+ * path and the target it names; nothing when that cannot be said.
+ */
+export type LinksIn = (
+  root: string,
+) => Promise<
+  readonly { readonly path: string; readonly target: string }[] | undefined
+>;
+
 export type ShellGitCall = {
   /** git's arguments, as the shell gave them. */
   readonly args: readonly string[];
@@ -282,14 +292,36 @@ async function pathThroughLink(
  * folder git may change, and where, or nothing. git follows a junction as a
  * folder, so through one it would read and write elsewhere. A link that
  * leads into another of the folders is walked too; one whose target is
- * missing is judged by the target it names.
+ * missing is judged by the target it names. The links of each folder are
+ * taken from `linksIn` where it can say, and walked for otherwise.
  */
 async function linkLeadingOut(
   roots: readonly string[],
   folders: readonly string[],
+  linksIn: LinksIn | undefined,
 ): Promise<{ readonly link: string; readonly real: string } | undefined> {
   const walked: string[] = [];
   let found: { link: string; real: string } | undefined;
+  /** Where a link leads: its real place, or the target it names when that is missing. */
+  const leadsTo = (path: string, target: string) =>
+    realpath(path).catch(() => resolve(dirname(path), target));
+  const fromIndex = async (root: string): Promise<boolean> => {
+    const links = linksIn
+      ? await linksIn(root).catch(() => undefined)
+      : undefined;
+    if (!links) return false;
+    const deeper: Promise<void>[] = [];
+    for (const { path, target } of links) {
+      const real = await leadsTo(path, target);
+      if (!folders.some((inside) => holds(inside, real))) {
+        found ??= { link: path, real };
+        break;
+      }
+      deeper.push(enter(real));
+    }
+    await Promise.all(deeper);
+    return true;
+  };
   const walk = async (folder: string): Promise<void> => {
     if (found) return;
     const entries = await readdir(folder, { withFileTypes: true }).catch(
@@ -314,7 +346,7 @@ async function linkLeadingOut(
   const enter = async (root: string): Promise<void> => {
     if (walked.some((done) => holds(done, root))) return;
     walked.push(root);
-    await walk(root);
+    if (!(await fromIndex(root))) await walk(root);
   };
   for (const root of roots) await enter(root);
   return found;
@@ -658,9 +690,15 @@ export function shellGit(options: {
   /** How this computer reaches a URL; absent, the proxy goes out directly. */
   readonly route?: ProxyRoute;
   readonly resolveGit?: () => string | undefined;
+  /**
+   * The links in a folder, `.git` and `node_modules` included, kept so that
+   * asking again costs little; absent, or when it cannot say, the folder is
+   * walked.
+   */
+  readonly linksIn?: LinksIn;
 }): (call: ShellGitCall) => Promise<ShellGitAnswer> {
   const find = options.resolveGit ?? resolveGit;
-  const { containment } = options;
+  const { containment, linksIn } = options;
   return async (call) => {
     const git = find();
     if (!git)
@@ -756,6 +794,7 @@ export function shellGit(options: {
       const leading = await linkLeadingOut(
         away.paths.length ? away.paths : [cwd],
         folders,
+        linksIn,
       );
       if (leading)
         return answer(

@@ -436,8 +436,8 @@ describe("rewind planner composition", () => {
       status: "checked",
       files: [
         { path: "chart.png", change: "created" },
-        { path: "notes.txt", change: "deleted" },
-        { path: "table.csv", change: "updated" },
+        { path: "notes.txt", change: "deleted", kept: true },
+        { path: "table.csv", change: "updated", kept: true },
       ],
     });
     expect(result.files).toEqual(
@@ -454,10 +454,115 @@ describe("rewind planner composition", () => {
     );
   });
 
+  it("marks a file a command reported changing as kept, from recovery's record, and the turn's undo puts it back", async () => {
+    const root = await folders.make("zhiyin-loop-undo-command-");
+    const storage = await folders.make("zhiyin-loop-undo-recovery-");
+    await writeFile(join(root, "notes.txt"), "the person's notes");
+    const workspace = new WorkspaceTools(root, { shell: undefined });
+    const deps = stubDependencies(() => {});
+    let request = 0;
+    const agent = loopFrom({
+      ...deps,
+      permissions: {
+        decide: async () => ({ outcome: "allow", reason: "Test policy." }),
+      },
+      // A command that lists what it changed itself, as the sealed shell does.
+      tools: {
+        list: () => [
+          {
+            name: "bash",
+            description: "Run a command.",
+            inputSchema: { type: "object" },
+          },
+        ],
+        inspect: async () => ({
+          ok: true as const,
+          action: "Run a sealed-off command",
+          target: "echo bread >> notes.txt",
+          command: "echo bread >> notes.txt",
+          effects: {
+            reads: "workspace" as const,
+            changes: "workspace" as const,
+            sends: "none" as const,
+            actsAsPerson: "none" as const,
+            runs: "sealed" as const,
+            lasting: false,
+            brings: "none" as const,
+          },
+          changesAnyFile: { writable: [] },
+        }),
+        execute: async () => {
+          await writeFile(join(root, "notes.txt"), "the person's notes\nbread");
+          return {
+            ok: true as const,
+            value: { exitCode: 0 },
+            commandChanges: {
+              status: "checked" as const,
+              files: [{ path: "notes.txt", change: "updated" as const }],
+            },
+          };
+        },
+      },
+      workspace,
+      recovery: new FileRecovery(storage, { list: workspace.listWorkspace }),
+      rewind: new ConversationRewind(() => "undo-command"),
+      model: {
+        ...deps.model,
+        send: async function* () {
+          request += 1;
+          if (request === 1)
+            yield {
+              kind: "toolCallDelta",
+              index: 0,
+              callId: "command-1",
+              name: "bash",
+              argumentsDelta: "{}",
+            };
+          else yield { kind: "textDelta", text: "Answer" };
+          yield { kind: "done" };
+        },
+      },
+    });
+    await agent.selectWorkspace(root);
+    const taskId = await agent.createTask();
+    await agent.start(taskId, "Add bread to the notes");
+    const action = agent.snapshot().tasks[0]!.actions.at(-1);
+
+    const preview = await agent.rewinds.previewUndo(
+      taskId,
+      agent.snapshot().tasks[0]!.messages[0]!.id,
+    );
+    await agent.commitUndo(taskId, preview.id, "restore", "keep");
+
+    expect(action?.commandChanges).toEqual({
+      status: "checked",
+      files: [{ path: "notes.txt", change: "updated", kept: true }],
+    });
+    expect(await readFile(join(root, "notes.txt"), "utf8")).toBe(
+      "the person's notes",
+    );
+  });
+
   it("deletes the copies kept for a conversation's changes with the conversation", async () => {
     const root = await folders.make("zhiyin-delete-");
     const storage = await folders.make("zhiyin-delete-recovery-");
-    await writeFile(join(root, "note.txt"), "before", "utf8");
+    const before = "the note as the person wrote it, before the change";
+    await writeFile(join(root, "note.txt"), before, "utf8");
+    // Each action's folder, and whether any file Zhiyin keeps holds the note.
+    const actionFolders = async () =>
+      (await readdir(join(storage, "recovery"))).filter(
+        (name) => !["content", "folders", "runs"].includes(name),
+      );
+    const kept = async () => {
+      const pending = [join(storage, "recovery")];
+      for (let next = pending.pop(); next; next = pending.pop())
+        for (const entry of await readdir(next, { withFileTypes: true })) {
+          const path = join(next, entry.name);
+          if (entry.isDirectory()) pending.push(path);
+          else if ((await readFile(path, "utf8")).includes(before)) return true;
+        }
+      return false;
+    };
     const workspace = new WorkspaceTools(root, { shell: undefined });
     const deps = stubDependencies(() => {});
     let request = 0;
@@ -495,11 +600,13 @@ describe("rewind planner composition", () => {
     await agent.selectWorkspace(root);
     const taskId = await agent.createTask();
     await agent.start(taskId, "Change the note");
-    expect(await readdir(join(storage, "recovery"))).toHaveLength(1);
+    expect(await actionFolders()).toHaveLength(1);
+    expect(await kept()).toBe(true);
 
     await agent.deleteTask(taskId);
 
-    expect(await readdir(join(storage, "recovery"))).toEqual([]);
+    expect(await actionFolders()).toEqual([]);
+    expect(await kept()).toBe(false);
     expect(await readFile(join(root, "note.txt"), "utf8")).toBe("agent result");
   });
 

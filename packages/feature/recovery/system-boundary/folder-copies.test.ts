@@ -5,6 +5,7 @@
  * folder, standing in for the one the app hands in.
  */
 
+import { writeFileSync } from "node:fs";
 import {
   readdir,
   readFile,
@@ -93,8 +94,8 @@ describe("a program's changes to its folder", () => {
       status: "checked",
       files: [
         { path: "data/chart.png", change: "created" },
-        { path: "data/table.csv", change: "updated" },
-        { path: "notes.txt", change: "deleted" },
+        { path: "data/table.csv", change: "updated", kept: true },
+        { path: "notes.txt", change: "deleted", kept: true },
       ],
     });
     expect(result.files).toEqual(
@@ -198,7 +199,7 @@ describe("a program's changes to its folder", () => {
 });
 
 describe("copying a folder", () => {
-  it("leaves a file over the per-file limit, and past the total the largest files, uncopied, saying why", async () => {
+  it("leaves the largest files past the undo budget uncopied, saying why", async () => {
     const { root, recovery } = await fixture(
       {
         "a.txt": "a".repeat(50),
@@ -206,7 +207,7 @@ describe("copying a folder", () => {
         "huge.bin": "h".repeat(150),
         "d.txt": "d".repeat(130),
       },
-      { fileBytes: 140, totalBytes: 250 },
+      { totalBytes: 250 },
     );
 
     const copy = await recovery.copyFolder("run-1", root, "conversation-1");
@@ -215,12 +216,12 @@ describe("copying a folder", () => {
       ok: true,
       uncopied: [
         {
-          path: "huge.bin",
-          reason: expect.stringContaining("recovery limit"),
+          path: "d.txt",
+          reason: expect.stringContaining("undo budget"),
         },
         {
-          path: "d.txt",
-          reason: expect.stringContaining("storage limit"),
+          path: "huge.bin",
+          reason: expect.stringContaining("undo budget"),
         },
       ],
     });
@@ -261,7 +262,7 @@ describe("copying a folder", () => {
   it("lists a change to a file that could not be copied as one that cannot be put back", async () => {
     const { root, recovery } = await fixture(
       { "huge.bin": "h".repeat(150), "small.txt": "small" },
-      { fileBytes: 100 },
+      { totalBytes: 100 },
     );
     await recovery.copyFolder("run-1", root, "conversation-1");
     await writeFile(join(root, "huge.bin"), "x".repeat(160));
@@ -274,7 +275,7 @@ describe("copying a folder", () => {
         path: "huge.bin",
         action: "unknown",
         status: "unprotected",
-        reason: expect.stringContaining("recovery limit"),
+        reason: expect.stringContaining("undo budget"),
       },
     ]);
     expect(await readFile(join(root, "huge.bin"), "utf8")).toBe(
@@ -369,7 +370,7 @@ describe("a run after which the folder cannot be listed", () => {
 
     expect(changes).toEqual({
       status: "checked",
-      files: [{ path: "a.txt", change: "updated" }],
+      files: [{ path: "a.txt", change: "updated", kept: true }],
       unlisted: expect.stringContaining("more than 3 files"),
     });
     expect(await readFile(join(root, "a.txt"), "utf8")).toBe("before");
@@ -534,7 +535,7 @@ describe("a job that ends while a later run awaits approval", () => {
     expect(changes).toEqual({
       status: "checked",
       files: [
-        { path: "keep.txt", change: "deleted" },
+        { path: "keep.txt", change: "deleted", kept: true },
         { path: "made.txt", change: "created" },
       ],
     });
@@ -563,7 +564,7 @@ describe("a job that ends while a later run awaits approval", () => {
 
     expect(runChanges).toEqual({
       status: "checked",
-      files: [{ path: "report.md", change: "updated" }],
+      files: [{ path: "report.md", change: "updated", kept: true }],
     });
     expect(await readFile(join(root, "keep.txt"), "utf8")).toBe("kept");
     expect(await readFile(join(root, "report.md"), "utf8")).toBe(
@@ -619,10 +620,10 @@ describe("a folder outside the workspace the program is given", () => {
     expect(changes).toEqual({
       status: "checked",
       files: [
-        { path: "notes.txt", change: "updated" },
+        { path: "notes.txt", change: "updated", kept: true },
         { path: join(elsewhere, "chart.png"), change: "created" },
-        { path: join(elsewhere, "old.txt"), change: "deleted" },
-        { path: join(elsewhere, "table.csv"), change: "updated" },
+        { path: join(elsewhere, "old.txt"), change: "deleted", kept: true },
+        { path: join(elsewhere, "table.csv"), change: "updated", kept: true },
       ],
     });
     expect(result.files.map((file) => file.status).sort()).toEqual([
@@ -664,8 +665,8 @@ describe("a folder outside the workspace the program is given", () => {
     expect(changes).toEqual({
       status: "checked",
       files: [
-        { path: "notes.txt", change: "updated" },
-        { path: join(elsewhere, "beside.txt"), change: "updated" },
+        { path: "notes.txt", change: "updated", kept: true },
+        { path: join(elsewhere, "beside.txt"), change: "updated", kept: true },
       ],
     });
   });
@@ -752,5 +753,165 @@ describe("a folder outside the workspace the program is given", () => {
 
     expect(await keptFor(storage)).toEqual({ actions: [], runs: [] });
     expect(await recovery.keepFolderChanges("run-1")).toBeUndefined();
+  });
+});
+
+describe("files that only work together", () => {
+  it("are each held and checked before any is put back, so a write to one while the others are held leaves all of them", async () => {
+    const root = await folders.make("zhiyin-folder-copy-group-");
+    const storage = await folders.make("zhiyin-folder-copy-group-store-");
+    await writeFile(join(root, "results.db"), "the database before");
+    await writeFile(join(root, "results.db-wal"), "the log before");
+    let racing = false;
+    const recovery = new FileRecovery(storage, {
+      list,
+      // Another program writes the log just as Zhiyin holds the database.
+      restoreCalls: (files) => ({
+        ...files,
+        openShared: (path) => {
+          const handle = files.openShared(path);
+          if (racing && path.endsWith("results.db")) {
+            racing = false;
+            writeFileSync(join(root, "results.db-wal"), "the person's log");
+          }
+          return handle;
+        },
+      }),
+    });
+    await recovery.copyFolder("run-1", root, "conversation-1");
+    await writeFile(join(root, "results.db"), "the database after");
+    await writeFile(join(root, "results.db-wal"), "the log after");
+    await recovery.keepFolderChanges("run-1");
+    const review = await recovery.review("review", root, [ran("run-1")]);
+
+    racing = true;
+    const result = await recovery.restore(review);
+
+    expect(result.files.map(({ path, status }) => [path, status])).toEqual([
+      ["results.db", "conflict"],
+      ["results.db-wal", "conflict"],
+    ]);
+    expect(await readFile(join(root, "results.db"), "utf8")).toBe(
+      "the database after",
+    );
+    expect(await readFile(join(root, "results.db-wal"), "utf8")).toBe(
+      "the person's log",
+    );
+    expect(
+      (await readdir(root)).filter((name) =>
+        /\.(restore|previous)$/.test(name),
+      ),
+    ).toEqual([]);
+  });
+
+  it("are left as they were when Windows refuses to put one back after another was, the first undone", async () => {
+    const root = await folders.make("zhiyin-folder-copy-undo-");
+    const storage = await folders.make("zhiyin-folder-copy-undo-store-");
+    await writeFile(join(root, "results.db"), "the database before");
+    await writeFile(join(root, "results.db-wal"), "the log before");
+    await writeFile(join(root, "results.db-shm"), "the index before");
+    const recovery = new FileRecovery(storage, {
+      list,
+      restoreCalls: (files) => ({
+        ...files,
+        replace: (target, replacement, previous) =>
+          target.endsWith("-wal") && replacement.endsWith(".restore")
+            ? false
+            : files.replace(target, replacement, previous),
+      }),
+    });
+    await recovery.copyFolder("run-1", root, "conversation-1");
+    await writeFile(join(root, "results.db"), "the database after");
+    await writeFile(join(root, "results.db-wal"), "the log after");
+    await rm(join(root, "results.db-shm"));
+    await writeFile(join(root, "results.db-journal"), "a journal made");
+    await recovery.keepFolderChanges("run-1");
+
+    const { result } = await goBack(recovery, root, [ran("run-1")]);
+
+    expect(
+      Object.fromEntries(
+        result.files.map(({ path, status }) => [path, status]),
+      ),
+    ).toEqual({
+      "results.db": "conflict",
+      "results.db-journal": "conflict",
+      "results.db-shm": "conflict",
+      "results.db-wal": "unprotected",
+    });
+    expect(
+      Object.fromEntries(
+        await Promise.all(
+          (await readdir(root))
+            .sort()
+            .map(async (name) => [
+              name,
+              await readFile(join(root, name), "utf8"),
+            ]),
+        ),
+      ),
+    ).toEqual({
+      "results.db": "the database after",
+      "results.db-journal": "a journal made",
+      "results.db-wal": "the log after",
+    });
+  });
+
+  it("are put back together: a SQLite database with its write-ahead log", async () => {
+    const { root, recovery } = await fixture({
+      "results.db": "the database before",
+      "results.db-wal": "the log before",
+    });
+    await recovery.copyFolder("run-1", root, "conversation-1");
+    await writeFile(join(root, "results.db"), "the database after");
+    await writeFile(join(root, "results.db-wal"), "the log after");
+    await recovery.keepFolderChanges("run-1");
+
+    const { result } = await goBack(recovery, root, [ran("run-1")]);
+
+    expect(result.files).toEqual([
+      { path: "results.db", status: "restored" },
+      { path: "results.db-wal", status: "restored" },
+    ]);
+    expect(await readFile(join(root, "results.db"), "utf8")).toBe(
+      "the database before",
+    );
+  });
+
+  it("are left as they are, all of them, when one of them changed since", async () => {
+    const { root, recovery } = await fixture({
+      "results.db": "the database before",
+      "results.db-wal": "the log before",
+      "scan.zarr/.zarray": "the array before",
+      "scan.zarr/0.0": "a chunk before",
+    });
+    await recovery.copyFolder("run-1", root, "conversation-1");
+    for (const path of [
+      "results.db",
+      "results.db-wal",
+      "scan.zarr/.zarray",
+      "scan.zarr/0.0",
+    ])
+      await writeFile(join(root, path), `${path} after`);
+    await recovery.keepFolderChanges("run-1");
+    const review = await recovery.review("review", root, [ran("run-1")]);
+    // The person's programs go on writing each group's second file.
+    await writeFile(join(root, "results.db-wal"), "the person's log");
+    await writeFile(join(root, "scan.zarr/0.0"), "the person's chunk");
+
+    const result = await recovery.restore(review);
+
+    expect(result.files.map(({ path, status }) => [path, status])).toEqual([
+      ["results.db", "conflict"],
+      ["results.db-wal", "conflict"],
+      ["scan.zarr/.zarray", "conflict"],
+      ["scan.zarr/0.0", "conflict"],
+    ]);
+    expect(await readFile(join(root, "results.db"), "utf8")).toBe(
+      "results.db after",
+    );
+    expect(await readFile(join(root, "scan.zarr/.zarray"), "utf8")).toBe(
+      "scan.zarr/.zarray after",
+    );
   });
 });

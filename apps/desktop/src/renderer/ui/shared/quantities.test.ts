@@ -21,6 +21,11 @@ describe("a file size", () => {
     expect(fileSize(22_463_684)).toBe("21.4 MB");
   });
 
+  it("is written in gigabytes to a tenth from one gigabyte", () => {
+    expect(fileSize(1024 * 1024 * 1024 - 1)).toBe("1024.0 MB");
+    expect(fileSize(5 * 1024 * 1024 * 1024)).toBe("5.0 GB");
+  });
+
   it("keeps a tenth of a kilobyte below ten, where rounding would overstate it", () => {
     expect(fileSize(1_536)).toBe("1.5 KB");
     expect(fileSize(9 * 1024 + 900)).toBe("9.9 KB");

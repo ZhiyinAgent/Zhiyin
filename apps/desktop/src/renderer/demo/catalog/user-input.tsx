@@ -223,4 +223,25 @@ export const userInputEntries: ComponentCatalogEntry[] = [
       />
     ),
   },
+  {
+    id: "undo-room",
+    title: "No room in the undo budget to keep a file first",
+    description:
+      "A program's first write to a 7.2 GB scan while only 1.4 GB of the 20 GB kept for going back is free; the program waits while the person chooses to change it without a backup, make room, or refuse.",
+    render: () => (
+      <UserInputPrompt
+        prompt={{
+          id: "catalog-undo-room",
+          kind: "undoRoom",
+          title: "No room to keep this file first",
+          path: "scans/2026-11 tomographie/volume-coronal-0412.tif",
+          bytes: 7_730_941_132,
+          roomBytes: 1_503_238_553,
+          budgetBytes: 21_474_836_480,
+        }}
+        onSubmit={() => undefined}
+        onCancel={() => undefined}
+      />
+    ),
+  },
 ];

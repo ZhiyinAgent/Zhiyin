@@ -18,14 +18,27 @@ import type {
   ListedFile,
 } from "@zhiyin/contract";
 import type { CapturedFile } from "./records.js";
-import { fileDigest } from "./workspace-files.js";
+import { fileDigest, isLinkDigest, linkDigest } from "./workspace-files.js";
 
 /** Files named on one action; the rest are counted. */
 const namedOnAction = 200;
 const mib = 1024 * 1024;
 
-/** A file as a copy found it, with its copy's digest when it was copied. */
-export type Known = ListedFile & { readonly digest?: string };
+/**
+ * A file as a copy found it, with its digest when that is known. `watched`:
+ * not saved yet, and saved as it is first written; `unstored`: its digest is
+ * known, as a run of the same turn left it, but the store holds no copy,
+ * since a turn keeps a file only as the turn found it (ADR 0031); `turn`, for
+ * such a file, is the turn that was.
+ */
+export type Known = ListedFile & {
+  readonly digest?: string;
+  readonly watched?: true;
+  readonly unstored?: true;
+  readonly turn?: number;
+  /** For a file changed since its turn began: the version the turn found, saved at its first write. */
+  readonly turnStart?: { readonly digest: string; readonly bytes: number };
+};
 
 /** A copy of a folder taken before a run, and what that run then recorded. */
 export type RunCopy = {
@@ -39,12 +52,32 @@ export type RunCopy = {
 
 /** A limit as a person reads it. */
 export const sizeOf = (bytes: number) =>
-  bytes % mib === 0 ? `${bytes / mib} MiB` : `${bytes} byte`;
+  bytes >= 1024 * mib
+    ? `${(bytes / (1024 * mib)).toFixed(1)} GiB`
+    : bytes % mib === 0
+      ? `${bytes / mib} MiB`
+      : bytes >= mib
+        ? `${(bytes / mib).toFixed(1)} MiB`
+        : `${bytes} bytes`;
+
+/**
+ * Whether what the run found can be put back: a link, by what it names, or a
+ * file whose bytes the store holds, as the run's copy or as its turn found
+ * it. A file known only by its digest has none.
+ */
+function savedBefore(before: Known): boolean {
+  if (isLinkDigest(before.digest)) return true;
+  return !before.unstored || before.turnStart !== undefined;
+}
 
 /** Whether a file now is other than a copy found it. */
 function differs(now: ListedFile | undefined, then: Known | undefined) {
   if (!now || !then) return now !== then;
-  return now.size !== then.size || now.modified !== then.modified;
+  return (
+    now.size !== then.size ||
+    now.modified !== then.modified ||
+    now.link !== then.link
+  );
 }
 
 export async function runChanges(options: {
@@ -57,13 +90,34 @@ export async function runChanges(options: {
   readonly unlisted?: string;
   /** Copies of the same folder taken after this run's. */
   readonly later: readonly RunCopy[];
-  readonly fileBytes: number;
+  /**
+   * The files the drive's change journal says were written since the run's
+   * copy, whatever their size and time say.
+   */
+  readonly written?: ReadonlySet<string>;
 }): Promise<{
   readonly files: readonly CapturedFile[];
   readonly shown: CommandFileChanges;
 }> {
-  const { run, uncopied, current, later, fileBytes } = options;
-  const limit = sizeOf(fileBytes);
+  const { run, uncopied, current, later } = options;
+  const written = options.written ?? new Set<string>();
+  /**
+   * What the store holds of the file before the run: a copy, or for a file
+   * changed since its turn began, the file as the turn found it, or only its
+   * digest.
+   */
+  const kept = (before: Known) =>
+    isLinkDigest(before.digest)
+      ? {}
+      : !before.unstored
+        ? { content: before.digest!, bytes: before.size }
+        : before.turnStart
+          ? {
+              content: before.turnStart.digest,
+              bytes: before.turnStart.bytes,
+              turnStart: true as const,
+            }
+          : { linkOnly: true as const };
   const ordered = [...later].sort((a, b) => a.seq - b.seq);
   const files: CapturedFile[] = [];
   const shown: CommandFileChange[] = [];
@@ -79,15 +133,24 @@ export async function runChanges(options: {
     );
     const after: Known | undefined = claimed ? claimed.files.get(path) : now;
     if (!before && !after) continue;
-    if (before && after && !differs(after, before)) continue;
+    if (
+      before &&
+      after &&
+      !differs(after, before) &&
+      (claimed || !written.has(path))
+    )
+      continue;
     // What the file held then: known from the later copy, or read now.
+    // A link is known by what it names; nothing it leads to is read.
     const afterDigest = !after
       ? undefined
       : claimed
         ? after.digest
-        : after.size > fileBytes
-          ? undefined
-          : await fileDigest(join(run.root, path)).catch(() => undefined);
+        : after.link !== undefined
+          ? linkDigest(after.link)
+          : await fileDigest(run.root, join(run.root, path)).catch(
+              () => undefined,
+            );
     if (!before) {
       shown.push({ path, change: "created" });
       files.push(
@@ -103,13 +166,18 @@ export async function runChanges(options: {
               path,
               status: "unprotected",
               before: "absent",
-              reason: `The file the run made is larger than the ${limit} recovery limit, so it is left in place.`,
+              reason:
+                "The file the run made could not be read, so it is left in place.",
             },
       );
       continue;
     }
     if (!after) {
-      shown.push({ path, change: "deleted" });
+      shown.push({
+        path,
+        change: "deleted",
+        ...(before.digest && savedBefore(before) ? { kept: true } : {}),
+      });
       files.push(
         before.digest
           ? {
@@ -117,8 +185,7 @@ export async function runChanges(options: {
               status: "protected",
               before: "file",
               beforeDigest: before.digest,
-              content: before.digest,
-              bytes: before.size,
+              ...kept(before),
               after: "absent",
             }
           : {
@@ -133,7 +200,13 @@ export async function runChanges(options: {
     }
     // Touched, its contents as they were.
     if (afterDigest && afterDigest === before.digest) continue;
-    shown.push({ path, change: "updated" });
+    shown.push({
+      path,
+      change: "updated",
+      ...(before.digest && afterDigest && savedBefore(before)
+        ? { kept: true }
+        : {}),
+    });
     files.push(
       before.digest && afterDigest
         ? {
@@ -141,8 +214,7 @@ export async function runChanges(options: {
             status: "protected",
             before: "file",
             beforeDigest: before.digest,
-            content: before.digest,
-            bytes: before.size,
+            ...kept(before),
             after: "file",
             afterDigest,
           }
@@ -152,7 +224,7 @@ export async function runChanges(options: {
             before: "unknown",
             reason:
               uncopied.get(path) ??
-              `The file the run left is larger than the ${limit} recovery limit, or was not copied, so it cannot be checked before it is put back.`,
+              "The file was not saved before the run, or could not be read after it, so it cannot be checked before it is put back.",
           },
     );
   }

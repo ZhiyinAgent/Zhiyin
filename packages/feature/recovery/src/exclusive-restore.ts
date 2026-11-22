@@ -64,7 +64,8 @@ export type RecoveryFiles = {
 
 let files: RecoveryFiles | undefined;
 
-function win32(): RecoveryFiles {
+/** The Windows calls a restore makes, from Zhiyin's own process. */
+export function windowsRecoveryFiles(): RecoveryFiles {
   if (files) return files;
   const windows = windowsFiles();
   files = {
@@ -188,8 +189,122 @@ export function exclusiveRecovery(filesOf: () => RecoveryFiles) {
     }
   }
 
-  return { restoreExclusively, recreateExclusively };
+  /**
+   * Puts back files that only work together, all or none. Every kept copy is
+   * written beside its file and put on disk first; then every file there is
+   * held so that no one may write to it, and its digest checked on that
+   * handle; only once all of them are held and match is any put back. One
+   * that cannot be put back puts back those already done, from what they
+   * held, before the handles are let go of.
+   */
+  async function restoreGroupExclusively(
+    members: readonly GroupMember[],
+  ): Promise<GroupOutcome> {
+    const api = filesOf();
+    const unique = () => randomUUID().replaceAll("-", "");
+    const temporaries = new Map<GroupMember, string>();
+    const handles: unknown[] = [];
+    const undo: (() => void)[] = [];
+    const aside: string[] = [];
+    try {
+      for (const member of members) {
+        if (member.action !== "restore") continue;
+        if (!member.backup)
+          return { ok: false, path: member.absolute, damaged: false };
+        const temporary = `${member.absolute}.${unique()}.restore`;
+        if (member.expected === "absent")
+          await mkdir(dirname(member.absolute), { recursive: true });
+        try {
+          await copyIntact(api, member.backup, temporary, member.retained);
+        } catch (error) {
+          await rm(temporary, { force: true });
+          return {
+            ok: false,
+            path: member.absolute,
+            damaged: error instanceof DamagedCopyError,
+          };
+        }
+        temporaries.set(member, temporary);
+      }
+      // Held and checked, every one, before any is touched.
+      for (const member of members) {
+        if (member.expected === "absent") continue;
+        const handle = api.openShared(member.absolute);
+        if (!handle) return { ok: false, path: member.absolute, held: true };
+        handles.push(handle);
+        if (digestOf(api, handle) !== member.expected)
+          return { ok: false, path: member.absolute, changed: true };
+      }
+      for (const member of members) {
+        const temporary = temporaries.get(member);
+        if (member.expected === "absent") {
+          if (!temporary || !api.moveIntoPlace(temporary, member.absolute))
+            return { ok: false, path: member.absolute, changed: true };
+          temporaries.delete(member);
+          undo.push(() => void api.remove(member.absolute));
+          continue;
+        }
+        const previous = `${member.absolute}.${unique()}.previous`;
+        if (member.action === "remove") {
+          if (!api.moveIntoPlace(member.absolute, previous))
+            return { ok: false, path: member.absolute, applied: false };
+          aside.push(previous);
+          undo.push(() => void api.moveIntoPlace(previous, member.absolute));
+          continue;
+        }
+        if (!api.replace(member.absolute, temporary!, previous))
+          return { ok: false, path: member.absolute, applied: false };
+        temporaries.delete(member);
+        aside.push(previous);
+        // Undone by renames: the file it was is still held by this process,
+        // which Windows lets be renamed but not be a replacement.
+        undo.push(() => {
+          const undone = `${member.absolute}.${unique()}.undone`;
+          if (!api.moveIntoPlace(member.absolute, undone)) return;
+          aside.push(undone);
+          api.moveIntoPlace(previous, member.absolute);
+        });
+      }
+      undo.length = 0;
+      return { ok: true };
+    } finally {
+      // What was put back goes back as it was, newest first.
+      for (const step of undo.reverse()) step();
+      for (const handle of handles) api.close(handle);
+      for (const temporary of temporaries.values())
+        await rm(temporary, { force: true });
+      for (const path of aside) await rm(path, { force: true });
+    }
+  }
+
+  return { restoreExclusively, recreateExclusively, restoreGroupExclusively };
 }
 
-export const { restoreExclusively, recreateExclusively } =
-  exclusiveRecovery(win32);
+/** One of the files a group puts back together. */
+export type GroupMember = {
+  readonly absolute: string;
+  /** The digest the file must still have, or `absent` when it must not be there. */
+  readonly expected: string;
+  readonly action: "restore" | "remove";
+  readonly backup?: string;
+  /** The digest the kept copy had when it was made. */
+  readonly retained?: string;
+};
+
+/** Whether a group went back, or which file kept it from going back, and why. */
+export type GroupOutcome =
+  | { readonly ok: true }
+  | {
+      readonly ok: false;
+      readonly path: string;
+      /** Its kept copy no longer matches what was kept. */
+      readonly damaged?: boolean;
+      /** Another program held it open for writing. */
+      readonly held?: true;
+      /** It changed since the review, or something took its place. */
+      readonly changed?: true;
+      /** Windows did not put it back. */
+      readonly applied?: false;
+    };
+
+export const { recreateExclusively } = exclusiveRecovery(windowsRecoveryFiles);

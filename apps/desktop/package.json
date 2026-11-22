@@ -35,6 +35,7 @@
     "@zhiyin/corrections-log": "workspace:*",
     "@zhiyin/document-compiler": "workspace:*",
     "@zhiyin/document-viewer": "workspace:*",
+    "@zhiyin/file-watch": "workspace:*",
     "@zhiyin/files": "workspace:*",
     "@zhiyin/git-connector": "workspace:*",
     "@zhiyin/interactive-browser": "workspace:*",
