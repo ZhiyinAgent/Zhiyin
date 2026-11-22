@@ -4,7 +4,7 @@
  * is being shown.
  */
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runProcess } from "@zhiyin/sandbox";
@@ -73,6 +73,24 @@ describe("listing a folder's files", () => {
     expect(listing.ok && listing.files.get("notes.md")?.size).toBe(5);
   });
 
+  it("gives each file's identity on its volume, which stays with it when it is renamed", async () => {
+    const root = await folderWith({ "notes.md": "notes", "plan.md": "plan" });
+    const before = await listFiles(setup(), root);
+    await rename(join(root, "notes.md"), join(root, "renamed.md"));
+    const after = await listFiles(setup(), root);
+
+    if (!before.ok || !after.ok) throw new Error("Not listed.");
+    expect(before.files.get("notes.md")?.id).toBe(
+      String((await stat(join(root, "renamed.md"), { bigint: true })).ino),
+    );
+    expect(after.files.get("renamed.md")?.id).toBe(
+      before.files.get("notes.md")?.id,
+    );
+    expect(before.files.get("plan.md")?.id).not.toBe(
+      before.files.get("notes.md")?.id,
+    );
+  });
+
   it("refuses a folder holding more files than it may list, saying so", async () => {
     const root = await folderWith({ a: "", b: "", c: "" });
 
@@ -81,6 +99,102 @@ describe("listing a folder's files", () => {
       reason:
         "This folder has more than 2 files, too many to check what commands change.",
     });
+  });
+
+  it("lists every file, past its bound, when all are asked for", async () => {
+    const root = await folderWith({ a: "1", b: "22", c: "333" });
+
+    const listing = await listFiles(setup(2), root, { all: true });
+
+    expect(namesIn(listing)).toEqual(["a", "b", "c"]);
+    expect(listing.ok && listing.files.get("c")?.size).toBe(3);
+  });
+
+  it("lists a junction or symbolic link as itself when all are asked for, never what it leads to", async () => {
+    const root = await folderWith({
+      ...files,
+      "sub/x.txt": "x",
+      "empty/.keep": "",
+    });
+    const outside = await folderWith({ "secret.txt": "the person's key" });
+    await symlink(outside, join(root, "elsewhere"), "junction");
+    // A symbolic link needs Developer Mode or an administrator.
+    const symbolic = await symlink(
+      join(outside, "secret.txt"),
+      join(root, "key.txt"),
+      "file",
+    ).then(
+      () => true,
+      () => false,
+    );
+
+    const listing = await listFiles(setup(), root, { all: true });
+
+    if (!listing.ok) throw new Error(listing.reason);
+    expect([...listing.files.keys()].sort()).toEqual(
+      [
+        ".env",
+        ".gitignore",
+        "data.csv",
+        "elsewhere",
+        "empty/.keep",
+        ...(symbolic ? ["key.txt"] : []),
+        "notes.md",
+        "sub/x.txt",
+      ].sort(),
+    );
+    expect(listing.files.get("elsewhere")?.link).toBe(`junction ${outside}`);
+    if (symbolic)
+      expect(listing.files.get("key.txt")?.link).toBe(
+        `file ${join(outside, "secret.txt")}`,
+      );
+    expect([...(listing.folders?.keys() ?? [])].sort()).toEqual([
+      "",
+      "empty",
+      "sub",
+    ]);
+    expect(listing.folders?.get("sub")).toBe(
+      String((await stat(join(root, "sub"), { bigint: true })).ino),
+    );
+  });
+
+  it("lists only the entries asked for, those of the folders asked for, or all of a folder", async () => {
+    const root = await folderWith({
+      "top.txt": "t",
+      "else.txt": "e",
+      "sub/x.txt": "x",
+      "sub/deeper/y.txt": "y",
+      "other/z.txt": "z",
+    });
+
+    const listing = await listFiles(setup(), root, {
+      all: true,
+      part: {
+        entries: ["top.txt", "gone.txt"],
+        entriesOf: ["sub"],
+        wholeOf: ["other"],
+      },
+    });
+
+    expect(namesIn(listing)).toEqual(["other/z.txt", "sub/x.txt", "top.txt"]);
+    expect(
+      [...(listing.ok ? (listing.folders?.keys() ?? []) : [])].sort(),
+    ).toEqual(["other", "sub/deeper"]);
+  });
+
+  it("refuses to list part of a folder through a junction", async () => {
+    const root = await folderWith({ "notes.md": "n" });
+    const outside = await folderWith({ "secret.txt": "the person's key" });
+    await symlink(outside, join(root, "elsewhere"), "junction");
+
+    for (const part of [
+      { entries: ["elsewhere/secret.txt"], entriesOf: [], wholeOf: [] },
+      { entries: [], entriesOf: ["elsewhere"], wholeOf: [] },
+      { entries: [], entriesOf: [], wholeOf: ["elsewhere"] },
+    ])
+      expect((await listFiles(setup(), root, { all: true, part })).ok).toBe(
+        false,
+      );
   });
 
   it("lists nothing without ripgrep", async () => {

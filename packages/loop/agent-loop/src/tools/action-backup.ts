@@ -33,6 +33,28 @@ type Inspection = Extract<ToolCallInspection, { readonly ok: true }>;
 const slashed = (path: string) => path.replaceAll("\\", "/");
 
 /**
+ * What a command said it changed, each file marked kept where the copy of
+ * its folder recorded it so (ADR 0031): only recovery knows that undo can
+ * put the file back.
+ */
+export function withKept(
+  said: CommandFileChanges,
+  recorded: CommandFileChanges,
+): CommandFileChanges {
+  if (said.status !== "checked" || recorded.status !== "checked") return said;
+  const kept = new Set(
+    recorded.files.flatMap((file) => (file.kept ? [slashed(file.path)] : [])),
+  );
+  if (!kept.size) return said;
+  return {
+    ...said,
+    files: said.files.map((file) =>
+      kept.has(slashed(file.path)) ? { ...file, kept: true } : file,
+    ),
+  };
+}
+
+/**
  * What a program changed, once it ended: against the copy of its folder when
  * that copy recorded it, and otherwise as the command left the files, so
  * going back can remove what it created. A call and a job that carried on
@@ -334,6 +356,11 @@ export class ActionBackup {
     let answered = result;
     if (recorded && !answered.commandChanges)
       answered = { ...answered, commandChanges: recorded };
+    else if (recorded)
+      answered = {
+        ...answered,
+        commandChanges: withKept(answered.commandChanges!, recorded),
+      };
     const held =
       started?.ok &&
       heldForRun(started.held, answered, this.#anyFile?.unheldBy);

@@ -78,7 +78,8 @@ const commandChanges: {
       (file) =>
         isRecord(file) &&
         typeof file.path === "string" &&
-        commandChange(file.change),
+        commandChange(file.change) &&
+        optionalTrue(file.kept),
     ) &&
     (changes.more === undefined || count(changes.more)) &&
     optionalText(changes.job),

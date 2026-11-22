@@ -511,6 +511,102 @@ describe("applying a rewind", () => {
     expect(saved.map((task) => task.messages)).toEqual([[], []]);
   });
 
+  it("lets go of what was kept for the actions a rewind removed once it is saved, files kept or put back", async () => {
+    const forgotten: string[][] = [];
+    const { recovery } = recoveryRecording({
+      forgetActions: async (ids) => void forgotten.push([...ids]),
+    });
+    const removed = (id: string) => ({
+      id,
+      action: "Write",
+      target: "notes.md",
+      status: "completed" as const,
+      sequence: 1,
+    });
+    let round = 0;
+    const rewind = composed({
+      conversation: planner({
+        plan: (task, messageId) => {
+          round += 1;
+          return {
+            ok: true,
+            preview: {
+              id: `rewind-${round}`,
+              taskId: task.id,
+              messageId,
+              draft: "Hello",
+              discardedMessages: 1,
+              laterUserMessages: 0,
+              discardedActions: [removed(`write-${round}`)],
+              files: [],
+              memory: [],
+            },
+            task,
+            source: JSON.stringify(task),
+          };
+        },
+      }),
+      recovery,
+    });
+    const { host } = hostFor(conversation("conversation-1", "C:/work"));
+
+    await rewind.preview("conversation-1", "u1", host);
+    await rewind.commit("conversation-1", "rewind-1", "keep", host);
+    await rewind.preview("conversation-1", "u1", host);
+    await rewind.commit("conversation-1", "rewind-2", "restore", host);
+
+    expect(forgotten).toEqual([["write-1"], ["write-2"]]);
+  });
+
+  it("is applied even when what was kept for the removed actions cannot be let go of", async () => {
+    const { recovery } = recoveryRecording({
+      forgetActions: async () => {
+        throw new Error("The store is busy.");
+      },
+    });
+    const rewind = composed({
+      conversation: planner({
+        plan: (task, messageId) => ({
+          ok: true,
+          preview: {
+            id: "rewind-1",
+            taskId: task.id,
+            messageId,
+            draft: "Hello",
+            discardedMessages: 1,
+            laterUserMessages: 0,
+            discardedActions: [
+              {
+                id: "write-1",
+                action: "Write",
+                target: "notes.md",
+                status: "completed",
+                sequence: 1,
+              },
+            ],
+            files: [],
+            memory: [],
+          },
+          task,
+          source: JSON.stringify(task),
+        }),
+      }),
+      recovery,
+    });
+    const { host, saved } = hostFor(conversation("conversation-1", "C:/work"));
+
+    await rewind.preview("conversation-1", "u1", host);
+    const applied = await rewind.commit(
+      "conversation-1",
+      "rewind-1",
+      "restore",
+      host,
+    );
+
+    expect(applied).toMatchObject({ ok: true });
+    expect(saved).toHaveLength(1);
+  });
+
   it("applies only the latest review of a conversation", async () => {
     const { recovery } = recoveryRecording();
     const rewind = composed({ conversation: planner(), recovery });

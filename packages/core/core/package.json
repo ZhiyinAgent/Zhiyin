@@ -39,6 +39,7 @@
   "devDependencies": {
     "@zhiyin/corrections-log": "workspace:*",
     "@zhiyin/document-compiler": "workspace:*",
+    "@zhiyin/file-watch": "workspace:*",
     "@zhiyin/files": "workspace:*",
     "@zhiyin/mcp": "workspace:*",
     "@zhiyin/permission-engine": "workspace:*",

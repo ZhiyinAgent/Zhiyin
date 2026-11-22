@@ -880,6 +880,33 @@ export class Workspace {
   }
 
   /**
+   * Says, in each conversation it belongs to, which files' earlier versions
+   * the undo budget let go of (ADR 0031): going back past those changes can
+   * no longer put the files back.
+   */
+  undoVersionsReleased(
+    versions: readonly {
+      readonly conversationId?: string;
+      readonly path: string;
+    }[],
+  ): void {
+    const byConversation = new Map<string | undefined, Set<string>>();
+    for (const { conversationId, path } of versions)
+      byConversation.set(
+        conversationId,
+        (byConversation.get(conversationId) ?? new Set()).add(path),
+      );
+    for (const [conversationId, paths] of byConversation) {
+      const [first, ...rest] = [...paths].sort();
+      const named = rest.length
+        ? `${first} and ${rest.length} other ${rest.length === 1 ? "file" : "files"}`
+        : first;
+      const message = `To stay within the room kept for going back, earlier versions of ${named} were let go of. Going back past those changes cannot put them back.`;
+      this.#reportIssue(conversationId ? { message, conversationId } : message);
+    }
+  }
+
+  /**
    * Stops showing an issue the person has read, and only that one: another
    * conversation's report with the same words stays.
    */

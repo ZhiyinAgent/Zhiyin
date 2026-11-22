@@ -5,43 +5,44 @@
  * or changed is known the same way, by what it left.
  */
 
-import { copyFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat } from "node:fs/promises";
 import type { CommandFileChange, FileChange } from "@zhiyin/contract";
+import { alternateStreams } from "@zhiyin/file-watch";
+import type { PieceStore } from "./pieces/piece-store.js";
 import type { CapturedFile, Manifest } from "./records.js";
 import { sizeOf } from "./run-changes.js";
-import type { RecoveryLimits } from "./storage-limits.js";
 import {
   currentDigest,
   fileDigest,
   kind,
+  openedThroughNoLink,
   safeAbsolute,
+  ThroughLinkError,
   unreadable,
 } from "./workspace-files.js";
 
-/** The bytes of the copies a manifest keeps. */
-export function protectedBytes(manifest: Manifest): number {
-  return manifest.files.reduce(
-    (sum, file) => sum + (file.status === "protected" ? (file.bytes ?? 0) : 0),
-    0,
-  );
-}
-
 /**
- * Copies into `folder` each file the changes would overwrite in `root`,
- * within the limits, counting `capturedBytes` already kept for actions
- * awaiting their run, and says of each path whether it is protected.
+ * Keeps each file the changes would overwrite in `root` in the store of
+ * pieces, within the `room` the undo budget leaves, and says of each path
+ * whether it is protected. `kept` hears each version as it is kept, before
+ * any record names it.
  */
 export async function captureFiles(
   root: string,
   changes: readonly FileChange[],
-  folder: string,
-  limits: RecoveryLimits,
-  capturedBytes: number,
+  {
+    room,
+    pieces,
+    kept: heard,
+  }: {
+    readonly room: number;
+    readonly pieces: PieceStore;
+    readonly kept: (digest: string) => void;
+  },
 ): Promise<CapturedFile[]> {
   const files: CapturedFile[] = [];
-  let captured = capturedBytes;
-  for (const [index, change] of changes.entries()) {
+  let left = room;
+  for (const change of changes) {
     const normalized = change.path.replaceAll("\\", "/");
     let absolute: string | undefined;
     let failure: string | undefined;
@@ -75,35 +76,32 @@ export async function captureFiles(
       files.push({ path: normalized, status: "protected", before: "absent" });
       continue;
     }
-    const info = await stat(absolute);
-    if (
-      info.size > limits.fileBytes ||
-      captured + info.size > limits.totalBytes
-    ) {
+    const info = await lstat(absolute);
+    if (info.size > left) {
       files.push({
         path: normalized,
         status: "unprotected",
         before: "file",
         tooLarge: true,
-        reason:
-          info.size > limits.fileBytes
-            ? `The existing file exceeds the ${sizeOf(limits.fileBytes)} recovery limit.`
-            : "The recovery storage limit cannot admit this file.",
+        reason: `The undo budget has room for ${sizeOf(Math.max(0, left))} more, too little to keep this file first.`,
       });
       continue;
     }
-    // The copy is read for its digest, so the digest is of what was kept.
-    const backup = `${index}.bin`;
-    await copyFile(absolute, join(folder, backup));
-    const bytes = (await stat(join(folder, backup))).size;
-    captured += bytes;
+    // The digest is of what was read into the store, so of what was kept.
+    const full = absolute;
+    const kept = await pieces.put(full, {
+      streams: alternateStreams(full),
+      opened: (file) => openedThroughNoLink(root, full, file),
+    });
+    heard(kept.digest);
+    left -= kept.bytes;
     files.push({
       path: normalized,
       status: "protected",
       before: "file",
-      beforeDigest: await fileDigest(join(folder, backup)),
-      backup,
-      bytes,
+      beforeDigest: kept.digest,
+      content: kept.digest,
+      bytes: kept.bytes,
     });
   }
   return files;
@@ -125,7 +123,7 @@ export async function stillAsCaptured(
           ok: false,
           reason: `${file.path} is no longer safely inside the workspace.`,
         };
-      current = await currentDigest(absolute);
+      current = await currentDigest(manifest.workspaceRoot, absolute);
     } catch (error) {
       return { ok: false, reason: unreadable(file.path, error) };
     }
@@ -151,7 +149,9 @@ export async function leftBehind(manifest: Manifest): Promise<CapturedFile[]> {
       manifest.workspaceRoot,
       file.path,
     ).catch(() => undefined);
-    const current = absolute ? await currentDigest(absolute) : "other";
+    const current = absolute
+      ? await currentDigest(manifest.workspaceRoot, absolute)
+      : "other";
     files.push({
       ...file,
       after: current === "absent" ? "absent" : "file",
@@ -186,13 +186,20 @@ export async function commandFiles(
       () => undefined,
     );
     if (!absolute || (await kind(absolute)) !== "file") continue;
-    if ((await stat(absolute)).size > fileBytes) continue;
+    if ((await lstat(absolute)).size > fileBytes) continue;
+    const afterDigest = await fileDigest(root, absolute).catch(
+      (error: unknown) => {
+        if (error instanceof ThroughLinkError) return undefined;
+        throw error;
+      },
+    );
+    if (!afterDigest) continue;
     files.push({
       path: normalized,
       status: "protected",
       before: change.change === "created" ? "absent" : "unknown",
       after: "file",
-      afterDigest: await fileDigest(absolute),
+      afterDigest,
     });
   }
   return files;

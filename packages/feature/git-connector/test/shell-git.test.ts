@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { openProcessContainer } from "@zhiyin/sandbox";
-import { resolveGit, shellGit } from "../src/index.js";
+import { resolveGit, shellGit, type LinksIn } from "../src/index.js";
 
 const folders = new TemporaryFolders();
 afterEach(() => folders.removeAll());
@@ -382,6 +382,64 @@ describe.runIf(process.platform === "win32" && resolveGit() !== undefined)(
         });
       },
     );
+
+    describe("given an index of the links in a folder", () => {
+      /** A repository, and git run in it with `linksIn` for its links. */
+      async function indexed(linksIn: LinksIn) {
+        const at = await setting();
+        await at.run("init", "-q");
+        const ask = shellGit({
+          containment: { open: openProcessContainer },
+          linksIn,
+        });
+        const run = async (...args: string[]) => {
+          const ran = await ask({
+            args,
+            cwd: at.workspace,
+            folders: [at.workspace],
+            hosts: [],
+            home: at.home,
+            signal: new AbortController().signal,
+          });
+          return {
+            exitCode: ran.exitCode,
+            stderr: ran.stderr.toString("utf8"),
+          };
+        };
+        return { ...at, run };
+      }
+
+      it("takes the links from the index, refusing one it names as leading out", async () => {
+        const outside = await folders.make("zhiyin-shell-git-outside-");
+        const asked: string[] = [];
+        let workspace = "";
+        const at = await indexed(async (root) => {
+          asked.push(root);
+          // A link only the index knows of: none is on disk.
+          return [{ path: join(workspace, "door"), target: outside }];
+        });
+        workspace = at.workspace;
+
+        const status = await at.run("status");
+
+        expect(asked.length).toBeGreaterThan(0);
+        expect(status.exitCode).toBe(128);
+        expect(status.stderr).toContain(join(at.workspace, "door"));
+        expect(status.stderr).toContain("outside the folders");
+      });
+
+      it("walks the folder when the index cannot say, finding the link on disk", async () => {
+        const outside = await folders.make("zhiyin-shell-git-outside-");
+        const at = await indexed(async () => undefined);
+        await symlink(outside, join(at.workspace, "link"), "junction");
+
+        const status = await at.run("status");
+
+        expect(status.exitCode).toBe(128);
+        expect(status.stderr).toContain(join(at.workspace, "link"));
+        expect(status.stderr).toContain("outside the folders");
+      });
+    });
 
     it("reaches no network when the conversation names no host", async () => {
       const { run } = await setting();

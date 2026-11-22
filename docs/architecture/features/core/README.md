@@ -222,8 +222,10 @@ one group in for all five. It answers every other command:
   screen and one whose turn runs are never left alone. The conversation keeps
   everything else, and both open again on their next use.
 - **Quitting always finishes.** Turns, then browsers, Blender and connections, are
-  given until one deadline five seconds after quitting starts. Whatever has not
-  closed is named and left. The data folder is given up either way, once the
+  given until one deadline five seconds after quitting starts. Then the files
+  watched for going back are let go of, given five seconds more, since the
+  thread watching them would otherwise keep the app from ending. Whatever has
+  not closed is named and left. The data folder is given up either way, once the
   loop has stopped or the deadline has passed, so the next launch is never
   told another copy is running.
 

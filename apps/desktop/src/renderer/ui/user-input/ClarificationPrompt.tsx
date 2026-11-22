@@ -13,7 +13,7 @@ type Answers = Record<string, readonly string[]>;
 type TextAnswers = Record<string, string>;
 type QuestionPrompt = Exclude<
   PendingUserInputRequest,
-  { readonly kind: "workBudget" | "folderInstructions" }
+  { readonly kind: "workBudget" | "folderInstructions" | "undoRoom" }
 >;
 
 function optionDescription(

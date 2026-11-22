@@ -167,8 +167,9 @@ export class WorkspaceTools
   readonly #jobs = new CommandJobs();
   readonly #shell: CommandShell;
   /**
-   * A folder's files as the checks of what commands change list them, for
-   * whatever copies a folder before a script or command runs in it.
+   * Every file of a folder, however many, chosen as the checks of what
+   * commands change choose them, for whatever keeps a folder's files as a
+   * turn or a run found them.
    */
   readonly listWorkspace: ListWorkspace;
 
@@ -200,7 +201,12 @@ export class WorkspaceTools
       upTo: options.checkCommandsUpTo ?? defaultCheckedUpTo,
       kept: options.commandFilesKept ?? defaultFilesKept,
     };
-    this.listWorkspace = (root) => listFiles(files, root, { ignored: true });
+    this.listWorkspace = (root, part) =>
+      listFiles(files, root, {
+        ignored: true,
+        all: true,
+        ...(part ? { part } : {}),
+      });
     this.#table = new ToolTable(
       [
         listDirectoryTool(),

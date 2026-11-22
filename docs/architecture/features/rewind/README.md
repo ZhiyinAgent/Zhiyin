@@ -60,8 +60,9 @@ for the loop.
   `RewindMembers`, `FileBackup`, `RewindHost`, `RewindMemoryHost`,
   `RewindChoice`, `RewindPreviewing`,
   `UndoPreviewing`, `RewindCommitting`, `ReplaceFile`, and the types of
-  recovery's `FileBackups`, `RunBackups`, `RunBackup` and `RunStart`, passed
-  on for the agent loop, which is handed recovery's backups beside the group.
+  recovery's `FileBackups`, `RunBackups`, `RunBackup`, `RunStart` and
+  `TurnFiles`, passed on for the agent loop, which is handed recovery's
+  backups and turns beside the group.
 
 ## Invariants
 
@@ -116,6 +117,10 @@ for the loop.
   each one taken back as undone on its card. An undo that keeps the files
   records no action as undone, so they can be undone later. An undo of
   neither files nor memory is refused.
+- Once a rewind is saved, what recovery kept for the actions it removed is let
+  go of, files kept or put back: nothing can go back to them now (ADR 0031).
+  The rewind is done whether or not that works; what stays is let go of later
+  by the undo budget.
 
 ## Testing notes
 

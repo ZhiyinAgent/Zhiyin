@@ -127,6 +127,12 @@ export function demoCommands(
   let memory = demoMemory;
   const removed = new Map<string, MemoryEntry>();
   let reviewer: ReviewerModelChoice | null = null;
+  // The undo budget as a first use would set it on a roomy disk.
+  let undoBudget = {
+    budgetBytes: 50_000_000_000,
+    usedBytes: 3_400_000_000,
+    chosen: false,
+  };
   // A first run starts with no OpenRouter key, until one is saved.
   let openRouterKey = scenario !== "first-run";
   return {
@@ -184,6 +190,11 @@ export function demoCommands(
       reviewer ? demoReviewerSettings(reviewer) : null,
     setWorkPauses: async (pauses) =>
       dispatch({ type: "workPausesChosen", pauses }),
+    undoBudget: async () => undoBudget,
+    setUndoBudget: async (bytes) => {
+      undoBudget = { ...undoBudget, budgetBytes: bytes, chosen: true };
+      return undoBudget;
+    },
     setAppearance: async (appearance) =>
       dispatch({ type: "appearanceChosen", appearance }),
     setLook: async (choice) => dispatch({ type: "lookChosen", choice }),

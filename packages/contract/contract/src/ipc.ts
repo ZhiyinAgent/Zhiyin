@@ -36,6 +36,8 @@ export const COMMAND_CHANNELS = {
   setReviewerModel: "zhiyin:set-reviewer-model",
   reviewerModelSettings: "zhiyin:reviewer-model-settings",
   setWorkPauses: "zhiyin:set-work-pauses",
+  undoBudget: "zhiyin:undo-budget",
+  setUndoBudget: "zhiyin:set-undo-budget",
   setAppearance: "zhiyin:set-appearance",
   setLook: "zhiyin:set-look",
   setSpelling: "zhiyin:set-spelling",

@@ -79,6 +79,26 @@ reports, at its default confidence, about a hundred Blender settings the
 harness assigns as unused attributes, and nothing more above 60%, so it is
 not a gate step.
 
+**zstd in `node:zlib`, with a dictionary.** _Verified 2026-11-20 by running
+probes under Node 22.23.4 (zstd 1.5.7) and in Electron 44.9.3 (Node 24.22.0,
+zstd 1.6.0)._ `zstdCompress` and `zstdDecompress` take a `dictionary`, raw
+bytes used as zstd's prefix, as `--patch-from` does: a piece compressed against
+the piece it changed from came to 26 bytes where it came to 78 alone, and
+decompressing it without the same dictionary fails with "Data corruption
+detected". Recovery's store of pieces needs no native package for it (ADR
+0031). A frame whose window is over the default needs
+`ZSTD_d_windowLogMax` raised on decompression.
+
+**Cutting files into pieces in JavaScript.** _Measured 2026-11-20 under Node
+22.23.4 on this project's development machine, over 1 GiB of random bytes._
+FastCDC with normalised chunking, level 2, averaging 256 KiB, cut 1.10 GB/s on
+one thread with a signed 32-bit gear hash, against 0.74 GB/s with unsigned
+arithmetic; cutting, a SHA-256 per piece and one of the whole file together
+ran at 0.54 GB/s. A turn's first write waits only for the file's copy, not
+for this, so recovery cuts on the main thread, with no worker. Node's
+`Buffer.prototype.slice` is a view, not a copy, as `Uint8Array`'s is: a tail
+kept from a reused read buffer must be copied as a `Uint8Array`.
+
 ## Renderer
 
 **React 19.2.8.** _Verified 2026-09-02 against the React documentation._
@@ -1936,6 +1956,96 @@ in one on NVIDIA graphics, but OptiX does not make its cache folder there; in
 a less-privileged container (LPAC), OpenGL falls back to Windows' software
 driver. cmd and PowerShell started inside are confined the same way; Git's
 bash does not start (`0xC0000142`). ADR 0006.
+
+**Copy on first write by oplock, through `koffi`.** _Verified 2026-11-20 and
+2026-11-21 on Windows 11 Home (22631), NTFS, unelevated, by running the
+file-watch and recovery system-boundary tests with programs in real app
+containers._ A file opened `GENERIC_READ` with `FILE_SHARE_READ` only,
+`FILE_FLAG_OVERLAPPED | FILE_FLAG_OPEN_REPARSE_POINT`, and given a read-handle
+oplock (`FSCTL_REQUEST_OPLOCK`, 0x00090240, `OPLOCK_LEVEL_CACHE_READ |
+OPLOCK_LEVEL_CACHE_HANDLE`, `REQUEST_OPLOCK_INPUT_FLAG_REQUEST`) answers
+`ERROR_IO_PENDING`; the break completes on an I/O completion port. A write,
+rename or delete open from any process, a contained one included, and the
+rename of a folder above it, wait until the handle closes; a read open does
+not break it. Acknowledging the break with a lower level keeps the handle and
+refuses the writer with a sharing violation. `koffi`'s `.async` runs
+`GetQueuedCompletionStatus` off the calling thread, inside a
+`node:worker_threads` worker too, and the worker runs the package's
+TypeScript as it is under Node 22.23's type stripping. Holding 20,000 files
+took 67.8 MB of non-paged pool in the test (73 MB in the first probe, 455 MB
+for 100,000). A contained program's first write to a 1 GiB file waited 0.56
+to 1.7 s while the watch copied it aside; on 2026-11-21, a 5 GiB file of
+random bytes waited 11.6 s on its first turn and 6.4 and 7.4 s on the next
+two, three turns of 1 MiB edits took 5126 MiB in the store, and putting back
+each turn's start took 40 to 87 s. Giving a folder to a container
+(`SetNamedSecurityInfoW` down its tree) breaks the locks of the files in it,
+so the watch must run on a thread of its own. ADR 0031.
+
+**A turn over a folder of 60,000 files.** _Measured 2026-11-21 on Windows 11
+Home (22631), NTFS on a local SSD, Node 22.23.4, by running the recovery
+system-boundary test of a folder of 60,000 small files and three of 8 MiB
+while another conversation's turn watched 20,000 files._ Listing the folder
+with the bundled ripgrep and reading each file's size, time and identity,
+64 at a time as ripgrep names them, took 1.51 to 1.59 s over three runs, and
+the listing held about 10 MB of the heap. With the watch full, the turn's
+start saved all 60,000 small files in 17.9 s, about 0.24 ms each, the cost of
+opening and hashing a file: they share frames and are named in the catalog a
+batch at a time. Saving each in a frame of its own, read into a 16 MiB buffer
+zeroed for each file, makes the same start take 136 s. Each run's copy of the
+folder then took
+about 7 s, and the heap stayed at about 100 MB through both runs and going
+back. ADR 0031.
+
+_Measured again 2026-11-21, same machine and test, with the folder listed
+whole once and then kept from the change journal._ Walking the folder entry
+by entry, never through a link, took 0.7 to 1.0 s for the 60,000 files over
+five runs, and once 2.7 s while the machine was busy (ripgrep's listing took
+1.5 s). A run then waited 331 to 595 ms for its two
+copies, the one before approval and the one as it began, over six runs in
+two sessions: reading the journal and finding nothing changed takes about
+20 ms, and the rest is bookkeeping over the 60,000 entries, chiefly the
+record of the run written before it starts, about 40 ms a copy. A file
+written between runs has the next copy read that one entry again, not the
+folder. ADR 0031.
+
+**The NTFS change journal without administrator rights.** _Verified
+2026-11-20 on Windows 11 Home (22631), NTFS, unelevated, by running the
+file-watch system-boundary tests._ `FSCTL_QUERY_USN_JOURNAL` (0x000900f4) and
+`FSCTL_READ_UNPRIVILEGED_USN_JOURNAL` (0x000903ab) work through a handle on a
+folder opened with `FILE_READ_ATTRIBUTES` and `FILE_FLAG_BACKUP_SEMANTICS`.
+Records are `USN_RECORD_V2`; an unprivileged read leaves names out, so a file
+is matched by its reference number, which Node gives as `stat(path, {
+bigint: true }).ino`. A write that puts the old time of change back is named
+with `USN_REASON_DATA_OVERWRITE`. A point from another journal ID, or below
+the journal's lowest valid USN, cannot be read from. ADR 0031.
+
+_Verified 2026-11-21, same machine, by the file-watch and recovery
+system-boundary tests._ Each record's parent reference number, at offset 16,
+names the folder an entry is in, after a rename the folder it is in now, so a
+folder's listing can be kept from the journal by identity alone: a junction
+made in a folder of interest arrives there with `FILE_ATTRIBUTE_REPARSE_POINT`
+(0x400, at offset 52) and `USN_REASON_REPARSE_POINT_CHANGE` (0x00100000). An
+unelevated account makes a junction with `fs.symlink(target, path,
+"junction")`; this account, with Developer Mode on, makes file symbolic links
+too. `lstat` reports both as symbolic links, `readlink` gives a junction's
+target as an absolute path, and `FindFirstFileW`'s `dwReserved0` gives the
+reparse tag (`IO_REPARSE_TAG_MOUNT_POINT` 0xA0000003 for a junction).
+`GetFinalPathNameByHandleW` on a file opened through a junction names the
+place the junction leads to. ADR 0031.
+
+_Verified 2026-11-21, same machine, by a probe and the recovery
+system-boundary tests._ A folder opened with `FILE_LIST_DIRECTORY` and a
+sharing mode of read and write only, without `FILE_SHARE_DELETE`, cannot be
+renamed or removed by anyone (`EBUSY`), nor can the folder holding it
+(`EPERM`), while files and folders inside it are still made, renamed,
+replaced with `ReplaceFileW` and deleted. Opened with
+`FILE_READ_ATTRIBUTES` alone, the same handle blocks nothing: Windows checks
+sharing only against opens that ask for data or delete access.
+`ReplaceFileW` with a file symbolic link as the file to replace fails
+(error 1464) and leaves what the link leads to as it was. `ReOpenFile` on a
+file held for an opportunistic lock whose break is waiting gives a second,
+synchronous handle that reads the file whole, by the file-watch tests.
+ADR 0031.
 
 **A container per home.** _Verified 2026-10-18 on Windows 11 (22631) by
 running the system-boundary tests and the real Blender, uv and Tectonic

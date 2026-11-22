@@ -671,7 +671,24 @@ export class ComposedRewind implements Rewind {
       () => applied.task,
     );
     this.#pending.delete(rewindId);
+    await this.#forget(pending.plan.preview.discardedActions);
     return { ok: true, result };
+  }
+
+  /**
+   * Lets go of what was kept for the actions a saved rewind removed: nothing
+   * can go back to them now. The rewind is done whether or not this works;
+   * what stays is let go of later by the undo budget.
+   */
+  async #forget(actions: readonly { readonly id: string }[]): Promise<void> {
+    if (!actions.length) return;
+    try {
+      await this.#members.recovery.forgetActions(
+        actions.map((action) => action.id),
+      );
+    } catch {
+      // Kept until the budget lets it go.
+    }
   }
 
   /**

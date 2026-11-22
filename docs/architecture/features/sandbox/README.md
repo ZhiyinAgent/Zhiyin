@@ -138,7 +138,8 @@ a process that reaches only the folders it is given (ADR 0006).
   `open`, as `CreateFileW` opens; `openWithoutFollowing`, which opens an
   entry itself, never what a link in its place leads to; `entryOf`, whether
   an open entry is a folder and whether it is a junction or symbolic link;
-  its permissions as text, by handle or by name; `read`, `replace`, `remove`
+  `finalPath`, where an open entry really is, as Windows names it by its
+  handle; its permissions as text, by handle or by name; `read`, `replace`, `remove`
   and `move`, as `ReadFile`, `ReplaceFileW`, `DeleteFileW` and `MoveFileExW`
   do; and `message`, Windows' own
   words for an error with its number. It throws where Windows cannot be

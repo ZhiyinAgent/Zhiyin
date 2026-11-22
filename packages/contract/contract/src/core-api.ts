@@ -53,7 +53,7 @@ import type {
   PluginSourceOutcome,
   PluginState,
 } from "./plugin-state.js";
-import type { RewindCommands } from "./rewind.js";
+import type { RewindCommands, UndoBudgetState } from "./rewind.js";
 import type { WorkspaceTask } from "./task.js";
 import type { ShellAvailability } from "./tools.js";
 import type { UsageState } from "./usage-state.js";
@@ -263,6 +263,13 @@ export interface CoreApi extends DocumentCommands, RewindCommands {
   reviewerModelSettings(): Promise<ProviderSettings | null>;
   /** When long tasks stop to ask whether to go on. */
   setWorkPauses(pauses: WorkPauses): Promise<void>;
+  /**
+   * The undo budget and the room the versions kept take now (ADR 0031);
+   * null where nothing is kept for going back.
+   */
+  undoBudget(): Promise<UndoBudgetState | null>;
+  /** Sets the undo budget, in bytes, letting go of versions to fit it. */
+  setUndoBudget(bytes: number): Promise<UndoBudgetState>;
 
   /** Paints the window light, dark, or as Windows is set. */
   setAppearance(appearance: Appearance): Promise<void>;

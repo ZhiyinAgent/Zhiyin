@@ -9,6 +9,7 @@ import {
   type LookChoice,
   type SpellingChoice,
   type SpellingState,
+  type UndoBudgetState,
   type WorkPauses,
 } from "@zhiyin/contract";
 import {
@@ -22,6 +23,7 @@ import {
 import { LimitField } from "./LimitField.js";
 import { SpellingLanguages } from "./SpellingLanguages.js";
 import { appUpdateStatus } from "./appUpdateStatus.js";
+import { gigabytes, gigabytesOf } from "./undoBudget.js";
 import styles from "./settings.module.css";
 
 /**
@@ -104,6 +106,8 @@ export function AppSettings({
   onChooseReviewerModel,
   onUseConversationModel,
   onOpenDataFolder,
+  undoBudget,
+  onUndoBudget,
   waitingForUpdate = 0,
   onUpdateConversations,
   appUpdate,
@@ -141,6 +145,13 @@ export function AppSettings({
   onUseConversationModel?: () => Promise<void>;
   /** Absent when the core does not offer it. ADR 0025. */
   onOpenDataFolder?: (() => Promise<void>) | undefined;
+  /**
+   * The room kept for going back, and how much of it is in use; absent until
+   * read, or where nothing is kept. ADR 0031.
+   */
+  undoBudget?: UndoBudgetState | undefined;
+  /** Saves a new budget, in bytes; absent where it cannot be set. */
+  onUndoBudget?: ((bytes: number) => Promise<void>) | undefined;
   /** Conversations an earlier version saved, not opened until updated. */
   waitingForUpdate?: number;
   /** Asks again about them. ADR 0025. */
@@ -485,8 +496,35 @@ export function AppSettings({
           </SettingsGroup>
         )}
         {(onOpenDataFolder ||
+          undoBudget ||
           (onUpdateConversations && waitingForUpdate > 0)) && (
           <SettingsGroup title="Your data" area="data">
+            {undoBudget && (
+              <SettingRow
+                title="Room for going back"
+                description={`Earlier versions of the files tasks change are kept so going back can restore them, in up to ${gigabytes(undoBudget.budgetBytes)}. ${gigabytes(undoBudget.usedBytes)} is in use. When it fills, the oldest versions go first; a file as it was before its conversation changed it goes only if you agree.`}
+                live
+                control={(label, description) =>
+                  onUndoBudget ? (
+                    <LimitField
+                      // The same number the sentence beside it says.
+                      value={Math.max(1, gigabytesOf(undoBudget.budgetBytes))}
+                      least={1}
+                      most={100_000}
+                      unit="GB"
+                      tenths
+                      labelledBy={label}
+                      describedBy={description}
+                      onSave={(value) =>
+                        change(() =>
+                          onUndoBudget(Math.round(value * 1_000_000_000)),
+                        )
+                      }
+                    />
+                  ) : null
+                }
+              />
+            )}
             {onUpdateConversations && waitingForUpdate > 0 && (
               <SettingRow
                 title="Conversations from an earlier version"

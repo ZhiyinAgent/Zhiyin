@@ -106,7 +106,92 @@ const folderInstructions: PendingUserInputRequest = {
   truncated: true,
 };
 
+const undoRoom: PendingUserInputRequest = {
+  id: "room-1",
+  kind: "undoRoom",
+  title: "No room to keep this file first",
+  path: "scans/volume.tif",
+  bytes: 5 * 1024 * 1024 * 1024,
+  roomBytes: 1024 * 1024 * 1024,
+  budgetBytes: 20 * 1024 * 1024 * 1024,
+};
+
 describe("UserInputPrompt", () => {
+  it("says which file has no room in the undo budget, how much is free, and what each answer does", () => {
+    render(
+      <UserInputPrompt
+        prompt={undoRoom}
+        onSubmit={() => {}}
+        onCancel={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("scans/volume.tif")).toBeVisible();
+    expect(
+      screen.getByText(
+        /\(5\.0 GB\), and only 1\.0 GB of the 20\.0 GB kept for going back is free/,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        /Make room lets go of older versions, including files as they were before this conversation changed them/,
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Refuse", "Make room", "Change without a backup"]);
+  });
+
+  it.each([
+    ["Refuse", "refuse"],
+    ["Make room", "make-room"],
+    ["Change without a backup", "without"],
+  ])(
+    "sends %s as the answer to the undo room question, once",
+    async (label, answer) => {
+      const onSubmit = vi.fn(async () => {});
+      render(
+        <UserInputPrompt
+          prompt={undoRoom}
+          onSubmit={onSubmit}
+          onCancel={() => {}}
+        />,
+      );
+
+      const button = screen.getByRole("button", { name: label });
+      button.focus();
+      fireEvent.click(button);
+      fireEvent.click(button);
+
+      await waitFor(() =>
+        expect(onSubmit).toHaveBeenCalledWith({
+          answers: [{ questionId: "undo-room", answerIds: [answer] }],
+        }),
+      );
+      expect(onSubmit).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("offers the undo room answers again when the one chosen could not be sent", async () => {
+    const onSubmit = vi.fn(async () => {
+      throw new Error("The core is gone.");
+    });
+    render(
+      <UserInputPrompt
+        prompt={undoRoom}
+        onSubmit={onSubmit}
+        onCancel={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Refuse" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That choice could not be sent. Try again.",
+    );
+    expect(screen.getByRole("button", { name: "Refuse" })).toBeEnabled();
+  });
+
   it("says up to which line this conversation sends a folder's instructions, when it does not send them all", () => {
     render(
       <UserInputPrompt

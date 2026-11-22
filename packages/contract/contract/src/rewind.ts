@@ -153,3 +153,14 @@ export interface RewindCommands {
     path: string,
   ): Promise<DocumentComparison>;
 }
+
+/**
+ * The undo budget (ADR 0031): the most room the versions kept for going back
+ * may take on disk, and how much of it they take now.
+ */
+export type UndoBudgetState = {
+  readonly budgetBytes: number;
+  readonly usedBytes: number;
+  /** Whether the person set it, rather than the default. */
+  readonly chosen: boolean;
+};

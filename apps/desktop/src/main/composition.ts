@@ -101,7 +101,8 @@ import {
   StandingGrantRules,
 } from "@zhiyin/permission-engine";
 import { ConversationRewind } from "@zhiyin/rewind-planner";
-import { FileRecovery, RunBackups } from "@zhiyin/recovery";
+import type { WatchThread, WatchThreadData } from "@zhiyin/file-watch";
+import { FileRecovery, folderLinks, RunBackups } from "@zhiyin/recovery";
 import { ComposedRewind, FileRewindJournal } from "@zhiyin/rewind";
 import {
   CanvasPictureFitting,
@@ -248,6 +249,11 @@ export type Surroundings = {
    * they are compared in the core's own thread.
    */
   readonly startComparing?: () => ComparisonThread;
+  /**
+   * Starts the thread that holds the files a turn may change (ADR 0031).
+   * Absent, as in tests, each run's folder is saved as the run is readied.
+   */
+  readonly startWatching?: (data: WatchThreadData) => WatchThread;
   /** Device pixels per CSS pixel where the window is now. */
   readonly pixelDensity?: () => number;
   /** Where what went wrong is kept, on this computer. */
@@ -425,6 +431,7 @@ export function buildCore({
   connectionsNeverClose,
   startDrawing,
   startComparing,
+  startWatching,
   pixelDensity,
   log,
   videos,
@@ -529,6 +536,9 @@ export function buildCore({
             git: shellGit({
               containment,
               ...(proxyRoute ? { route: proxyRoute } : {}),
+              // The links in a repository, kept from the change journal, so
+              // a git call need not walk it whole each time.
+              linksIn: folderLinks(),
             }),
             // Zhiyin's own Node, a toolchain like uv (ADR 0027); a command
             // with full access runs the person's.
@@ -840,10 +850,25 @@ export function buildCore({
     capabilities.shutdown = () => new Promise<void>(() => {});
   // Each preview and export is given its conversation's folder by the core.
   const artifacts = new WorkspaceArtifacts();
-  // A script's or command's folder is listed as commands are checked, and
-  // copied before it runs (ADR 0012).
+  // The loop asks, in a conversation whose turn is writing, about a file the
+  // undo budget has no room for; it exists once the core makes it, below.
+  let turns: AgentLoop | undefined;
+  // From each turn's start, the files of its folder are held, and saved as
+  // the turn first writes each, on a thread of their own (ADR 0031). A
+  // script's or command's folder is listed as commands are checked.
   const recovery = new FileRecovery(dataDirectory, {
     list: workspace.listWorkspace,
+    ...(startWatching ? { watch: startWatching } : {}),
+    ask: async ({ conversationId, path, bytes, roomBytes, budgetBytes }) =>
+      conversationId && turns
+        ? turns.askUndoRoom(conversationId, {
+            path,
+            bytes,
+            roomBytes,
+            budgetBytes,
+          })
+        : "refuse",
+    released: (versions) => state.undoVersionsReleased(versions),
   });
   const rewind = new ComposedRewind({
     conversation: new ConversationRewind(randomUUID),
@@ -943,6 +968,7 @@ export function buildCore({
         rewind,
         backups: recovery,
         runs,
+        turnFiles: recovery,
         corrections,
         kept: sessions,
         // A picture past what the configured model accepts is scaled rather
@@ -989,12 +1015,14 @@ export function buildCore({
         (taskId, job, changes, outcome) =>
           void loop.jobChanged(taskId, job, changes, outcome),
       );
+      turns = loop;
       return loop;
     },
   );
 
   return new Core({
     dataFolder: dataDirectory,
+    undo: recovery,
     workspace: state,
     // One instance owns the data directory at a time, and taking and giving up
     // that ownership belongs to the app's lifetime rather than to a turn.

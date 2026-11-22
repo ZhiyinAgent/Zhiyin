@@ -623,6 +623,12 @@ const validPendingUserInputRequest = byKind<PendingUserInputRequest["kind"]>({
   clarification: validUserInputRequest,
   quiz: validUserInputRequest,
   folderInstructions: validFolderInstructionsRequest,
+  undoRoom: (request) =>
+    typeof request.title === "string" &&
+    typeof request.path === "string" &&
+    count(request.bytes) &&
+    count(request.roomBytes) &&
+    count(request.budgetBytes),
   workBudget: (request) =>
     typeof request.title === "string" &&
     count(request.completedRounds) &&

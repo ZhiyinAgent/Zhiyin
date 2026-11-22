@@ -86,6 +86,10 @@ function rowNote(file: TurnFile): string | undefined {
     return file.command === "later"
       ? "Created by a command that finished later"
       : "Created by a command";
+  if (!file.declared && file.kept)
+    return file.command === "later"
+      ? "Changed by a command that finished later"
+      : "Changed by a command";
   if (!file.declared)
     return file.command === "later"
       ? "Changed by a command that finished later, so no copy was kept"
@@ -388,7 +392,7 @@ export function TurnFiles({
             {preview.memory.length > 0
               ? "The conversation stays as it is. Only what you choose below changes, and a file you changed afterwards is never overwritten."
               : "The conversation stays as it is. Only these files change, and a file you changed afterwards is never overwritten."}
-            {files.some((file) => !file.declared) &&
+            {files.some((file) => !file.declared && !undoable(file)) &&
               " Files a command changed stay as they are, as no copy was kept of them."}
           </p>
           <UndoChoices

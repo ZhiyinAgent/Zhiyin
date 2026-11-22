@@ -40,15 +40,20 @@ export type FileChange = {
 export type CommandFileChange = {
   readonly path: string;
   readonly change: "created" | "updated" | "deleted";
+  /**
+   * For a file it updated or deleted: a version from before it was saved
+   * (ADR 0031), so undo can put the file back.
+   */
+  readonly kept?: true;
 };
 
 /**
  * What changed in a shell command's folder while it ran, found by listing the
  * folder before and after: names and kinds only, and a change made by anything
- * else while the command ran is seen as well. Nothing was copied, so none of
- * it can be reviewed, and what it updated or deleted cannot be put back; a
- * file the same turns created can still be removed, as it did not exist
- * before them.
+ * else while the command ran is seen as well. None of it can be reviewed. What
+ * it updated or deleted can be put back only where a version from before was
+ * kept; a file the same turns created can always be removed, as it did not
+ * exist before them.
  */
 export type CommandFileChanges =
   | {
@@ -74,17 +79,49 @@ export type ListedFile = {
   readonly size: number;
   /** Milliseconds since 1970, as Windows keeps it. */
   readonly modified: number;
+  /**
+   * The file's identity on its drive, as a decimal string: the same while it
+   * is renamed or rewritten in place, and how the drive's change journal
+   * names it.
+   */
+  readonly id?: string;
+  /**
+   * The entry is a junction or a symbolic link, never followed: its kind and
+   * the target it names, as `junction`, `folder` or `file`, a space, then
+   * the target as written. Its size and time are the link's own.
+   */
+  readonly link?: string;
 };
 
 /**
  * A folder's files, by their path from the folder with forward slashes, as
  * the listing that checks what commands change finds them: hidden files
  * included, ignored files and generated folders left out. Or why it could
- * not be listed.
+ * not be listed. `folders`, when the listing gives them, are the folders it
+ * walked, by the same paths, "" for the folder itself, with each one's
+ * identity.
  */
 export type WorkspaceListing =
-  | { readonly ok: true; readonly files: ReadonlyMap<string, ListedFile> }
+  | {
+      readonly ok: true;
+      readonly files: ReadonlyMap<string, ListedFile>;
+      readonly folders?: ReadonlyMap<string, string>;
+    }
   | { readonly ok: false; readonly reason: string };
 
-/** Lists a folder's files, given by its full path. */
-export type ListWorkspace = (root: string) => Promise<WorkspaceListing>;
+/**
+ * Part of a folder to list, each by its path from the folder: each of
+ * `entries` by itself, the entries directly in each of `entriesOf`, and
+ * everything in each of `wholeOf`.
+ */
+export type ListingPart = {
+  readonly entries: readonly string[];
+  readonly entriesOf: readonly string[];
+  readonly wholeOf: readonly string[];
+};
+
+/** Lists a folder's files, given by its full path, or only `part` of them. */
+export type ListWorkspace = (
+  root: string,
+  part?: ListingPart,
+) => Promise<WorkspaceListing>;

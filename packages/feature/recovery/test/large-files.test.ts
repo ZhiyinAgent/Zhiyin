@@ -1,6 +1,7 @@
 /**
- * Files larger than recovery once copied (ADR 0013): a scene or a data file
- * of tens of megabytes is copied before a change, so going back puts it back.
+ * Large files (ADR 0031): a scene or a data file
+ * of tens of megabytes is kept before a change, so going back puts it back,
+ * within the undo budget.
  */
 
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
@@ -9,7 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import type { ListedFile, ListWorkspace } from "@zhiyin/contract";
 import { FileRecovery, RunBackups } from "../src/index.js";
-import { recoveryTotal } from "../src/storage-limits.js";
+import { defaultBudget } from "../src/storage-limits.js";
 
 const folders = new TemporaryFolders();
 afterEach(() => folders.removeAll());
@@ -98,13 +99,13 @@ describe("a file of 20 MiB", () => {
   });
 });
 
-describe("a file past the limit for one file", () => {
-  it("is not copied by a declared change, which says the limit", async () => {
+describe("a file past the undo budget", () => {
+  it("is not copied by a declared change, which says the room left", async () => {
     const root = await folders.make("zhiyin-large-workspace-");
     const storage = await folders.make("zhiyin-large-store-");
     await writeFile(join(root, "part.step"), "p".repeat(200));
     const recovery = new FileRecovery(storage, {
-      limits: { fileBytes: 100 },
+      limits: { totalBytes: 100 },
       freeBytes: async () => 100 * gib,
     });
 
@@ -119,17 +120,67 @@ describe("a file past the limit for one file", () => {
       {
         path: "part.step",
         status: "unprotected",
-        reason: "The existing file exceeds the 100 byte recovery limit.",
+        reason:
+          "The undo budget has room for 100 bytes more, too little to keep this file first.",
         tooLarge: true,
       },
     ]);
   });
 });
 
-describe("everything recovery keeps", () => {
-  it("is a tenth of the free space, at least 256 MiB and at most 4 GiB", () => {
-    expect(recoveryTotal(10 * gib)).toBe(gib);
-    expect(recoveryTotal(gib)).toBe(256 * mib);
-    expect(recoveryTotal(500 * gib)).toBe(4 * gib);
+describe("the undo budget", () => {
+  it("is a tenth of the free space, and at most 50 GB", () => {
+    expect(defaultBudget(10 * gib)).toBe(gib);
+    expect(defaultBudget(100 * gib)).toBe(10 * gib);
+    expect(defaultBudget(4_000 * gib)).toBe(50_000_000_000);
+  });
+
+  it("is taken from the free space when recovery first keeps a version in its store, and stays so as the disk fills", async () => {
+    const root = await folders.make("zhiyin-large-workspace-");
+    const storage = await folders.make("zhiyin-large-store-");
+    await writeFile(join(root, "notes.txt"), "the person's notes");
+    let free = 100 * gib;
+    const started = () =>
+      new FileRecovery(storage, { list, freeBytes: async () => free });
+    const first = started();
+    await first.copyFolder("run-1", root, "conversation-1");
+    await first.keepFolderChanges("run-1");
+    await first.close();
+
+    free = 10 * gib;
+    const later = started();
+
+    expect(await later.undoBudget()).toMatchObject({
+      budgetBytes: 10 * gib,
+      chosen: false,
+    });
+    await later.close();
+  });
+
+  it("is the person's once they set it, kept across a restart, and said with the room in use", async () => {
+    const root = await folders.make("zhiyin-large-workspace-");
+    const storage = await folders.make("zhiyin-large-store-");
+    await writeFile(join(root, "notes.txt"), "the person's notes");
+    const started = () =>
+      new FileRecovery(storage, { freeBytes: async () => 100 * gib });
+    const first = started();
+    await first.setUndoBudget(2 * gib);
+    await first.prepare(
+      "write-1",
+      root,
+      [{ path: "notes.txt", change: "updated" }],
+      "conversation-1",
+    );
+    await first.commit("write-1");
+    await first.close();
+
+    const later = started();
+    const budget = await later.undoBudget();
+
+    expect(budget).toMatchObject({ budgetBytes: 2 * gib, chosen: true });
+    expect(budget.usedBytes).toBeGreaterThanOrEqual(
+      "the person's notes".length,
+    );
+    await later.close();
   });
 });
