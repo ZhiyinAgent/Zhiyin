@@ -57,11 +57,11 @@ const fontScale = 2;
 /** Pixels the sheet is drawn on, opaque. */
 class Canvas {
   readonly rgba: Uint8Array;
-  constructor(
-    readonly width: number,
-    readonly height: number,
-    background: Colour,
-  ) {
+  readonly width: number;
+  readonly height: number;
+  constructor(width: number, height: number, background: Colour) {
+    this.width = width;
+    this.height = height;
     this.rgba = new Uint8Array(width * height * 4);
     for (let index = 0; index < width * height; index += 1) {
       this.rgba[index * 4] = background[0];

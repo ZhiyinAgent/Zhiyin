@@ -4,13 +4,25 @@ import type { Sessions } from "@zhiyin/session";
 
 /** The core's one commit path and its visible failed-save state. */
 export class WorkspacePersistence {
+  private readonly sessions: Sessions;
+  private readonly current: () => WorkspaceSnapshot;
+  private readonly available: () => boolean;
+  private readonly failed: () => void;
+  private readonly succeeded: () => void;
+
   constructor(
-    private readonly sessions: Sessions,
-    private readonly current: () => WorkspaceSnapshot,
-    private readonly available: () => boolean,
-    private readonly failed: () => void,
-    private readonly succeeded: () => void,
-  ) {}
+    sessions: Sessions,
+    current: () => WorkspaceSnapshot,
+    available: () => boolean,
+    failed: () => void,
+    succeeded: () => void,
+  ) {
+    this.sessions = sessions;
+    this.current = current;
+    this.available = available;
+    this.failed = failed;
+    this.succeeded = succeeded;
+  }
 
   async save(
     snapshot: WorkspaceSnapshot = this.current(),

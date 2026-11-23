@@ -28,6 +28,12 @@ a feature, and every package depends on it. The renderer is documented in
 The main process holds wiring only. It may say which implementation a feature
 uses, never what that implementation does.
 
+Scripts run on plain Node import workspace packages as their TypeScript
+source, and Node only strips types: it refuses syntax that compiles to code,
+such as constructor parameter properties or enums. The typecheck holds every
+package to `erasableSyntaxOnly`, and a test loads what `pnpm release:publish`
+imports in a separate Node process with no flags.
+
 ## Feature boundaries are enforced by lint
 
 TypeScript has no private module boundary, so the rules the architecture

@@ -55,11 +55,10 @@ export function refusedAsTooLong(error: unknown): TokenLimitDetail | undefined {
 
 /** A failure the loop itself ends a turn with, and what to do about it. */
 export class TurnFailure extends VisibleError {
-  constructor(
-    message: string,
-    readonly remedies: readonly TurnRemedy[],
-  ) {
+  readonly remedies: readonly TurnRemedy[];
+  constructor(message: string, remedies: readonly TurnRemedy[]) {
     super(message);
+    this.remedies = remedies;
   }
 }
 

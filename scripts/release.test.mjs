@@ -4,6 +4,7 @@
  * the workflow's checksum or latest.yml does not name.
  */
 
+import { spawnSync } from "node:child_process";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -146,5 +147,30 @@ describe("what is checked before signing", () => {
         path,
       ),
     ).toEqual(["SHA256SUMS.txt does not name the installer's SHA-256."]);
+  });
+});
+
+describe("publishing", () => {
+  it("loads the updates package on plain Node, with no flag beyond what pnpm release:publish gives", async () => {
+    // Its own Node, as the command runs it: this test's process compiles
+    // TypeScript itself, so only a separate one meets what Node cannot strip.
+    const script = join(await folders.make("zhiyin-release-load-"), "load.mjs");
+    await writeFile(
+      script,
+      `const { loadUpdates } = await import(${JSON.stringify(new URL("./release.mjs", import.meta.url).href)});
+const updates = await loadUpdates();
+console.log(typeof updates.checkSignature);
+`,
+    );
+    const loaded = spawnSync(process.execPath, [script], {
+      encoding: "utf8",
+      env: { ...process.env, NODE_OPTIONS: "" },
+    });
+
+    expect(loaded.stderr).not.toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+    expect({ status: loaded.status, out: loaded.stdout.trim() }).toEqual({
+      status: 0,
+      out: "function",
+    });
   });
 });

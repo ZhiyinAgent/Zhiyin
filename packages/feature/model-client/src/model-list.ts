@@ -123,10 +123,12 @@ const platform = (region: string | undefined) => region ?? ONE_PLATFORM;
  * newer list takes effect without describing the model again.
  */
 class ListedDescription {
-  constructor(
-    readonly id: string,
-    readonly region: string | undefined,
-  ) {}
+  readonly id: string;
+  readonly region: string | undefined;
+  constructor(id: string, region: string | undefined) {
+    this.id = id;
+    this.region = region;
+  }
 }
 
 /**

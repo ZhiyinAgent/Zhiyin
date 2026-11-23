@@ -11,8 +11,12 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
 export class CadConversations {
+  private readonly directory: string;
+
   /** `directory` is the studio's folder in the app's data. */
-  constructor(private readonly directory: string) {}
+  constructor(directory: string) {
+    this.directory = directory;
+  }
 
   /** The conversation's own folder, made by the studio when it first keeps something. */
   folder(conversationId: string): string {

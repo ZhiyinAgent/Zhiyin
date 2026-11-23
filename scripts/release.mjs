@@ -30,7 +30,8 @@ import { resolveWorkspaceTypeScript } from "./workspace-typescript.mjs";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-async function loadUpdates() {
+/** The updates package, loaded as plain Node strips its types. */
+export async function loadUpdates() {
   resolveWorkspaceTypeScript();
   return import(
     pathToFileURL(join(repository, "packages/feature/updates/src/index.ts"))
