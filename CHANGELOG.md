@@ -2,7 +2,7 @@
 
 What changed for people using Zhiyin, newest release first.
 
-## Unreleased
+## 0.1.0-alpha.2
 
 ### Shell commands
 
