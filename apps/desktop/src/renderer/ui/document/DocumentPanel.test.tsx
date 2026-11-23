@@ -381,11 +381,16 @@ describe("DocumentPanel", () => {
     vi.stubGlobal(
       "IntersectionObserver",
       class {
+        private readonly report: (
+          entries: { target: Element; isIntersecting: boolean }[],
+        ) => void;
         constructor(
-          private readonly report: (
+          report: (
             entries: { target: Element; isIntersecting: boolean }[],
           ) => void,
-        ) {}
+        ) {
+          this.report = report;
+        }
         observe(target: Element) {
           this.report([{ target, isIntersecting: true }]);
         }

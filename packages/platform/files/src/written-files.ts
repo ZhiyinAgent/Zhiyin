@@ -34,15 +34,20 @@ export function contentDigest(path: string): Promise<string | undefined> {
 export class WrittenFiles {
   /** Each change waits for the one before, so calls that finish together lose none. */
   private readonly changes = new Serial();
+  private readonly record: string;
+  private readonly replace: (path: string, text: string) => Promise<void>;
 
   /**
    * `record` is the file the digests are kept in, in the conversation's own
    * folder; `replace` writes it whole, so it is never left half written.
    */
   constructor(
-    private readonly record: string,
-    private readonly replace: (path: string, text: string) => Promise<void>,
-  ) {}
+    record: string,
+    replace: (path: string, text: string) => Promise<void>,
+  ) {
+    this.record = record;
+    this.replace = replace;
+  }
 
   private async read(): Promise<Record<string, string>> {
     try {

@@ -37,7 +37,11 @@ export class FoundLines {
   readonly #beyond = new Set<string>();
   #held = 0;
 
-  constructor(readonly context: number) {}
+  readonly context: number;
+
+  constructor(context: number) {
+    this.context = context;
+  }
 
   add(path: string, line: FoundLine): void {
     let file = this.#files.get(path);

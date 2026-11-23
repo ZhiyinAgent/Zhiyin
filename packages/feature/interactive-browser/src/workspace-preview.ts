@@ -44,11 +44,10 @@ const mostUnservedNamed = 20;
 
 /** Why a file was not served, with the status the request is answered. */
 class Unserved extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
+  readonly status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
