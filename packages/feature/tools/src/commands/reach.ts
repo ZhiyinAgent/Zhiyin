@@ -328,7 +328,7 @@ export async function checkedFolder(
   if (!mayGrantFolder(real))
     return {
       ok: false,
-      reason: `${real} cannot be given to a container: only an administrator may change who opens it, as for Program Files and Windows' own folders. A program installed there that commands cannot reach runs only with full_access, which the person approves.`,
+      reason: `${real} cannot be given to a container: Windows lets no one but itself change who opens it, an administrator included, as for Program Files and Windows' own folders. A program installed there that commands cannot reach runs only with full_access, which the person approves.`,
     };
   const walked = await linksAndNames(real);
   if (!walked)

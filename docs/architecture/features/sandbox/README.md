@@ -108,8 +108,8 @@ a process that reaches only the folders it is given (ADR 0006).
   runs no more of its code and is passed over, so a container whose commands
   keep starting short-lived processes is held every time.
 - `mayGrantFolder(path)` says whether a folder can be given to a container:
-  whether this account may change who opens it, which only an administrator
-  may for Program Files and Windows' own folders.
+  whether this account may change who opens it, which no account may for
+  Program Files and Windows' own folders, an administrator included.
 - `removeUnusedContainers(purposes?)` removes Zhiyin's containers whose home
   is gone, of the purposes named or of all, and answers how many went. The
   app runs it as it starts.

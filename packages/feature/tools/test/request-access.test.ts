@@ -5,7 +5,6 @@
  * granted refused with the reason.
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, symlink, writeFile, link } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -175,26 +174,18 @@ describe("a folder asked for", () => {
     });
   });
 
-  it("is refused when only an administrator may change who opens it, pointing to full access, unless Zhiyin runs as one", async () => {
+  it("is refused when Windows keeps who opens it to itself, even from an administrator, pointing to full access", async () => {
     const common = join(
       process.env["ProgramFiles"] ?? "C:\\Program Files",
       "Common Files",
     );
-    // `net session` answers only an elevated administrator.
-    const elevated =
-      spawnSync("net", ["session"], { stdio: "ignore" }).status === 0;
 
-    const checked = await checkedFolder(common, "read", [], undefined);
-
-    if (elevated)
-      expect(checked.ok ? "" : checked.reason).not.toContain("administrator");
-    else
-      expect(checked).toMatchObject({
-        ok: false,
-        reason: expect.stringMatching(
-          /only an administrator may change who opens it.*full_access/,
-        ),
-      });
+    expect(await checkedFolder(common, "read", [], undefined)).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(
+        /Windows lets no one but itself change who opens it.*full_access/,
+      ),
+    });
   });
 
   it("is refused when named from no drive", async () => {
