@@ -131,7 +131,7 @@ rather than re-deriving its checks elsewhere.
 powershell -File scripts/gate.ps1 -Quick   # source checks only, about 2 minutes
 powershell -File scripts/gate.ps1          # every everyday check
 powershell -File scripts/gate.ps1 -Full    # adds packaging
-powershell -File scripts/gate.ps1 -Release # -Full, and the real-engine tests run on this commit
+powershell -File scripts/gate.ps1 -Release # -Full, and the real-engine tests run on this code
 ```
 
 To run the gate on every commit: `git config core.hooksPath .githooks`. With

@@ -219,11 +219,14 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 - The tests that need a real Blender or the CAD environment, those the
   skip list says need `ZHIYIN_BLENDER` or `ZHIYIN_CAD_PYTHON`, are recorded
   in `scripts/real-engine-record.json` each time one runs, however it is
-  started: for each file, the commit, the Blender and build123d it ran with,
+  started: for each file, the commit, a fingerprint of the files such a run
+  loads as that commit holds them, the Blender and build123d it ran with,
   and how many of its tests passed, failed and were skipped. A run writes
   only from a working tree with no change but the record, so the commit names
   the code that ran, and a file whose tests all skipped keeps its entry. The
-  record is committed, and the release gate reads it.
+  record is committed, and the release gate reads it: a run whose fingerprint
+  is the commit's own ran on the same code, even when a rebased merge renamed
+  its commit.
 - `system-boundary` tests drive real browsers, Windows processes and file
   replacement. They run one file at a time, after the parallel projects, so
   shared machine resources do not skew them. Each scope has its own test
@@ -332,7 +335,16 @@ release tag. Among the first checks it reads the record of the real-engine
 tests and fails unless every file the skip list says needs a real Blender or
 the CAD environment ran whole, with nothing failed or skipped, with the
 Blender the app installs and the build123d the CAD environment's lock pins,
-on this commit or on one it differs from only by the record. The files that
+on a commit since which nothing such a run loads has changed. What a run
+loads is followed from those test files through their imports, relative and
+of the workspace's packages, with the runner's configuration and setup. A
+change counts when it is to any file of a package reached that way, whole
+package folders because the Python scripts and pins a package reads while it
+runs are not imported; to a file reached outside the packages; or to the
+workspace's manifest, lock, package list, compiler settings or
+`.gitattributes`. A change to docs, workflows, another script or a package
+those tests do not load needs no new run; the check names each change that
+does. The files that
 render, and the CAD suites, run only on a PC with a graphics card before a
 release; the record is what shows they ran on the code released. CI's Blender
 job covers about two thirds of the Blender files without one, in three parts
