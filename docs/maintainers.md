@@ -41,12 +41,15 @@ that signs prices cannot sign code.
 
 ### Publishing a release
 
-1. Raise the desktop package's version and commit it. From that commit, with
-   nothing else changed, run the real-engine tests on a PC with a graphics
-   card, with `ZHIYIN_BLENDER` naming the Blender the app installs and
-   `ZHIYIN_CAD_PYTHON` the CAD environment's Python, until every one has
-   passed; each run writes `scripts/real-engine-record.json`. Commit the
-   record alone, run the release gate (`gate.ps1 -Release`), merge, and tag
+1. Raise the desktop package's version and commit it. Run
+   `node scripts/real-engine-record.mjs --check`: it passes when the record
+   holds a passing run since which nothing the real-engine tests load has
+   changed, and otherwise names each change that counts. If it fails, run the
+   real-engine tests from that commit, with nothing else changed, on a PC
+   with a graphics card, with `ZHIYIN_BLENDER` naming the Blender the app
+   installs and `ZHIYIN_CAD_PYTHON` the CAD environment's Python, until every
+   one has passed; each run writes `scripts/real-engine-record.json`, and the
+   record is committed alone. Run the release gate (`gate.ps1 -Release`), merge, and tag
    the commit on `main` (`v0.1.0-alpha.2`, say). The release workflow builds
    the installer and leaves a draft release with the installer, its block
    map, `latest.yml` and `SHA256SUMS.txt`. A draft is invisible to installed
