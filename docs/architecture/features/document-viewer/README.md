@@ -158,7 +158,8 @@ shows live pages.
   kept, they are listed, and the shown one is drawn again only if it is among
   them. A redraw still owed to a document
   written earlier is dropped when another is written or asked for. Of two
-  documents asked for at once, the later is shown; a request refused as
+  documents asked for at once, the later is shown, and the earlier never is,
+  not even while the later is still looked for; a request refused as
   outside the folder, by its name or through a link, overtakes nothing, and a
   panel closed while a document is being looked for stays closed. A request
   for a page that is not there changes nothing shown: a panel left opening,

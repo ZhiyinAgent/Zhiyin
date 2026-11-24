@@ -77,6 +77,9 @@ function begin(asks: readonly (readonly [string, OrderingEvent])[]): World {
 function apply(world: World, who: string, event: OrderingEvent): World {
   const { ordering, effects } = step(world.ordering, event, clock);
   const work = new Map(world.work);
+  // Each piece of work is answered once; a load may then wait on nothing,
+  // held until another load's step lets it go on.
+  if ("load" in event) work.delete(event.load);
   const names = new Map(world.names);
   if (event.kind === "load") names.set(ordering.numbered, who);
   for (const effect of effects) {
@@ -276,6 +279,41 @@ describe("the order of what happens to a panel's documents", () => {
         ).toEqual([]);
       }
       expect(count).toBeGreaterThan(10);
+    },
+  );
+
+  it.each([
+    ["a later document", "b.pdf", "shown b.pdf"],
+    ["a path outside the folder", "../secret.pdf", "shown a.pdf"],
+  ])(
+    "never shows a document asked for at once with %s before the later request's folder check, whatever order their steps finish in",
+    (_, later, end) => {
+      let start = begin([]);
+      start = apply(start, "a", show("a.pdf"));
+      start = apply(start, "later", show(later));
+      let count = 0;
+      for (const world of walks(start)) {
+        count += 1;
+        const walk = describeWalk(world);
+        expectSettled(world, walk);
+        expect(where(world.ordering.panel), walk).toBe(end);
+        const laterChecked = world.log.findIndex(
+          ({ who, event }) => who === "later" && event.kind === "located",
+        );
+        expect(
+          shown(world)
+            .filter(({ at }) => at < laterChecked)
+            .map(({ panel }) => where(panel)),
+          walk,
+        ).toEqual([]);
+        if (end === "shown b.pdf")
+          expect(
+            shown(world).map(({ panel }) => where(panel)),
+            walk,
+          ).not.toContain("shown a.pdf");
+      }
+      // Either check may finish first.
+      expect(count).toBeGreaterThan(1);
     },
   );
 

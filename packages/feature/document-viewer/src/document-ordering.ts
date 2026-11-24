@@ -10,7 +10,9 @@
  * numbered as they are asked for, and closing takes a number too. The newest
  * load past its folder check, or the newest close, is the one the panel
  * follows: an older load that finishes changes nothing. A load refused as
- * outside the folder is never followed, so it overtakes nothing.
+ * outside the folder is never followed, so it overtakes nothing. A load past
+ * its check waits while a later one is still at its own, so the panel never
+ * shows a document a later request is about to overtake.
  */
 
 import { extname } from "node:path";
@@ -65,7 +67,16 @@ type Load = {
   readonly forgone: readonly OwedRedraw[];
   /** The revision it is opening, once its bytes are read. */
   readonly opening?: { readonly revision: string; readonly format: Format };
+  /** Past its folder check. */
+  readonly checked?: boolean;
+  /** What its folder check found, while it waits on a later load's check. */
+  readonly held?: Inside;
 };
+
+/** What a folder check found for a path inside the folder. */
+type Inside =
+  | Extract<Located, { readonly kind: "found" }>
+  | { readonly kind: "missing" | "not-a-file" | "unreadable" };
 
 /** What a conversation's panel knows about the documents it shows. */
 export type Ordering = {
@@ -306,6 +317,11 @@ class Stepping {
   }
 
   on(event: OrderingEvent): void {
+    this.#handle(event);
+    this.#resumeHeld();
+  }
+
+  #handle(event: OrderingEvent): void {
     switch (event.kind) {
       case "load":
         this.#load(event);
@@ -384,7 +400,40 @@ class Stepping {
       this.#answer(number, { ok: false, reason });
       return;
     }
+    const inside: Inside =
+      found.kind === "found" ? found : { kind: found.kind };
     this.#latest = Math.max(this.#latest, number);
+    const checked = { ...load, checked: true };
+    if (this.#checking(number)) {
+      this.#loads.set(number, { ...checked, held: inside });
+      return;
+    }
+    this.#take(number, checked, inside);
+  }
+
+  /** Whether a load asked for after this one is still at its folder check. */
+  #checking(after: number): boolean {
+    for (const [number, load] of this.#loads)
+      if (number > after && !load.checked) return true;
+    return false;
+  }
+
+  /** Each load held behind a later one's check goes on once no later one is at it. */
+  #resumeHeld(): void {
+    const held = [...this.#loads]
+      .filter(([, load]) => load.held)
+      .sort(([a], [b]) => a - b);
+    for (const [number, load] of held) {
+      if (!load.held || this.#checking(number)) continue;
+      const { held: found, ...going } = load;
+      this.#loads.set(number, going);
+      this.#take(number, going, found);
+    }
+  }
+
+  /** A load past its folder check takes the panel, unless it was overtaken. */
+  #take(number: number, load: Load, found: Inside): void {
+    const { place } = load.request;
     // Overtaken while it looked, by another request or by closing: what came
     // after it is what the panel shows.
     if (number !== this.#latest) {
