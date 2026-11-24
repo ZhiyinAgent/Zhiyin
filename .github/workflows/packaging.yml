@@ -77,6 +77,16 @@ jobs:
           "TEMP=$temp" >> $env:GITHUB_ENV
           "TMP=$temp" >> $env:GITHUB_ENV
 
+      # As in CI: the tests read the work disk's change journal.
+      - name: Keep a change journal on the runner's work disk
+        shell: powershell
+        run: |
+          $drive = Split-Path -Qualifier $env:RUNNER_TEMP
+          fsutil usn createjournal m=33554432 a=8388608 $drive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          fsutil usn queryjournal $drive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install dependencies
         shell: powershell
         run: pnpm install --frozen-lockfile

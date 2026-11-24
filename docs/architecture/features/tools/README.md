@@ -455,8 +455,8 @@ with the reason, and checking for a shell again does not change it.
   holding the workspace, a drive, the user folder or a folder holding it, a
   network share, Zhiyin's own folders and where credentials are kept are
   refused, and so, to change, are Windows, Program Files and the Startup
-  folders. A folder whose permissions this account may not change, as only an
-  administrator may for Program Files, cannot be given to a container and is
+  folders. A folder whose permissions this account may not change, as no
+  account may for Program Files, cannot be given to a container and is
   refused, pointing to `full_access`. Each is refused before any card,
   checked again as it runs, and asked every time.
 - A command with full access is not sandboxed: it starts in the folder and can

@@ -459,8 +459,9 @@ export function folderGrants(
 
 /**
  * Whether a folder can be given to a container: this account may change who
- * may open it, which granting it does. One only an administrator may change,
- * as Program Files and Windows' own folders, cannot be.
+ * may open it, which granting it does. One whose permissions Windows keeps to
+ * itself, as Program Files and Windows' own folders, cannot be, even by an
+ * administrator.
  */
 export function mayGrantFolder(path: string): boolean {
   if (process.platform !== "win32") return false;

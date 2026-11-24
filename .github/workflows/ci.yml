@@ -48,6 +48,18 @@ jobs:
           "TEMP=$temp" >> $env:GITHUB_ENV
           "TMP=$temp" >> $env:GITHUB_ENV
 
+      # The tests of the folder index and of a turn's files read the change
+      # journal of the disk their folders are on, as on a person's PC, and a
+      # new runner's work disk keeps none until one is made.
+      - name: Keep a change journal on the runner's work disk
+        shell: powershell
+        run: |
+          $drive = Split-Path -Qualifier $env:RUNNER_TEMP
+          fsutil usn createjournal m=33554432 a=8388608 $drive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          fsutil usn queryjournal $drive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Install dependencies
         shell: powershell
         run: pnpm install --frozen-lockfile

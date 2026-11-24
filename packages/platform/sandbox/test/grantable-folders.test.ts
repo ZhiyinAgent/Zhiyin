@@ -3,7 +3,6 @@
  * account may change, as granting writes them.
  */
 
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
@@ -17,16 +16,15 @@ describe.runIf(process.platform === "win32")("a folder to grant", () => {
     expect(mayGrantFolder(await folders.make("zhiyin-grantable-"))).toBe(true);
   });
 
-  it("cannot be given when only an administrator may change who opens it, unless this runs as one", () => {
+  it("cannot be given when Windows keeps who opens it to itself, as for Program Files, even to an administrator", () => {
+    // Common Files belongs to TrustedInstaller: administrators may change
+    // what is in it, not who opens it.
     const common = join(
       process.env["ProgramFiles"] ?? "C:\\Program Files",
       "Common Files",
     );
-    // `net session` answers only an elevated administrator.
-    const elevated =
-      spawnSync("net", ["session"], { stdio: "ignore" }).status === 0;
 
-    expect(mayGrantFolder(common)).toBe(elevated);
+    expect(mayGrantFolder(common)).toBe(false);
   });
 
   it("cannot be given when it is not there", () => {
