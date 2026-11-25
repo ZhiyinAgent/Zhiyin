@@ -9,7 +9,9 @@
   minutes and is not worth paying on every commit. -Release is -Full for a
   release: it also asks for the record of the tests that need a real Blender
   or the CAD environment, run on this commit. -Quick runs only the checks that
-  read the source, in a few minutes, to run before committing.
+  read the source, in a few minutes, to run before committing. -Docs is the
+  gate for a change to documentation alone (scripts/change-scope.mjs): the
+  source checks and the repository tests, which read the docs.
 
   Those checks come first, and when one fails nothing after them runs: the
   tests, the build and the installed app take most of the time, and their
@@ -23,12 +25,14 @@
   powershell -File scripts/gate.ps1 -Full
   powershell -File scripts/gate.ps1 -Release
   powershell -File scripts/gate.ps1 -Quick
+  powershell -File scripts/gate.ps1 -Docs
 #>
 [CmdletBinding()]
 param(
     [switch]$Full,
     [switch]$Release,
-    [switch]$Quick
+    [switch]$Quick,
+    [switch]$Docs
 )
 
 $ErrorActionPreference = 'Stop'
@@ -110,6 +114,17 @@ if ($Quick -or $failures.Count -gt 0) {
     }
     Write-Failures
     Write-Host "Source checks passed. -Quick runs no tests, build or installed app." -ForegroundColor Green
+    exit 0
+}
+
+# Documentation alone: the checks that read it, such as the decision records'
+# numbering and the overview's package list, are the repository tests. The
+# app, its tests and its build read none of what changed.
+if ($Docs) {
+    Invoke-Step "repository tests" { pnpm vitest run --project repository }
+    Write-Failures
+    Write-Host ""
+    Write-Host "All checks for a change to documentation passed." -ForegroundColor Green
     exit 0
 }
 
