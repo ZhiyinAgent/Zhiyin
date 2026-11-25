@@ -20,10 +20,10 @@ where that is practical.
 Zhiyin shows every action it takes. A change in the folder you chose runs
 without asking, because Zhiyin backs the file up first and can put it back;
 Zhiyin asks before what it can neither prevent nor undo. It runs as your
-Windows account and does not make that account a sandbox: a shell command you
-approve can do whatever your account can do. Python scripts, CAD builds,
-Blender and LaTeX run in Windows app containers, which reach only the folders
-Zhiyin gives them. The sections below say what each boundary contains and
+Windows account and does not make that account a sandbox. Shell commands,
+Python scripts, CAD builds, Blender and LaTeX run in Windows app containers,
+which reach only the folders Zhiyin gives them; a shell command you approve
+with full access can do whatever your account can do. The sections below say what each boundary contains and
 where it stops.
 
 ### Approvals
@@ -42,12 +42,14 @@ worst case, and the strictest part of what it does decides it.
   records; reading your account on a service through a connector that ships
   with Zhiyin; changing the folder you chose in a way Zhiyin backs up first,
   and moving a file there to the Recycle Bin; code sealed off in an app
-  container, such as a Python script, a CAD build or a Blender call; and
+  container, such as a shell command, a Python script, a CAD build or a
+  Blender call, reaching only the hosts on the conversation's list; and
   sending to a fixed service you connected, such as a web search. Each is
   shown in the conversation, and a change with a way back.
 - **Asks every time, and nothing allowed for the conversation covers it:**
-  code with your account's full access, such as a shell command or a Git
-  change, which runs the repository's own hooks and filters; deleting for
+  code with your account's full access, such as a shell command run outside
+  its container or a Git connector change, which runs the repository's own
+  hooks and filters; deleting for
   good, or any other change Zhiyin cannot put back, unless all it cannot put
   back is one file too large for the undo budget; acting as you on an account
   in a way that cannot be taken back, such as merging or pushing, or without
@@ -62,7 +64,9 @@ worst case, and the strictest part of what it does decides it.
   too large for the undo budget, by that file; and each tool of a connector
   you added, unless you chose beside its switch that it only reads, which is
   your word and not something Zhiyin can check, or that it is asked about
-  every time.
+  every time; and a website or a folder outside the folder you chose for the
+  shell's commands to reach, asked with a card Zhiyin builds from what it
+  checked itself.
 - **Sending what the model wrote to a destination it chose** runs, unless
   the conversation holds both content someone else wrote and something
   private; then it asks every time. Such a send is text typed into a page,
@@ -131,23 +135,64 @@ at its end stays done.
 
 ### Shell commands
 
-Shell commands run in the bash that comes with Git for Windows, starting in
-the folder you chose. That starting folder is not a boundary: a command has
-your account's access to files, processes, the network and credentials. Read
-the whole command before approving it, including paths, redirections,
-downloads and the programs it starts. The model's explanation of a command is
-a claim, and the approval labels it as one.
+Shell commands run in Zhiyin's own shell, busybox-w32, starting in the folder
+you chose. Each command runs sealed off in a Windows app container of the
+conversation's own, and asks nothing. Windows refuses it, and every program
+it starts, every file your account can reach except these: it reads the
+folder you chose, the shell, Zhiyin's toolchains, what Windows opens to every
+app container and the folders allowed to the conversation for reading, and
+changes the folder you chose and the folders allowed for changing. Its tools'
+caches and settings go to a home of the conversation's own. It reaches the
+network only through a proxy in Zhiyin, and only the hosts on the
+conversation's list: package registries and Git hosts, and the websites you
+allowed. It reaches its own container's loopback, never this computer's, so
+Zhiyin's servers and other programs listening here stay out of reach; a
+server it starts is shown to you only on request, through a port Zhiyin
+carries inward. Each `.git` folder and every Startup folder it could reach
+is read-only for the run.
 
-A command that deletes files is refused before you are asked, and the model
-is pointed to the delete tool, which shows each item and whether it can be
-restored. This reads the command's text, including nested shells and inline
-Python, Node or PowerShell code, and catches the usual ways to delete, not
-every way: any program can delete files. A script the model wrote earlier,
-code that hides the call, or a command that overwrites a file still deletes
-without being caught, and only your approval of the command covers it.
+When the model needs a website or folder beyond that, it asks with a card
+built from what Zhiyin checked itself: a website by its registrable domain or
+exact host, a folder by its whole real path, for reading or for changing.
+Drives, your user folder or one holding it, network shares, Zhiyin's own
+folders and where credentials are kept, such as `.ssh` or browser profiles,
+are refused before any card; so are, for changing, Windows, Program Files and
+Startup folders. A website allowed can receive whatever the conversation's
+commands can read, and the card says so when something private is within
+reach. A grant lasts for the conversation and can be taken back. When the
+conversation later holds both content from outside and something private,
+the next command that could reach a grant asks you to keep or take back each
+one first. Three refusals in a row end the turn.
+
+git runs through Zhiyin, since it cannot start in a container: the
+container's `git` hands the call to Zhiyin, which runs the git of Git for
+Windows outside it, only in the folder you chose or a folder allowed for the
+conversation, with every setting that would run a program turned off, such
+as hooks, filters, credential helpers and ssh commands, reaching only the
+hosts on the conversation's list through the proxy, never with your
+credentials, and refusing a path that leads through a link outside those
+folders. While git runs, every process of the conversation's container is
+paused.
+
+A command with full access runs the same shell outside the container, with
+your account's access to files, processes, the network and credentials, and
+asks every time. The model uses it for what a container cannot do, such as
+installing for the whole computer or pushing with your credentials. Read the
+whole command before approving it, including paths, redirections, downloads
+and the programs it starts. The model's explanation of a command is a claim,
+and the approval labels it as one. Where Windows cannot run the shell in a
+container, every command runs with full access and asks.
+
+A command that starts with a usual way to delete, such as `rm`, `del` or
+`git clean`, is refused before you are asked, and the model is pointed to the
+delete tool, which shows each item and whether it can be restored. This
+steers and does not guard: any program can delete files, and in the
+container only what it may change can be deleted; with full access, only
+your approval of the command covers it.
 
 After a command runs, Zhiyin records every file the command created, changed
-or deleted in the folder you chose, against the files as the turn found them,
+or deleted in the folder you chose and in each folder allowed to the
+conversation for changing, against the files as the turn found them,
 so going back or undoing the turn puts each back. This covers files Git
 ignores, however many the folder holds, but leaves out `.git` and the folders
 tools rebuild (`node_modules`, `build`, `dist`, `out`, `.next`, `.venv` and
@@ -158,8 +203,8 @@ until the rest fit, and the largest left over cannot be put back unless the
 model saves each with `prepare_change` before changing it. When the folder
 could not be watched, Zhiyin lists by name the files that changed while the
 command ran, where it can, and going back can only remove those the command
-created. Nothing a command does outside the folder is kept or listed, and
-none of it can be undone. A junction or symbolic link in the folder, which a
+created. Nothing a command does outside those folders is kept or listed,
+and none of it can be undone. A junction or symbolic link in the folder, which a
 command can make pointing anywhere, is recorded and put back as a link and
 never followed: Zhiyin does not read, save or watch what it leads to, and a
 file whose path now passes through one, such as a folder replaced by a
@@ -227,8 +272,9 @@ files it names, such as its pictures, geometry and parts, are inside the
 folder you chose, read as the importer reads them; a USD file that names one
 in a way that cannot be read the same way, or USD text that plays clips, is
 refused. A Blender script runs without asking, and its card says what it can
-reach: Zhiyin copies the folder you chose before it runs, so going back puts
-back every file it changed there, the scene included.
+reach: Zhiyin saves each file of the folder you chose the moment the script
+first writes to it, so going back puts back every file it changed there, the
+scene included.
 
 ### Documents
 
@@ -310,7 +356,7 @@ Job Objects govern how long processes live, not what they can reach. They do
 not limit file, registry, network or credential access, and they do not cover
 programs started outside Zhiyin.
 
-App containers govern what Python, Blender and LaTeX reach. Besides the
+App containers govern what shell commands, Python, Blender and LaTeX reach. Besides the
 folders a run is given, a contained program reads what Windows opens to every
 app container, such as Windows' own files and the fonts installed for
 everyone. A whole drive, a folder that holds your user folder, and a folder on
