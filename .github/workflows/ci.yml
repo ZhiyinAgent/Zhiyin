@@ -166,13 +166,17 @@ jobs:
   # in it, and in three parts of about 25 minutes each: measured on
   # 2026-11-14, these files take about three times as long here as on a PC
   # with a graphics card. The files that render, and the CAD suites, run on
-  # such a PC, and a release asks for their record. Not for documentation alone.
+  # such a PC, and a release asks for their record. For documentation alone
+  # each part starts and runs none of its steps: a job skipped whole would show
+  # its name unexpanded, with `matrix.part` in it.
   blender:
     name: Real Blender, no graphics card (${{ matrix.part }})
     needs: scope
-    if: ${{ !cancelled() && needs.scope.outputs.scope != 'docs' }}
+    if: ${{ !cancelled() }}
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      BLENDER_RUN: ${{ needs.scope.outputs.scope != 'docs' }}
     strategy:
       fail-fast: false
       matrix:
@@ -189,27 +193,36 @@ jobs:
               library render-motion-loops library-details measure own-heights
               cad-sizes
     steps:
+      - name: Not needed for documentation alone
+        if: env.BLENDER_RUN != 'true'
+        run: echo "The change touches documentation alone; no Blender test reads it."
+
       - name: Check out the repository
+        if: env.BLENDER_RUN == 'true'
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up Node.js
+        if: env.BLENDER_RUN == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
 
       - name: Enable the pinned pnpm version
+        if: env.BLENDER_RUN == 'true'
         shell: powershell
         run: |
           corepack enable
           corepack prepare pnpm@11.25.0 --activate
 
       - name: Install dependencies
+        if: env.BLENDER_RUN == 'true'
         shell: powershell
         run: pnpm install --frozen-lockfile
 
       # Blender's archive, kept between runs until its pin changes. A short
       # folder: Blender's own tree adds up to 142 characters to its path.
       - name: Keep Blender's archive between runs
+        if: env.BLENDER_RUN == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: C:\zb\blender.zip
@@ -218,6 +231,7 @@ jobs:
       # The address and the digest are read from the app's own pin, so this
       # runs the Blender the app installs, and nothing else is trusted.
       - name: Download, verify and unpack the pinned Blender
+        if: env.BLENDER_RUN == 'true'
         shell: powershell
         run: |
           $pins = Get-Content -Raw packages/feature/toolchains/src/toolchains.ts
@@ -240,6 +254,7 @@ jobs:
           "ZHIYIN_BLENDER=C:\zb\$folder\blender.exe" >> $env:GITHUB_ENV
 
       - name: Run this part's real-Blender tests
+        if: env.BLENDER_RUN == 'true'
         shell: powershell
         env:
           ZHIYIN_TEST_WINDOWS: aside
