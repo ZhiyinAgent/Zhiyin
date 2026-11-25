@@ -26,7 +26,7 @@ takes a few minutes.
 https://github.com/user-attachments/assets/67128e82-6adc-4bcb-ac21-25ad92e0f016
 
 <p align="center">
-  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.1/Zhiyin-Setup-0.1.0-alpha.1.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
+  <a href="https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe"><img alt="Download for Windows: developer preview" src="https://img.shields.io/badge/Download_for_Windows-Developer_preview-0078D4?style=for-the-badge&labelColor=24292f"></a>
 </p>
 
 > [!NOTE]
@@ -51,16 +51,18 @@ Zhiyin is for.
   DeepSeek, Kimi, Qwen, Z.ai, MiniMax or Xiaomi MiMo, international or
   mainland China. Your own key is kept in Windows Credential Manager.
 - **Lets you undo what it changes.** Changes in your folder run without
-  stopping you: each file is backed up first, and every change is shown in
-  the conversation, line by line, with a way back. It asks only for what it
-  can neither prevent nor undo, such as a shell command, deleting for good, a
+  stopping you: each file is saved the moment something first writes to it,
+  whatever its size, and every change is shown in the conversation, line by
+  line, with a way back. It asks only for what it can neither prevent nor
+  undo, such as a command that needs your full access, deleting for good, a
   change outside your folder, or acting as you on an account. Where one
-  answer can stand, you can allow it for the rest of the conversation: a file
-  or folder outside your folder, one place on an account, one tool of a
-  connector you added, or a file too large to back up.
+  answer can stand, you can allow it for the rest of the conversation: a
+  website or folder its commands may reach, a file or folder outside your
+  folder, one place on an account, one tool of a connector you added, or a
+  file too large to back up.
 - **Lets you go back.** Edit an earlier message and send it again, and the
-  files it changed can go back too. Each turn's file changes can also be
-  undone on their own.
+  files it changed can go back too, with what it remembered in between, or
+  only one of the two. Each turn's changes can also be undone on their own.
 - **Remembers.** From one conversation to the next, it keeps what you tell it
   about yourself and how you want it to work, where each piece of work
   stands, and what it learned along the way, as files on your computer. The
@@ -89,11 +91,13 @@ Zhiyin is for.
 - **Checks your spelling** as you type, in the languages you choose from 47,
   with every dictionary included.
 
-Shell commands always ask first and stop when the app closes. They run with
-your Windows account's access, so review each one: Zhiyin backs up your
-folder before each, so what a command changes there can be undone, but not
-what it does anywhere else. Python scripts, CAD builds, Blender and LaTeX run
-in Windows app containers that reach only the folders Zhiyin gives them. The [security policy](.github/SECURITY.md) says what each
+Shell commands run sealed off in a Windows app container, in Zhiyin's own
+shell. They reach your folder, the folders and websites you allowed for the
+conversation, and package registries and Git hosts, so they run without
+asking, and what they change in your folder can be undone. A command that
+needs your full access, such as installing for the whole computer or pushing
+with your credentials, asks every time. Commands stop when the app closes.
+Python scripts, CAD builds, Blender and LaTeX run in app containers too. The [security policy](.github/SECURITY.md) says what each
 boundary covers.
 
 ## Get Zhiyin
@@ -101,9 +105,9 @@ boundary covers.
 ### Install the developer preview
 
 Download
-[`Zhiyin-Setup-0.1.0-alpha.1.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.1/Zhiyin-Setup-0.1.0-alpha.1.exe)
+[`Zhiyin-Setup-0.1.0-alpha.2.exe`](https://github.com/ZhiyinAgent/Zhiyin/releases/download/v0.1.0-alpha.2/Zhiyin-Setup-0.1.0-alpha.2.exe)
 from the
-[`v0.1.0-alpha.1`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.1)
+[`v0.1.0-alpha.2`](https://github.com/ZhiyinAgent/Zhiyin/releases/tag/v0.1.0-alpha.2)
 prerelease. Microsoft Defender SmartScreen warns before it runs: choose **More
 info**, then **Run anyway**.
 
@@ -113,13 +117,13 @@ You also need:
   of the lab that makes the model; whoever issued the key bills your account
   for the models you use;
 - Edge or Chrome, for browser work;
-- [Git for Windows](https://git-scm.com/download/win), whose bash runs shell
-  commands, and which the Git connector uses.
+- [Git for Windows](https://git-scm.com/download/win), for git: Zhiyin runs
+  it for the Git connector and for git in shell commands.
 
 To check the installer before running it, compare
-`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.1.exe` with the SHA-256 in the
+`Get-FileHash .\Zhiyin-Setup-0.1.0-alpha.2.exe` with the SHA-256 in the
 release notes, and confirm its origin with
-`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.1.exe --repo ZhiyinAgent/Zhiyin`.
+`gh attestation verify .\Zhiyin-Setup-0.1.0-alpha.2.exe --repo ZhiyinAgent/Zhiyin`.
 The release workflow builds only an alpha tag that matches the app's
 version, after the full gate passes, with `SHA256SUMS.txt` and a
 build-provenance attestation. A maintainer then checks the installer against

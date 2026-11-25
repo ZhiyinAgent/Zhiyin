@@ -23,8 +23,9 @@ Windows PC and, for the AI itself, an account with credit at a model provider
 Zhiyin also uses two free programs:
 
 - **Edge or Chrome**, to open web pages. Edge comes with Windows.
-- [Git for Windows](https://git-scm.com/download/win), to run shell commands
-  (commands typed for Windows to carry out) and to work with Git.
+- [Git for Windows](https://git-scm.com/download/win), to work with Git.
+  Shell commands (commands typed for Windows to carry out) run in a shell
+  that comes with Zhiyin.
 
 ## 2. Connect an AI model
 
@@ -181,16 +182,27 @@ conversation** in the sidebar, or **Ctrl+N**, starts another one.
 
 **Your files, and a way back.** Zhiyin reads, creates and changes files in
 your folder without asking, and moves them to the Recycle Bin the same way.
-It backs up each file before changing it, and every change appears in the
-conversation: select a file to see the change line by line, and **Undo**
-beside a turn's files puts them back. Python scripts, CAD builds and the 3D
-studio's work run the same way, since Zhiyin copies the folder before each
-one. Editing an earlier message and sending it again can put files back too.
+It saves each file the moment something first writes to it in a turn,
+whatever its size, and every change appears in the conversation: select a
+file to see the change line by line, and **Undo** beside a turn's files puts
+them back. Shell commands, Python scripts, CAD builds and the 3D studio's
+work are saved the same way. **Room for going back**, under **Settings**,
+sets how much space the saved versions may take. Editing an earlier message
+and sending it again can put files back too.
 Undoing a turn and going back also take back what Zhiyin kept in memory in
 those turns, unless you clear **Undo memory changes**.
 
+**Shell commands.** Zhiyin's shell commands run sealed off: they reach your
+folder, the folders and websites allowed for the conversation, and package
+registries and Git hosts, so they run without asking. When
+a task needs another website or folder, Zhiyin asks once, with a card that
+says what it would reach; **Allow for this conversation** lets commands reach
+it until the conversation ends. Its shell is not bash, so a command written
+for bash may be rewritten.
+
 **When it asks.** Zhiyin asks only for what it can neither prevent nor undo:
-a shell command; deleting for good; reading or changing anything outside your
+a shell command that needs your full access, such as installing for the
+whole computer or pushing with your Git credentials; deleting for good; reading or changing anything outside your
 folder; acting as you on an account, such as opening a pull request on
 GitHub; a Git change, which runs the repository's own hooks; installing
 packages, or making or rebuilding a Python environment; a tool of a connector
@@ -214,7 +226,7 @@ which can be wrong, so check what will run. You choose:
   changed outside Zhiyin. To take it back, select **•••** next to the
   conversation in the sidebar, then **Permissions**, then **Take back**.
 
-A shell command, deleting for good, a Git change, a Python environment
+A shell command with full access, deleting for good, a Git change, a Python environment
 change, anything that cannot be taken back on an account, such as merging a
 pull request, and anything that would run later on its own always ask. Nothing
 allowed for the conversation covers a file in a `.git` folder.
@@ -286,5 +298,8 @@ Zhiyin says what happened, with a button for the next step:
   add credit on its site, then select **Try again**.
 - A connector's window says the service refused the saved key: make a new key
   on the service's site and paste it there.
-- The Plugins page says "Shell commands are unavailable": select **Get Git for
-  Windows**, install it, then select **Check again**.
+- The Git connector says "No git was found": install
+  [Git for Windows](https://git-scm.com/download/win).
+- The Plugins page says "Shell commands are unavailable": Windows cannot hold
+  the programs a command would start, so Zhiyin runs none, and the message
+  says why.

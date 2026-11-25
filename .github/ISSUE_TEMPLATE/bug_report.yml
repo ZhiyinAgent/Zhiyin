@@ -29,7 +29,7 @@ body:
     id: version
     attributes:
       label: Zhiyin version
-      description: The version you installed, such as 0.1.0-alpha.1, or the commit you built.
+      description: The version you installed, such as 0.1.0-alpha.2, or the commit you built.
     validations:
       required: true
   - type: input
