@@ -5,6 +5,17 @@ the release and model-list keys, update the signed model list, and keep
 Zhiyin's mirror copies. Building, testing and the gate are in
 [tooling.md](tooling.md).
 
+## How changes reach main
+
+`main` takes changes only through a pull request, maintainers' included: the
+repository's rules refuse a push to it, and a maintainer's bypass holds for
+pull requests only. Each change is made on a branch of its own, in commits
+that each make one change whole, with the gate run before each commit. The
+branch is pushed, a pull request opened, and it is merged with "Rebase and
+merge" once its checks have passed, so each commit lands on `main` as it was
+made. A check that fails is fixed on the branch, never merged past. Tags
+name commits on `main`, never a branch's.
+
 ## Releases
 
 Releases are developer-preview alpha tags. The release workflow accepts only a
@@ -41,19 +52,22 @@ that signs prices cannot sign code.
 
 ### Publishing a release
 
-1. Raise the desktop package's version and commit it. Run
-   `node scripts/real-engine-record.mjs --check`: it passes when the record
-   holds a passing run since which nothing the real-engine tests load has
-   changed, and otherwise names each change that counts. If it fails, run the
+1. On the release's branch, raise the desktop package's version and commit
+   it. Run `node scripts/real-engine-record.mjs --check`: it passes when the
+   record holds a passing run on the same files the real-engine tests load
+   now, and otherwise names each change that counts. If it fails, run the
    real-engine tests from that commit, with nothing else changed, on a PC
    with a graphics card, with `ZHIYIN_BLENDER` naming the Blender the app
    installs and `ZHIYIN_CAD_PYTHON` the CAD environment's Python, until every
    one has passed; each run writes `scripts/real-engine-record.json`, and the
-   record is committed alone. Run the release gate (`gate.ps1 -Release`), merge, and tag
-   the commit on `main` (`v0.1.0-alpha.2`, say). The release workflow builds
-   the installer and leaves a draft release with the installer, its block
-   map, `latest.yml` and `SHA256SUMS.txt`. A draft is invisible to installed
-   copies.
+   record is committed alone. The record keeps a fingerprint of the files the
+   run loaded, so the rebased merge, which gives each commit a new name,
+   leaves it true. Run the release gate (`gate.ps1 -Release`), push the
+   branch and open its pull request. Once its checks pass, merge it as above
+   and tag the merged commit on `main` (`v0.1.0-alpha.2`, say). The release
+   workflow builds the installer and leaves a draft release with the
+   installer, its block map, `latest.yml` and `SHA256SUMS.txt`. A draft is
+   invisible to installed copies.
 2. In a terminal, from an up-to-date checkout:
    `pnpm release:publish v0.1.0-alpha.2 <path to the primary release key> --mirror <remote:bucket>`.
    It downloads the draft, checks the installer against `SHA256SUMS.txt`,
