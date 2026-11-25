@@ -8,7 +8,7 @@
 
 import { copyFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Socket } from "node:net";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import {
@@ -19,6 +19,22 @@ import {
   type LiveRun,
   type PipeOpening,
 } from "../src/index.js";
+
+/**
+ * A port nothing on this computer listens on, as Windows chooses one. A port
+ * picked at random can be one another program, or another test running
+ * beside this one, already holds; the server in the container then cannot
+ * listen, and its program ends.
+ */
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) =>
+    server.listen(0, "127.0.0.1", () => resolve()),
+  );
+  const { port } = server.address() as AddressInfo;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
 
 const folders = new TemporaryFolders();
 const kept = new TemporaryFolders();
@@ -150,7 +166,7 @@ describe.runIf(process.platform === "win32")(
     });
 
     it("shows a server the program starts on its own loopback at a port of this computer", async () => {
-      const port = 40_000 + Math.floor(Math.random() * 10_000);
+      const port = await freePort();
       const stop = new AbortController();
       let answer = "";
       let address = "";
