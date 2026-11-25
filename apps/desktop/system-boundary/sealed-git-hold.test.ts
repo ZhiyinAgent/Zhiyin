@@ -103,12 +103,17 @@ const counting = (each = "") =>
 const countingStarted = "until [ -s count ]; do sleep 0.05; done; sleep 1";
 
 /**
+ * Reads the count into `c`, again while it is empty: the loop empties the
+ * file before it writes each count, and a read can fall in between.
+ */
+const readCount = 'c=$(cat count); while [ -z "$c" ]; do c=$(cat count); done';
+
+/**
  * Reads the count, then again once it has moved on, or after 30 seconds: a
  * loaded machine may take over a second for one round, and a loop that was
  * never resumed never moves.
  */
-const countMovesOn =
-  'before=$(cat count); n=0; while [ "$(cat count)" = "$before" ] && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done; after=$(cat count)';
+const countMovesOn = `${readCount}; before=$c; n=0; while [ $n -lt 300 ]; do ${readCount}; [ "$c" != "$before" ] && break; sleep 0.1; n=$((n+1)); done; after=$c`;
 
 describe.runIf(process.platform === "win32" && built !== "")(
   "the container while git runs for it",
@@ -204,8 +209,12 @@ describe.runIf(process.platform === "win32" && built !== "")(
       // Every call here may become a job after half a second, git's too: its
       // end is waited for before the count is read.
       await vi.waitFor(() => expect(seen).toHaveLength(2), { timeout: 60_000 });
-      const count = async () =>
-        Number(await readFile(join(root, "count"), "utf8"));
+      // Read again while empty: the loop, running again, empties the file
+      // before it writes each count.
+      const count = async (): Promise<number> => {
+        const text = await readFile(join(root, "count"), "utf8");
+        return text.trim() ? Number(text) : count();
+      };
       const before = await count();
       let after = before;
       for (let waited = 0; after === before && waited < 30_000; waited += 100) {
