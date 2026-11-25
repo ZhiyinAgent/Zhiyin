@@ -361,8 +361,8 @@ staged and CI from the files changed against the pull request's base or the
 commit `main` moved on from, and run the whole gate for anything else, or when
 that cannot be read. Markdown inside a package is read by the app or its
 tests, and the third-party licences ship in the installer, so a change to
-either runs the whole gate. CI's Blender job does not run for documentation
-alone. The CI job keeps temporary
+either runs the whole gate. For documentation alone, CI's Blender job starts
+and runs none of its tests. The CI job keeps temporary
 files on the runner's work disk: a fresh machine's system disk is busy with
 Windows' own work for its first minutes, and browsers and app copies started
 from a profile there were measured waiting on it. CI runs on Windows for pull
