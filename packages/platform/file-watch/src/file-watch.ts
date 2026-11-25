@@ -70,9 +70,16 @@ export type WatchFailures = ReadonlyMap<string, string>;
 
 const keyOf = (path: string) => path.toLowerCase();
 
+/** A path without the separators it ends in, read once from the end. */
+function withoutTrailingSeparators(path: string): string {
+  let end = path.length;
+  while (end > 0 && (path[end - 1] === "\\" || path[end - 1] === "/")) end -= 1;
+  return path.slice(0, end);
+}
+
 /** Whether `path` is `folder` or inside it, as Windows compares names. */
 function within(folder: string, path: string): boolean {
-  const base = keyOf(folder).replace(/[\\/]+$/, "");
+  const base = withoutTrailingSeparators(keyOf(folder));
   const key = keyOf(path);
   return (
     key === base || key.startsWith(`${base}\\`) || key.startsWith(`${base}/`)

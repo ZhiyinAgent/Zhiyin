@@ -221,7 +221,11 @@ function opensInside(handle: unknown, root: string): boolean {
   const length = GetFinalPathNameByHandleW(handle, name, 32_768, 0);
   if (!length || length >= 32_768) return false;
   const opened = plainPath(name.toString("utf16le", 0, 2 * length));
-  const base = real.replace(/[\\/]+$/, "").toLowerCase();
+  let end = real.length;
+  // Read once from the end: a pattern for the trailing separators would try
+  // again from each one.
+  while (end > 0 && (real[end - 1] === "\\" || real[end - 1] === "/")) end -= 1;
+  const base = real.slice(0, end).toLowerCase();
   return opened.toLowerCase().startsWith(`${base}\\`);
 }
 
