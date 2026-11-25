@@ -19,9 +19,47 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # What the change touches, from the files it changes against its base: a
+  # pull request's base, or the commit a push to main moved on from.
+  # Documentation alone gets the gate's documentation checks
+  # (scripts/change-scope.mjs). Without a base, as on a schedule, or when this
+  # job fails, the scope is empty, and everything runs.
+  scope:
+    name: What the change touches
+    runs-on: ubuntu-latest
+    outputs:
+      scope: ${{ steps.scope.outputs.scope }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Read which files the change touches
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          scope=full
+          if [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] &&
+            git fetch -q --no-tags --depth=1 origin "$BASE"; then
+            scope=$(git diff --name-only --no-renames "$BASE" HEAD | node scripts/change-scope.mjs)
+          fi
+          echo "scope=$scope" >> "$GITHUB_OUTPUT"
+          echo "Scope: $scope"
+
   gate:
     name: Repository gate
+    needs: scope
+    # Runs even when the scope job failed, so the check main requires is
+    # never skipped; it then runs whole.
+    if: ${{ !cancelled() }}
     runs-on: windows-latest
+    env:
+      DOCS_ONLY: ${{ needs.scope.outputs.scope == 'docs' }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -52,6 +90,7 @@ jobs:
       # journal of the disk their folders are on, as on a person's PC, and a
       # new runner's work disk keeps none until one is made.
       - name: Keep a change journal on the runner's work disk
+        if: env.DOCS_ONLY != 'true'
         shell: powershell
         run: |
           $drive = Split-Path -Qualifier $env:RUNNER_TEMP
@@ -65,6 +104,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install the Electron runtime after the clean install
+        if: env.DOCS_ONLY != 'true'
         shell: powershell
         run: pnpm --filter desktop install:electron
 
@@ -78,6 +118,7 @@ jobs:
       # their record. Only the downloads are kept between runs, and only
       # until a pin changes.
       - name: Keep the downloaded programs between runs
+        if: env.DOCS_ONLY != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}\zt\archives
@@ -88,6 +129,7 @@ jobs:
       # busybox-w32's source it downloads are kept until the pins change; the
       # build checks each kept file's SHA-256 before using it.
       - name: Keep the shell's downloads between runs
+        if: env.DOCS_ONLY != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}\zt\busybox
@@ -98,6 +140,7 @@ jobs:
       # runs until the list changes; the build checks each kept file's
       # SHA-256 before using it, and fetches only what is missing or differs.
       - name: Keep the spelling dictionaries between runs
+        if: env.DOCS_ONLY != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: apps\desktop\dictionaries
@@ -105,6 +148,7 @@ jobs:
 
       # The build also fetches the fallback font from GitHub, kept the same way.
       - name: Keep the fallback font between runs
+        if: env.DOCS_ONLY != 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: apps\desktop\fonts
@@ -114,7 +158,7 @@ jobs:
         shell: powershell
         env:
           ZHIYIN_TEST_TOOLS: ${{ runner.temp }}\zt
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gate.ps1 ${{ env.DOCS_ONLY == 'true' && '-Docs' || '' }}
 
   # The real-Blender tests that ask for no picture, on this machine without a
   # graphics card: the session finds it cannot draw with EEVEE and draws its
@@ -122,9 +166,11 @@ jobs:
   # in it, and in three parts of about 25 minutes each: measured on
   # 2026-11-14, these files take about three times as long here as on a PC
   # with a graphics card. The files that render, and the CAD suites, run on
-  # such a PC, and a release asks for their record.
+  # such a PC, and a release asks for their record. Not for documentation alone.
   blender:
     name: Real Blender, no graphics card (${{ matrix.part }})
+    needs: scope
+    if: ${{ !cancelled() && needs.scope.outputs.scope != 'docs' }}
     runs-on: windows-latest
     timeout-minutes: 60
     strategy:

@@ -352,7 +352,17 @@ of about 25 minutes each: on its machine they take about three times as long
 as on a PC with a graphics card (measured 2026-11-14).
 
 The pre-commit hook and the CI workflow both call the script rather than
-restating its checks, so they cannot drift apart. The CI job keeps temporary
+restating its checks, so they cannot drift apart. A change to documentation
+alone, the root READMEs and changelog, `docs/`, and `.github`'s Markdown,
+issue templates and pictures, needs only `-Docs`: the source checks and the
+repository tests, which hold the decision records and the overview to the
+code. Both read what the change touches the same way, the hook from what is
+staged and CI from the files changed against the pull request's base or the
+commit `main` moved on from, and run the whole gate for anything else, or when
+that cannot be read. Markdown inside a package is read by the app or its
+tests, and the third-party licences ship in the installer, so a change to
+either runs the whole gate. CI's Blender job does not run for documentation
+alone. The CI job keeps temporary
 files on the runner's work disk: a fresh machine's system disk is busy with
 Windows' own work for its first minutes, and browsers and app copies started
 from a profile there were measured waiting on it. CI runs on Windows for pull
