@@ -16,7 +16,15 @@ import { sameFolder as namesSameFolder } from "@zhiyin/path-comparison";
 function plain(folder: string): string {
   const whole = resolve(folder);
   const { root } = parse(whole);
-  return whole.length > root.length ? whole.replace(/[\\/]+$/, "") : whole;
+  // Read once from the end: a pattern for the trailing separators would try
+  // again from each one.
+  let end = whole.length;
+  while (
+    end > root.length &&
+    (whole[end - 1] === "\\" || whole[end - 1] === "/")
+  )
+    end -= 1;
+  return whole.slice(0, end);
 }
 
 function same(one: string, other: string): boolean {

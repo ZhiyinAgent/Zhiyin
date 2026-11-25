@@ -135,5 +135,11 @@ export function FolderPicker({
 
 /** The folder a path is in, as the person would read it. */
 function parentOf(path: string): string {
-  return path.replace(/[\\/]+$/, "").replace(/[\\/][^\\/]*$/, "") || path;
+  // Read once from the end: a pattern for the trailing separators would try
+  // again from each one.
+  let end = path.length;
+  while (end > 0 && (path[end - 1] === "\\" || path[end - 1] === "/")) end -= 1;
+  const trimmed = path.slice(0, end);
+  const last = Math.max(trimmed.lastIndexOf("\\"), trimmed.lastIndexOf("/"));
+  return (last < 0 ? "" : trimmed.slice(0, last)) || path;
 }
