@@ -23,6 +23,14 @@ export const vector3 = (description: string) => ({
   maxItems: 3,
   description,
 });
+/** Where an object's origin goes: across only, for an object set down. */
+export const setDownLocation = (description: string) => ({
+  type: "array",
+  items: { type: "number" },
+  minItems: 2,
+  maxItems: 3,
+  description: `${description}: [x, y, z], or [x, y] with rest_on or rest_across, which set the height.`,
+});
 export const point2 = {
   type: "array",
   items: { type: "number" },

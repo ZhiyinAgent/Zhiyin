@@ -11,10 +11,12 @@ import {
 import { basename, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
+import { readAsKey } from "@zhiyin/contract";
 import {
   ConversationScenes,
   sceneAutomation,
   sceneLines,
+  studioTools,
   type SessionLaunchOptions,
 } from "../src/index.js";
 import { sceneIn } from "../src/paths.js";
@@ -1663,12 +1665,12 @@ describe("motion", () => {
 
     const before = await readdir(workspace, { recursive: true });
     const inspected = await studio.inspect("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 250,
       count: 8,
     });
     const sheet = await call(studio, "blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 250,
       count: 8,
     });
@@ -1685,8 +1687,8 @@ describe("motion", () => {
       },
     });
     expect(inspected.ok && inspected.changes).toBeUndefined();
-    // How often to look is what the sheet is of: without it, nobody is asked.
-    for (const every_ms of [undefined, 0, "250"])
+    // A spacing given must be one: nobody is asked about a sheet that cannot be drawn.
+    for (const every_ms of [0, "250"])
       expect(
         await studio.inspect("blender_frame_sheet", { count: 8, every_ms }),
       ).toMatchObject({
@@ -1755,7 +1757,7 @@ describe("motion", () => {
     });
     const asked = {
       pictures: false,
-      start: 0,
+      time: 0,
       end: 2,
       allowed: [["Gear_A", "Gear_B"]],
     };
@@ -1781,6 +1783,131 @@ describe("motion", () => {
     expect(report.content.some((c) => c.type === "image")).toBe(false);
     expect(sent?.args["picture"]).toBeUndefined();
     expect(sent?.args["limit_seconds"]).toBe(600);
+  });
+
+  it("says a frame sheet's first moment and picture width are read by the names the other 3D tools give them, each one of its own inputs", () => {
+    const sheet = studioTools.find(
+      (tool) => tool.name === "blender_frame_sheet",
+    );
+    const schema = sheet?.inputSchema as {
+      readonly properties: Readonly<Record<string, unknown>>;
+      readonly [readAsKey]: Readonly<Record<string, string>>;
+    };
+
+    expect(schema[readAsKey]).toEqual({
+      start: "time",
+      frame_width: "tile_width",
+      picture_width: "tile_width",
+    });
+    for (const own of Object.values(schema[readAsKey]))
+      expect(schema.properties).toHaveProperty(own);
+  });
+
+  it("draws one frame with no spacing, and frames spread evenly to an end or to the timeline's end", async () => {
+    const { tools, blender } = await setUp(async (request) => {
+      if (request.op === "frames")
+        await writeFile(String(request.args["picture"]), pictureBytes);
+      return { ok: true, text: `did ${request.op}` };
+    });
+    const studio = tools();
+    await call(studio, "blender_open_scene", {
+      path: "arm.blend",
+      create: true,
+    });
+    /** How the person reads the frames asked for. */
+    const frames = async (args: Record<string, unknown>) => {
+      const inspected = await studio.inspect("blender_frame_sheet", args);
+      expect(inspected).toMatchObject({ ok: true });
+      return inspected.ok
+        ? inspected.invocation?.arguments.find((row) => row.name === "Frames")
+            ?.value
+        : undefined;
+    };
+
+    expect(
+      await frames({
+        count: 1,
+        tile_width: 640,
+        pictures: true,
+        view: "camera",
+      }),
+    ).toBe("1, at 0 s");
+    expect(await frames({ count: 5, time: 1, end: 3 })).toBe(
+      "5, spread evenly from 1 s to 3 s",
+    );
+    expect(await frames({ count: 6 })).toBe(
+      "6, spread evenly from 0 s to the end of the timeline",
+    );
+    const sheet = await call(studio, "blender_frame_sheet", {
+      count: 5,
+      time: 1,
+      end: 3,
+    });
+    expect(sheet.isError).toBeFalsy();
+    expect(blender.requests.find((r) => r.op === "frames")?.args).toMatchObject(
+      { count: 5, time: 1, end: 3 },
+    );
+  });
+
+  it("answers a description asked with no scene open by saying none is open and how to open one, as an answer, not a refusal", async () => {
+    const { tools, blender } = await setUp();
+    const studio = tools();
+
+    const inspected = await studio.inspect("blender_describe_scene", {});
+    const described = await call(studio, "blender_describe_scene", {});
+
+    expect(inspected).toMatchObject({
+      ok: true,
+      effects: expect.objectContaining({ changes: "none" }),
+    });
+    expect(described.isError).toBeFalsy();
+    expect(said(described)).toBe(
+      "No scene is open, so there is nothing to describe. Open or create one with blender_open_scene.",
+    );
+    expect(blender.requests.map((r) => r.op)).not.toContain("describe");
+    // Every other tool on the scene is still refused.
+    expect(
+      await studio.inspect("blender_look", { objects: ["Mug"] }),
+    ).toMatchObject({ ok: false, correctable: true });
+  });
+
+  it("renders a picture at an exposure of its own, and takes [x, y] for where an object is set down", async () => {
+    const { tools, blender } = await setUp();
+    const studio = tools();
+    await call(studio, "blender_open_scene", {
+      path: "desk.blend",
+      create: true,
+    });
+
+    const render = {
+      output: "desk.png",
+      engine: "cycles",
+      background: "white",
+      samples: 160,
+      exposure: -0.3,
+    };
+    expect(await studio.inspect("blender_render", render)).toMatchObject({
+      ok: true,
+    });
+    await call(studio, "blender_render", render);
+    expect(blender.requests.find((r) => r.op === "render")?.args).toMatchObject(
+      { exposure: -0.3 },
+    );
+
+    const edits = [
+      {
+        location: [-0.32, -0.2],
+        object: "Notebook_large",
+        rest_on: "Desk_top",
+      },
+    ];
+    expect(
+      await studio.inspect("blender_edit_objects", { edits }),
+    ).toMatchObject({ ok: true });
+    await call(studio, "blender_edit_objects", { edits });
+    expect(
+      blender.requests.find((r) => r.op === "edit")?.args["edits"],
+    ).toEqual(edits);
   });
 
   it("sends every command with the seconds it may run, so Blender can fit its checks within them", async () => {
@@ -3793,7 +3920,7 @@ describe("what a call declares it does", () => {
 
     for (const [name, args] of [
       ["blender_describe_scene", {}],
-      ["blender_frame_sheet", { start: 0, every_ms: 250, count: 8 }],
+      ["blender_frame_sheet", { time: 0, every_ms: 250, count: 8 }],
       ["blender_close_ups", { objects: ["Can"] }],
     ] as const)
       expect(await effectsOf(name, args), name).toEqual({

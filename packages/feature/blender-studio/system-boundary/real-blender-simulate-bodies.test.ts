@@ -548,7 +548,7 @@ describe.runIf(blender)("rigid bodies and baking in a real Blender", () => {
     });
     const looked = await call("blender_frame_sheet", {
       pictures: false,
-      start: 0,
+      time: 0,
       end: 0.25,
     });
     const described = await call("blender_describe_scene", {});
@@ -569,7 +569,7 @@ describe.runIf(blender)("rigid bodies and baking in a real Blender", () => {
     const after = await call("blender_describe_scene", {});
     const read = await call("blender_frame_sheet", {
       pictures: false,
-      start: 0,
+      time: 0,
       end: 0.25,
     });
     await script("import bpy\nbpy.context.scene.frame_end = 24");

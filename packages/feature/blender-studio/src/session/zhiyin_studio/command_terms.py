@@ -33,6 +33,7 @@ from . import (
     export,
     follow,
     frame_sheet,
+    frame_times,
     library,
     lighting,
     lighting_caustics,
@@ -506,9 +507,9 @@ def terms():
         },
         "frames": {
             "inputs": {
-                "start": defaulting(timeline.START),
-                "count": counted(frame_sheet.MOST_FRAMES, frame_sheet.FRAMES),
-                "frame_width": ranged(*frame_sheet.FRAME_WIDTHS, frame_sheet.FRAME_WIDTH),
+                "time": defaulting(timeline.START),
+                "count": counted(frame_times.MOST_FRAMES, frame_times.FRAMES),
+                "tile_width": ranged(*frame_sheet.FRAME_WIDTHS, frame_sheet.FRAME_WIDTH),
                 "objects": {"maxItems": sheets.MOST_FOLLOWED},
                 "end": longest,
             },

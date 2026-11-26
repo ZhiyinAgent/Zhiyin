@@ -3,7 +3,7 @@ blender_frame_sheet: the motion as a sheet of frames at the times asked, each la
 time, with where the named objects are and what moving parts go into at each. A mesh whose shape
 changes, by bones, shape keys or a simulation, moves by its shape, and is followed as a moving
 part is. Without pictures it is a report in
-numbers of every frame from a start to an end, however many, until most of the call's time is
+numbers of every frame from a first time to an end, however many, until most of the call's time is
 spent. Either says how each simulation was reached: read from its bake, or stepped from its start.
 """
 
@@ -16,9 +16,10 @@ import time
 import bpy
 import numpy
 
-from .arguments import need, number, whole
+from .arguments import need, whole
 from .errors import keep_error
 from .finding import find_objects, scene, subjects
+from .frame_times import frame_times
 from .geometry import Lasting, held_still, own_size, world_corners
 from .keys import curves_of
 from .motion_checks import overlap_text, scan
@@ -30,11 +31,9 @@ from .sim_state import reached_text
 from .timeline import LONGEST, START, back_to, go_to, moment, now, seconds_of, seconds_text, timeline_text
 from .wording import listed, point_text
 
-# A frame sheet's limits: how many frames, how wide each, how wide the sheet.
-MOST_FRAMES = 36
+# How wide each frame may be, and how wide when the call does not say; how wide the sheet may be.
 FRAME_WIDTHS = (160, 640)
-# How many frames, and how wide each, when the call does not say.
-FRAMES, FRAME_WIDTH = 12, 320
+FRAME_WIDTH = 320
 SHEET_WIDEST = 2560
 # The share of the call's time limit a scan of every frame may spend.
 SCAN_SHARE = 0.8
@@ -75,30 +74,26 @@ def scan_budget(args, started):
 
 def frame_sheet(args, scene_file, device):
     """
-    Frames from a start time, every so many milliseconds, side by side with
-    their times, and where each moving object is at each: for checking a
-    motion, which a model cannot watch. Without pictures, a report in
-    numbers of every frame from a start to an end.
+    Frames from a first time, every so many milliseconds or spread to an
+    end, side by side with their times, and where each moving object is at
+    each: for checking a motion, which a model cannot watch. Without
+    pictures, a report in numbers of every frame from a first time to an end.
     """
     if args.get("pictures") is False:
         return motion_report(args)
-    need(args.get("end") is None, "end is for a report without pictures; frames reach from start, every every_ms.")
     s = scene()
     need(
         s.camera is not None or args.get("view") in ("overview", "objects"),
         "The scene has no camera. Set one with blender_set_camera, or ask for view overview.",
     )
-    start = moment(args.get("start"), "start", default=START)
-    every = number(args.get("every_ms"), "every_ms", minimum=1, maximum=LONGEST * 1000)
-    count = whole(args.get("count"), "count", minimum=1, maximum=MOST_FRAMES, default=FRAMES)
-    width = whole(args.get("frame_width"), "frame_width", minimum=FRAME_WIDTHS[0], maximum=FRAME_WIDTHS[1], default=FRAME_WIDTH)
+    times, every = frame_times(args, seconds_of(s.frame_end))
+    count = len(times)
+    width = whole(args.get("tile_width"), "tile_width", minimum=FRAME_WIDTHS[0], maximum=FRAME_WIDTHS[1], default=FRAME_WIDTH)
     engine = args.get("engine", "eevee")
     need(engine in ("eevee", "solid"), "engine is eevee or solid.")
     view = args.get("view", "camera")
     need(view in ("camera", "overview", "objects"), "view is camera, overview or objects.")
     need(view != "objects" or args.get("objects"), "view objects frames the objects named: name them in objects.")
-    times = [start + i * every / 1000 for i in range(count)]
-    need(times[-1] <= LONGEST, f"The frames reach past {LONGEST} s.")
     aspect = s.render.resolution_x / s.render.resolution_y if view == "camera" else 16 / 9
     framed = None
     # A preview is at least 64 on each side: a wide picture's frames are made
@@ -197,9 +192,13 @@ def frame_sheet(args, scene_file, device):
     else:
         seen_from = "from the scene camera" if view == "camera" else "from the overview"
     head = (
-        f"A frame sheet of {count} frames, {seconds_text(times[0])} to {seconds_text(times[-1])} every {every:g} ms,"
-        f" {columns} across and {rows} down, each {width}×{height} and labelled with its time,"
-        f" {seen_from}, drawn with {' and '.join(sorted(engines))} in {seconds:.1f} s."
+        (
+            f"A frame sheet of 1 frame, at {seconds_text(times[0])}, {width}×{height} and labelled with its time,"
+            if every is None
+            else f"A frame sheet of {count} frames, {seconds_text(times[0])} to {seconds_text(times[-1])} every {round(every, 1):g} ms,"
+            f" {columns} across and {rows} down, each {width}×{height} and labelled with its time,"
+        )
+        + f" {seen_from}, drawn with {' and '.join(sorted(engines))} in {seconds:.1f} s."
     )
     if overlapping:
         head += (
@@ -233,15 +232,15 @@ def frame_sheet(args, scene_file, device):
 
 def motion_report(args):
     """
-    The motion in numbers, no pictures: every frame from a start to an end
-    stepped through, however many, checked as a frame sheet checks the frames
-    between those it draws, until most of the call's time is spent.
+    The motion in numbers, no pictures: every frame from a first time to an
+    end stepped through, however many, checked as a frame sheet checks the
+    frames between those it draws, until most of the call's time is spent.
     """
     s = scene()
     started = time.time()
-    start = moment(args.get("start"), "start", default=START)
+    start = moment(args.get("time"), "time", default=START)
     end = moment(args.get("end"), "end", default=min(seconds_of(s.frame_end), LONGEST))
-    need(end > start, "end must come after start.")
+    need(end > start, "end must come after time.")
     asked = args.get("objects") or []
     need(isinstance(asked, list) and all(isinstance(n, str) for n in asked), "objects lists objects by name.")
     followed = find_objects(asked)

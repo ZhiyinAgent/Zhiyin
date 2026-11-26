@@ -280,7 +280,7 @@ describe.runIf(blender)(
 
       const report = await call("blender_frame_sheet", {
         pictures: false,
-        start: 0,
+        time: 0,
         end: 1,
       });
 
@@ -333,7 +333,7 @@ describe.runIf(blender)(
 
       const report = await call("blender_frame_sheet", {
         pictures: false,
-        start: 0,
+        time: 0,
         end: 0.5,
       });
 

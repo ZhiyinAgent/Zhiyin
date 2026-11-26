@@ -361,6 +361,8 @@ def render(args, scene_file, device):
     )
     need(plan or args.get("cut") is None, "cut is a plan's: a picture through the camera shows the scene whole.")
     cut = number(args["cut"], "cut") if args.get("cut") is not None else None
+    need(not (plan and args.get("exposure") is not None), "A plan is drawn at an exposure of its own: leave exposure out.")
+    exposure = number(args["exposure"], "exposure", minimum=-10, maximum=10) if args.get("exposure") is not None else None
     engine = "eevee" if plan else args.get("engine", "cycles")
     need(engine in ("cycles", "eevee"), "engine is cycles or eevee.")
     need(not (plan and args.get("post") is not None), "A plan is drawn plain, with no post: leave post out.")
@@ -392,6 +394,8 @@ def render(args, scene_file, device):
         need(s.camera is not None, "The scene has no camera. Set one with blender_set_camera first.")
         refocus(s.camera)
     aside = Aside()
+    # An exposure given is for this picture alone: the scene keeps its own.
+    scene_exposure = s.view_settings.exposure
     made = []
     framed_on = ""
     level, above, through = None, [], ([], [])
@@ -404,6 +408,8 @@ def render(args, scene_file, device):
     try:
         if at is not None:
             go_to(at)
+        if exposure is not None:
+            aside.set(s.view_settings, "exposure", exposure)
         was = (s.render.resolution_x, s.render.resolution_y)
         if args.get("resolution") is not None:
             width, height = vector(args["resolution"], "resolution", 2)
@@ -571,6 +577,11 @@ def render(args, scene_file, device):
         + (f"at {at:g} s of the animation, " if at is not None else "")
         + (f"the plan from above with +y up the picture, {length(across)} across, " if plan else "")
         + f"with {'Cycles on ' + where if engine == 'cycles' else 'EEVEE'} in {seconds:.1f} s, {tone}"
+        + (
+            f", the scene's own exposure staying {scene_exposure:+g}"
+            if exposure is not None and abs(exposure - scene_exposure) > 1e-6
+            else ""
+        )
         + (f", without {listed(left)}" if left else "")
         + (f", only {listed([o.name for o in shown_only])}, the rest left out" if shown_only else "")
         + (f", {framed_on}" if framed_on else "")

@@ -152,7 +152,10 @@ covered by a test.
   that composites its picture still has its colours told by object.
   Reading them leaves the scene as it was. It
   also gives the tone and exposure the picture was made with, which decide
-  how those colours stand against the ones given.
+  how those colours stand against the ones given. An exposure given to a
+  render is that picture's alone, as a camera named for it is: the scene
+  keeps its own, which the answer gives when they differ, and a plan, drawn
+  at its own exposure, refuses one.
 - **A render keeps the scene's denoising and says what guiding does.** A
   Cycles render denoises as the scene is set to; a draft and the full
   previews, drawn at a few samples, are denoised and leave the setting as it

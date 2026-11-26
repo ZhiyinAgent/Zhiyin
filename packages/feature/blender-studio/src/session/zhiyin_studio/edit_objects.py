@@ -8,10 +8,11 @@ keyed motion kept with it.
 import os
 
 import bpy
+import mathutils
 import numpy
 
 from .aiming import keeps_focus, reaim
-from .arguments import need, number, positive_size, rotation, vector
+from .arguments import location_of, need, number, positive_size, rotation, vector
 from .contact import move_onto, push_against
 from .copies import axis_of, axis_words, distribute, duplicate, pivot_of, shared_text, turned_round
 from .errors import Refused
@@ -237,7 +238,8 @@ def edit_objects(args, scene_file):
             changes.append(f"renamed to {obj.name}")
         # Positions and turns are the world's, attached or not.
         if edit.get("location") is not None:
-            place_in_world(obj, location=vector(edit["location"], "location"))
+            # [x, y] for one set down after, from the height it is at now.
+            place_in_world(obj, location=mathutils.Vector(location_of(edit, obj.matrix_world.translation.z)))
             reaim(obj)
             changes.append("moved")
             moved = True

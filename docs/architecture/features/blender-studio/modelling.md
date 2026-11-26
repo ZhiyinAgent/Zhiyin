@@ -245,7 +245,9 @@ here is covered by a test.
   "below", on whatever is under it. Tilted to the surface, it is turned about
   its contact to follow that surface, lowered again, and the tilt is said.
   The answer gives the gap measured after, surface to surface, between it
-  and each support: 0 mm where they touch.
+  and each support: 0 mm where they touch. An object added or moved to be
+  set down takes its location as [x, y], where across, the setting down
+  giving its height; [x, y] without a setting down is refused in words.
 - **Pushed until it meets, or laid point on point.** Pushed against a side
   of another object, an object moves along that one axis, keeping its place
   across, until the two surfaces meet or stand the gap asked apart, measured

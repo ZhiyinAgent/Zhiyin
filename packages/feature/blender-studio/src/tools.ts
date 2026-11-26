@@ -436,6 +436,11 @@ export const studioTools: readonly StudioTool[] = [
           description:
             "A moment of the animation to render, in seconds; the scene stays at the frame it was on.",
         },
+        exposure: {
+          type: "number",
+          description:
+            "In stops, this picture alone: +1 doubles the light; the scene keeps its own exposure, which blender_set_camera sets.",
+        },
         noise: {
           type: "boolean",
           description: `Cycles: true measures noise and denoising from two half-size pictures, half as long again; false never; by default when the picture took ${statedNumbers.render.cheap_seconds} s or less.`,

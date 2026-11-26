@@ -229,7 +229,7 @@ def scan(first, last, moving, checked, loop, lasting, most=MOST_SCANNED, allowed
     )
     if stopped:
         head += (
-            f" (stopped there for the call's time, short of {seconds_text(last)}: check on with start"
+            f" (stopped there for the call's time, short of {seconds_text(last)}: check on with time"
             f" {seconds_text(seconds_of(frames[-1]))})"
         )
     surface_findings = surface_pops(frames, surfaces, POP, LEAST_POP)

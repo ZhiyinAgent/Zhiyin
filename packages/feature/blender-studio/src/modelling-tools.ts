@@ -7,6 +7,7 @@
 
 import {
   point2,
+  setDownLocation,
   vector3,
   workspaceFile,
   type StudioTool,
@@ -60,7 +61,7 @@ const objectSpec = {
         "Width, depth, height in metres, along the object's own axes before it is turned. For a model, the box it is scaled to fit.",
     },
     location: {
-      ...vector3("Where the object's origin goes, in metres."),
+      ...setDownLocation("Where the object's origin goes, in metres"),
       default: [0, 0, 0],
     },
     rest_on: {
@@ -262,7 +263,7 @@ export const modellingTools: readonly StudioTool[] = [
                 type: "string",
                 description: "Its exact name; no pattern.",
               },
-              location: vector3("Where the origin goes, in metres."),
+              location: setDownLocation("Where the origin goes, in metres"),
               move_by: vector3("Move by this much, in metres."),
               rotation: vector3("New rotation in degrees."),
               size: vector3("New size in metres."),

@@ -412,7 +412,7 @@ describe.runIf(blender)("a real Blender, animating rigs", () => {
     const sheet = await call("blender_frame_sheet", {
       every_ms: 250,
       count: 5,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
     });
 
