@@ -26,6 +26,7 @@ import {
   sceneAutomation,
   sceneLines,
 } from "@zhiyin/blender-studio";
+import { withKeptGlCache } from "@zhiyin/blender-studio/testing";
 import { cadAutomation } from "@zhiyin/cad-studio";
 import { openProcessContainer } from "@zhiyin/sandbox";
 import { TemporaryFolders } from "@zhiyin/test-support";
@@ -86,7 +87,7 @@ describe.runIf(blender && python)("a drawing of a real Blender scene", () => {
     scenes = new ConversationScenes({
       blender: async () => blender,
       directory: join(root, "data", "scenes"),
-      launch: containedSessionLaunch(
+      launch: withKeptGlCache(containedSessionLaunch)(
         { open: openProcessContainer },
         { scripts: join(root, "session-scripts") },
       ),

@@ -21,6 +21,7 @@ import {
   containedSessionLaunch,
   sceneAutomation,
 } from "@zhiyin/blender-studio";
+import { withKeptGlCache } from "@zhiyin/blender-studio/testing";
 import { replaceFile } from "@zhiyin/files";
 import { openProcessContainer, readOnlyHolds } from "@zhiyin/sandbox";
 import { FileRecovery, RunBackups } from "@zhiyin/recovery";
@@ -83,7 +84,7 @@ describe.runIf(blender)("a real Blender scene past 10 MiB", () => {
     scenes = new ConversationScenes({
       blender: async () => blender,
       directory: join(data, "scenes"),
-      launch: containedSessionLaunch(
+      launch: withKeptGlCache(containedSessionLaunch)(
         { open: openProcessContainer },
         { scripts: join(root, "session-scripts") },
       ),

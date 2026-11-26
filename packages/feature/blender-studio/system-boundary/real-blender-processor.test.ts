@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { ScenePreview } from "@zhiyin/contract";
 import { TemporaryFolders } from "@zhiyin/test-support";
+import { withKeptGlCache } from "../test/kept-gl-cache.js";
 import { openProcessContainer } from "@zhiyin/sandbox";
 import {
   ConversationScenes,
@@ -79,7 +80,7 @@ describe.runIf(blender)(
       );
       workspace = join(root, "workspace");
       await mkdir(workspace, { recursive: true });
-      const contained = containedSessionLaunch(
+      const contained = withKeptGlCache(containedSessionLaunch)(
         { open: openProcessContainer },
         { scripts: join(root, "session-scripts"), withoutGraphicsCard: true },
       );

@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openProcessContainer } from "@zhiyin/sandbox";
 import { TemporaryFolders } from "@zhiyin/test-support";
+import { withKeptGlCache } from "../test/kept-gl-cache.js";
 import {
   ConversationScenes,
   containedSessionLaunch,
@@ -88,7 +89,7 @@ describe.runIf(blender)(
       scenes = new ConversationScenes({
         blender: async () => blender,
         directory: join(root, "data"),
-        launch: containedSessionLaunch(
+        launch: withKeptGlCache(containedSessionLaunch)(
           { open: openProcessContainer },
           { scripts: join(root, "session-scripts") },
         ),

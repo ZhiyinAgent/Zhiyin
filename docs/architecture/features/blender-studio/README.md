@@ -649,6 +649,15 @@ arrays, the formulas a part follows another by and the words answers give
 sizes in, is tested in plain Python, with the NumPy Blender bundles, in every
 gate.
 
+Each real-Blender test file makes conversation folders of its own, and a
+Blender's first start in a new folder compiles the shaders its warm-up picture
+draws with into the graphics driver's cache in its container's folder. Those
+tests start on a copy of a cache kept for them beside their temporary
+folders, one per Blender executable, and keep the cache a session leaves when
+it differs; without one, or when the copy fails, a start compiles them as a
+new conversation's does. The test of the commands Blender describes as its
+session starts always starts on none, so that path stays tested too.
+
 Reading Blender's API, and each API change both ways, are tested against
 Blender 5.2 when `ZHIYIN_BLENDER` names it; without it, keeping, listing
 and reading again are tested against the stand-in session, which gives a
