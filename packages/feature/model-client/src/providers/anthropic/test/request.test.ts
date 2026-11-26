@@ -187,6 +187,73 @@ describe("a request to Anthropic", () => {
     });
   });
 
+  it("after older pictures are let go, still marks the last block before them, sent as the request before sent it, so the conversation up to there is read from the cache", async () => {
+    const looked = (n: number): ModelMessage[] => [
+      {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: `look-${n}`, name: "look", arguments: "{}" }],
+      },
+      {
+        role: "tool",
+        toolCallId: `look-${n}`,
+        name: "look",
+        content: "Shown.",
+      },
+      {
+        role: "user",
+        content: [
+          { kind: "text", text: `Picture ${n}.` },
+          { kind: "image", mediaType: "image/png", data: `png-${n}` },
+        ],
+      },
+    ];
+    const start: ModelMessage[] = [
+      { role: "system", content: "You are Zhiyin." },
+      { role: "user", content: "Model a gearbox." },
+    ];
+    // The request before: the first picture that can go follows message 3.
+    const before = [...start, ...looked(1), ...looked(2), ...looked(3)];
+    // The next request lets go of that picture, in place, and adds a round.
+    const after = [
+      ...before.slice(0, 4),
+      { role: "user" as const, content: "1 picture let go." },
+      ...before.slice(5),
+      ...looked(4),
+    ];
+    const sent: Sent[] = [];
+    const client = anthropicClient({ fetcher: recording(sent) });
+
+    await drain(client, { messages: before, cacheAfter: [0, 3, 10] });
+    await drain(client, { messages: after, cacheAfter: [0, 3, 6, 13] });
+
+    type Sendable = Record<string, unknown>;
+    const blocks = (body: Sendable): Sendable[] => [
+      ...(body["system"] as Sendable[]),
+      ...(body["messages"] as { content: Sendable[] }[]).flatMap(
+        (turn) => turn.content,
+      ),
+    ];
+    const marks = (all: Sendable[]) =>
+      all.flatMap((block, at) => ("cache_control" in block ? [at] : []));
+    const [first, second] = sent.map(({ body }) => blocks(body));
+    const shared = marks(first ?? []).filter((at) =>
+      marks(second ?? []).includes(at),
+    );
+    const lastShared = Math.max(...shared);
+
+    expect(marks(second ?? [])).toHaveLength(4);
+    expect(second?.[lastShared]).toEqual({
+      type: "tool_result",
+      tool_use_id: "look-1",
+      content: "Shown.",
+      cache_control: { type: "ephemeral" },
+    });
+    expect(second?.slice(0, lastShared + 1)).toEqual(
+      first?.slice(0, lastShared + 1),
+    );
+  });
+
   it("sends an earlier turn back with the thinking Anthropic gave it, and a turn another provider wrote with its words only", async () => {
     const first = await drain(
       anthropicClient({ fetcher: streamOf(answer()) }),
