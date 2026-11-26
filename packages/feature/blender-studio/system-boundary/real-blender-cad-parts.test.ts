@@ -498,39 +498,6 @@ describe.runIf(blender)("a real Blender, on CAD parts and close checks", () => {
     expect(both.said).toContain("only or without, not both");
   }, 120_000);
 
-  it("brings in a model of four hundred parts in seconds, each closed", async () => {
-    // The import leaves every part chosen: closing each in turn closed them
-    // all again each time, minutes for an engine of a hundred and fifty.
-    await writeFile(
-      join(workspace, "many.glb"),
-      cadLikeGlb(
-        Array.from({ length: 400 }, (_, k) => ({
-          name: `Pin ${k + 1}`,
-          size: [0.01, 0.01, 0.03] as const,
-          at: [
-            20 + (k % 20) * 0.02,
-            (Math.floor(k / 20) - 10) * 0.02,
-            0.015,
-          ] as const,
-        })),
-      ),
-    );
-    const started = Date.now();
-    const added = await call("blender_add_objects", {
-      objects: [{ name: "Pins", kind: "model", path: "many.glb" }],
-    });
-    const seconds = (Date.now() - started) / 1000;
-
-    expect(added.isError, added.said).toBeUndefined();
-    expect(seconds).toBeLessThan(20);
-    expect(await lineOf("Pin 400")).toContain("closed");
-    // Its parts turn by the angles a script sets, as every other object does.
-    await printed(
-      'import bpy, math\nbpy.data.objects["Pin 1"].rotation_euler[2] = math.radians(30)',
-    );
-    expect(await lineOf("Pin 1")).toContain("turned (0°, 0°, 30°)");
-  }, 180_000);
-
   it("keys a model's parts where the CAD placed them at each position, smoothly between, a spring stretched, and runs the cycle on", async () => {
     await writeFile(
       join(workspace, "motion.glb"),
@@ -681,83 +648,6 @@ describe.runIf(blender)("a real Blender, on CAD parts and close checks", () => {
     expect(heights).toContain("at 1.5 s: lid 15.00, bolt 32.00");
     expect(heights).toContain("at 2 s: lid 15.00, bolt 10.00");
   }, 180_000);
-
-  it("refuses a CAD motion that ends past the longest timeline, naming the limit, and keys several parts at that length well inside its time limit", async () => {
-    // Eight parts, each turning a whole turn round z in 600 s, at 24 frames a second.
-    const names = Array.from({ length: 8 }, (_, i) => `Long ${i}`);
-    await writeFile(
-      join(workspace, "long.glb"),
-      cadLikeGlb(
-        names.map((name, i) => ({
-          name,
-          size: [0.02, 0.004, 0.004],
-          at: [0.01, 0.02 * i, 0],
-        })),
-      ),
-    );
-    const turned = (degrees: number) => {
-      const [c, s] = [
-        Math.cos((degrees * Math.PI) / 180),
-        Math.sin((degrees * Math.PI) / 180),
-      ];
-      return [c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    };
-    await writeFile(
-      join(workspace, "long.json"),
-      JSON.stringify({
-        motion: 1,
-        positions: [["0"], ["90"], ["180"], ["270"]],
-        parts: Object.fromEntries(
-          names.map((name) => [
-            name,
-            [turned(0), turned(90), turned(180), turned(270)],
-          ]),
-        ),
-        unfitted: {},
-        still: 0,
-      } satisfies CadMotionFile),
-    );
-    const added = await call("blender_add_objects", {
-      objects: [
-        {
-          name: "Long run",
-          kind: "model",
-          path: "long.glb",
-          location: [3, 0, 0],
-        },
-      ],
-    });
-    const tooLong = await call("blender_animate", {
-      fps: 24,
-      cad_motion: { file: "long.json", to: 900, cycle: true },
-    });
-    const started = Date.now();
-    const longest = await call("blender_animate", {
-      cad_motion: { file: "long.json", to: 600, cycle: true },
-    });
-    const took = Date.now() - started;
-    const halfway = await printed(
-      [
-        "import bpy, math",
-        "s = bpy.context.scene",
-        "s.frame_set(s.frame_start + 300 * 24)",
-        "print(f\"at 300 s: {math.degrees(bpy.data.objects['Long 7'].rotation_euler.z):.2f}\")",
-        "s.frame_set(s.frame_start)",
-      ].join("\n"),
-    );
-    await call("blender_animate", { duration: 2, clear: ["/Long \\d/"] });
-
-    expect(added.isError, added.said).toBeUndefined();
-    expect(tooLong.isError).toBe(true);
-    expect(tooLong.said).toContain("to is at most 600 s");
-    expect(longest.isError, longest.said).toBeUndefined();
-    expect(longest.said).toContain(
-      "8 parts keyed at every frame from 0 s to 600 s",
-    );
-    // The command's limit is two minutes; this is well inside it.
-    expect(took).toBeLessThan(30_000);
-    expect(halfway).toContain("at 300 s: 180.00");
-  }, 300_000);
 
   it("plays a cycle whose length is not whole frames at exactly its period, every frame step even", async () => {
     // One turn round z in 1.7 s at 24 frames a second: 40.8 frames a loop.
@@ -980,50 +870,6 @@ describe.runIf(blender)("a real Blender, on CAD parts and close checks", () => {
     expect(middles).toContain("at 1 s: Lift (5100.0, 0.0, 30.0)");
     expect(middles).toContain("at 0 s: Cap (5100.0, 0.0, 40.0)");
     expect(middles).toContain("at 1 s: Cap (5100.0, 0.0, 40.0)");
-  }, 180_000);
-
-  it("takes a name written as a pattern for every object it matches whole, and says which", async () => {
-    const painted = await call("blender_set_material", {
-      objects: ["/Pin 1[0-9]/", "Pin 3"],
-      material: { name: "Pin steel", color: "#8a8d91", metallic: 1 },
-    });
-    expect(painted.isError, painted.said).toBeUndefined();
-    expect(painted.said).toContain(
-      "/Pin 1[0-9]/ named 10 objects: Pin 10, Pin 11, Pin 12, Pin 13, Pin 14, Pin 15, Pin 16, Pin 17, Pin 18, Pin 19.",
-    );
-    expect(painted.said).toContain(
-      "on Pin 10, Pin 11, Pin 12, Pin 13, Pin 14, Pin 15, Pin 16, Pin 17, Pin 18, Pin 19, Pin 3.",
-    );
-    // Whole names only: "Pin 1" matches neither "Pin 10" nor "Pin 100".
-    const described = await call("blender_describe_scene", {
-      objects: ["/Pin 1/", "/Pin 39[0-9]/"],
-    });
-    expect(described.said).toContain("/Pin 1/ named 1 object: Pin 1.");
-    expect(described.said.match(/^- Pin \d+:/gm)).toHaveLength(11);
-
-    // The model's group is an empty, which takes no material: said, not dropped.
-    const grouped = await call("blender_set_material", {
-      objects: ["/Pins|Pin 5/"],
-      material: { name: "Pin steel" },
-    });
-    expect(grouped.isError, grouped.said).toBeUndefined();
-    expect(grouped.said).toContain(
-      "/Pins|Pin 5/ named 1 object: Pin 5. Left out, as this cannot take them: Pins (an empty).",
-    );
-
-    const none = await call("blender_set_material", {
-      objects: ["/Pni .*/"],
-      material: { name: "Pin steel" },
-    });
-    expect(none.isError).toBe(true);
-    expect(none.said).toContain("/Pni .*/ matches no object's whole name.");
-    const broken = await call("blender_describe_scene", {
-      objects: ["/Pin (1/"],
-    });
-    expect(broken.isError).toBe(true);
-    expect(broken.said).toContain(
-      "/Pin (1/ is not a pattern: missing ), unterminated subpattern",
-    );
   }, 180_000);
 
   it("finds nothing inside a model whose parts touch face to face, below where they touch", async () => {

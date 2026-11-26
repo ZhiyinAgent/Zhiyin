@@ -330,6 +330,20 @@ export const expected = new Map([
     },
   ],
   [
+    "packages/feature/blender-studio/system-boundary/real-blender-time.test.ts",
+    {
+      needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",
+      without: (env) => !env.ZHIYIN_BLENDER,
+    },
+  ],
+  [
+    "packages/feature/blender-studio/system-boundary/real-blender-confinement.test.ts",
+    {
+      needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",
+      without: (env) => !env.ZHIYIN_BLENDER,
+    },
+  ],
+  [
     "packages/feature/blender-studio/system-boundary/real-blender-spec-motion.test.ts",
     {
       needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",
