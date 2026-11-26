@@ -7,7 +7,7 @@
  * and along a curve. Each answer measures where the decal landed and how it
  * lies on the surface, and the pictures show it.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-decals.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-decals.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

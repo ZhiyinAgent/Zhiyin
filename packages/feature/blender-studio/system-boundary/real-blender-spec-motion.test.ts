@@ -5,7 +5,7 @@
  * measured over the frames; and a sheet moved by keyed shape keys through a
  * box, which the motion report follows by its shape.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-spec-motion.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-spec-motion.test.ts
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

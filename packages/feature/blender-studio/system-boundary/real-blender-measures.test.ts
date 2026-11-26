@@ -3,7 +3,7 @@
  * model file keeps of a material, the colours a render shows, the render
  * settings a picture follows, what floats, and a simulation's frames.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, readFile } from "node:fs/promises";

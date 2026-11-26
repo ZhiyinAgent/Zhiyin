@@ -5,7 +5,7 @@
  * lies in its picture — and the shaping, resizing, copying and aiming
  * answers said from what was measured after the change.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-change-checks.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-change-checks.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

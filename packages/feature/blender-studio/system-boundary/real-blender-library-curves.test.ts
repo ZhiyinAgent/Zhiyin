@@ -5,7 +5,7 @@
  * that does not exist or a value of the wrong kind is refused with the inputs
  * there are.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir } from "node:fs/promises";

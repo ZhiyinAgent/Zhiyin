@@ -358,7 +358,7 @@ Large files are read in parts, never whole into memory.
 
 Tests use real temporary folders and raw bytes; text stand-ins cannot show
 byte preservation, containment or conflict handling. The Windows file-handle
-behavior is tested in the serial system-boundary suite, and so are turns with
+behavior is tested in the system-boundary suite, and so are turns with
 the real watch and programs in real app containers: a write, rename, delete
 and folder rename waiting until the file is saved, a 1 GiB file edited in
 three turns put back to each turn's start, a folder of 60,000 files with the

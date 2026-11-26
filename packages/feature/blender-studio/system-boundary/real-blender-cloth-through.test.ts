@@ -10,7 +10,7 @@
  * requirement that the cloth pass through no plate fails on the same crossing
  * and holds once the steps stop it.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-cloth-through.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-cloth-through.test.ts
  */
 
 import { mkdir, rm, writeFile } from "node:fs/promises";

@@ -6,7 +6,7 @@
  * arrays round an axis, along a curve or fitted to a length, and bevels by
  * width type and limit. Each answer is measured on the shape.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-shapes.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-shapes.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

@@ -7,7 +7,7 @@
  * one that does not. Skipped unless the CAD environment's Python is named, as
  * the other real-CAD tests are:
  *
- *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project system-boundary packages/feature/cad-studio/system-boundary/real-cad-making.test.ts
+ *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project "system-boundary*" packages/feature/cad-studio/system-boundary/real-cad-making.test.ts
  */
 
 import { execFile } from "node:child_process";

@@ -4,7 +4,7 @@
  * failed script with, checked both ways: the old form raises the error the
  * change is matched by, and the form given instead runs.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-knowledge.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-knowledge.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

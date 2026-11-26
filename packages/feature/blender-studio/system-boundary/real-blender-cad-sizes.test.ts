@@ -4,7 +4,7 @@
  * finely or more coarsely is not said to have changed, and one that changed
  * is said to have changed by its exact sizes.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

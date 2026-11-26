@@ -6,7 +6,7 @@
  * remesh, Multires levels sculpted on a copy and baked into maps, and a
  * symmetry measured and restored. Each refuses what it cannot do, saying why.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir } from "node:fs/promises";

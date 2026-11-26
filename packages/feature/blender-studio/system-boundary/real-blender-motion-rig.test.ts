@@ -5,7 +5,7 @@
  * stretch to reach their target or keep a part on a curve, and frame sheets
  * that measure the meshes bones bend. Each answer says where things went.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir } from "node:fs/promises";

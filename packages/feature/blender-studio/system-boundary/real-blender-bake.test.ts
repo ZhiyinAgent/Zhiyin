@@ -7,7 +7,7 @@
  * rest; the shape maps; what is refused; and the bake an export calls for a
  * look a model file cannot hold.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-bake.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-bake.test.ts
  */
 
 import { mkdir, readFile, stat } from "node:fs/promises";

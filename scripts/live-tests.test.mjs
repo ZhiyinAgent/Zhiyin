@@ -9,6 +9,7 @@ const gateProjects = [
   "desktop",
   "repository",
   "system-boundary",
+  "system-boundary-alone",
   "installed",
 ];
 

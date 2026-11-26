@@ -27,6 +27,76 @@ const installedLimits = {
   fileParallelism: false,
 } as const;
 
+/** Where the system-boundary tests are: each scope has a folder of its own. */
+const systemBoundaryTests = [
+  "apps/desktop/system-boundary/**/*.test.{ts,tsx}",
+  "packages/*/*/system-boundary/**/*.test.ts",
+];
+
+/**
+ * The system-boundary files whose evidence holds only with the machine to
+ * themselves, run one at a time after the others. Each asserts something that
+ * work beside it would change: how long a step takes, a fixed pause before a
+ * result is read, or a count taken across the whole machine.
+ */
+const systemBoundaryAlone = [
+  // A stopped command's next run within 30 s; fixed 100-700 ms pauses
+  // between steps.
+  "apps/desktop/system-boundary/sealed-git-hold.test.ts",
+  // The reading position compared after fixed 300 and 500 ms pauses.
+  "apps/desktop/system-boundary/reading-place.test.ts",
+  // A fixed 500 ms pause for the panel to settle before it is measured.
+  "apps/desktop/system-boundary/document-fit.test.ts",
+  // Each call on a busy page answers within 15 s, a click within 1 s.
+  "packages/feature/interactive-browser/system-boundary/busy-page.test.ts",
+  // Requests counted after fixed pauses of 0.5 to 2 s.
+  "packages/feature/interactive-browser/system-boundary/preview-seal.test.ts",
+  // Streamed pictures counted over 2 s, 20 to 34 of them.
+  "packages/feature/interactive-browser/system-boundary/playwright-launcher.test.ts",
+  // A command's first output read before it becomes a job, 1.5 s in.
+  "packages/feature/tools/system-boundary/command-jobs.test.ts",
+  // The kernel's non-paged memory, which every process on the machine moves.
+  "packages/platform/file-watch/system-boundary/file-watch.test.ts",
+  // A change timed against reading 3,000 records again.
+  "packages/feature/recovery/system-boundary/recovery.test.ts",
+  // Tens of thousands of files written and watched: they fill the file system
+  // and the watch every other file shares (79 s alone, 379 s beside others).
+  "packages/feature/recovery/system-boundary/turn-files-watch-room.test.ts",
+  // Steps timed against 30 s and against drawing, and the Blender containers
+  // in the person's profile counted, which another Blender's adds to.
+  "packages/feature/blender-studio/system-boundary/real-blender.test.ts",
+  // CAD parts brought in within 20 s and keyed within 30 s.
+  "packages/feature/blender-studio/system-boundary/real-blender-cad-parts.test.ts",
+  // A call that leaves a slow shape alone answers within 5 s.
+  "packages/feature/blender-studio/system-boundary/real-blender-change-checks.test.ts",
+  // A render's estimate compared with the time the render took.
+  "packages/feature/blender-studio/system-boundary/real-blender-checks.test.ts",
+  // Spec checks within 45 s, and the measures' own time limit reported.
+  "packages/feature/blender-studio/system-boundary/real-blender-spec.test.ts",
+  // Builds within 40, 70 and 85 s, sixty thousand edges drawn within the
+  // minute a drawing has, a position's time read from the answer, and a
+  // drawing that runs out of time.
+  "packages/feature/cad-studio/system-boundary/real-cad-time.test.ts",
+  // The CAD containers in the person's profile counted before and after a
+  // build, which another lane's build adds to.
+  "packages/feature/cad-studio/system-boundary/real-cad-confinement.test.ts",
+  // Drawings given a minute each, one of them sixty thousand edges.
+  "packages/feature/cad-studio/system-boundary/real-cad-scene-drawing.test.ts",
+  // Builds within 60 and 150 s, none stopped for want of time.
+  "packages/feature/cad-studio/system-boundary/real-cad-many-parts.test.ts",
+  // Where a 0.2 s deadline stops the making checks.
+  "packages/feature/cad-studio/system-boundary/real-cad-making.test.ts",
+];
+
+const systemBoundaryLimits = {
+  environment: "node",
+  testTimeout: 120_000,
+  hookTimeout: 120_000,
+  // These renderer boundary tests serve the module styles as plain CSS,
+  // matching the desktop project's test-time class names.
+  css: { modules: { classNameStrategy: "non-scoped" } },
+} as const;
+
 /*
  * When a test ends a page's process, Playwright drops the commands it had sent
  * that page as crashed. Chromium may still answer one of them, "Target
@@ -120,24 +190,29 @@ export default defineConfig({
         },
       },
       {
-        // Real browsers and Windows-exclusive file replacement share machine
-        // resources that unit-test workers do not. Run these after the
-        // parallel projects and one file at a time, so their evidence measures
-        // the product boundary rather than scheduler contention.
+        // Real browsers, Blenders, CAD builds and sealed-off processes, each
+        // taking far more of the machine than a unit-test worker. They run
+        // after the parallel projects, three files at a time: three real
+        // Blenders together hold about 4 GB, and a browser file less. The
+        // files that need the machine to themselves run after these, one at
+        // a time. Vitest gives each group order its own worker limit, so each
+        // project here has an order of its own.
         test: {
           name: "system-boundary",
-          include: [
-            "apps/desktop/system-boundary/**/*.test.{ts,tsx}",
-            "packages/*/*/system-boundary/**/*.test.ts",
-          ],
-          environment: "node",
-          fileParallelism: false,
-          testTimeout: 120_000,
-          hookTimeout: 120_000,
-          // These renderer boundary tests serve the module styles as plain CSS,
-          // matching the desktop project's test-time class names.
-          css: { modules: { classNameStrategy: "non-scoped" } },
+          ...systemBoundaryLimits,
+          include: systemBoundaryTests,
+          exclude: [...configDefaults.exclude, ...systemBoundaryAlone],
+          maxWorkers: 3,
           sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        test: {
+          name: "system-boundary-alone",
+          ...systemBoundaryLimits,
+          include: systemBoundaryAlone,
+          fileParallelism: false,
+          sequence: { groupOrder: 2 },
         },
       },
     ],

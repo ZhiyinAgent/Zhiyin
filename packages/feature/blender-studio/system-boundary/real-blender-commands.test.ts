@@ -7,7 +7,11 @@
  * ZHIYIN_RECORD_COMMANDS=1 it records the description Blender gave, as
  * Prettier writes JSON, before comparing it.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-commands.test.ts
+ * Its Blender starts on no graphics driver cache, as one does in a
+ * conversation's new folder: it compiles every shader its warm-up picture
+ * draws with. The other real-Blender files start on a kept cache.
+ *
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-commands.test.ts
  */
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";

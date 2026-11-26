@@ -7,7 +7,7 @@
  * contained and reached over its pipes. They are skipped unless Blender is
  * named in the environment, because the gate installs nothing:
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { execFileSync } from "node:child_process";

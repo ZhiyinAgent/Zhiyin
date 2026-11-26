@@ -20,7 +20,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
-    "test": "vitest run --project packages --project desktop --project repository --project system-boundary --reporter=default --reporter=./scripts/skipped-tests.mjs --reporter=./scripts/real-engine-record.mjs",
+    "test": "vitest run --project packages --project desktop --project repository --project system-boundary --project system-boundary-alone --reporter=default --reporter=./scripts/skipped-tests.mjs --reporter=./scripts/real-engine-record.mjs",
     "test:python": "node scripts/python-tests.mjs",
     "test:installed": "vitest run --project installed --reporter=default --reporter=./scripts/skipped-tests.mjs",
     "test:live": "node --env-file=.env.local node_modules/vitest/vitest.mjs run --project live",

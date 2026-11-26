@@ -7,7 +7,7 @@
  * show each object from two sides; a camera named for a picture is for it
  * alone. The CAD parts are written here as the CAD studio writes them.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";

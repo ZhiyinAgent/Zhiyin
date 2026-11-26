@@ -7,7 +7,7 @@
  * shape makes, as a shaping step and a sculpt pass both remesh; and how far
  * one shape goes into another, as describing and measuring both say.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-shared-geometry.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-shared-geometry.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

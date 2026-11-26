@@ -679,7 +679,7 @@ with the reason, and checking for a shell again does not change it.
   file contents as well as the returned result. A no-op edit reported as a
   failure has its own test, because a refactor can easily lose it.
 - Command teardown, jobs and the file listing around a command run against
-  real processes and Windows itself, in the serial system-boundary suite.
+  real processes and Windows itself, in the system-boundary suite.
 - Which calls need a person's approval is tested in the permission engine.
 - For the tests of the packages above it, `@zhiyin/tools/testing` offers
   `fakeTools()`, which lists no tool and refuses every call, and

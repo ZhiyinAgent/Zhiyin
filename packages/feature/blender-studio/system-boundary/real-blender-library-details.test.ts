@@ -5,7 +5,7 @@
  * thickness; a retopology says its quads, poles and how far the source lies
  * from it; and each refuses what it cannot do, saying why.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir } from "node:fs/promises";

@@ -5,7 +5,7 @@
  * Blender's own compositor effects laid over every render, their inputs read
  * back. Pictures are tiny and few-sampled.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir } from "node:fs/promises";

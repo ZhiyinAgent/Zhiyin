@@ -8,7 +8,7 @@
  * Skipped unless the CAD environment's Python is named, as the other
  * real-CAD tests are:
  *
- *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project system-boundary packages/feature/cad-studio
+ *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project "system-boundary*" packages/feature/cad-studio
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

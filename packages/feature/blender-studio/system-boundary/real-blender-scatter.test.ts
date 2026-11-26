@@ -8,7 +8,7 @@
  * the scene now has. A second scatter of the same items onto the same
  * surface replaces the first.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-scatter.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-scatter.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

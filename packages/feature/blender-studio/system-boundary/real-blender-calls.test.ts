@@ -3,7 +3,7 @@
  * a Blender without a window is refused before it runs, what does nothing
  * without one is said, and each answer tells what the change measurably did.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, stat } from "node:fs/promises";

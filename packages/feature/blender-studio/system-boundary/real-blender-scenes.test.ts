@@ -6,7 +6,7 @@
  * Skipped unless Blender is named in the environment, as the main real-Blender
  * suite is:
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";

@@ -4,7 +4,7 @@
  * and below its rim; each of the 3D kinds with a requirement that holds and
  * one that fails; a spec that cannot be read; and a requirement removed.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-spec.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-spec.test.ts
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

@@ -4,7 +4,7 @@
  * above, and a group with no shape of its own. The parts attached reach past
  * their holder, which is said apart from the holder's own heights.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-own-heights.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-own-heights.test.ts
  */
 
 import { mkdir } from "node:fs/promises";
