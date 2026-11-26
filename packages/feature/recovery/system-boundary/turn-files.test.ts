@@ -6,10 +6,11 @@
  * turn found it.
  */
 
-import { randomBytes } from "node:crypto";
-import { renameSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { createReadStream, renameSync } from "node:fs";
 import {
   mkdir,
+  open as openFile,
   readdir,
   readFile,
   realpath,
@@ -41,6 +42,33 @@ afterAll(async () => {
 
 const mib = 1024 * 1024;
 const gib = 1024 * mib;
+
+/**
+ * Writes `size` bytes of noise to `path` a chunk at a time and gives their
+ * SHA-256, so a large file is checked byte for byte without being held whole.
+ */
+async function writeNoise(path: string, size: number): Promise<string> {
+  const hash = createHash("sha256");
+  const file = await openFile(path, "w");
+  try {
+    for (let written = 0; written < size; written += 64 * mib) {
+      const chunk = randomBytes(Math.min(64 * mib, size - written));
+      hash.update(chunk);
+      await file.write(chunk);
+    }
+  } finally {
+    await file.close();
+  }
+  return hash.digest("hex");
+}
+
+/** The SHA-256 of a file's bytes, read a chunk at a time. */
+async function digestOf(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path))
+    hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
 
 /** Every file with its size, time of last change and identity, as the app lists them. */
 const list: ListWorkspace = async (root) => {
@@ -154,15 +182,14 @@ describe(
       const storage = await folders.make("zhiyin-turn-files-large-store-");
       // Measured data: noise that compresses little, as a scan does.
       const volume = join(root, "volume.raw");
-      const original = randomBytes(gib);
-      await writeFile(volume, original);
+      const original = await writeNoise(volume, gib);
       const recovery = started(storage);
       const confined = await contained.grant(root);
-      const states: Buffer[] = [];
+      const states: string[] = [];
       const pauses: number[] = [];
 
       for (const [turn, at] of [64 * mib, 512 * mib, 900 * mib].entries()) {
-        states.push(await readFile(volume));
+        states.push(await digestOf(volume));
         await recovery.beginTurn("conversation-1", [root]);
         await recovery.copyFolder(`run-${turn + 1}`, root, "conversation-1", {
           begins: true,
@@ -192,9 +219,9 @@ describe(
         expect(result.files).toEqual([
           { path: "volume.raw", status: "restored" },
         ]);
-        expect((await readFile(volume)).equals(states[from - 1]!)).toBe(true);
+        expect(await digestOf(volume)).toBe(states[from - 1]);
       }
-      expect((await readFile(volume)).equals(original)).toBe(true);
+      expect(await digestOf(volume)).toBe(original);
     });
 
     it("finds a file changed between turns by a program that put its old time back, and keeps it as the next turn found it", async () => {
