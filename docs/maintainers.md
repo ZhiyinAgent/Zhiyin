@@ -54,15 +54,19 @@ that signs prices cannot sign code.
 
 1. On the release's branch, raise the desktop package's version and commit
    it. Run `node scripts/real-engine-record.mjs --check`: it passes when the
-   record holds a passing run on the same files the real-engine tests load
-   now, and otherwise names each change that counts. If it fails, run the
-   real-engine tests from that commit, with nothing else changed, on a PC
-   with a graphics card, with `ZHIYIN_BLENDER` naming the Blender the app
-   installs and `ZHIYIN_CAD_PYTHON` the CAD environment's Python, until every
-   one has passed; each run writes `scripts/real-engine-record.json`, and the
-   record is committed alone. The record keeps a fingerprint of the files the
-   run loaded, so the rebased merge, which gives each commit a new name,
-   leaves it true. Run the release gate (`gate.ps1 -Release`), push the
+   record holds, for each real-engine test file, a passing run on the same
+   files that file loads now, and otherwise names each file that needs a new
+   run and the change that counts. If it fails, run
+   `node scripts/real-engine-record.mjs --run` from that commit, with nothing
+   else changed, on a PC with a graphics card, with `ZHIYIN_BLENDER` naming
+   the Blender the app installs and `ZHIYIN_CAD_PYTHON` the CAD environment's
+   Python. It runs exactly the files `--check` named (`--stale` lists them),
+   and refuses before any engine starts when the tree has other changes or
+   an engine is missing or not the pinned one. Repeat until `--check` passes;
+   each run writes `scripts/real-engine-record.json`, and the record is
+   committed alone. The record keeps, for each file, a fingerprint of the
+   files its run loaded, so the rebased merge, which gives each commit a new
+   name, leaves it true. Run the release gate (`gate.ps1 -Release`), push the
    branch and open its pull request. Once its checks pass, merge it as above
    and tag the merged commit on `main` (`v0.1.0-alpha.2`, say). The release
    workflow builds the installer and leaves a draft release with the
