@@ -165,7 +165,8 @@ jobs:
   # previews with Cycles on the processor (ADR 0022). Beside the gate, never
   # in it, and in three parts of about 25 minutes each: measured on
   # 2026-11-14, these files take about three times as long here as on a PC
-  # with a graphics card. The files that render, and the CAD suites, run on
+  # with a graphics card. Each part runs its files one at a time, as those
+  # times were measured. The files that render, and the CAD suites, run on
   # such a PC, and a release asks for their record. For documentation alone
   # each part starts and runs none of its steps: a job skipped whole would show
   # its name unexpanded, with `matrix.part` in it.
@@ -261,4 +262,4 @@ jobs:
         run: |
           $files = "${{ matrix.files }}".Split(" ", [StringSplitOptions]::RemoveEmptyEntries) |
             ForEach-Object { "packages/feature/blender-studio/system-boundary/real-blender-$_.test.ts" }
-          pnpm exec vitest run --project system-boundary @files
+          pnpm exec vitest run --project system-boundary --project system-boundary-alone --no-file-parallelism @files

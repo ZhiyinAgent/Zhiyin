@@ -7,7 +7,7 @@
  * toward a pole and checked at every frame, and a tail along a curve. Each
  * answer says what the weights, the pose test and the timeline measured.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-rig-bind.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-rig-bind.test.ts
  */
 
 import { mkdir, readFile } from "node:fs/promises";

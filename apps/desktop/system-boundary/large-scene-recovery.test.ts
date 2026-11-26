@@ -7,7 +7,7 @@
  * save failed. Skipped unless Blender is named in the environment:
  *
  *   $env:ZHIYIN_BLENDER = "…\blender.exe"
- *   npx vitest run --project system-boundary apps/desktop/system-boundary/large-scene-recovery.test.ts
+ *   npx vitest run --project "system-boundary*" apps/desktop/system-boundary/large-scene-recovery.test.ts
  */
 
 import { createHash } from "node:crypto";

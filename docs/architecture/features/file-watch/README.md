@@ -99,7 +99,7 @@ file recovery's, which is why this is a package of its own.
 ## Testing notes
 
 Holding is tested against real files and programs in real app containers,
-started as Zhiyin's sandbox starts them, in the serial system-boundary suite:
+started as Zhiyin's sandbox starts them, in the system-boundary suite:
 a fake cannot show what Windows makes a writer wait for. The non-paged memory
 is read from the system's own pool counter around holding 20,000 files. The
 index runs against the real journal and real junctions, with a plain walk in

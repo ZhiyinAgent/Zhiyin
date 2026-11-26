@@ -7,7 +7,7 @@
  * edges; a material on some faces only; a texture set found in a folder; and
  * a normal map's convention, given or guessed.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-materials.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-materials.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

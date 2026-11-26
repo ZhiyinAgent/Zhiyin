@@ -6,7 +6,7 @@
  * added and measured, the view is drawn as a real picture, and a render
  * asked of EEVEE says what drew it.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-processor.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-processor.test.ts
  */
 
 import { mkdir, realpath, stat, writeFile } from "node:fs/promises";

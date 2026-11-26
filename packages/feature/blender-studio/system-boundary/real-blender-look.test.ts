@@ -3,7 +3,7 @@
  * each shading, and the counts of a mesh's faults, each on a mesh that has
  * the fault and one that does not.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-look.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-look.test.ts
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

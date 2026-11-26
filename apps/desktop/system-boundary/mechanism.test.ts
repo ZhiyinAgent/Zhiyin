@@ -13,7 +13,7 @@
  *
  *   $env:ZHIYIN_BLENDER = "…\blender.exe"
  *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"
- *   npx vitest run --project system-boundary apps/desktop/system-boundary/mechanism.test.ts
+ *   npx vitest run --project "system-boundary*" apps/desktop/system-boundary/mechanism.test.ts
  */
 
 import { mkdir, writeFile } from "node:fs/promises";

@@ -7,7 +7,7 @@
  * each instance as an object of its own. Measuring changes nothing, and a
  * script that replaced the session's own code changes no measure.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio/system-boundary/real-blender-measure.test.ts
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-measure.test.ts
  */
 
 import { mkdir } from "node:fs/promises";

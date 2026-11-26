@@ -13,7 +13,7 @@
  * downloads (`ZHIYIN_TEST_TOOLS`):
  *
  *   $env:ZHIYIN_BLENDER_ARCHIVE = "…\blender-5.2.2-windows-x64.zip"
- *   npx vitest run --project system-boundary apps/desktop/system-boundary/blender-install.test.ts
+ *   npx vitest run --project "system-boundary*" apps/desktop/system-boundary/blender-install.test.ts
  */
 
 import { createReadStream } from "node:fs";

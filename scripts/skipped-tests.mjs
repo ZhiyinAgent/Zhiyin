@@ -354,7 +354,70 @@ export const expected = new Map([
   [
     // The CAD environment is made by Zhiyin from its lock, about 570 MB,
     // which CI does not download.
-    "packages/feature/cad-studio/system-boundary/real-cad.test.ts",
+    "packages/feature/cad-studio/system-boundary/real-cad-scripts.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-confinement.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-outputs.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-measuring.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-motion.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-time.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-drawing-dimensions.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-drawing-layout.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-drawing-lines.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
+    "packages/feature/cad-studio/system-boundary/real-cad-scene-drawing.test.ts",
     {
       needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
       without: (env) => !env.ZHIYIN_CAD_PYTHON,

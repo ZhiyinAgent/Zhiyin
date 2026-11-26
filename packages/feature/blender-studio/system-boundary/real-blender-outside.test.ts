@@ -5,7 +5,7 @@
  * where they were approved. A script writes an approved folder the same way,
  * and a direct write there is still refused, saying which folder to use.
  *
- *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project system-boundary packages/feature/blender-studio
+ *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio
  */
 
 import { mkdir, readFile, readdir, realpath, stat } from "node:fs/promises";
