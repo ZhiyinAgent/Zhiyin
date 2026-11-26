@@ -2080,6 +2080,29 @@ source package; the environment it builds in has a `sitecustomize` of its own
 on `PYTHONPATH`, and adds the target environment's packages through
 `site.addsitedir`, so path files there run. ADR 0020.
 
+**What a confined `import build123d` costs.** _Verified 2026-11-26 on
+Windows 11 (22631), Python 3.13.15 as uv 0.12.15 installs it, build123d
+0.13.0, by timing runs with `-X importtime`, `-v` and step by step, confined
+as the kept environments are and unconfined with the same variables._ uv's
+environment names its Python, in `pyvenv.cfg`, through a junction for its
+minor version (`cpython-3.13-windows-x86_64-none`) to the folder of the exact
+one. In a container, `GetFinalPathNameByHandleW` with `VOLUME_NAME_DOS` is
+refused in about 5.8 ms a call, against 0.05 ms unconfined, and the startup
+file's mending needs a folder on the path whose name holds no link and which
+the run may open. Given only the junction's target, a run finds no such
+folder for the Python's own paths: `os.path.realpath(sys._base_executable)`
+returns the junction's path, the first call taking 0.85 s, and
+`sysconfig.get_config_vars()`, which scipy's and numpy's test helpers call as
+build123d imports them, about 0.9 s; the import takes 4.25–4.47 s against
+2.55–2.67 s unconfined, and a one-plate `cad_build` 10.4–10.7 s. Given the
+folder of Zhiyin's Pythons, as the kept environments are, the real path is
+right, the import takes 3.04–3.22 s and the build 7.63–7.81 s. What is left
+is mostly WMI, which a container is refused, so `platform.machine()` takes
+0.1–0.16 s before falling back to `PROCESSOR_ARCHITECTURE`, and the mending's
+first call, which loads `ctypes`. Every module comes from the bytecode
+compiled as the environment is made, confined as unconfined, and the venv's
+launcher costs nothing measurable against the base `python.exe`. ADR 0020.
+
 **Low integrity through `koffi`.** Not used: it limits writes only (ADR 0006).
 _Verified 2026-10-12 on Windows 11
 (22631) by running probes; Microsoft's "Designing Applications to Run at a

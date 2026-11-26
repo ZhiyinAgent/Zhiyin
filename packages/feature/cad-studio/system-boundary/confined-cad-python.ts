@@ -24,6 +24,10 @@ export async function confinedPython(): Promise<CadPython> {
   const configured = await readFile(join(environment, "pyvenv.cfg"), "utf8");
   const base = /^home\s*=\s*(.+)$/m.exec(configured)?.[1]?.trim();
   if (!base) throw new Error("The CAD environment names no base Python.");
+  // The folder of Zhiyin's Pythons, as the kept environments are given it:
+  // the environment names its Python through a link there, and with only the
+  // link's target readable, every real path through it fails slowly.
+  const pythons = dirname(base);
   return {
     state: async () => "ready",
     async run(request) {
@@ -45,7 +49,7 @@ export async function confinedPython(): Promise<CadPython> {
         confinement: {
           purpose: "python-cad-test",
           home: request.home,
-          read: [base, environment, ...request.read],
+          read: [pythons, environment, ...request.read],
           write: [...request.write],
           hosts: [],
         },

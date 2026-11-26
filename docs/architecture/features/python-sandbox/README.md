@@ -259,9 +259,14 @@ Running scripts:
   package published only as source. A container may not open `NUL`, so what a
   script writes to `os.devnull` or a program's `DEVNULL` output is read and
   dropped through a pipe, kept nowhere, and reading either ends at once. A
-  shell's own `> nul` still fails there. What makes this work is a Python file
-  that every environment runs as it starts; it changes private parts of
-  Python's library, so it holds on each Python an environment may use.
+  shell's own `> nul` still fails there. `os.path.realpath` finds a path's
+  real place, the Python's own included, which an environment names through
+  the link uv keeps for its minor version: a run reads the folder all of
+  Zhiyin's Pythons are in, not only the one it runs on, since through a link
+  whose folder it cannot read a real path is wrong and slow to look up. What
+  makes this work is a Python file that every environment runs as it starts;
+  it changes private parts of Python's library, so it holds on each Python an
+  environment may use.
 - Only a `.py` file is run, and a call that gives neither code nor a file is
   refused.
 
