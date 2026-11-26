@@ -76,16 +76,19 @@ async function withMemory(options: {
   const requests: ModelRequest[] = [];
   const executed: string[] = [];
   const base = stubDependencies(options.emit ?? (() => {}));
-  const inspection = (name: string, args: unknown): ToolCallInspection => ({
-    ok: true,
-    action: name === "fetch_page" ? "Open a page" : "List a folder",
-    target: name === "fetch_page" ? "https://forum.example/thread" : ".",
-    command: `${name}(${JSON.stringify(args)})`,
-    effects:
-      name === "fetch_page"
-        ? { ...nothing, reads: "none", brings: "outside" }
-        : nothing,
-  });
+  const inspection = (name: string, args: unknown): ToolCallInspection =>
+    (args as { wrong?: boolean }).wrong
+      ? { ok: false, reason: "No folder is open.", correctable: true }
+      : {
+          ok: true,
+          action: name === "fetch_page" ? "Open a page" : "List a folder",
+          target: name === "fetch_page" ? "https://forum.example/thread" : ".",
+          command: `${name}(${JSON.stringify(args)})`,
+          effects:
+            name === "fetch_page"
+              ? { ...nothing, reads: "none", brings: "outside" }
+              : nothing,
+        };
   const { host } = loopAndHost({
     ...base,
     memory,
@@ -845,6 +848,34 @@ describe("looking back over a work turn", () => {
     expect(notices(review, "review")).toHaveLength(1);
     expect(review.tools).toEqual(turn.tools);
   });
+
+  it.each([
+    ["still standing", "fetch_page"],
+    ["taken back once the tool succeeded", "list_directory"],
+  ])(
+    "starts from the turn's own request after a quiet correction %s",
+    async (_, refused) => {
+      const { requests, loop } = await withMemory({
+        script: (request) =>
+          request === 1
+            ? { calls: [{ name: refused, args: { wrong: true } }] }
+            : workThen(() => ({ text: "" }))(request - 1),
+      });
+      const taskId = await loop.createTask();
+
+      await loop.start(taskId, "Summarise the folder");
+      await until(() => requests.length === 6);
+
+      const turn = requests[4]!;
+      const review = requests[5]!;
+      expect(JSON.stringify(requests[1]?.messages)).toContain(
+        "No folder is open.",
+      );
+      expect(review.messages.slice(0, turn.messages.length)).toEqual(
+        turn.messages,
+      );
+    },
+  );
 
   it("lets the model call only remember and recall from its notice on, round after round, while the turn's tools stay for the cache", async () => {
     const { requests, loop } = await withMemory({

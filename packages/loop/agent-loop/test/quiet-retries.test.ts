@@ -6,6 +6,7 @@ import {
   type FakeCorrectionsLog,
 } from "@zhiyin/corrections-log/testing";
 import { stubDependencies, loopFrom } from "./support.js";
+import { sharedPrefix } from "./request-prefix.js";
 
 /**
  * A tool that refuses the first `failures` attempts as model-correctable and
@@ -318,6 +319,111 @@ function editLoop(
   });
   return { loop, seen, corrections };
 }
+
+/**
+ * A conversation whose model follows `script`, one step per request: an edit
+ * sent `{"wrong": true}` is refused as correctable, any other call succeeds.
+ */
+function scriptedLoop(
+  script: (
+    request: number,
+  ) =>
+    | { readonly call: string; readonly args?: object }
+    | { readonly text: string },
+) {
+  const requests: ModelRequest[] = [];
+  const deps = stubDependencies(() => {});
+  const loop = loopFrom({
+    ...deps,
+    tools: {
+      list: () =>
+        ["multi_edit", "read_file"].map((name) => ({
+          name,
+          description: name,
+          inputSchema: { type: "object" },
+        })),
+      inspect: async (
+        name: string,
+        args: unknown,
+      ): Promise<ToolCallInspection> =>
+        (args as { wrong?: boolean }).wrong
+          ? {
+              ok: false,
+              reason: "“old text” was not found in notes.md.",
+              correctable: true,
+            }
+          : {
+              ok: true,
+              action: name,
+              target: "notes.md",
+              command: `${name}({})`,
+            },
+      execute: async () => ({ ok: true as const, value: "Done." }),
+    },
+    permissions: {
+      decide: async () => ({ outcome: "allow" as const, reason: "Approved" }),
+    },
+    model: {
+      ...deps.model,
+      send: async function* (request: ModelRequest) {
+        requests.push(request);
+        const step = script(requests.length);
+        if ("text" in step)
+          yield { kind: "textDelta" as const, text: step.text };
+        else
+          yield {
+            kind: "toolCallDelta" as const,
+            index: 0,
+            callId: `call-${requests.length}`,
+            name: step.call,
+            argumentsDelta: JSON.stringify(step.args ?? {}),
+          };
+        yield { kind: "done" as const };
+      },
+    },
+  });
+  return { loop, requests };
+}
+
+describe("a quiet correction and the next turn", () => {
+  it("is sent to the next turn as the turn sent it, while the tool has not yet succeeded", async () => {
+    const { loop, requests } = scriptedLoop((request) =>
+      request === 1
+        ? { call: "multi_edit", args: { wrong: true } }
+        : request === 2
+          ? { call: "read_file" }
+          : { text: request === 3 ? "The edit could not be made." : "Yes." },
+    );
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Fix the owner line");
+    await loop.start(taskId, "Is that all?");
+
+    const lastOfTurn = requests[2]?.messages ?? [];
+    const nextTurn = requests[3]?.messages ?? [];
+    expect(JSON.stringify(lastOfTurn)).toContain("was not found");
+    expect(sharedPrefix(lastOfTurn, nextTurn)).toBe(lastOfTurn.length);
+  });
+
+  it("is gone from the next turn too, once the tool succeeded and it was taken back", async () => {
+    const { loop, requests } = scriptedLoop((request) =>
+      request === 1
+        ? { call: "multi_edit", args: { wrong: true } }
+        : request === 2
+          ? { call: "multi_edit" }
+          : { text: request === 3 ? "The edit is in place." : "Yes." },
+    );
+    const taskId = await loop.createTask();
+
+    await loop.start(taskId, "Fix the owner line");
+    await loop.start(taskId, "Is that all?");
+
+    const lastOfTurn = requests[2]?.messages ?? [];
+    const nextTurn = requests[3]?.messages ?? [];
+    expect(JSON.stringify(nextTurn)).not.toContain("was not found");
+    expect(sharedPrefix(lastOfTurn, nextTurn)).toBe(lastOfTurn.length);
+  });
+});
 
 describe("the record of a quiet correction", () => {
   it("is kept in the corrections log, with the call as the model made it", async () => {

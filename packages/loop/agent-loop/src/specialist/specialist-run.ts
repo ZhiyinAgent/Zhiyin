@@ -367,7 +367,6 @@ export class SpecialistRun {
         await messages.history.result(
           finish,
           toolOutput(finish.name, JSON.stringify(noReport)),
-          true,
         );
         this.#quiet.remember(finish.name, finish.callId);
         return "again";

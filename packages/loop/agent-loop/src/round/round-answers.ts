@@ -219,7 +219,6 @@ export class RoundAnswers {
       await transcript.result(
         call,
         toolOutput(call.name, JSON.stringify(input.result)),
-        input.quiet,
       );
       if (input.quiet) quiet.remember(call.name, call.callId);
       return "answered";
@@ -237,11 +236,7 @@ export class RoundAnswers {
     if (loopTool) {
       const answer = await loopTool.answer(call, args);
       if (answer instanceof Spoken)
-        await transcript.result(
-          call,
-          answer.content(call.name, input.note),
-          false,
-        );
+        await transcript.result(call, answer.content(call.name, input.note));
       else
         await answerWith(
           transcript,
@@ -348,12 +343,12 @@ export class RoundAnswers {
     await transcript.result(
       call,
       outcome.fromPerson ? personsAnswer(sent) : toolOutput(call.name, sent),
-      Boolean(outcome.quiet),
     );
     await pictures?.send();
     await transcript.rewriteCall(call.callId, call.arguments);
     if (outcome.quiet) quiet.remember(call.name, call.callId);
-    else if (outcome.result.ok) transcript.forget(quiet.succeeded(call.name));
+    else if (outcome.result.ok)
+      await transcript.forget(quiet.succeeded(call.name));
     return outcome.denied ? "declined" : "answered";
   }
 }
@@ -368,7 +363,6 @@ async function answerWith(
   await transcript.result(
     call,
     toolOutput(call.name, JSON.stringify(answer)),
-    false,
     runId,
   );
 }

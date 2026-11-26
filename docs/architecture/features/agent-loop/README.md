@@ -483,7 +483,11 @@ named by its target.
   tools where the switch says so; the date in the system prompt changing, a
   condensing, older results cleared, older pictures dropped, or a quietly
   corrected proposal taken out once its tool succeeds. Each is an expected
-  cache miss, made in one step rather than many.
+  cache miss, made in one step rather than many. A quiet correction is stored
+  as it was sent until it is taken out, and is taken out of what is stored
+  with what is sent, so a look back and the next turn start with the whole of
+  the turn's last request, whether the correction still stands or was taken
+  back.
 - A turn's system messages name every enabled plugin, with its skills,
   toolkits, specialists and connectors, whether the conversation activated it
   or not, and no line of them depends on which plugins are active (ADR 0017).
@@ -823,8 +827,8 @@ named by its target.
 - A specialist run keeps what it said and was answered after its task, as it
   was sent, and the record of each of its requests, with the run when it ends,
   whether it reported, failed or was stopped. What is kept follows the
-  conversation's history: a call once its result is, never a quiet
-  correction, and the round that sent the report.
+  conversation's history: a call once its result is, a quiet correction until
+  it is taken back, and the round that sent the report.
 - A read specialist is offered only tools declared as reading, by Zhiyin's own
   code, a connection Zhiyin ships included, or by an activated plugin for its
   connector. Its definition's list of tools names a connection's tool by the
