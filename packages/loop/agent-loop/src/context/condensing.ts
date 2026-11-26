@@ -646,7 +646,6 @@ export class Condensing {
       await history.result(
         { callId: calls[index]?.id ?? "", name: reader },
         toolOutput(reader, await sizes.fit(JSON.stringify(answered), answered)),
-        false,
       );
     }
     await history.endRound();
@@ -700,7 +699,6 @@ export class Condensing {
       await history.result(
         { callId: calls[index]?.id ?? "", name: openToolName },
         openingAnswer(opening, route).content(openToolName),
-        false,
       );
     await history.endRound();
   }

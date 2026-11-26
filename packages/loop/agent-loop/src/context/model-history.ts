@@ -14,9 +14,9 @@
  * cleared to a receipt many at a time once they pile up; pictures past the
  * most one request carries are let go of several at a time, so the start
  * changes once rather than with every new picture; and a proposal a tool
- * refused quietly is taken back out once the tool succeeds. That last kind is
- * never stored at all: it was a correction between the model and a tool, not
- * part of the conversation.
+ * refused quietly is taken back out once the tool succeeds. Until then it is
+ * stored as it was sent, and it is taken out of what is stored with what is
+ * sent, so a look back, the next turn and a restart send what the turn sent.
  */
 
 import {
@@ -48,7 +48,7 @@ const picturesKeptFromTheStart = 2;
 
 type Item = {
   message: ModelMessage;
-  /** The stored entry this is sent from; none for a quiet correction. */
+  /** The stored entry this is sent from; none for what is never stored. */
   entryId?: string;
 };
 
@@ -232,7 +232,7 @@ export class ModelHistory implements Transcript {
 
   /**
    * Stored results, each with how many complete rounds came after the round
-   * it answered; a quiet one is never stored and never listed.
+   * it answered.
    */
   results(): {
     readonly entryId: string;
@@ -396,13 +396,11 @@ export class ModelHistory implements Transcript {
   }
 
   /**
-   * A tool's answer. A quiet one is sent until taken back, and never stored.
-   * `runId` names the specialist run a delegation started.
+   * A tool's answer. `runId` names the specialist run a delegation started.
    */
   async result(
     call: { readonly callId: string; readonly name: string },
     content: string,
-    quiet: boolean,
     runId?: string,
   ): Promise<void> {
     const message: ModelMessage = {
@@ -411,10 +409,6 @@ export class ModelHistory implements Transcript {
       name: call.name,
       content,
     };
-    if (quiet) {
-      this.#items.push({ message });
-      return;
-    }
     this.#kept.add(call.callId);
     const entryId = this.#options.newId();
     this.#items.push({ message, entryId });
@@ -453,8 +447,9 @@ export class ModelHistory implements Transcript {
     this.#round = undefined;
   }
 
-  /** Takes quietly refused proposals back out of what is sent. */
-  forget(callIds: ReadonlySet<string>): void {
+  /** Takes quietly refused proposals back out of what is sent and stored. */
+  async forget(callIds: ReadonlySet<string>): Promise<void> {
+    if (!callIds.size) return;
     withdrawCalls(
       this.#items,
       callIds,
@@ -464,6 +459,18 @@ export class ModelHistory implements Transcript {
         return item;
       },
     );
+    for (let index = this.#entries.length - 1; index >= 0; index -= 1) {
+      const entry = this.#entries[index];
+      if (entry?.kind === "result" && callIds.has(entry.callId))
+        this.#entries.splice(index, 1);
+      if (entry?.kind !== "calls") continue;
+      const calls = entry.calls.filter((call) => !callIds.has(call.id));
+      if (calls.length === entry.calls.length) continue;
+      if (!calls.length && !entry.text.trim()) this.#entries.splice(index, 1);
+      else this.#entries[index] = { ...entry, calls };
+    }
+    for (const callId of callIds) this.#kept.delete(callId);
+    await this.#save();
   }
 
   /** Pictures sent as themselves, after the result that produced them. */

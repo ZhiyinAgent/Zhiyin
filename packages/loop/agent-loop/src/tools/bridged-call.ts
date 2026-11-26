@@ -59,13 +59,8 @@ function wrapped(name: string, args: string): string {
 function asOuter(base: Transcript, name: string): Transcript {
   return {
     round: (...round) => base.round(...round),
-    result: (call, content, quiet, runId) =>
-      base.result(
-        { callId: call.callId, name: callToolName },
-        content,
-        quiet,
-        runId,
-      ),
+    result: (call, content, runId) =>
+      base.result({ callId: call.callId, name: callToolName }, content, runId),
     rewriteCall: (callId, args) =>
       base.rewriteCall(callId, wrapped(name, args)),
     forget: (callIds) => base.forget(callIds),

@@ -30,19 +30,21 @@ export interface Transcript {
     kept?: TurnKept,
   ): void;
   /**
-   * A call's answer. A quiet one is a correction, taken back once it is not
-   * needed. `runId` names the specialist run a delegation started.
+   * A call's answer, a quiet correction's included. `runId` names the
+   * specialist run a delegation started.
    */
   result(
     call: { readonly callId: string; readonly name: string },
     content: string,
-    quiet: boolean,
     runId?: string,
   ): Promise<void>;
   /** The arguments that ran, in place of the draft the model wrote. */
   rewriteCall(callId: string, args: string): Promise<void>;
-  /** Takes quietly refused calls, and their answers, back out. */
-  forget(callIds: ReadonlySet<string>): void;
+  /**
+   * Takes quietly refused calls, and their answers, back out of what is sent
+   * and what is kept.
+   */
+  forget(callIds: ReadonlySet<string>): Promise<void>;
   /** The round's calls are all answered. */
   endRound(): Promise<void>;
 }

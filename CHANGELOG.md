@@ -2,6 +2,15 @@
 
 What changed for people using Zhiyin, newest release first.
 
+## Unreleased
+
+### Fixes
+
+- A tool call the agent corrected quietly is kept with the conversation as it
+  was sent, until the tool succeeds and it is taken out of both. The look back
+  after a turn, the next turn and a restarted app now start with exactly what
+  the turn sent, so they are read from the provider's cache.
+
 ## 0.1.0-alpha.2
 
 ### Shell commands
