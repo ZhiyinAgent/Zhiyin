@@ -10,6 +10,9 @@ What changed for people using Zhiyin, newest release first.
   was sent, until the tool succeeds and it is taken out of both. The look back
   after a turn, the next turn and a restarted app now start with exactly what
   the turn sent, so they are read from the provider's cache.
+- When the browser cannot reach a site it is allowed to, its 502 answer says
+  why, such as the connection being refused; the browser's proxy no longer
+  passes on headers meant for one connection only.
 
 ## 0.1.0-alpha.2
 

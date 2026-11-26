@@ -11,7 +11,9 @@ import { lookup as lookUp } from "node:dns/promises";
 import {
   createServer,
   request as forward,
+  type IncomingHttpHeaders,
   type IncomingMessage,
+  type OutgoingHttpHeaders,
   type Server,
 } from "node:http";
 import {
@@ -116,6 +118,38 @@ function fromLocal(from: string | undefined): boolean {
 }
 
 /**
+ * The fields that belong to one connection rather than to the request or
+ * answer (RFC 9110, 7.6.1): never passed on, so each side of the proxy keeps
+ * its own connection alive or closes it. Trailers are not passed on either,
+ * so neither is the field announcing them.
+ */
+const connectionsOwn = new Set([
+  "connection",
+  "proxy-connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
+/** `headers` without those of the connection they came on, or those it names. */
+function passedOn(headers: IncomingHttpHeaders): OutgoingHttpHeaders {
+  const named = new Set(
+    String(headers.connection ?? "")
+      .split(",")
+      .map((option) => option.trim().toLowerCase()),
+  );
+  const kept: OutgoingHttpHeaders = {};
+  for (const [name, value] of Object.entries(headers))
+    if (value !== undefined && !connectionsOwn.has(name) && !named.has(name))
+      kept[name] = value;
+  return kept;
+}
+
+/**
  * Connection options that reach only the addresses checked, each tried in
  * turn, as the browser tries a name's addresses.
  */
@@ -172,19 +206,27 @@ export class NetworkGate {
             port: target.port,
             method: req.method,
             path: target.path,
-            headers: req.headers,
+            headers: passedOn(req.headers),
             setHost: false,
             // A connection of its own: none is kept to be used again.
             agent: false,
           },
           (answer) => {
             answer.on("error", () => res.destroy());
-            res.writeHead(answer.statusCode ?? 502, answer.headers);
+            res.writeHead(answer.statusCode ?? 502, passedOn(answer.headers));
             answer.pipe(res);
           },
         );
-        out.on("error", () =>
-          res.headersSent ? res.destroy() : res.writeHead(502).end(),
+        // The reason names why the site was not reached, as the system said.
+        out.on("error", (error: NodeJS.ErrnoException) =>
+          res.headersSent
+            ? res.destroy()
+            : res
+                .writeHead(
+                  502,
+                  `Bad Gateway: ${error.code ?? "the connection failed"}`,
+                )
+                .end(),
         );
         // A browser that stops reading, as when it stops a download, stops
         // the site sending.
