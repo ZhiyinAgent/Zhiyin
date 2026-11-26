@@ -1816,39 +1816,6 @@ describe.runIf(blender)("a real Blender's checks after a change", () => {
     expect(scale).toContain("scale (1.0, 1.0, 1.0)");
   }, 120_000);
 
-  it("keeps a call that leaves a slow shape alone quick, its preview drawn from the shape as evaluated", async () => {
-    await done("blender_open_scene", { path: "slow.blend", create: true });
-    // Its poles, where 200 faces meet, make it slow to subdivide: seconds at each evaluation.
-    await script([
-      "import bpy, bmesh",
-      "b = bmesh.new()",
-      "bmesh.ops.create_uvsphere(b, u_segments=200, v_segments=125, radius=0.5)",
-      "m = bpy.data.meshes.new('Ball')",
-      "b.to_mesh(m)",
-      "b.free()",
-      "o = bpy.data.objects.new('Ball', m)",
-      "o.location = (0, 0, 0.5)",
-      "bpy.context.scene.collection.objects.link(o)",
-      "o.modifiers.new('Sub', 'SUBSURF').levels = 1",
-    ]);
-    // Each call waits for the preview of the one before it.
-    await script(["print('nothing')"]);
-    const started = Date.now();
-    const box = await done("blender_add_objects", {
-      objects: [
-        {
-          name: "Box",
-          kind: "box",
-          size: [0.2, 0.2, 0.2],
-          location: [2, 0, 0.1],
-        },
-      ],
-    });
-    await script(["print('nothing')"]);
-    expect(box).toContain("Added Box");
-    expect(Date.now() - started).toBeLessThan(5_000);
-  }, 300_000);
-
   it("says a part that was the same on both sides and an edit left otherwise, and nothing of an edit that keeps it so", async () => {
     await done("blender_open_scene", { path: "symmetry.blend", create: true });
     await done("blender_add_objects", {

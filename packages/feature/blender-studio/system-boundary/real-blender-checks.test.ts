@@ -1,7 +1,7 @@
 /**
  * What a render and a frame sheet measure against a real Blender: a render's
- * light, noise, time and memory, and a motion checked at every frame, each
- * on a scene that has the fault and one that does not.
+ * light, noise and memory, and a motion checked at every frame, each on a
+ * scene that has the fault and one that does not.
  *
  *   $env:ZHIYIN_BLENDER = "…\blender.exe"; npx vitest run --project "system-boundary*" packages/feature/blender-studio/system-boundary/real-blender-checks.test.ts
  */
@@ -171,27 +171,6 @@ describe.runIf(blender)("a real Blender, checking renders and motion", () => {
 
       expect(unmeasured).not.toContain("Noise, from two pictures");
     }, 240_000);
-
-    it("times a large picture beforehand, and says the scene's picture size it leaves", async () => {
-      const large = await done("blender_render", {
-        output: "large.png",
-        samples: 128,
-        resolution: [1920, 1080],
-        noise: false,
-      });
-      await done("blender_set_camera", { resolution: [320, 240] });
-
-      expect(large).toMatch(/Estimated beforehand at [\d.]+ (s|min)\./);
-      // The estimate a refusal rests on is not far below the time the picture took.
-      const took = Number(/ in ([\d.]+) s, /.exec(large)?.[1]);
-      const ahead = Number(
-        /Estimated beforehand at ([\d.]+) s\./.exec(large)?.[1],
-      );
-      expect(ahead, large).toBeGreaterThanOrEqual(took * 0.75);
-      expect(large).toContain(
-        "The scene's picture size is now 1920×1080, from 320×240, and stays for later pictures through its camera.",
-      );
-    }, 300_000);
 
     it("says a scene with no lights is lit only by its background", async () => {
       await script([

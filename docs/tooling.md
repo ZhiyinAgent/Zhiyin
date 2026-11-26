@@ -176,9 +176,10 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 
 - Vitest runs everything. Package tests run in Node; only the renderer pays for
   a DOM.
-- There are eight projects. `pnpm test` runs `packages`, `desktop`,
+- There are nine projects. `pnpm test` runs `packages`, `desktop`,
   `repository` (checks over the repository as a whole, such as the lint rules),
-  `system-boundary` and `system-boundary-alone`. `installed` starts the built
+  `system-boundary`, `system-boundary-cad` and `system-boundary-alone`.
+  `installed` starts the built
   app in Electron through Playwright, with its own data folder, so it runs
   after the build as its own
   gate step. Whatever is only true of a real launch is tested there: the
@@ -232,14 +233,17 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 - System-boundary tests drive real browsers, Blenders, CAD builds, Windows
   processes and file replacement. Each scope has its own test directory, so
   adding a boundary test needs no exclusion list. They run after the parallel
-  projects, three files at a time (`system-boundary`), and then, one at a
-  time, the files whose evidence needs the machine to themselves
-  (`system-boundary-alone`): those that time a step, read a result after a
-  fixed pause, or count something across the whole machine, such as the
-  kernel's memory or the containers in the person's profile. The
-  configuration lists those files by name, each with its reason; a new test
-  of that kind joins the list. Each file belongs to one of the two, so a run
-  by hand names both: `--project "system-boundary*"`.
+  projects, three files at a time (`system-boundary`); then the real-CAD
+  files, which draw on no graphics card, four at a time
+  (`system-boundary-cad`); and then, one at a time, the files whose
+  evidence needs the machine to themselves (`system-boundary-alone`): those
+  that time a step, read a result after a fixed pause, or count something
+  across the whole machine, such as the kernel's memory or the containers in
+  the person's profile. The configuration lists those files by name, each
+  with its reason; a new test of that kind joins the list, or a file of its
+  own in it, so the rest of its suite runs beside others. Each file belongs
+  to one of the three, so a run by hand names them all:
+  `--project "system-boundary*"`.
 - **Permission engine:** the adversarial corpus is a table of actions and
   expected decisions, each with its reason, run through one loop. A newly
   found bypass is one more entry.

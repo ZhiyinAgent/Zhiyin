@@ -1,25 +1,19 @@
 /**
  * Drawing a scene's lines, as Blender's Line Art gives them, with the real
  * drafting: lines found twice joined, rings read as circles, a section that
- * cuts nothing explained, and a busy scene's views sized, scaled and kept
- * readable. Skipped unless the CAD environment's Python is named, as the other
- * real-CAD tests are:
+ * cuts nothing explained, and a busy scene's views sized, scaled and each
+ * failure named. Skipped unless the CAD environment's Python is named, as the
+ * other real-CAD tests are:
  *
  *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project "system-boundary*" packages/feature/cad-studio/system-boundary/real-cad-scene-drawing.test.ts
  */
 
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation } from "../src/index.js";
 import { confinedPython, harness, python } from "./confined-cad-python.js";
-import {
-  bladed,
-  busyDrafting,
-  type Call,
-  type Result,
-} from "./real-cad-studio.js";
+import { busyDrafting, type Call, type Result } from "./real-cad-studio.js";
 
 const folders = new TemporaryFolders();
 
@@ -258,14 +252,12 @@ describe.skipIf(!python)(
 );
 
 describe.skipIf(!python)("drawing a busy scene with the real drafting", () => {
-  let root: string;
   let given: unknown;
   let draw: Call;
   const text = (result: Result) => result.content[0]?.text ?? "";
 
   beforeAll(async () => {
     const drafting = await busyDrafting(folders, () => given);
-    root = drafting.root;
     draw = drafting.drawIn(60_000);
   }, 30_000);
 
@@ -290,10 +282,6 @@ describe.skipIf(!python)("drawing a busy scene with the real drafting", () => {
     cut: [],
     facing: null,
   });
-  /** How many of a DXF's entities lie on its HIDDEN layer. */
-  const hiddenIn = async (path: string) =>
-    (await readFile(join(root, path), "utf8")).match(/\n\s*8\r?\nHIDDEN\r?\n/g)
-      ?.length ?? 0;
 
   it("says how large each view is on the model, so its scale can be checked against the part", async () => {
     given = {
@@ -381,32 +369,4 @@ describe.skipIf(!python)("drawing a busy scene with the real drafting", () => {
       ": front view, top view and iso view at 1:2.",
     );
   }, 120_000);
-
-  it("says when hidden edges crowd a view into a mass, and leaves them out of a view given hidden: false", async () => {
-    given = {
-      names: ["Rotor"],
-      centre: [0, 0, 0],
-      views: { front: bladed(60_000) },
-    };
-
-    const crowded = await draw({
-      scene: true,
-      views: [{ view: "front" }],
-      outputs: [{ path: "busy/crowded.dxf" }],
-    });
-    const clear = await draw({
-      scene: true,
-      views: [{ view: "front", hidden: false }],
-      outputs: [{ path: "busy/clear.dxf" }],
-    });
-
-    expect(crowded.isError, text(crowded)).toBeUndefined();
-    expect(text(crowded)).toContain(
-      "Hidden edges crowd the front view so closely that they read as a mass: give it hidden: false to leave them out.",
-    );
-    expect(await hiddenIn("busy/crowded.dxf")).toBeGreaterThan(1000);
-    expect(clear.isError, text(clear)).toBeUndefined();
-    expect(text(clear)).not.toContain("Hidden edges crowd");
-    expect(await hiddenIn("busy/clear.dxf")).toBe(0);
-  }, 180_000);
 });

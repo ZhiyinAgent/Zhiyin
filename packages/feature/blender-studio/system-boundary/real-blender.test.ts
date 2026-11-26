@@ -28,8 +28,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { crc32 } from "node:zlib";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { ScenePreview } from "@zhiyin/contract";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { openProcessContainer } from "@zhiyin/sandbox";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { withKeptGlCache } from "../test/kept-gl-cache.js";
@@ -290,36 +289,6 @@ describe.runIf(blender)("a real Blender", () => {
       "part.blend changed on disk, so it was loaded again.",
     );
     expect(described.said).toContain("at (0, 0, 0 mm)");
-  });
-
-  it("shows the scene again when it was loaded from disk, even when the command then fails", async () => {
-    await copyFile(join(workspace, "part.blend"), join(root, "kept.blend"));
-    await call("blender_edit_objects", {
-      edits: [{ object: "Plate", move_by: [0.1, 0, 0] }],
-    });
-    await copyFile(join(root, "kept.blend"), join(workspace, "part.blend"));
-    // The edit's own picture arrives first.
-    let before = -1;
-    while (before !== (scenes.scene("live").state().preview?.sequence ?? 0)) {
-      before = scenes.scene("live").state().preview?.sequence ?? 0;
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-
-    const failed = await call("blender_edit_objects", {
-      edits: [{ object: "Nowhere", move_by: [0.1, 0, 0] }],
-    });
-
-    expect(failed.isError).toBe(true);
-    expect(failed.said).toContain(
-      "part.blend changed on disk, so it was loaded again.",
-    );
-    await vi.waitFor(
-      () =>
-        expect(
-          scenes.scene("live").state().preview?.sequence ?? 0,
-        ).toBeGreaterThan(before),
-      { timeout: 30_000 },
-    );
   });
 
   it("turns the overview for the person without touching the scene file", async () => {
@@ -4811,72 +4780,6 @@ describe.runIf(blender)("a real Blender", () => {
     expect(lineOf("Lettering")).not.toContain("into");
   });
 
-  it("draws a quick picture in the objects' own colours while the view turns, and leaves the scene as it was", async () => {
-    await call("blender_open_scene", { path: "quick.blend", create: true });
-    await call("blender_add_objects", {
-      objects: [{ name: "Brick", kind: "cube", size: [0.1, 0.1, 0.1] }],
-    });
-    await call("blender_set_material", {
-      objects: ["Brick"],
-      material: { name: "Brick red", color: "#c81e1e", roughness: 0.6 },
-    });
-    await call("blender_set_lighting", { preset: "product" });
-    // A camera exposure for the render, which the solid view draws without.
-    await call("blender_run_script", {
-      code: "import bpy\nbpy.context.scene.view_settings.exposure = -3",
-    });
-    const settings =
-      "import bpy\ns = bpy.context.scene\nm = bpy.data.materials['Brick red']\nv = s.view_settings\nprint('settings', s.render.engine, s.display.shading.color_type, s.render.resolution_percentage, tuple(round(c, 3) for c in m.diffuse_color), tuple(round(c, 3) for c in s.world.color), [o.hide_render for o in s.objects], v.view_transform, v.look, v.exposure, v.gamma)";
-    const before = (await call("blender_run_script", { code: settings })).said;
-
-    const session = scenes.scene("live");
-    // The change's own picture is drawn before the view turns.
-    await call("blender_api", { name: "Object" });
-    const pictures: ScenePreview[] = [];
-    const known = session.state().preview?.sequence ?? 0;
-    const stop = session.onState((state) => {
-      const latest = pictures.at(-1)?.sequence ?? known;
-      if (state.preview && state.preview.sequence > latest)
-        pictures.push(state.preview);
-    });
-    session.look({ kind: "turn", yaw: 20, pitch: 0 });
-    for (let tries = 0; tries < 300 && pictures.length < 2; tries++)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    stop();
-    const [quick, full] = pictures;
-    await writeFile(
-      join(workspace, "quick.jpg"),
-      Buffer.from(quick!.data, "base64"),
-    );
-    // Blender reads the middle of the quick picture, where the brick is.
-    const read = await call("blender_run_script", {
-      code: [
-        "import bpy",
-        "image = bpy.data.images.load(bpy.path.abspath('//quick.jpg'))",
-        "w, h = image.size",
-        "p = image.pixels[:]",
-        "patch = [(y * w + x) * 4 for x in range(w // 2 - 4, w // 2 + 4) for y in range(h // 2 - 4, h // 2 + 4)]",
-        "print('brick', *[sum(p[i + c] for i in patch) / len(patch) for c in range(3)])",
-        "bpy.data.images.remove(image)",
-      ].join("\n"),
-    });
-    const [red, green, blue] = (/brick (.+)/.exec(read.said)?.[1] ?? "")
-      .split(" ")
-      .map(Number) as [number, number, number];
-    const after = (await call("blender_run_script", { code: settings })).said;
-
-    expect(quick?.quick).toBe(true);
-    expect(full?.quick).toBeUndefined();
-    expect(red).toBeGreaterThan(Math.max(green, blue) * 1.8);
-    expect(
-      red,
-      "the brick's red at the exposure of a lit view",
-    ).toBeGreaterThan(0.25);
-    expect(after.match(/settings .+/)?.[0]).toBe(
-      before.match(/settings .+/)?.[0],
-    );
-  });
-
   it("says a preview of a scene with nothing in it is empty", async () => {
     await call("blender_open_scene", { path: "nothing.blend", create: true });
     const session = scenes.scene("live");
@@ -4972,92 +4875,6 @@ describe.runIf(blender)("a real Blender", () => {
     expect(preview?.quick).toBeUndefined();
     // Amber through clear glass: far more red than blue.
     expect(red).toBeGreaterThan(blue * 1.6);
-  });
-
-  it("keeps the full picture of a slow see-through scene far quicker than drawing it to the end, and leaves its settings as they were", async () => {
-    await call("blender_open_scene", { path: "slow.blend", create: true });
-    await call("blender_add_objects", {
-      objects: [
-        { name: "Jar", kind: "cube", size: [0.1, 0.1, 0.1] },
-        { name: "Smoke", kind: "cube", size: [0.08, 0.08, 0.08] },
-      ],
-    });
-    await call("blender_set_material", {
-      objects: ["Jar"],
-      material: {
-        name: "Glass",
-        color: "#ffffff",
-        transmission: 1,
-        roughness: 0,
-      },
-    });
-    await call("blender_set_lighting", { preset: "product" });
-    await call("blender_set_camera", {
-      frame: { objects: ["Jar"], direction: "front", margin: 0.3 },
-    });
-    // Smoke that light scatters through many times: slow to draw however
-    // few samples a picture takes.
-    await call("blender_run_script", {
-      code: [
-        "import bpy",
-        "s = bpy.context.scene",
-        "s.cycles.volume_bounces = 128",
-        "s.cycles.max_bounces = 128",
-        "s.cycles.volume_step_rate = 0.05",
-        "m = bpy.data.materials.new('Smoke')",
-        "m.use_nodes = True",
-        "t = m.node_tree",
-        "t.nodes.remove(t.nodes['Principled BSDF'])",
-        "scatter = t.nodes.new('ShaderNodeVolumeScatter')",
-        "noise = t.nodes.new('ShaderNodeTexNoise')",
-        "noise.inputs['Scale'].default_value = 40",
-        "density = t.nodes.new('ShaderNodeMath')",
-        "density.operation = 'MULTIPLY'",
-        "density.inputs[1].default_value = 40000",
-        "t.links.new(noise.outputs['Fac'], density.inputs[0])",
-        "t.links.new(density.outputs[0], scatter.inputs['Density'])",
-        "t.links.new(scatter.outputs[0], t.nodes['Material Output'].inputs['Volume'])",
-        "bpy.data.objects['Smoke'].data.materials.append(m)",
-      ].join("\n"),
-    });
-    const limit =
-      "import bpy\nprint('limit', bpy.context.scene.cycles.time_limit)";
-    const before = (await call("blender_run_script", { code: limit })).said;
-    const session = scenes.scene("live");
-    await call("blender_api", { name: "Object" });
-    let full: ScenePreview | undefined;
-    const known = session.state().preview?.sequence ?? 0;
-    const stop = session.onState((state) => {
-      if (
-        state.preview &&
-        state.preview.sequence > known &&
-        !state.preview.quick
-      )
-        full ??= state.preview;
-    });
-    const began = Date.now();
-    session.look({ kind: "view", view: "camera" });
-    while (!full && Date.now() - began < 60_000)
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    const took = Date.now() - began;
-    stop();
-    const after = (await call("blender_run_script", { code: limit })).said;
-    // The same scene at the full picture's size and samples, drawn to the
-    // end. Whatever else is using the graphics card slows both, so the full
-    // picture is held against this one rather than against the clock alone.
-    const toTheEnd = await call("blender_render", {
-      output: "renders/slow.png",
-      engine: "cycles",
-      samples: 16,
-      resolution: [480, 270],
-    });
-    const drawing = Number(/ in ([\d.]+) s/.exec(toTheEnd.said)?.[1]) * 1000;
-
-    expect(full).toBeDefined();
-    // The wait before it, a second of drawing, and Blender's own preparation.
-    expect(took).toBeLessThan(drawing / 2);
-    expect(took).toBeLessThan(30_000);
-    expect(after.match(/limit .+/)?.[0]).toBe(before.match(/limit .+/)?.[0]);
   });
 
   it("shows the product backdrop through clear glass as bright as beside it", async () => {
@@ -7498,34 +7315,6 @@ describe.runIf(blender)("a real Blender", () => {
     expect(kept.join("\n")).toMatch(
       /The scene could not be put back after a change that failed:\s+Traceback/,
     );
-  });
-
-  it("removes the container a conversation's Blender ran in when the conversation is deleted", async () => {
-    const packages = join(
-      process.env["LOCALAPPDATA"] ?? join(homedir(), "AppData", "Local"),
-      "Packages",
-    );
-    const containers = async () =>
-      (await readdir(packages)).filter((name) =>
-        name.toLowerCase().startsWith("zhiyin.blender."),
-      );
-    const before = await containers();
-    const other = sceneAutomation(scenes.scene("deleted"), {
-      workspaceRoot: () => workspace,
-      blender: async () => blender,
-      directory: scenes.directory("deleted"),
-    });
-
-    const opened = (await other.callTool("blender_open_scene", {
-      path: "deleted.blend",
-      create: true,
-    })) as Result;
-    const during = await containers();
-    await scenes.forget("deleted");
-
-    expect(opened.isError).toBeUndefined();
-    expect(during.filter((name) => !before.includes(name))).toHaveLength(1);
-    expect(await containers()).toEqual(before);
   });
 });
 

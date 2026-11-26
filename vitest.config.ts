@@ -62,30 +62,33 @@ const systemBoundaryAlone = [
   // Tens of thousands of files written and watched: they fill the file system
   // and the watch every other file shares (79 s alone, 379 s beside others).
   "packages/feature/recovery/system-boundary/turn-files-watch-room.test.ts",
-  // Steps timed against 30 s and against drawing, and the Blender containers
-  // in the person's profile counted, which another Blender's adds to.
-  "packages/feature/blender-studio/system-boundary/real-blender.test.ts",
-  // CAD parts brought in within 20 s and keyed within 30 s.
-  "packages/feature/blender-studio/system-boundary/real-blender-cad-parts.test.ts",
-  // A call that leaves a slow shape alone answers within 5 s.
-  "packages/feature/blender-studio/system-boundary/real-blender-change-checks.test.ts",
-  // A render's estimate compared with the time the render took.
-  "packages/feature/blender-studio/system-boundary/real-blender-checks.test.ts",
-  // Spec checks within 45 s, and the measures' own time limit reported.
-  "packages/feature/blender-studio/system-boundary/real-blender-spec.test.ts",
-  // Builds within 40, 70 and 85 s, sixty thousand edges drawn within the
-  // minute a drawing has, a position's time read from the answer, and a
-  // drawing that runs out of time.
+  // A preview's number read once the previews stay still for 2 s, two
+  // previews awaited for 6 s, a full preview timed against drawing to the end
+  // and 30 s, a call within 5 s, a render's estimate against its time, spec
+  // measures within 45 s and 6 s, and CAD parts brought in within 20 s and
+  // keyed within 30 s.
+  "packages/feature/blender-studio/system-boundary/real-blender-time.test.ts",
+  // The Blender containers in the person's profile counted, which another
+  // Blender's adds to.
+  "packages/feature/blender-studio/system-boundary/real-blender-confinement.test.ts",
+  // Builds within 40, 60, 70, 85 and 150 s, none stopped for want of time,
+  // sixty thousand edges drawn within the minute a drawing has, a position's
+  // time read from the answer, where a 0.2 s deadline stops the making
+  // checks, and a drawing that runs out of time.
   "packages/feature/cad-studio/system-boundary/real-cad-time.test.ts",
   // The CAD containers in the person's profile counted before and after a
   // build, which another lane's build adds to.
   "packages/feature/cad-studio/system-boundary/real-cad-confinement.test.ts",
-  // Drawings given a minute each, one of them sixty thousand edges.
-  "packages/feature/cad-studio/system-boundary/real-cad-scene-drawing.test.ts",
-  // Builds within 60 and 150 s, none stopped for want of time.
-  "packages/feature/cad-studio/system-boundary/real-cad-many-parts.test.ts",
-  // Where a 0.2 s deadline stops the making checks.
-  "packages/feature/cad-studio/system-boundary/real-cad-making.test.ts",
+];
+
+/**
+ * The real-CAD files, which use the processor and no graphics card. A file
+ * of drawings holds about 1.5 GB at its peak, while a drawing works out
+ * several views at once, and a few hundred megabytes between; a file of
+ * builds alone holds about 400 MB.
+ */
+const realCadTests = [
+  "packages/feature/cad-studio/system-boundary/real-cad-*.test.ts",
 ];
 
 const systemBoundaryLimits = {
@@ -190,20 +193,35 @@ export default defineConfig({
         },
       },
       {
-        // Real browsers, Blenders, CAD builds and sealed-off processes, each
-        // taking far more of the machine than a unit-test worker. They run
-        // after the parallel projects, three files at a time: three real
-        // Blenders together hold about 4 GB, and a browser file less. The
-        // files that need the machine to themselves run after these, one at
-        // a time. Vitest gives each group order its own worker limit, so each
-        // project here has an order of its own.
+        // Real browsers, Blenders and sealed-off processes, each taking far
+        // more of the machine than a unit-test worker. They run after the
+        // parallel projects, three files at a time: three real Blenders
+        // together hold about 4 GB, and a browser file less. The real-CAD
+        // files run after these, four at a time: four at their peaks hold
+        // about 6 GB. Then, one at a time, run the files that need the
+        // machine to themselves. Vitest gives each group order its own worker
+        // limit, so each project here has an order of its own.
         test: {
           name: "system-boundary",
           ...systemBoundaryLimits,
           include: systemBoundaryTests,
-          exclude: [...configDefaults.exclude, ...systemBoundaryAlone],
+          exclude: [
+            ...configDefaults.exclude,
+            ...systemBoundaryAlone,
+            ...realCadTests,
+          ],
           maxWorkers: 3,
           sequence: { groupOrder: 1 },
+        },
+      },
+      {
+        test: {
+          name: "system-boundary-cad",
+          ...systemBoundaryLimits,
+          include: realCadTests,
+          exclude: [...configDefaults.exclude, ...systemBoundaryAlone],
+          maxWorkers: 4,
+          sequence: { groupOrder: 2 },
         },
       },
       {
@@ -212,7 +230,7 @@ export default defineConfig({
           ...systemBoundaryLimits,
           include: systemBoundaryAlone,
           fileParallelism: false,
-          sequence: { groupOrder: 2 },
+          sequence: { groupOrder: 3 },
         },
       },
     ],

@@ -10,10 +10,8 @@
  *   $env:ZHIYIN_CAD_PYTHON = "…\cad\Scripts\python.exe"; npx vitest run --project "system-boundary*" packages/feature/cad-studio/system-boundary/real-cad-making.test.ts
  */
 
-import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { promisify } from "node:util";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation } from "../src/index.js";
@@ -343,42 +341,6 @@ describe.skipIf(!python)(
       expect(said).toContain(
         "Body left, moulded (its draft requirement) along +Z: 2 faces, 400 mm², trapped",
       );
-    }, 120_000);
-
-    it("stops a part's checks when the build's time runs out during them, keeping what they found, and names the part as not checked", async () => {
-      // The measuring run's checks, given the time they are due by as the
-      // build gives it: a fifth of a second after they start, for a ribbed grid
-      // and a hollow block in one part, whose checks take several seconds.
-      // Its closed void is found first, so its line and its name together
-      // show the checks stopped inside the part, not before or after it.
-      const script = [
-        "import json, sys, time",
-        "import numpy",
-        "sys.path.insert(0, sys.argv[1])",
-        "from build123d import *",
-        "from zhiyin_cad import making",
-        "grid = Box(300, 300, 2)",
-        "ribs = [Pos(i * 10, 0, 4) * Box(1.2, 290, 6) for i in range(-14, 15)] + [Pos(0, j * 10, 4) * Box(290, 1.2, 6) for j in range(-14, 15)]",
-        "part = Compound([grid + Compound(ribs), Pos(-200, 0, 0) * (Box(10, 10, 10) - Box(5, 5, 5))])",
-        'ways = {"Part": {"method": "moulded", "why": "as shown", "pull": numpy.array([0.0, 0.0, 1.0]), "parting": None}}',
-        "started = time.time()",
-        'lines, unchecked = making.checked([("Part", part)], ways, [], started + 0.2)',
-        'print(json.dumps({"lines": lines, "unchecked": unchecked}))',
-      ].join("\n");
-      const { stdout } = await promisify(execFile)(
-        python!,
-        ["-I", "-c", script, dirname(harness)],
-        { timeout: 120_000 },
-      );
-      const checked = JSON.parse(stdout) as {
-        lines: string[];
-        unchecked: string[];
-      };
-
-      expect(checked.lines).toEqual([
-        "Part holds 1 closed void inside it, where none can be: 125 mm³, 5 × 5 × 5 mm about (-200, 0, 0). No tool or mould reaches a closed void, and a resin or powder print keeps it full; open it to the outside, or fill it.",
-      ]);
-      expect(checked.unchecked).toEqual(["Part"]);
     }, 120_000);
 
     it("checks a flat part shown as sheet for holes near its edge, and says a part shown as sheet whose folds have no bend has none", async () => {

@@ -119,37 +119,3 @@ export const lBracket = [
   "    fillet(b.edges().filter_by(Axis.Y).group_by(Axis.X)[-1].group_by(Axis.Z)[-1], radius=6)",
   'show(b.part, name="Bracket")',
 ].join("\n");
-
-/** A ring modelled with `sides` sides, as Line Art gives its outline: one stroke back to its start. */
-const ring = (r: number, sides: number) =>
-  Array.from({ length: sides + 1 }, (_, i) => [
-    r * Math.cos((2 * Math.PI * i) / sides),
-    r * Math.sin((2 * Math.PI * i) / sides),
-  ]);
-/**
- * A bladed row seen end on, as Line Art strokes one: a casing ring in
- * sight, and behind it the short edges of `count` blades' sections, each
- * blade at its own turn and every edge at its own slant.
- */
-export const bladed = (count: number) => ({
-  look: [0, 1, 0],
-  up: [0, 0, 1],
-  lines: [
-    ["visible", ring(400, 64)],
-    ...Array.from({ length: count }, (_, i) => {
-      const turn = (2 * Math.PI * i) / count;
-      const r = 150 + (i % 200);
-      const slant = turn + 0.3 + (i % 7) * 0.05;
-      const [x, y] = [r * Math.cos(turn), r * Math.sin(turn)];
-      return [
-        "hidden",
-        [
-          [x, y],
-          [x + 3 * Math.cos(slant), y + 3 * Math.sin(slant)],
-        ],
-      ];
-    }),
-  ],
-  cut: [],
-  facing: null,
-});
