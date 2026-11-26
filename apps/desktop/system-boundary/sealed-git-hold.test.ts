@@ -204,7 +204,14 @@ describe.runIf(process.platform === "win32" && built !== "")(
       onTestFinished(() => tools.stopAllCommands());
 
       const job = await run(`${counting()}\nwait`);
-      await run(countingStarted);
+      // The first count is waited for here, not in a call: a call still
+      // waiting after half a second answers as a job, and git would then
+      // read a count the loop has not yet written.
+      const written = async () =>
+        (await readFile(join(root, "count"), "utf8").catch(() => "")).trim();
+      await vi.waitFor(async () => expect(await written()).not.toBe(""), {
+        timeout: 60_000,
+      });
       await run("git status");
       // Every call here may become a job after half a second, git's too: its
       // end is waited for before the count is read.
