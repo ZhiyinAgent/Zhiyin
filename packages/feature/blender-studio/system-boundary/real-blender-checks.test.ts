@@ -55,7 +55,7 @@ describe.runIf(blender)("a real Blender, checking renders and motion", () => {
     done("blender_frame_sheet", {
       every_ms,
       count,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "overview",
       ...more,

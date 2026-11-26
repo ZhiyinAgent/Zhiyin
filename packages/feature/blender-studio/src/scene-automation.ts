@@ -157,6 +157,7 @@ export function sceneAutomation(
           "The scene or a file this call writes changed after it was approved, so it did not run. Ask again to approve it as it is now.",
           true,
         );
+      if (prepared.answer !== undefined) return textResult(prepared.answer);
       const run = runFolders(prepared, options.directory);
       const spec = await specs.before(
         prepared.command,

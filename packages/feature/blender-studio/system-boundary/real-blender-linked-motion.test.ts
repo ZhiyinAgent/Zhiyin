@@ -195,10 +195,10 @@ describe.runIf(blender)("a real Blender, moving parts with others", () => {
       ],
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 125,
       count: 5,
-      frame_width: 160,
+      tile_width: 160,
       view: "overview",
       objects: ["Piston"],
     });
@@ -454,10 +454,10 @@ describe.runIf(blender)("a real Blender, moving parts with others", () => {
       ],
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 250,
       count: 4,
-      frame_width: 160,
+      tile_width: 160,
       view: "objects",
       objects: ["Arm", "Stop"],
     });
@@ -616,18 +616,18 @@ describe.runIf(blender)("a real Blender, moving parts with others", () => {
         ]),
     });
     const walled = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       view: "objects",
       objects: ["Gear"],
     });
     const overview = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 250,
       count: 4,
-      frame_width: 160,
+      tile_width: 160,
       view: "overview",
     });
     await call("blender_edit_objects", {
@@ -693,10 +693,10 @@ describe.runIf(blender)("a real Blender, moving parts with others", () => {
       ]),
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "objects",
       objects: ["Marker"],
@@ -735,10 +735,10 @@ describe.runIf(blender)("a real Blender, moving parts with others", () => {
       ].join("\n"),
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "overview",
     });

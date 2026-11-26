@@ -25,10 +25,15 @@ export const prepareDescribe: Preparer = (args, { scene }) => ({
 });
 
 export const prepareFrameSheet: Preparer = (args, { scene }) => {
-  // Without pictures it is a report of every frame, which needs no spacing.
+  // Without pictures it is a report of every frame, which needs no spacing;
+  // with them, frames left unspaced spread to an end.
   const pictures = args["pictures"] !== false;
   const every = args["every_ms"];
-  if (pictures && (typeof every !== "number" || !(every >= 1)))
+  if (
+    pictures &&
+    every !== undefined &&
+    !(typeof every === "number" && every >= 1)
+  )
     return {
       reason: "every_ms is the time between frames, in milliseconds from 1.",
       correctable: true,

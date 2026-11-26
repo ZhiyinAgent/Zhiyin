@@ -49,6 +49,29 @@ def vector(value, name, length=3, default=None):
     return mathutils.Vector([float(v) for v in value])
 
 
+def location_of(spec, height, default=None):
+    """
+    Where an object's origin goes, as (x, y, z): its location's three numbers, or two for an
+    object set down by rest_on or rest_across, which then sets its height, `height` until it does.
+    """
+    value = spec.get("location")
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        need(
+            spec.get("rest_on") is not None or spec.get("rest_across") is not None,
+            "location is [x, y, z]; [x, y] is for an object set down by rest_on or rest_across, which sets its height.",
+        )
+        need(all(is_number(v) for v in value), "location must be a list of 2 or 3 numbers.")
+        return (float(value[0]), float(value[1]), float(height))
+    if value is None:
+        need(default is not None, "location is required.")
+        return tuple(float(v) for v in default)
+    need(
+        isinstance(value, (list, tuple)) and len(value) == 3 and all(is_number(v) for v in value),
+        "location must be a list of 3 numbers.",
+    )
+    return tuple(float(v) for v in value)
+
+
 def positive_size(value, name, default=None, length=3):
     found = vector(value, name, length, default)
     need(all(c > 0 for c in found), f"Every value of {name} must be greater than 0.")

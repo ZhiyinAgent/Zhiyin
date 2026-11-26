@@ -23,6 +23,10 @@ What changed for people using Zhiyin, newest release first.
   given its list as plan, and a toolkit's tool called through call by its
   short name. The browser preview says how to open another page of the
   workspace.
+- The 3D frame sheet takes time and tile_width, as the other 3D tools do, and
+  reads its old names; one frame needs no spacing, and frames spread evenly to
+  an end. Setting an object down takes [x, y]. A render takes an exposure of
+  its own, and describing with no scene open answers instead of refusing.
 
 ## 0.1.0-alpha.2
 

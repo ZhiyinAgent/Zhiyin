@@ -34,6 +34,8 @@ export type Prepared = {
   readonly forGood?: readonly string[];
   /** What the person is told besides the rows, such as a write outside. */
   readonly detail?: string;
+  /** The whole answer, given without Blender: the call runs nothing. */
+  readonly answer?: string;
   /**
    * Blender also writes a smaller copy for the model to see. Where it goes is
    * chosen only when the call runs: what the call is described as must stay

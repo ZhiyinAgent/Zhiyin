@@ -6,7 +6,7 @@ its scale as added recorded as its built size.
 
 import bpy
 
-from .arguments import need, number, points, positive_size, rotation, vector
+from .arguments import location_of, need, number, points, positive_size, rotation
 from .as_added import stamp
 from .errors import Refused
 from .finding import find_object, is_helper, link, unused_name
@@ -221,7 +221,8 @@ def add_objects(args, scene_file):
         if obj.name not in bpy.context.scene.objects:
             link(obj)
         obj.rotation_euler = rotation(spec.get("rotation"))
-        obj.location = vector(spec.get("location"), "location", default=LOCATION)
+        # [x, y] for one set down after, from the height of the default location.
+        obj.location = location_of(spec, LOCATION[2], default=LOCATION)
         if group_children is not None and kind != "model":
             # A drawing's origin is where it was placed; its parts are centred
             # on it, moved in the world's terms whatever the group's scale. A

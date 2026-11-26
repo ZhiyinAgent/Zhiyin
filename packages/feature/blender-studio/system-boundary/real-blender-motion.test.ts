@@ -132,10 +132,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     expect(animated.isError).toBeUndefined();
 
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 250,
       count: 5,
-      frame_width: 160,
+      tile_width: 160,
       objects: ["Ball"],
     });
 
@@ -198,10 +198,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     expect(pathed.isError).toBeUndefined();
 
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 1000,
       count: 3,
-      frame_width: 160,
+      tile_width: 160,
       objects: ["Camera"],
     });
     const described = await call("blender_describe_scene", {
@@ -281,7 +281,7 @@ describe.runIf(blender)("a real Blender, animating", () => {
 
   it("refuses a frame sheet of an object the scene does not have, and the scene works on", async () => {
     const refused = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
       objects: ["Nope"],
@@ -312,10 +312,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
       ],
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 1000,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       objects: ["Grower"],
     });
@@ -563,10 +563,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     });
     const turnOf = async () => {
       const sheet = await call("blender_frame_sheet", {
-        start: 0,
+        time: 0,
         every_ms: 100,
         count: 1,
-        frame_width: 160,
+        tile_width: 160,
         engine: "solid",
         objects: ["Camera"],
       });
@@ -585,10 +585,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     await call("blender_set_camera", { resolution: [1920, 600] });
 
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
     });
     await call("blender_set_camera", { resolution: [1920, 1080] });
@@ -635,10 +635,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     });
 
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 1000,
       count: 3,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       objects: ["Flag"],
     });
@@ -718,10 +718,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     const runner = await keyTimes('bpy.data.objects["Runner"]', "location");
     const copy = await keyTimes('bpy.data.objects["Runner 2"]', "location");
     const sheet = await call("blender_frame_sheet", {
-      start: 1,
+      time: 1,
       every_ms: 100,
       count: 1,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       objects: ["Runner", "Runner 2"],
     });
@@ -925,10 +925,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     });
 
     const sheet = await call("blender_frame_sheet", {
-      start: 1,
+      time: 1,
       every_ms: 100,
       count: 1,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       objects: ["Glider"],
     });
@@ -944,18 +944,18 @@ describe.runIf(blender)("a real Blender, animating", () => {
   it("draws a tall picture's frames narrower, and refuses one too tall in words", async () => {
     await call("blender_set_camera", { resolution: [400, 2000] });
     const tall = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 320,
+      tile_width: 320,
       engine: "solid",
     });
     await call("blender_set_camera", { resolution: [100, 4000] });
     const tooTall = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 2,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
     });
     await call("blender_set_camera", { resolution: [1920, 1080] });
@@ -1069,10 +1069,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
     });
 
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 1,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "overview",
     });
@@ -1104,10 +1104,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
       code: [...alpha, "s.render.ffmpeg.codec = 'H264'"].join("\n"),
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 0,
+      time: 0,
       every_ms: 500,
       count: 1,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "overview",
     });
@@ -1192,10 +1192,10 @@ describe.runIf(blender)("a real Blender, animating", () => {
       ],
     });
     const sheet = await call("blender_frame_sheet", {
-      start: 1.27,
+      time: 1.27,
       every_ms: 100,
       count: 1,
-      frame_width: 160,
+      tile_width: 160,
       engine: "solid",
       view: "objects",
       objects: ["Drifter"],
@@ -1407,7 +1407,7 @@ describe.runIf(blender)("a real Blender, timing and checking motion", () => {
     });
     const report = await done("blender_frame_sheet", {
       pictures: false,
-      start: 0,
+      time: 0,
       end: 1,
       objects: ["Gear_A", "Gear_B", "Foot"],
       allowed: [
@@ -1436,11 +1436,11 @@ describe.runIf(blender)("a real Blender, timing and checking motion", () => {
   it("stops a report of every frame once most of its time is spent, and says where to check on from", async () => {
     const said = await printed([
       "from zhiyin_studio.frame_sheet import frame_sheet",
-      "print(frame_sheet({'pictures': False, 'start': 0, 'end': 1, 'limit_seconds': 1e-6}, None, None))",
+      "print(frame_sheet({'pictures': False, 'time': 0, 'end': 1, 'limit_seconds': 1e-6}, None, None))",
     ]);
 
     expect(said).toMatch(
-      /Checked at every frame from 0 s to 0 s, 1 frames \(stopped there for the call's time, short of 1 s: check on with start 0 s\)/,
+      /Checked at every frame from 0 s to 0 s, 1 frames \(stopped there for the call's time, short of 1 s: check on with time 0 s\)/,
     );
   }, 300_000);
 

@@ -147,6 +147,13 @@ a test.
   tried is named too. Moving objects it does not place are counted, and the
   answer says to name them to see where they are. An object that keys show
   and hide is followed while it shows.
+- **A frame sheet's frames are spaced, spread or single.** Its first frame is
+  at `time` and each is `tile_width` wide, the names a still and close-ups
+  give them. Its schema names `start`, `frame_width` and `picture_width` as
+  read as those, for the agent loop to read a call by. Frames come every `every_ms` milliseconds, or,
+  without it, spread evenly from the first time to `end`, or to the
+  timeline's end; one frame needs neither. A spacing and an end together,
+  or an end not after the first time, are refused in words.
 - **A motion is checked at every frame.** A frame sheet steps through every
   frame from its first time to its last, up to 360 frames and past them
   every so many, saying so; it then measures turns and speeds from each

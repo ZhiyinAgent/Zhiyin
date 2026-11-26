@@ -286,7 +286,9 @@ way:
   folder has it, by the 3D tools and a drawing alike. Blender started in a
   folder without the scene leaves it unopened and remembered, so what needs
   no scene still answers there, and back in its folder the scene is open
-  again.
+  again. A description asked for with no scene open is answered, not
+  refused: none is open, and how to open one, without Blender being asked;
+  every other tool on the scene is refused with how to open one.
 - **Every file a tool names stays in the workspace, unless the person
   approves a place outside it.** Pictures, fonts, drawings and models it
   reads are workspace-relative paths with an expected kind of file, and so

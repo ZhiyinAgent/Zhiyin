@@ -671,7 +671,7 @@ export function framesRows(args: Args): Row[] {
     return [
       {
         name: "Checks",
-        value: `every frame from ${seconds(args["start"]) ?? "0 s"} to ${seconds(args["end"]) ?? "the end of the timeline"}, in numbers, with no pictures`,
+        value: `every frame from ${seconds(args["time"]) ?? "0 s"} to ${seconds(args["end"]) ?? "the end of the timeline"}, in numbers, with no pictures`,
       },
       ...row("Places of", names(args["objects"]) || undefined),
       ...row("Touching by design", allowedWords(args["allowed"])),
@@ -682,10 +682,16 @@ export function framesRows(args: Args): Row[] {
           : undefined,
       ),
     ];
+  const first = seconds(args["time"]) ?? "0 s";
   return [
     {
       name: "Frames",
-      value: `${count}, from ${seconds(args["start"]) ?? "0 s"}, every ${trimmed(args["every_ms"] as number)} ms`,
+      value:
+        count === 1
+          ? `1, at ${first}`
+          : isNumber(args["every_ms"])
+            ? `${count}, from ${first}, every ${trimmed(args["every_ms"])} ms`
+            : `${count}, spread evenly from ${first} to ${seconds(args["end"]) ?? "the end of the timeline"}`,
     },
     {
       name: "Seen from",

@@ -4,6 +4,7 @@
  * video for the person. Times are in seconds, as people give them.
  */
 
+import { readAsKey } from "@zhiyin/contract";
 import {
   colour,
   point2,
@@ -423,18 +424,19 @@ export const motionTools: readonly StudioTool[] = [
     label: "Look at frames of a 3D animation",
     access: "read",
     checksWork: "runs",
-    description: `Check an animation: frames from a start time, every so many milliseconds, drawn side by side on one picture you can see, each labelled with its time, and, at each time, where each moving object is, turned how, and what it goes into. What goes into what is measured on the parts' surfaces, not their boxes, and the deepest overlaps come first: between parts of a mechanism they are clashes. Every frame from the first to the last drawn is also stepped through, up to ${statedNumbers.frames.most_scanned} frames and past them every so many, for parts going into each other between the frames drawn, pops, turns that flip or are too fast for the frame rate, parts that slide or slip where they rest, aimed parts whose distance to their target changes, objects leaving the camera's picture, and the fastest parts. The fastest parts and those that accelerate hardest are named, parts named as feet or wheels are measured for how far they go into what they stand on, and each simulation is said read from its bake or stepped from its start. With pictures false it checks every frame from start to end in numbers only. Use it after animating, and look at it before calling a motion finished: you cannot watch a video. It changes nothing. ${timeLimitStated("frames")}`,
+    description: `Check an animation: frames from a first time, every so many milliseconds or spread evenly to an end, drawn side by side on one picture you can see, each labelled with its time, and, at each time, where each moving object is, turned how, and what it goes into. What goes into what is measured on the parts' surfaces, not their boxes, and the deepest overlaps come first: between parts of a mechanism they are clashes. Every frame from the first to the last drawn is also stepped through, up to ${statedNumbers.frames.most_scanned} frames and past them every so many, for parts going into each other between the frames drawn, pops, turns that flip or are too fast for the frame rate, parts that slide or slip where they rest, aimed parts whose distance to their target changes, objects leaving the camera's picture, and the fastest parts. The fastest parts and those that accelerate hardest are named, parts named as feet or wheels are measured for how far they go into what they stand on, and each simulation is said read from its bake or stepped from its start. With pictures false it checks every frame from time to end in numbers only. Use it after animating, and look at it before calling a motion finished: you cannot watch a video. It changes nothing. ${timeLimitStated("frames")}`,
     inputSchema: {
       type: "object",
       properties: {
-        start: {
+        time: {
           type: "number",
           default: 0,
-          description: "The first frame's time, in seconds.",
+          description: "The first frame's moment, in seconds.",
         },
         every_ms: {
           type: "number",
-          description: "Milliseconds between frames.",
+          description:
+            "Milliseconds between frames. Left out, the frames spread evenly to end, or to the timeline's end; one frame needs none.",
         },
         count: {
           type: "integer",
@@ -443,7 +445,7 @@ export const motionTools: readonly StudioTool[] = [
           default: 12,
           description: "How many frames.",
         },
-        frame_width: {
+        tile_width: {
           type: "integer",
           minimum: 160,
           maximum: 640,
@@ -476,13 +478,13 @@ export const motionTools: readonly StudioTool[] = [
         pictures: {
           type: "boolean",
           description:
-            "false: no pictures, a report in numbers of every frame from start to end however many, until most of the call's time is spent; every_ms and count are not needed.",
+            "false: no pictures, a report in numbers of every frame from time to end however many, until most of the call's time is spent; every_ms and count are not needed.",
         },
         end: {
           type: "number",
           maximum: longestTimeline,
           description:
-            "With pictures false: the last time checked, in seconds; the timeline's end by default.",
+            "The last frame's moment, in seconds, instead of every_ms; with pictures false, the last checked. The timeline's end by default.",
         },
         allowed: {
           type: "array",
@@ -497,6 +499,12 @@ export const motionTools: readonly StudioTool[] = [
         },
       },
       additionalProperties: false,
+      // The names its sibling tools give these inputs, and those it gave them.
+      [readAsKey]: {
+        start: "time",
+        frame_width: "tile_width",
+        picture_width: "tile_width",
+      },
     },
   },
   {
