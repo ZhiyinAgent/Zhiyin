@@ -311,11 +311,19 @@ with the reason, and checking for a shell again does not change it.
   refused, correctably, and a refusal names a top-level input where it sits.
 - `multi_edit` resolves every replacement in memory during inspection, so an
   edit that cannot apply fails before anyone is asked and no file is touched.
-  A replacement that matches nothing, matches more than once without
-  `replaceAll`, or changes nothing is refused with a reason; occurrences that
-  overlap are more than one match, and `replaceAll` replaces each one that
-  does not overlap one already replaced. A failed match names the closest line,
-  never quoting the file.
+  A replacement that matches nothing or matches more than once without
+  `replaceAll` refuses the whole call with a reason; occurrences that overlap
+  are more than one match, and `replaceAll` replaces each one that does not
+  overlap one already replaced. Every replacement is checked before the
+  refusal, which names each that cannot be made, by its number in its file's
+  entry when that entry has more than one. Replacements apply in order, and
+  each is checked against the text left by the ones before it that can be
+  made. A failed match names the closest line, counted in that text, never
+  quoting the file.
+- A `multi_edit` replacement that puts back the same text is skipped, and one
+  with `replaceAll` that matches nothing replaces nothing; the others apply
+  and the answer names each such replacement, the latter as 0 replaced. A
+  file the replacements would leave as it is is refused, saying why.
 - A `multi_edit` replacement with `regex` finds by a JavaScript regular
   expression, `^` and `$` at each line, and expands `$1`, `$<name>` and `$&`
   in its replacement as JavaScript's `replace` does, the file's line endings
