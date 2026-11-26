@@ -65,7 +65,8 @@ live later that day.
   cost the two DeepSeek 3D runs 2% and 11% more.
 - **The largest avoidable costs are elsewhere.** Letting go of old pictures
   cost 8.2% of the eight runs. On Claude most of it was matching input the
-  provider never looked at: 14.6% of the gearbox run. A quiet correction taken
+  provider never looked at: 14.6% of the gearbox run, which was taped before
+  the request that lets go kept a mark the request before it set. A quiet correction taken
   back early in the conversation cost the tablecloth run 9.5%.
 - **The engineering plugin's 78 tools are mostly GitHub's.** GitHub's 46
   tools are 72% of their characters, the browser's 22 are 20% and Git's 10
@@ -173,9 +174,14 @@ conversation and of each specialist's run.
   system prompt, though 185,000 and 210,000 tokens matched an earlier request.
   Anthropic looks for a hit at most 20 blocks before each cache mark. The
   requests before carried a mark at the first picture that could go; the
-  request that lets go moves its marks on to the next such picture, farther
+  request that lets go moved its marks on to the next such picture, farther
   than Anthropic looks back from them. Of the 375,000 unread tokens, 330,000
-  were such matching input.
+  were such matching input. The gearbox was taped before the request that
+  lets go also kept the mark of the request before it, on the last block
+  before the first picture let go, which both requests send alike. Checked
+  live on 2026-11-26 with Claude Haiku 5.5: with that mark, the request that
+  lets go read 25,582 of its 26,652 tokens from cache; without it, none of
+  25,252.
 - **Quiet correction taken back.** A call a tool refused quietly leaves the
   conversation once corrected, and Claude drops the reasoning that follows a
   changed start. Near the end of the conversation this costs little. In the
