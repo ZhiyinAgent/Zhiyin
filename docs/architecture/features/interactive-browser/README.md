@@ -186,8 +186,17 @@ some sites refuse headless browsers.
   a request a page on this computer or its network made, as the browser says
   in headers no page can set. A website's page never reaches them, and
   neither does a name that looks up to them.
+- **The browser keeps its connection to the proxy from one request to the
+  next.** What belongs to a single connection is never passed on in either
+  direction: `Connection` and the fields it names, `Proxy-Connection`,
+  `Keep-Alive`, the proxy authentication fields, `TE`, `Trailer`,
+  `Transfer-Encoding` and `Upgrade`. Each request reaches the site on a
+  connection of its own, made to the address checked for it.
 - **A request the browser stops is stopped at the site**, as when a download
   is stopped at its limit.
+- **A site the proxy may reach but cannot is answered 502**, its reason
+  naming the system's error, such as `Bad Gateway: ECONNREFUSED`, so a
+  request that fails there says why the site was not reached.
 
 ### What the person sees
 

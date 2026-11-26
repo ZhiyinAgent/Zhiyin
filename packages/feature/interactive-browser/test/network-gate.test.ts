@@ -6,7 +6,13 @@
  * internet, made reachable here by the test's own rule for addresses.
  */
 
-import { createServer, request, type Server } from "node:http";
+import {
+  Agent,
+  createServer,
+  request,
+  type IncomingHttpHeaders,
+  type Server,
+} from "node:http";
 import { connect, type AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { NetworkGate, reachable } from "../src/network-gate.js";
@@ -104,6 +110,71 @@ describe("the browser's proxy, before any preview", () => {
     expect(shop.seen).toEqual(["GET /menu"]);
   });
 
+  it("answers request after request on one connection, passing on none of the headers that belong to that connection", async () => {
+    const sent: IncomingHttpHeaders[] = [];
+    const shop = createServer((req, res) => {
+      sent.push(req.headers);
+      // Its own connection's headers, which are not the browser's.
+      res.setHeader("Keep-Alive", "timeout=1");
+      res.setHeader("Connection", "close");
+      res.end("shop");
+    });
+    servers.push(shop);
+    await new Promise<void>((done) => shop.listen(0, "127.0.0.1", done));
+    const shopPort = (shop.address() as AddressInfo).port;
+    const { port } = await gate({ "shop.test": shopPort });
+    const oneConnection = new Agent({ keepAlive: true, maxSockets: 1 });
+
+    const answers: { body: string; sameConnection: boolean }[] = [];
+    for (const path of ["/a", "/b", "/c"])
+      answers.push(
+        await new Promise((done, fail) => {
+          const asked = request(
+            {
+              agent: oneConnection,
+              host: "127.0.0.1",
+              port,
+              path: `http://shop.test:${shopPort}${path}`,
+              headers: {
+                host: `shop.test:${shopPort}`,
+                connection: "keep-alive, x-hop",
+                "x-hop": "for the proxy only",
+                "proxy-connection": "keep-alive",
+                "keep-alive": "timeout=300",
+                te: "trailers",
+                "x-kept": "for the site",
+              },
+            },
+            (res) => {
+              let body = "";
+              res.on("data", (chunk) => (body += chunk));
+              res.on("end", () =>
+                done({ body, sameConnection: asked.reusedSocket }),
+              );
+            },
+          );
+          asked.on("error", fail);
+          asked.end();
+        }),
+      );
+    oneConnection.destroy();
+
+    expect(answers).toEqual([
+      { body: "shop", sameConnection: false },
+      { body: "shop", sameConnection: true },
+      { body: "shop", sameConnection: true },
+    ]);
+    expect(sent.map((headers) => headers["x-kept"])).toEqual([
+      "for the site",
+      "for the site",
+      "for the site",
+    ]);
+    const connectionsOwn = ["proxy-connection", "keep-alive", "te", "x-hop"];
+    expect(
+      sent.map((headers) => connectionsOwn.filter((name) => name in headers)),
+    ).toEqual([[], [], []]);
+  });
+
   it("opens a tunnel to the site it names", async () => {
     const shop = await site("shop");
     const { port } = await gate({ "shop.test": shop.port });
@@ -137,6 +208,41 @@ describe("the browser's proxy, before any preview", () => {
     asked.end();
 
     await closed;
+  });
+
+  it("says why it could not reach a site it was allowed to", async () => {
+    const gone = createServer();
+    await new Promise<void>((done) => gone.listen(0, "127.0.0.1", done));
+    const closedPort = (gone.address() as AddressInfo).port;
+    await new Promise((done) => gone.close(done));
+    const { port } = await gate({ "gone.test": closedPort });
+
+    const answer = await new Promise<{ status: number; reason: string }>(
+      (done, fail) => {
+        const asked = request(
+          {
+            host: "127.0.0.1",
+            port,
+            path: `http://gone.test:${closedPort}/`,
+            headers: { host: `gone.test:${closedPort}` },
+          },
+          (res) => {
+            res.resume();
+            done({
+              status: res.statusCode ?? 0,
+              reason: res.statusMessage ?? "",
+            });
+          },
+        );
+        asked.on("error", fail);
+        asked.end();
+      },
+    );
+
+    expect(answer).toEqual({
+      status: 502,
+      reason: "Bad Gateway: ECONNREFUSED",
+    });
   });
 
   it("refuses an address that is not reachable, sending it nothing", async () => {

@@ -20,7 +20,7 @@
  */
 
 import { fileURLToPath, URL } from "node:url";
-import type { BrowserContext, Page, Request } from "playwright-core";
+import type { BrowserContext, Page, Request, Response } from "playwright-core";
 import {
   playwrightBrowserLauncher,
   type BrowserTarget,
@@ -126,42 +126,89 @@ function harness(): Promise<ServedBundle> {
 }
 
 /**
+ * Runs a step in the page; if it fails, the error also says what the browser
+ * saw of its requests meanwhile: each that failed and the browser's reason,
+ * each answered with an error status, and each still unanswered.
+ *
+ * The test's server answers only 200 and 404, so any other status is the
+ * proxy's, and a request the server's own log lacks never got past the proxy.
+ */
+async function watching<T>(page: Page, step: () => Promise<T>): Promise<T> {
+  const unanswered = new Set<string>();
+  const seen: string[] = [];
+  const asked = (request: Request) => unanswered.add(request.url());
+  const finished = (request: Request) => unanswered.delete(request.url());
+  const failed = (request: Request) => {
+    unanswered.delete(request.url());
+    seen.push(
+      `${request.url()} failed: ${request.failure()?.errorText ?? "no reason given"}`,
+    );
+  };
+  const answered = (response: Response) => {
+    if (response.status() >= 400)
+      seen.push(
+        `${response.url()} answered ${response.status()} ${response.statusText()}`,
+      );
+  };
+  page.on("request", asked);
+  page.on("requestfinished", finished);
+  page.on("requestfailed", failed);
+  page.on("response", answered);
+  try {
+    return await step();
+  } catch (error) {
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}\nThe browser during this step: ${seen.join("; ") || "no request failed"}; still unanswered: ${[...unanswered].join(", ") || "nothing"}.`,
+      { cause: error },
+    );
+  } finally {
+    page.off("request", asked);
+    page.off("requestfinished", finished);
+    page.off("requestfailed", failed);
+    page.off("response", answered);
+  }
+}
+
+/**
  * Opens the harness and waits until it can draw.
  *
  * The page's module script holds back DOMContentLoaded until the drawing module
  * has loaded and run, so the launcher's navigation is the wait for that module.
  * It gets the minute this file allows for the module, rather than Playwright's
- * thirty-second default ending it first. When it runs out, the error names the
- * requests still unanswered, so a stall says where it was.
+ * thirty-second default ending it first. When it runs out, the error says what
+ * the browser and the server saw of each request, so a stall says where it was.
  */
 async function openHarness(
   target: BrowserTarget,
   page: Page,
-  url: string,
+  served: ServedBundle,
   ready: string,
 ): Promise<void> {
-  const unanswered = new Set<string>();
-  const asked = (request: Request) => unanswered.add(request.url());
-  const answered = (request: Request) => unanswered.delete(request.url());
-  page.on("request", asked);
-  page.on("requestfinished", answered);
-  page.on("requestfailed", answered);
   page.setDefaultNavigationTimeout(60_000);
   try {
-    await target.goto(url);
-    await page.waitForFunction((name) => name in window, ready, {
-      timeout: 60_000,
-    });
+    await watching(page, () =>
+      served.asking(async () => {
+        await target.goto(served.url);
+        await page.waitForFunction((name) => name in window, ready, {
+          timeout: 60_000,
+        });
+      }),
+    );
   } catch (error) {
     throw new Error(
-      `The harness was not ready to draw. Still unanswered: ${[...unanswered].join(", ") || "nothing"}.`,
+      `The harness was not ready to draw. ${error instanceof Error ? error.message : String(error)}`,
       { cause: error },
     );
-  } finally {
-    page.off("request", asked);
-    page.off("requestfinished", answered);
-    page.off("requestfailed", answered);
   }
+}
+
+/** Runs `drawing` in the page, saying on failure what the browser and the server saw. */
+function draw<T>(
+  page: Page,
+  served: ServedBundle,
+  drawing: () => Promise<T>,
+): Promise<T> {
+  return watching(page, () => served.asking(drawing));
 }
 
 describe.runIf(availability.available)("diagram fitting", () => {
@@ -180,12 +227,12 @@ describe.runIf(availability.available)("diagram fitting", () => {
     try {
       const open = (target.automation() as BrowserContext).pages()[0];
       if (!open) throw new Error("No browser page");
-      await openHarness(target, open, served.url, "drawAll");
+      await openHarness(target, open, served, "drawAll");
 
       const captures: unknown[] = [];
       for (let run = 0; run < runs; run += 1) {
         captures.push(
-          await served.asking(() =>
+          await draw(open, served, () =>
             open.evaluate(
               (values) =>
                 (
@@ -232,9 +279,9 @@ describe.runIf(availability.available)("diagram fitting", () => {
     try {
       const open = (target.automation() as BrowserContext).pages()[0];
       if (!open) throw new Error("No browser page");
-      await openHarness(target, open, served.url, "drawFramed");
+      await openHarness(target, open, served, "drawFramed");
 
-      const framed = await served.asking(() =>
+      const framed = await draw(open, served, () =>
         open.evaluate(
           (values) =>
             (
@@ -269,8 +316,8 @@ describe.runIf(availability.available)("diagram fitting", () => {
 
       const capture = async (motion: "no-preference" | "reduce") => {
         await open.emulateMedia({ reducedMotion: motion });
-        await openHarness(target, open, served.url, "drawAll");
-        return served.asking(() =>
+        await openHarness(target, open, served, "drawAll");
+        return draw(open, served, () =>
           open.evaluate(
             (values) =>
               (
@@ -311,12 +358,12 @@ describe.runIf(availability.available)("diagram fitting", () => {
     try {
       const open = (target.automation() as BrowserContext).pages()[0];
       if (!open) throw new Error("No browser page");
-      await openHarness(target, open, served.url, "drawAtWidth");
+      await openHarness(target, open, served, "drawAtWidth");
 
       const widths = [1100, 1085, 900, 700, 520];
       const byWidth: Record<number, unknown> = {};
       for (const width of widths) {
-        byWidth[width] = await served.asking(() =>
+        byWidth[width] = await draw(open, served, () =>
           open.evaluate(
             ([values, at]) =>
               (
