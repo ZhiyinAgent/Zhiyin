@@ -16,7 +16,13 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -364,6 +370,25 @@ describe.runIf(uv)("the real uv", () => {
 
     expect(result.said).toContain("to the error stream");
     expect(result.said).not.toContain("Failed to find real location");
+  }, 120_000);
+
+  it("finds the real place of the Python a script runs on, through the link uv names it by", async () => {
+    const result = await run({
+      code: [
+        "import os, sys",
+        "print('named', sys._base_executable)",
+        "print('real', os.path.realpath(sys._base_executable))",
+      ].join("\n"),
+    });
+
+    expect(result.isError, result.said).toBeUndefined();
+    const named = /^named (.+)$/m.exec(result.said)?.[1]?.trim() ?? "";
+    const real = /^real (.+)$/m.exec(result.said)?.[1]?.trim() ?? "";
+    const place = await realpath(named);
+    // uv names the Python by its minor version, a link to the folder of its
+    // exact version, so the real place differs from the name.
+    expect(place.toLowerCase()).not.toBe(named.toLowerCase());
+    expect(real.toLowerCase()).toBe(place.toLowerCase());
   }, 120_000);
 
   it.each(pythonVersions)(

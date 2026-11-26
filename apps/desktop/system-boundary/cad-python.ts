@@ -1,8 +1,8 @@
 /**
  * The CAD environment's Python for tests that join the two studios, confined
- * as the kept environments run theirs: it reads its own environment and base
- * Python and the folders a run grants, writes only those it is given, and
- * has no network.
+ * as the kept environments run theirs: it reads its own environment, the
+ * folder its base Python is in and the folders a run grants, writes only
+ * those it is given, and has no network.
  */
 
 import { readFile } from "node:fs/promises";
@@ -41,7 +41,9 @@ export async function confinedCadPython(
         confinement: {
           purpose,
           home: request.home,
-          read: [base, environment, ...request.read],
+          // The folder of Zhiyin's Pythons, as the kept environments are
+          // given it: the environment names its Python through a link there.
+          read: [dirname(base), environment, ...request.read],
           write: [...request.write],
           hosts: [],
         },
