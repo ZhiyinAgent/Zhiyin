@@ -14,6 +14,7 @@ import type {
   ToolInvocationResult,
   ToolSpec,
 } from "@zhiyin/contract";
+import { readAsKey } from "@zhiyin/contract";
 import { refusal } from "../tools/refusals.js";
 import type { ModelHistory } from "../context/model-history.js";
 import type { TurnRecords } from "../turn/turn-records.js";
@@ -67,6 +68,8 @@ const updatePlanTool: ToolSpec = {
     },
     required: ["items"],
     additionalProperties: false,
+    // Codex's tool of the same name takes the list as `plan`.
+    [readAsKey]: { plan: "items" },
   },
 };
 

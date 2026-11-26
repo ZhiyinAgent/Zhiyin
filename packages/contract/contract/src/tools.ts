@@ -4,6 +4,15 @@
  */
 export type ToolOwner = "built-in" | "mcp" | "skill" | "plugin";
 
+/**
+ * A key an input schema may hold beside `properties`: each field a call may
+ * send under another name, such as one a sibling tool gives the same input,
+ * mapped to the field it is read as. The call is read that way before it is
+ * checked, the model is told so, and the key is left out of the schema the
+ * model is shown.
+ */
+export const readAsKey = "x-zhiyin-read-as";
+
 /** A tool as named to the agent and shown to the user. */
 export interface ToolSpec {
   readonly name: string;

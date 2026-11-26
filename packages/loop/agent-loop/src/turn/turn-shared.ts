@@ -28,6 +28,8 @@ export type AssembledToolCall = {
   callId: string;
   name: string;
   arguments: string;
+  /** What was corrected in the call before its input was read, in words. */
+  readonly corrections?: readonly string[];
 };
 
 /**

@@ -2,9 +2,12 @@
  * A proposed call's input, from what the model streamed to the arguments a
  * tool is handed, or to a refusal the model can act on.
  *
- * Input that is not valid JSON is a refusal like any a tool makes, and the rest
- * of its batch runs. It is reached only after the fixes that cannot change a
- * value have failed, and is answered to the model (ADR 0009). Either
+ * Input that reads is corrected where it misses its tool's schema in a way
+ * that has one reading, and the model is told each correction with the
+ * call's result. Input that is not valid JSON is a refusal like any a tool
+ * makes, and the rest of its batch runs. It is reached only after the fixes
+ * that cannot change a value have failed, and is answered to the model
+ * (ADR 0009). Either
  * way, `call.arguments` is left holding what the conversation should keep: the
  * corrected input, or an empty object in place of text no request can carry.
  * The raw text goes to the corrections log, and a bounded copy to the failed action's
@@ -13,7 +16,8 @@
 
 import type { ToolSpec } from "@zhiyin/contract";
 import type { CorrectionEntry } from "@zhiyin/corrections-log";
-import { readEncodedValues, readToolInput } from "./tool-input.js";
+import { correctedInput } from "./call-corrections.js";
+import { readToolInput } from "./tool-input.js";
 import { type Refusal, unreadableInput } from "./refusals.js";
 import type { AssembledToolCall, RoundTools } from "../turn/turn-shared.js";
 
@@ -85,11 +89,15 @@ export class CallInputs {
     const raw = call.arguments;
     const input = readToolInput(raw);
     if (input.ok) {
-      const values = readEncodedValues(
+      const values = correctedInput(
         input.arguments,
-        round.tools.find((tool) => tool.name === call.name)?.inputSchema,
+        round.tools.find((tool) => tool.name === call.name),
       );
-      const corrections = [...input.corrections, ...values.corrections];
+      const corrections = [
+        ...(call.corrections ?? []),
+        ...input.corrections,
+        ...values.corrections,
+      ];
       if (!corrections.length) return { ok: true, arguments: input.arguments };
       const fixed = corrections.join(", ");
       await this.#logCorrection(

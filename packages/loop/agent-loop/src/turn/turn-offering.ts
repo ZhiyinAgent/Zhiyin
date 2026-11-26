@@ -10,7 +10,7 @@ import type { ModelMessage, ModelRequest } from "@zhiyin/model-client";
 import { fixedModelMessages } from "../context/conversation-context.js";
 import { directoryAsSent } from "../context/directory-readiness.js";
 import type { ModelHistory } from "../context/model-history.js";
-import { selfDescribing } from "../context/self-description.js";
+import { selfDescribing, shownSchema } from "../context/self-description.js";
 import type { LoopTool } from "../round/loop-tool.js";
 import type { Unwrapped } from "../round/round-answers.js";
 import { unwrapBridged } from "../tools/bridged-call.js";
@@ -163,7 +163,7 @@ export class TurnOffering {
   advertised(): readonly ToolSpec[] {
     return [
       ...this.tools.map(selfDescribing),
-      ...this.#loopSpecs(),
+      ...this.#loopSpecs().map(shownSchema),
       ...(this.route === "list" ? this.#openedTools().map(selfDescribing) : []),
     ];
   }

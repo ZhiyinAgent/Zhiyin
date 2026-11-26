@@ -342,6 +342,18 @@ describe("opening the preview", () => {
       "Call it again after changing the file to see the change.",
     );
   });
+
+  it("is described as the way to open another page of the workspace, which no address the model writes reaches", async () => {
+    const { automation } = await previewing();
+
+    const preview = (await automation.listTools()).find(
+      (tool) => tool.name === "browser_preview",
+    );
+
+    expect(preview?.description).toContain(
+      "To open another page of the workspace, call this again with its path: the preview's address is Zhiyin's, and a localhost address you write does not reach it.",
+    );
+  });
 });
 
 describe("files the page asked for and did not get", () => {
