@@ -238,7 +238,7 @@ export const browserTools: Readonly<Record<string, BrowserTool>> = {
     previewTool: true,
     checksWork: "runs",
     description: (seeing) =>
-      `Preview a workspace HTML file in the visible browser. Zhiyin manages the local server; do not start one with bash or invent file URLs. The answer gives the viewport and whether the page is wider than it, the console's errors, the page's snapshot${seeing ? " and a picture of what the window shows" : ""}, and names each file the page asked for and was not given. Call it again after changing the file to see the change.`,
+      `Preview a workspace HTML file in the visible browser. Zhiyin manages the local server; do not start one with bash or invent file URLs. To open another page of the workspace, call this again with its path: the preview's address is Zhiyin's, and a localhost address you write does not reach it. The answer gives the viewport and whether the page is wider than it, the console's errors, the page's snapshot${seeing ? " and a picture of what the window shows" : ""}, and names each file the page asked for and was not given. Call it again after changing the file to see the change.`,
     schema: {
       type: "object",
       properties: {

@@ -24,7 +24,7 @@ import type {
 import type { AgentLoopDependencies } from "../dependencies.js";
 import { estimatedRequestTokens } from "../context/conversation-context.js";
 import { RequestSize, type RequestParts } from "../context/request-size.js";
-import { selfDescribing } from "../context/self-description.js";
+import { selfDescribing, shownSchema } from "../context/self-description.js";
 import {
   modelRoundRequest,
   type RequestBefore,
@@ -273,7 +273,7 @@ export class SpecialistMessages {
   /** The tools as offered, with the purpose every call gives (ADR 0014). */
   advertised(): readonly ToolSpec[] {
     return this.#own.map((tool) =>
-      this.#plain.has(tool) ? tool : selfDescribing(tool),
+      this.#plain.has(tool) ? shownSchema(tool) : selfDescribing(tool),
     );
   }
 

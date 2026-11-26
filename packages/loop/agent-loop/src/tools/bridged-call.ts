@@ -3,7 +3,8 @@
  * conversation runs (ADR 0017): one tool, `call`, whose own schema never
  * changes, runs an opened tool by name. The call is answered as a direct call
  * to that tool would be, its input read, inspected and approved the same way,
- * and the conversation keeps it as the `call` the model made.
+ * and the conversation keeps it as the `call` the model made, by the tool's
+ * whole name when a short one was read as it.
  */
 
 import type { ToolSpec } from "@zhiyin/contract";
@@ -92,13 +93,13 @@ export function unwrapBridged(
         call.arguments.length,
       ),
     };
-  const { name, arguments: inner, purpose } = outer.arguments;
+  const { name: given, arguments: inner, purpose } = outer.arguments;
   // A model that writes its calls out can run a tool's name on into its own
   // call markup, the arguments inside it. They are not taken from there: what
   // is run is what the model sent in the call's own fields.
   const head =
-    typeof name === "string"
-      ? /^[\w.-]+(?=["'<>\s])/.exec(name)?.[0]
+    typeof given === "string"
+      ? /^[\w.-]+(?=["'<>\s])/.exec(given)?.[0]
       : undefined;
   if (head && known.has(head))
     return {
@@ -110,9 +111,9 @@ export function unwrapBridged(
     };
   const args = innerText(inner, purpose);
   if (
-    typeof name !== "string" ||
-    !name.trim() ||
-    name === callToolName ||
+    typeof given !== "string" ||
+    !given.trim() ||
+    given === callToolName ||
     args === undefined
   )
     return {
@@ -122,6 +123,9 @@ export function unwrapBridged(
         "Send call again with both.",
       ),
     };
+  const resolved = wholeName(given, known);
+  if ("refused" in resolved) return resolved;
+  const { name } = resolved;
   if (known.own(name))
     return {
       refused: refusal(
@@ -141,7 +145,41 @@ export function unwrapBridged(
     };
   }
   return {
-    call: { index: call.index, callId: call.callId, name, arguments: args },
+    call: {
+      index: call.index,
+      callId: call.callId,
+      name,
+      arguments: args,
+      ...(name !== given ? { corrections: [`${given} read as ${name}`] } : {}),
+    },
     transcript: (base) => asOuter(base, name),
+  };
+}
+
+/**
+ * The tool a `call` names: the name itself when it is known, or the one
+ * offered tool whose name ends with it after a connection's prefix, as
+ * `tavily_search` ends `mcp__tavily__tavily_search`. A short name that ends
+ * several is refused, naming them; one that ends none is left for the
+ * refusal of a name nothing offers.
+ */
+function wholeName(
+  given: string,
+  known: {
+    readonly has: (name: string) => boolean;
+    readonly names: () => readonly string[];
+  },
+): { readonly name: string } | { readonly refused: object } {
+  if (known.has(given)) return { name: given };
+  const ending = known.names().filter((name) => name.endsWith(`__${given}`));
+  if (ending.length === 1) return { name: ending[0]! };
+  if (ending.length === 0) return { name: given };
+  const listed = `${ending.slice(0, -1).join(", ")} or ${ending.at(-1)!}`;
+  return {
+    refused: refusal(
+      "input-check",
+      `“${given}” could be ${listed}.`,
+      "Send call again with the tool's whole name in name.",
+    ),
   };
 }

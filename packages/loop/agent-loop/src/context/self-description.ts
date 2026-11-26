@@ -8,7 +8,7 @@
  * established about the action.
  */
 
-import type { ToolSpec } from "@zhiyin/contract";
+import { readAsKey, type ToolSpec } from "@zhiyin/contract";
 import { guidanceTextLimits } from "./task-guidance.js";
 
 /**
@@ -25,7 +25,7 @@ type ObjectSchema = {
 
 /**
  * The tool as offered, with the argument added. A tool whose own input already
- * has it is offered as it is.
+ * has it is offered as it is, but for the names its schema reads as others.
  *
  * The argument is listed among what a call has to give: offered as something
  * a call may give, two of three models gave it on no call at all, and each of
@@ -33,9 +33,10 @@ type ObjectSchema = {
  * still runs, and is named that way.
  */
 export function selfDescribing(tool: ToolSpec): ToolSpec {
-  const schema = tool.inputSchema as ObjectSchema;
+  const shown = shownSchema(tool);
+  const schema = shown.inputSchema as ObjectSchema;
   const properties = schema.properties ?? {};
-  if (schema.type !== "object" || "purpose" in properties) return tool;
+  if (schema.type !== "object" || "purpose" in properties) return shown;
   return {
     ...tool,
     inputSchema: {
@@ -64,7 +65,12 @@ export function selfDescription(
 ): { readonly args: Record<string, unknown>; readonly said: SelfDescription } {
   if (!tool) return { args, said: {} };
   const owned = ownArgument(tool);
-  if (!owned && selfDescribing(tool) === tool) return { args, said: {} };
+  const schema = tool.inputSchema as ObjectSchema;
+  if (
+    !owned &&
+    (schema.type !== "object" || "purpose" in (schema.properties ?? {}))
+  )
+    return { args, said: {} };
   const { purpose, ...own } = args;
   const limit =
     owned && typeof owned.maxLength === "number"
@@ -78,6 +84,18 @@ export function selfDescription(
     args: owned ? args : own,
     said: sentence ? { purpose: sentence } : {},
   };
+}
+
+/**
+ * The tool as the model is shown it: without the other names its schema
+ * reads as its fields, which only the loop reads.
+ */
+export function shownSchema(tool: ToolSpec): ToolSpec {
+  if (!Object.hasOwn(tool.inputSchema, readAsKey)) return tool;
+  const inputSchema = Object.fromEntries(
+    Object.entries(tool.inputSchema).filter(([key]) => key !== readAsKey),
+  );
+  return { ...tool, inputSchema };
 }
 
 /** The tool's own `purpose`, when its input has one. */

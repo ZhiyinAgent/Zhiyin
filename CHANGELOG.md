@@ -17,6 +17,12 @@ What changed for people using Zhiyin, newest release first.
   replacement, by its number, in one answer. A replacement that puts back the
   same text is skipped, and one with replaceAll that finds nothing replaces
   nothing and says 0.
+- Calls whose meaning is clear run with a note instead of being refused: a
+  field sent under the name a sibling tool gives it, a purpose put inside an
+  item or doubled, a direct call wrapped as {name, arguments}, update_plan
+  given its list as plan, and a toolkit's tool called through call by its
+  short name. The browser preview says how to open another page of the
+  workspace.
 
 ## 0.1.0-alpha.2
 

@@ -324,6 +324,9 @@ some sites refuse headless browsers.
   that lead out are refused. A file that is not there is answered as missing,
   a folder without an `index.html` as missing its index, and a type the
   preview does not serve as unsupported.
+- **Another page of the workspace is opened with the preview's own tool.**
+  Its description says to call it again with the page's path: the preview's
+  address is Zhiyin's, and no localhost address the model writes reaches it.
 - **Each file the preview's pages asked for and were not given is named to
   the model**, once, with why, in the next answer from the browser: missing,
   a folder with no `index.html`, of a type the preview does not serve, too

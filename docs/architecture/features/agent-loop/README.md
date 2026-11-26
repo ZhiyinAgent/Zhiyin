@@ -191,7 +191,10 @@ How an opened toolkit reaches the model is the turn host's `toolLoading()`:
   its arguments an object or JSON text, is answered as a direct call to that
   tool would be: its input read and fixed, inspected, approved and shown
   the same way, and kept in the conversation as the `call` the model made. A
-  name nothing offers is refused, naming `find`; Zhiyin's own tools, `open`
+  name nothing offers is refused, naming `find`. A name that ends exactly one
+  offered tool's name after its connection's prefix runs that tool, the
+  model is told so, and the conversation keeps the call by the whole name; a
+  name that ends several is refused, naming each. Zhiyin's own tools, `open`
   among them, are refused, to be called directly. A name that runs on from a
   tool's name into the model's own call markup is refused, naming that tool
   and asking for name and arguments apart; nothing is taken from the markup.
@@ -750,7 +753,17 @@ named by its target.
 - Input slips with one reading are fixed before the tool sees the call, and the
   model is told: a code fence, a trailing comma, a raw control character in
   text, an object sent as a string, or a field whose schema wants a list or an
-  object but never text, sent as the JSON text of one.
+  object but never text, sent as the JSON text of one. So are misses of the
+  schema with one reading: a field sent under a name its schema says is read
+  as another, such as the name a sibling tool gives the same input, is read
+  as that field and held to its limits, and the model is never shown those
+  names; a direct call sent as `{name, arguments}` naming
+  that same tool is unwrapped; `update_plan` reads a list sent as `plan`, as
+  Codex's tool of that name takes it, as `items`; a `purpose` inside an object whose schema takes no field it
+  does not list is moved to the top when the call has none, and left out
+  when it has; a `purposes` beside `purpose` is left out. No fix changes a
+  value the model sent: a number, list or text past its schema's limit is
+  refused, naming the limit.
 - A refusal reaches the model as the refusing tool words it: how the input
   departs from the tool's schema is said by the feature that refuses, not
   added by the loop. A call its tool runs with fields its schema says it does
