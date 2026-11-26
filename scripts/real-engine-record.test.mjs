@@ -1,16 +1,26 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import {
+  changesBesideRecord,
   changesThatCount,
   engineFiles,
   loadsFingerprint,
+  reachedByFile,
   reachedFiles,
   recordProblems,
   recorded,
+  recordingNotice,
   runCounts,
+  runRefusals,
+  staleFiles,
+  uncountedReads,
 } from "./real-engine-record.mjs";
+import { expected } from "./skipped-tests.mjs";
+
+const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const blenderFile =
   "packages/feature/blender-studio/system-boundary/real-blender.test.ts";
@@ -33,9 +43,12 @@ const module = (moduleId, ...states) => ({
   children: { allTests: () => states.map(ran) },
 });
 
+/** The same fingerprint for each real-engine file. */
+const eachLoads = (loads) => new Map([...files.keys()].map((f) => [f, loads]));
+
 /**
  * A record in which every real-engine file ran whole and passed on `commit`,
- * with the files it loaded as `loads` names them.
+ * each with the files it loaded as `loads` names them.
  */
 function passingRecord(commit, loads) {
   return recorded(
@@ -46,7 +59,7 @@ function passingRecord(commit, loads) {
     files,
     {
       commit,
-      ...(loads === undefined ? {} : { loads }),
+      ...(loads === undefined ? {} : { loads: eachLoads(loads) }),
       versions,
       at,
     },
@@ -140,6 +153,28 @@ describe("writing the record", () => {
       commit: "abc123",
       loads: "fingerprint",
     });
+  });
+
+  it("keeps for each file the fingerprint of the files that file's run loads", () => {
+    const record = recorded(
+      {},
+      new Map([
+        [blenderFile, { passed: 5, failed: 0, skipped: 0 }],
+        [cadFile, { passed: 4, failed: 0, skipped: 0 }],
+      ]),
+      files,
+      {
+        commit: "c1",
+        loads: new Map([
+          [blenderFile, "blender's"],
+          [cadFile, "cad's"],
+        ]),
+        versions,
+        at,
+      },
+    );
+    expect(record[blenderFile].loads).toBe("blender's");
+    expect(record[cadFile].loads).toBe("cad's");
   });
 
   it("leaves a file's entry as it was when none of its tests ran", () => {
@@ -253,6 +288,77 @@ describe("the files a real-engine run loads", () => {
       "vitest.config.ts",
     ]);
   });
+
+  it("name, by a relative path in their code, no test folder the run does not count", async () => {
+    const root = await workspace({
+      "packages/feature/studio/package.json": manifest("@zhiyin/studio", {
+        ".": "./src/index.ts",
+      }),
+      "packages/feature/studio/src/index.ts":
+        'export { view } from "@zhiyin/viewer";\nexport const start = "../session/start.py";',
+      "packages/feature/studio/system-boundary/real.test.ts": [
+        'import { view } from "../src/index.js";',
+        'const own = new URL("../test/commands.json", import.meta.url);',
+        'const theirs = new URL("../../viewer/test/pictures.json", import.meta.url);',
+        'const outside = "../outside.png";',
+      ].join("\n"),
+      "packages/feature/viewer/package.json": manifest("@zhiyin/viewer", {
+        ".": "./src/index.ts",
+      }),
+      "packages/feature/viewer/src/index.ts": "export const view = 1;",
+    });
+    const studio = "packages/feature/studio/system-boundary/real.test.ts";
+
+    expect(uncountedReads(root, reachedByFile(root, [studio]))).toEqual([
+      `${studio}: ${studio} names packages/feature/viewer/test/pictures.json, a test folder its run does not count.`,
+    ]);
+  });
+
+  it("in this repository, name by a relative path no test folder their run does not count", () => {
+    const engine = [...engineFiles(expected).keys()];
+    expect(
+      uncountedReads(repository, reachedByFile(repository, engine)),
+    ).toEqual([]);
+  });
+
+  it("are, for each test file, what that file's own run loads", async () => {
+    const root = await workspace({
+      "vitest.config.ts": "export default {};",
+      "packages/feature/studio/package.json": manifest("@zhiyin/studio", {
+        ".": "./src/index.ts",
+      }),
+      "packages/feature/studio/src/index.ts":
+        'export { box } from "@zhiyin/shapes";',
+      "packages/feature/studio/system-boundary/real.test.ts":
+        'import { box } from "../src/index.js";',
+      "packages/pure/shapes/package.json": manifest("@zhiyin/shapes", {
+        ".": "./src/index.ts",
+      }),
+      "packages/pure/shapes/src/index.ts": "export const box = 1;",
+      "packages/feature/viewer/package.json": manifest("@zhiyin/viewer", {
+        ".": "./src/index.ts",
+      }),
+      "packages/feature/viewer/src/index.ts": "export const view = 1;",
+      "packages/feature/viewer/system-boundary/real.test.ts":
+        'import { view } from "../src/index.js";',
+    });
+    const studio = "packages/feature/studio/system-boundary/real.test.ts";
+    const viewer = "packages/feature/viewer/system-boundary/real.test.ts";
+
+    const each = reachedByFile(root, [studio, viewer]);
+
+    expect([...each.get(studio)].sort()).toEqual([
+      "packages/feature/studio/src/index.ts",
+      studio,
+      "packages/pure/shapes/src/index.ts",
+      "vitest.config.ts",
+    ]);
+    expect([...each.get(viewer)].sort()).toEqual([
+      "packages/feature/viewer/src/index.ts",
+      viewer,
+      "vitest.config.ts",
+    ]);
+  });
 });
 
 describe("the changes that can alter a real-engine run", () => {
@@ -290,6 +396,37 @@ describe("the changes that can alter a real-engine run", () => {
       "tsconfig.base.json",
     ];
     expect(changesThatCount(build, reached)).toEqual(build);
+  });
+
+  it("are not those to a package's own tests when the run loads nothing from its test folders", () => {
+    expect(
+      changesThatCount(
+        [
+          "packages/platform/sandbox/test/pipe-openings.test.ts",
+          "packages/platform/sandbox/test/fixtures/child.mjs",
+          "packages/platform/sandbox/system-boundary/job-objects.test.ts",
+        ],
+        new Set([...reached, "packages/platform/sandbox/src/index.ts"]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("are those to any test folder of a package the run loads a test file from: a helper it imports, what sits beside it, and the fixtures its own package keeps", () => {
+    const withHelper = new Set([
+      ...reached,
+      "packages/platform/sandbox/src/index.ts",
+      "packages/platform/sandbox/test/fakes.ts",
+    ]);
+    const changed = [
+      "packages/platform/sandbox/test/fakes.ts",
+      "packages/platform/sandbox/test/fixtures/child.mjs",
+      "packages/platform/sandbox/system-boundary/job-objects.test.ts",
+      "packages/feature/blender-studio/system-boundary/scene-helpers.ts",
+      "packages/feature/blender-studio/test/blender-commands.json",
+      "apps/desktop/system-boundary/fixtures/part.step",
+      "apps/desktop/installed/opens.test.ts",
+    ];
+    expect(changesThatCount(changed, withHelper)).toEqual(changed);
   });
 
   it("are not those to a package the run does not load from, to docs, workflows or other scripts, or to the record", () => {
@@ -344,6 +481,21 @@ describe("the fingerprint of what a run loads", () => {
     );
   });
 
+  it("stays the same when only a test the run does not load, in a package it loads from, changes", () => {
+    const withTest = [
+      ...tree,
+      { path: "packages/feature/cad-studio/test/x.test.ts", blob: "f1" },
+    ];
+    expect(
+      loadsFingerprint(
+        withTest.map((file) =>
+          file.blob === "f1" ? { ...file, blob: "f2" } : file,
+        ),
+        reached,
+      ),
+    ).toBe(loadsFingerprint(withTest, reached));
+  });
+
   it("stays the same when only a package the run does not load from, or the docs, change", () => {
     const before = loadsFingerprint(tree, reached);
     expect(
@@ -360,9 +512,12 @@ describe("the fingerprint of what a run loads", () => {
 
 describe("the release check", () => {
   const unchanged = () => [];
-  const reached = new Set([
-    "packages/feature/blender-studio/src/index.ts",
-    "packages/feature/cad-studio/src/index.ts",
+  const blenderCode = "packages/feature/blender-studio/src/index.ts";
+  const cadCode = "packages/feature/cad-studio/src/index.ts";
+  const reached = new Map([
+    [blenderFile, new Set([blenderFile, blenderCode])],
+    [cadFile, new Set([cadFile, cadCode])],
+    [bothFile, new Set([bothFile, blenderCode, cadCode])],
   ]);
 
   it("accepts every file run whole and passing on this commit, with the engines the app pins", () => {
@@ -409,10 +564,77 @@ describe("the release check", () => {
       pins,
       reached,
     });
-    expect(problems).toHaveLength(3);
     expect(problems[0]).toContain(
       "1 file it loads from changed since: packages/feature/blender-studio/src/session/x.py",
     );
+  });
+
+  it("refuses only the files whose own run loads the changed code, naming each", () => {
+    const problems = recordProblems(passingRecord("before"), files, {
+      changedSince: () => ["packages/feature/cad-studio/src/harness/x.py"],
+      pins,
+      reached,
+    });
+    expect(problems).toEqual([
+      expect.stringMatching(new RegExp(`^${cadFile}: ran on before`)),
+      expect.stringMatching(new RegExp(`^${bothFile}: ran on before`)),
+    ]);
+  });
+
+  it("accepts every file when only another package's own test changed, and refuses those that import a test helper that changed", () => {
+    const sandbox = "packages/platform/sandbox/src/index.ts";
+    const loadingSandbox = new Map(
+      [...reached].map(([file, loads]) => [file, new Set([...loads, sandbox])]),
+    );
+    expect(
+      recordProblems(passingRecord("before"), files, {
+        changedSince: () => [
+          "packages/platform/sandbox/test/pipe-openings.test.ts",
+        ],
+        pins,
+        reached: loadingSandbox,
+      }),
+    ).toEqual([]);
+    const withHelper = new Map([
+      ...loadingSandbox,
+      [
+        cadFile,
+        new Set([
+          ...loadingSandbox.get(cadFile),
+          "packages/platform/sandbox/test/fakes.ts",
+        ]),
+      ],
+    ]);
+    expect(
+      recordProblems(passingRecord("before"), files, {
+        changedSince: () => ["packages/platform/sandbox/test/fakes.ts"],
+        pins,
+        reached: withHelper,
+      }),
+    ).toEqual([
+      expect.stringContaining(
+        `${cadFile}: ran on before, and 1 file it loads from changed since: packages/platform/sandbox/test/fakes.ts`,
+      ),
+    ]);
+  });
+
+  it("accepts a file whose own fingerprint is this commit's, beside one whose is not", () => {
+    const record = passingRecord("rebased-away", "files then");
+    record[blenderFile].loads = "blender's now";
+    const problems = recordProblems(record, files, {
+      changedSince: () => null,
+      loads: new Map([
+        [blenderFile, "blender's now"],
+        [cadFile, "cad's now"],
+        [bothFile, "both now"],
+      ]),
+      pins,
+      reached,
+    });
+    expect(problems).toEqual([
+      expect.stringContaining(`${cadFile}: ran on rebased-`),
+      expect.stringContaining(`${bothFile}: ran on rebased-`),
+    ]);
   });
 
   it("refuses a run on a commit this repository's history does not hold", () => {
@@ -429,7 +651,7 @@ describe("the release check", () => {
     expect(
       recordProblems(passingRecord("rebased-away", "same files"), files, {
         changedSince: () => null,
-        loads: "same files",
+        loads: eachLoads("same files"),
         pins,
         reached,
       }),
@@ -440,7 +662,12 @@ describe("the release check", () => {
     const problems = recordProblems(
       passingRecord("rebased-away", "files then"),
       files,
-      { changedSince: () => null, loads: "files now", pins, reached },
+      {
+        changedSince: () => null,
+        loads: eachLoads("files now"),
+        pins,
+        reached,
+      },
     );
     expect(problems).toHaveLength(3);
     expect(problems[0]).toContain("history");
@@ -449,7 +676,7 @@ describe("the release check", () => {
   it("refuses a run on a commit the history holds when the code it loads changed since, whatever the files were named then", () => {
     const problems = recordProblems(passingRecord("before", "files"), files, {
       changedSince: () => ["packages/feature/cad-studio/src/x.py"],
-      loads: "other files",
+      loads: eachLoads("other files"),
       pins,
       reached,
     });
@@ -503,5 +730,172 @@ describe("the release check", () => {
         reached,
       }),
     ).toEqual([expect.stringContaining("no record")]);
+  });
+});
+
+describe("the files to run again", () => {
+  const reached = new Map([
+    [blenderFile, new Set(["packages/feature/blender-studio/src/index.ts"])],
+    [cadFile, new Set(["packages/feature/cad-studio/src/index.ts"])],
+    [bothFile, new Set(["apps/desktop/system-boundary/scene-drawing.test.ts"])],
+  ]);
+
+  it("are none when every file ran whole and passing on this code", () => {
+    expect(
+      staleFiles(passingRecord("head"), files, {
+        changedSince: () => [],
+        pins,
+        reached,
+      }),
+    ).toEqual([]);
+  });
+
+  it("are the files whose own run loads code changed since, and no others", () => {
+    expect(
+      staleFiles(passingRecord("before"), files, {
+        changedSince: () => ["packages/feature/cad-studio/src/harness/x.py"],
+        pins,
+        reached,
+      }),
+    ).toEqual([cadFile]);
+  });
+
+  it("are the files with no run recorded, a failure, a skip or an engine other than the pinned one", () => {
+    const record = passingRecord("head");
+    delete record[blenderFile];
+    record[cadFile] = { ...record[cadFile], failed: 1 };
+    record[bothFile] = { ...record[bothFile], blender: "5.1.0" };
+    expect(
+      staleFiles(record, files, { changedSince: () => [], pins, reached }),
+    ).toEqual([blenderFile, cadFile, bothFile]);
+  });
+
+  it("are every file when there is no record", () => {
+    expect(
+      staleFiles(undefined, files, { changedSince: () => [], pins, reached }),
+    ).toEqual([...files.keys()]);
+  });
+});
+
+describe("the working tree's changes", () => {
+  it("are every path git lists as differing from the commit, the record aside", () => {
+    const status = [
+      " M packages/feature/cad-studio/src/index.ts",
+      " M scripts/real-engine-record.json",
+      "R  packages/feature/cad-studio/src/new name.ts",
+      "packages/feature/cad-studio/src/old name.ts",
+      "?? scratch.txt",
+      "",
+    ].join("\0");
+    expect(changesBesideRecord(status)).toEqual([
+      "packages/feature/cad-studio/src/index.ts",
+      "packages/feature/cad-studio/src/new name.ts",
+      "scratch.txt",
+    ]);
+  });
+});
+
+describe("starting a run of the files to run again", () => {
+  const ready = {
+    changes: [],
+    env: { ZHIYIN_BLENDER: "blender.exe", ZHIYIN_CAD_PYTHON: "python.exe" },
+    versions,
+    pins,
+  };
+
+  it("goes ahead on a tree with no change but the record, with the pinned engines named", () => {
+    expect(runRefusals([blenderFile, bothFile], files, ready)).toEqual([]);
+  });
+
+  it("refuses a working tree with changes, before any engine runs, saying why", () => {
+    expect(
+      runRefusals([blenderFile], files, {
+        ...ready,
+        changes: ["packages/feature/blender-studio/src/index.ts", "notes.txt"],
+      }),
+    ).toEqual([
+      expect.stringContaining(
+        "2 files differ from the commit, such as packages/feature/blender-studio/src/index.ts",
+      ),
+    ]);
+  });
+
+  it("refuses when the variable naming an engine the files need is not set", () => {
+    expect(
+      runRefusals([cadFile], files, {
+        ...ready,
+        env: { ZHIYIN_BLENDER: "blender.exe" },
+      }),
+    ).toEqual([expect.stringContaining("ZHIYIN_CAD_PYTHON is not set")]);
+  });
+
+  it("does not ask for an engine none of the files needs", () => {
+    expect(
+      runRefusals([blenderFile], files, {
+        ...ready,
+        env: { ZHIYIN_BLENDER: "blender.exe" },
+        versions: { blender: "5.2.2" },
+      }),
+    ).toEqual([]);
+  });
+
+  it("refuses an engine other than the one the app pins", () => {
+    expect(
+      runRefusals([bothFile], files, {
+        ...ready,
+        versions: { blender: "5.1.0", build123d: "0.13.0" },
+      }),
+    ).toEqual([
+      expect.stringContaining("Blender 5.1.0, where the app installs 5.2.2"),
+    ]);
+  });
+});
+
+describe("a run that would not be recorded", () => {
+  const skipList = new Map([
+    [
+      blenderFile,
+      {
+        needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",
+        without: (env) => !env.ZHIYIN_BLENDER,
+      },
+    ],
+    [
+      "packages/feature/python-sandbox/test/real-uv.test.ts",
+      { needs: "uv (ZHIYIN_UV)", without: (env) => !env.ZHIYIN_UV },
+    ],
+  ]);
+  const withBlender = { ZHIYIN_BLENDER: "blender.exe", ZHIYIN_UV: "uv.exe" };
+  const dirty = () => ["packages/feature/blender-studio/src/index.ts"];
+
+  it("is named at its start when a real-engine file will run on a tree with changes", () => {
+    expect(
+      recordingNotice([blenderFile], skipList, withBlender, dirty),
+    ).toContain(
+      "1 file differs from the commit, such as packages/feature/blender-studio/src/index.ts",
+    );
+  });
+
+  it("is not named when the tree has no change but the record", () => {
+    expect(
+      recordingNotice([blenderFile], skipList, withBlender, () => []),
+    ).toBeUndefined();
+  });
+
+  it("is not named, nor the tree read, when no real-engine file will run", () => {
+    const unread = () => {
+      throw new Error("the tree was read");
+    };
+    expect(
+      recordingNotice([blenderFile], skipList, { ZHIYIN_UV: "uv.exe" }, unread),
+    ).toBeUndefined();
+    expect(
+      recordingNotice(
+        ["packages/feature/python-sandbox/test/real-uv.test.ts"],
+        skipList,
+        withBlender,
+        unread,
+      ),
+    ).toBeUndefined();
   });
 });

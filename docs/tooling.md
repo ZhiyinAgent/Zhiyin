@@ -219,11 +219,12 @@ What to test is in `docs/testing-philosophy.md`. Mechanically:
 - The tests that need a real Blender or the CAD environment, those the
   skip list says need `ZHIYIN_BLENDER` or `ZHIYIN_CAD_PYTHON`, are recorded
   in `scripts/real-engine-record.json` each time one runs, however it is
-  started: for each file, the commit, a fingerprint of the files such a run
-  loads as that commit holds them, the Blender and build123d it ran with,
+  started: for each file, the commit, a fingerprint of the files that file's
+  run loads as that commit holds them, the Blender and build123d it ran with,
   and how many of its tests passed, failed and were skipped. A run writes
   only from a working tree with no change but the record, so the commit names
-  the code that ran, and a file whose tests all skipped keeps its entry. The
+  the code that ran; a run that will not be written says so at its start,
+  before any engine runs. A file whose tests all skipped keeps its entry. The
   record is committed, and the release gate reads it: a run whose fingerprint
   is the commit's own ran on the same code, even when a rebased merge renamed
   its commit.
@@ -335,16 +336,30 @@ release tag. Among the first checks it reads the record of the real-engine
 tests and fails unless every file the skip list says needs a real Blender or
 the CAD environment ran whole, with nothing failed or skipped, with the
 Blender the app installs and the build123d the CAD environment's lock pins,
-on a commit since which nothing such a run loads has changed. What a run
-loads is followed from those test files through their imports, relative and
+on a commit since which nothing that file's run loads has changed. What a
+run loads is followed from the test file through its imports, relative and
 of the workspace's packages, with the runner's configuration and setup. A
 change counts when it is to any file of a package reached that way, whole
 package folders because the Python scripts and pins a package reads while it
 runs are not imported; to a file reached outside the packages; or to the
 workspace's manifest, lock, package list, compiler settings or
-`.gitattributes`. A change to docs, workflows, another script or a package
-those tests do not load needs no new run; the check names each change that
-does. The files that
+`.gitattributes`. A package's test folders (`test`, `system-boundary`,
+`installed`) are the exception: they count, whole, only when the run loads a
+file from one of them, the test file itself or a test helper, so the
+fixtures a test reads beside them count too; otherwise they hold that
+package's own tests, and a change to them needs no new run. This rests on an
+assumption: the code a run loads reads no file of a test folder it does not
+count. A repository test holds it for paths written out relatively, such as
+`new URL("../test/x.json", import.meta.url)`; a path built from parts is not
+checked. Each file is judged by its own reach, so a change to the CAD studio
+leaves the Blender files that do not load it standing. A change to docs,
+workflows, another script or a package a file does not load needs no new run
+of it; the check names each file that needs one, and the change that does.
+`node scripts/real-engine-record.mjs --stale` lists those files, and `--run`
+runs exactly them with the record's reporter. It refuses first,
+before any engine starts, a working tree with changes besides the record, an
+engine those files need that no variable names, and a Blender or build123d
+other than the pinned one. The files that
 render, and the CAD suites, run only on a PC with a graphics card before a
 release; the record is what shows they ran on the code released. CI's Blender
 job covers about two thirds of the Blender files without one, in three parts
