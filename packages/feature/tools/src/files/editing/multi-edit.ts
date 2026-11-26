@@ -9,10 +9,13 @@
  * fix by itself. Nobody should have to read a permission request for an edit
  * that was never going to work.
  *
- * A replacement that matches nothing, matches more than one place, or puts back
- * the text already present is a failure with a reason. Guessing which
- * occurrence was meant, or reporting a no-op as done, would leave the agent
- * believing it changed something it did not.
+ * A replacement that matches nothing or matches more than one place is a
+ * failure with a reason, and every such failure in the call is named at once,
+ * by its number, so one retry can correct them all. Guessing which occurrence
+ * was meant would leave the agent believing it changed something it did not.
+ * A replacement that puts back the same text, or that replaces every
+ * occurrence and finds none, has nothing to do: it is not made, the others
+ * are, and the answer says which.
  */
 
 import { detailsOf, facts } from "../../shared/action-detail.js";
@@ -119,7 +122,7 @@ const replacementsSchema = {
 const multiEditSpec: ToolSpec = {
   name: "multi_edit",
   checksWork: "shows",
-  description: `Replace text in files that already exist: in the current workspace by a workspace-relative path, or elsewhere by an absolute path, which the person is asked about by that path. Give one file by path and replacements, or several as edits. The file must have been read in this conversation since it last changed. The answer shows the lines each edit wrote, numbered, with one line around each. Each replacement finds exact text, or what a pattern matches when regex is set, and must match exactly one place unless replaceAll is set. Line endings, a byte-order mark, trailing whitespace, and the indentation of a whole block are matched flexibly; the words themselves must match. That flexible matching works in files of at most ${maximumSearchLines.toLocaleString("en-US")} lines, for text to find of at most ${maximumPatternLines.toLocaleString("en-US")} lines. A file larger than ${largestChangedShown} is not changed. Either every replacement applies or none does.`,
+  description: `Replace text in files that already exist: in the current workspace by a workspace-relative path, or elsewhere by an absolute path, which the person is asked about by that path. Give one file by path and replacements, or several as edits. The file must have been read in this conversation since it last changed. The answer shows the lines each edit wrote, numbered, with one line around each. Each replacement finds exact text, or what a pattern matches when regex is set, and must match exactly one place unless replaceAll is set. Line endings, a byte-order mark, trailing whitespace, and the indentation of a whole block are matched flexibly; the words themselves must match. That flexible matching works in files of at most ${maximumSearchLines.toLocaleString("en-US")} lines, for text to find of at most ${maximumPatternLines.toLocaleString("en-US")} lines. A file larger than ${largestChangedShown} is not changed. Either every replacement applies or none does, and a refusal names each one that cannot, by its number. A replacement that puts back the same text is skipped, and one with replaceAll that matches nothing replaces nothing; the answer says which.`,
   inputSchema: {
     type: "object",
     properties: {
@@ -169,8 +172,11 @@ type ResolvedFile = {
   readonly identity: string;
   readonly decoded: DecodedText;
   readonly text: string;
+  /** The replacements made: those skipped or matching nothing are not. */
   readonly replacements: number;
   readonly loose: readonly number[];
+  /** What happened to the replacements that were not made. */
+  readonly unmade: readonly string[];
 };
 
 type PlannedEdit = {
@@ -292,31 +298,56 @@ function lineHolding(lineStarts: readonly number[], offset: number): number {
 }
 
 /**
- * Applies one file's replacements in order, each to the text the previous one
- * produced. Nothing here touches the disk: the caller decides whether the whole
- * edit is worth proposing before any of it is written.
+ * A replacement that cannot be made, said of the file it was for: `numbered`
+ * when the file's entry has more than one replacement, so the model can tell
+ * which.
  */
-function applyReplacements(
-  edit: FileEdit,
-  original: string,
-):
-  | {
-      readonly text: string;
-      /** The replacements, from 1, found only with indentation set aside. */
-      readonly loose: readonly number[];
-    }
-  | { readonly refusal: Refusal } {
+type Failure = {
+  readonly number: number;
+  readonly says: (path: string, numbered: boolean) => string;
+};
+
+/** The reason a replacement cannot be made, with the file named before it. */
+function failing(number: number, reason: string): Failure {
+  return {
+    number,
+    says: (path, numbered) =>
+      `${numbered ? `Replacement ${number} in ${path}` : path}: ${reason}`,
+  };
+}
+
+/** One file's edit as checked: what it would write, or why it cannot. */
+type CheckedFile = {
+  readonly text: string;
+  /** The replacements, from 1, found only with indentation set aside. */
+  readonly loose: readonly number[];
+  /** Those that put back the same text, which are not made. */
+  readonly skipped: readonly number[];
+  /** Those that replace every occurrence and found none. */
+  readonly none: readonly number[];
+  readonly failures: readonly Failure[];
+};
+
+/**
+ * Applies one file's replacements in order, each to the text the previous one
+ * produced. A replacement that cannot be made is recorded and leaves the text
+ * as it was, so every one after it is still checked, against the text the
+ * ones before it that can be made leave. Nothing here touches the disk: the
+ * caller decides whether the whole edit is worth proposing before any of it is
+ * written.
+ */
+function applyReplacements(edit: FileEdit, original: string): CheckedFile {
   let lines = original.split("\n");
   const loose: number[] = [];
-  const refused = (refusal: Refusal) => ({ refusal });
+  const skipped: number[] = [];
+  const none: number[] = [];
+  const failures: Failure[] = [];
   for (const [index, given] of edit.replacements.entries()) {
+    const number = index + 1;
     let replacement = given;
     if (!replacement.regex && replacement.find === replacement.replace) {
-      return refused(
-        correctable(
-          `A replacement in ${edit.path} puts back the same text. No file was changed.`,
-        ),
-      );
+      skipped.push(number);
+      continue;
     }
 
     const text = lines.join("\n");
@@ -326,16 +357,23 @@ function applyReplacements(
     let match: ReturnType<typeof findText>;
     if (replacement.regex) {
       const found = findPattern(text, replacement.find, replacement.replace);
-      if (found.kind === "refused")
-        return refused(
-          correctable(`${edit.path}: ${found.reason} No file was changed.`),
-        );
-      if (found.kind === "none")
-        return refused(
-          correctable(
-            `The pattern ${quoted(replacement.find)} matched nothing in ${edit.path}. Read the file again and retry with a pattern for its current text. No file was changed.`,
-          ),
-        );
+      if (found.kind === "refused") {
+        failures.push(failing(number, found.reason));
+        continue;
+      }
+      if (found.kind === "none") {
+        const pattern = quoted(replacement.find);
+        if (replacement.replaceAll) none.push(number);
+        else
+          failures.push({
+            number,
+            says: (path, numbered) =>
+              numbered
+                ? `Replacement ${number} in ${path}: the pattern ${pattern} matched nothing. Read the file again and retry with a pattern for its current text.`
+                : `The pattern ${pattern} matched nothing in ${path}. Read the file again and retry with a pattern for its current text.`,
+          });
+        continue;
+      }
       spots = found.targets;
       match = { kind: "exact", offsets: spots.map((spot) => spot.start) };
     } else match = findText(text, replacement.find);
@@ -351,11 +389,15 @@ function applyReplacements(
         replacement = { ...replacement, ...unnumbered };
       }
     }
-    if (match.kind === "unsearchable")
-      return refused(
-        correctable(`${edit.path}: ${match.reason} No file was changed.`),
-      );
+    if (match.kind === "unsearchable") {
+      failures.push(failing(number, match.reason));
+      continue;
+    }
     if (match.kind === "none") {
+      if (replacement.replaceAll) {
+        none.push(number);
+        continue;
+      }
       // The file itself is never quoted back: it has not been approved for
       // reading. A line number and a similarity are enough to retry from.
       const nearby = match.nearest
@@ -363,16 +405,34 @@ function applyReplacements(
             match.nearest.score * 100,
           )}% of the block.`
         : "";
-      return refused(
-        correctable(
-          `${quoted(replacement.find)} was not found in ${edit.path}.${nearby} Read the file again and retry with its exact current text. No file was changed.`,
-        ),
-      );
+      const find = quoted(replacement.find);
+      failures.push({
+        number,
+        says: (path, numbered) =>
+          `${numbered ? `Replacement ${number} in ${path}: ${find} was not found.` : `${find} was not found in ${path}.`}${nearby} Read the file again and retry with its exact current text.`,
+      });
+      continue;
     }
 
-    if (match.kind === "flexible") loose.push(index + 1);
     const occurrences =
       match.kind === "exact" ? match.offsets.length : match.lines.length;
+    if (occurrences > 1 && !replacement.replaceAll) {
+      const find = quoted(replacement.find);
+      const regex = replacement.regex;
+      failures.push({
+        number,
+        says: (path, numbered) => {
+          const subject = numbered ? `Replacement ${number} in ${path}: ` : "";
+          const within = numbered ? "" : ` in ${path}`;
+          return regex
+            ? `${subject}${numbered ? "the" : "The"} pattern ${find} matches ${occurrences} places${within}. Make it match only the one meant, or set replaceAll.`
+            : `${subject}${find} appears ${occurrences} times${within}. Include surrounding text to make it unique, or set replaceAll.`;
+        },
+      });
+      continue;
+    }
+
+    if (match.kind === "flexible") loose.push(number);
     if (match.kind === "exact")
       spots ??= match.offsets.map((start) => ({
         start,
@@ -414,14 +474,6 @@ function applyReplacements(
         last: first + matched.split("\n").length - 1,
       };
     });
-    if (occurrences > 1 && !replacement.replaceAll)
-      return refused(
-        correctable(
-          replacement.regex
-            ? `The pattern ${quoted(replacement.find)} matches ${occurrences} places in ${edit.path}. Make it match only the one meant, or set replaceAll. No file was changed.`
-            : `${quoted(replacement.find)} appears ${occurrences} times in ${edit.path}. Include surrounding text to make it unique, or set replaceAll. No file was changed.`,
-        ),
-      );
 
     // Targets that touch the same lines are rewritten together, as one
     // piece of the lines they share.
@@ -470,15 +522,57 @@ function applyReplacements(
     lines = nextLines;
   }
 
-  const text = lines.join("\n");
-  if (text === original) {
-    return refused(
-      correctable(
-        `The replacements for ${edit.path} would change nothing. No file was changed.`,
-      ),
-    );
-  }
-  return { text, loose };
+  return { text: lines.join("\n"), loose, skipped, none, failures };
+}
+
+/** What happened to the replacements that were not made, one line each. */
+function unmadeNotes(checked: CheckedFile): string[] {
+  const { skipped, none } = checked;
+  return [
+    skipped.length
+      ? `${skipped.length === 1 ? "Replacement" : "Replacements"} ${spokenNumbers(skipped)} ${skipped.length === 1 ? "puts" : "put"} back the same text, so ${skipped.length === 1 ? "it was" : "they were"} skipped.`
+      : undefined,
+    none.length
+      ? `${none.length === 1 ? "Replacement" : "Replacements"} ${spokenNumbers(none)} matched nothing: 0 replaced.`
+      : undefined,
+  ].filter((note) => note !== undefined);
+}
+
+/** A file with replacements that cannot be made, as the call named it. */
+type FailedFile = {
+  readonly path: string;
+  /** Its entry has more than one replacement. */
+  readonly numbered: boolean;
+  readonly failures: readonly Failure[];
+};
+
+/**
+ * The refusal for replacements that cannot be made, every one of them named
+ * so a single retry can correct them all.
+ */
+function failedReplacements(failed: readonly FailedFile[]): Refusal {
+  const lines = failed.flatMap(({ path, numbered, failures }) =>
+    failures.map((failure) => failure.says(path, numbered)),
+  );
+  const single = lines.length === 1 && !failed[0]?.numbered;
+  const later = failed.some(
+    ({ numbered, failures }) =>
+      numbered && failures.some((failure) => failure.number > 1),
+  );
+  const closing = [
+    later
+      ? "Each replacement is checked against the text left by the ones before it that can be made, and a line number counts in that text."
+      : undefined,
+    single
+      ? undefined
+      : `Send the whole edit again with ${lines.length === 1 ? "it" : "these"} corrected.`,
+    "No file was changed.",
+  ].filter((part) => part !== undefined);
+  return correctable(
+    single
+      ? `${lines[0]} ${closing.join(" ")}`
+      : [...lines, closing.join(" ")].join("\n"),
+  );
 }
 
 async function planMultiEdit(
@@ -525,6 +619,7 @@ async function planMultiEdit(
   }
 
   const files: ResolvedFile[] = [];
+  const failed: FailedFile[] = [];
   let realRoot: string;
   try {
     realRoot = await realpath(root);
@@ -630,9 +725,24 @@ async function planMultiEdit(
       whole: false,
     });
     if (unseen) return unseen;
-    const applied = applyReplacements(edit, decoded.text);
-    if ("refusal" in applied) return applied.refusal;
-    const { loose } = applied;
+    const checked = applyReplacements(edit, decoded.text);
+    if (checked.failures.length) {
+      failed.push({
+        path: edit.path,
+        numbered: edit.replacements.length > 1,
+        failures: checked.failures,
+      });
+      continue;
+    }
+    const unmade = unmadeNotes(checked);
+    if (checked.text === decoded.text)
+      return correctable(
+        [
+          `${edit.path} would not change.`,
+          ...unmade,
+          "No file was changed.",
+        ].join(" "),
+      );
     files.push({
       path,
       outside,
@@ -640,14 +750,17 @@ async function planMultiEdit(
       absolute,
       identity,
       decoded,
-      text: applied.text,
-      replacements: edit.replacements.length,
-      loose,
+      text: checked.text,
+      replacements:
+        edit.replacements.length - checked.skipped.length - checked.none.length,
+      loose: checked.loose,
+      unmade,
     });
   }
+  if (failed.length) return failedReplacements(failed);
 
-  const replacements = input.edits.reduce(
-    (total, edit) => total + edit.replacements.length,
+  const replacements = files.reduce(
+    (total, file) => total + file.replacements,
     0,
   );
   const outside = files.some((planned) => planned.outside);
@@ -769,6 +882,7 @@ function editedFile(file: ResolvedFile) {
     file.loose.length
       ? `${file.loose.length === 1 ? "Replacement" : "Replacements"} ${spokenNumbers(file.loose)} ${file.loose.length === 1 ? "was" : "were"} found only with indentation and trailing spaces set aside, and ${file.loose.length === 1 ? "was" : "were"} written at the file's indentation.`
       : undefined,
+    ...file.unmade,
     finalBreak === "added"
       ? "A line break was added at the end of the file."
       : finalBreak === "removed"

@@ -382,7 +382,7 @@ describe("multi_edit", () => {
     );
   });
 
-  it("reports a replacement that would change nothing as a failure", async () => {
+  it("refuses an edit that would leave its file as it is, saying why", async () => {
     const root = await workspace({ "notes.md": "Owner: Dana" });
     const tools = new WorkspaceTools(root);
 
@@ -399,7 +399,18 @@ describe("multi_edit", () => {
       ok: false,
       correctable: true,
       reason:
-        "A replacement in notes.md puts back the same text. No file was changed.",
+        "notes.md would not change. Replacement 1 puts back the same text, so it was skipped. No file was changed.",
+    });
+    await expect(
+      tools.execute("multi_edit", {
+        path: "notes.md",
+        replacements: [{ find: "’", replace: "'", replaceAll: true }],
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      correctable: true,
+      reason:
+        "notes.md would not change. Replacement 1 matched nothing: 0 replaced. No file was changed.",
     });
   });
 
@@ -1155,5 +1166,146 @@ describe("one file given at the top of the call", () => {
 
     expect(both).toMatchObject({ ok: false, correctable: true });
     expect(both.ok || both.reason).toMatch(/not both/);
+  });
+});
+
+describe("a batch whose replacements cannot all be made", () => {
+  it("names every replacement that cannot be made, by its number, and changes nothing", async () => {
+    const text = "Owner: Dana\nStatus: draft\nDue: Friday\nRoom: 4";
+    const root = await workspace({ "notes.md": text });
+    const tools = new WorkspaceTools(root);
+    const args = {
+      path: "notes.md",
+      replacements: [
+        { find: "Dana", replace: "Rowan" },
+        { find: "Status: draft\nDue: Monday", replace: "Status: final" },
+        { find: "Due: Friday", replace: "Due: Saturday" },
+        { find: ": ", replace: " = " },
+      ],
+    };
+
+    const refused = {
+      ok: false,
+      correctable: true,
+      reason: [
+        "Replacement 2 in notes.md: “Status: draft⏎Due: Monday” was not found. The closest similar text is at line 2, sharing about 50% of the block. Read the file again and retry with its exact current text.",
+        "Replacement 4 in notes.md: “: ” appears 4 times. Include surrounding text to make it unique, or set replaceAll.",
+        "Each replacement is checked against the text left by the ones before it that can be made, and a line number counts in that text. Send the whole edit again with these corrected. No file was changed.",
+      ].join("\n"),
+    };
+    expect(await tools.inspect("multi_edit", args)).toEqual(refused);
+    await expect(tools.execute("multi_edit", args)).resolves.toEqual(refused);
+    expect(await readFile(join(root, "notes.md"), "utf8")).toBe(text);
+  });
+
+  it("names the replacements that cannot be made in every file of the call", async () => {
+    const root = await workspace({ "a.md": "one", "b.md": "two two" });
+    const tools = new WorkspaceTools(root);
+
+    expect(
+      await tools.inspect("multi_edit", {
+        edits: [
+          { path: "a.md", replacements: [{ find: "uno", replace: "1" }] },
+          {
+            path: "b.md",
+            replacements: [
+              { find: "two two", replace: "2 2" },
+              { find: "three", replace: "3" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual({
+      ok: false,
+      correctable: true,
+      reason: [
+        "“uno” was not found in a.md. Read the file again and retry with its exact current text.",
+        "Replacement 2 in b.md: “three” was not found. Read the file again and retry with its exact current text.",
+        "Each replacement is checked against the text left by the ones before it that can be made, and a line number counts in that text. Send the whole edit again with these corrected. No file was changed.",
+      ].join("\n"),
+    });
+  });
+
+  it("checks a later replacement against the text the ones before it that can be made leave", async () => {
+    const root = await workspace({ "notes.md": "alpha beta" });
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.inspect("multi_edit", {
+      path: "notes.md",
+      replacements: [
+        { find: "alpha", replace: "one" },
+        { find: "gamma", replace: "three" },
+        // Found only in the text replacement 1 leaves.
+        { find: "one beta", replace: "one two" },
+        // Would be found only in the text replacement 2 would have left.
+        { find: "three", replace: "3" },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: false, correctable: true });
+    if (result.ok)
+      throw new Error("A batch with a wrong replacement is refused");
+    expect(result.reason).toContain("Replacement 2 in notes.md:");
+    expect(result.reason).not.toContain("Replacement 3");
+    expect(result.reason).toContain("Replacement 4 in notes.md:");
+  });
+
+  it("skips a replacement that puts back the same text, applies the others, and says which it skipped", async () => {
+    const root = await workspace({ "notes.md": "Owner: Dana\nStatus: draft" });
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("multi_edit", {
+      path: "notes.md",
+      replacements: [
+        { find: "Dana", replace: "Dana" },
+        { find: "draft", replace: "final" },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        files: [
+          {
+            path: "notes.md",
+            replacements: 1,
+            note: "Replacement 1 puts back the same text, so it was skipped.",
+          },
+        ],
+      },
+    });
+    expect(await readFile(join(root, "notes.md"), "utf8")).toBe(
+      "Owner: Dana\nStatus: final",
+    );
+  });
+
+  it("replaces nothing for a replaceAll that matches nothing, applies the others, and says 0 replaced", async () => {
+    const root = await workspace({ "trip.md": "Day 1: Guilin\nStatus: draft" });
+    const tools = new WorkspaceTools(root);
+
+    const result = await tools.execute("multi_edit", {
+      path: "trip.md",
+      replacements: [
+        { find: "’", replace: "'", replaceAll: true },
+        { find: "draft", replace: "final" },
+        { find: "^#+ ", replace: "", regex: true, replaceAll: true },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        files: [
+          {
+            path: "trip.md",
+            replacements: 1,
+            note: "Replacements 1 and 3 matched nothing: 0 replaced.",
+          },
+        ],
+      },
+    });
+    expect(await readFile(join(root, "trip.md"), "utf8")).toBe(
+      "Day 1: Guilin\nStatus: final",
+    );
   });
 });

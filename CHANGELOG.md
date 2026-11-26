@@ -13,6 +13,10 @@ What changed for people using Zhiyin, newest release first.
 - When the browser cannot reach a site it is allowed to, its 502 answer says
   why, such as the connection being refused; the browser's proxy no longer
   passes on headers meant for one connection only.
+- When a batch of edits cannot all be made, the refusal names every failing
+  replacement, by its number, in one answer. A replacement that puts back the
+  same text is skipped, and one with replaceAll that finds nothing replaces
+  nothing and says 0.
 
 ## 0.1.0-alpha.2
 
