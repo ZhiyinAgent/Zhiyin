@@ -64,7 +64,20 @@ function Invoke-Step {
 
 # Includes the feature-boundary rules. TypeScript has no private module
 # boundary, so those rules are the only thing standing where a compiler would.
-Invoke-Step "eslint"    { pnpm lint }
+# Outside CI, ESLint keeps each file's result and lints again only the files
+# whose content or configuration changed. A result that depends on another
+# file, such as an import cycle or an import that no longer resolves, can lag
+# until the file itself changes; CI lints every file. The cache is named by
+# the lockfile, since ESLint does not drop it when a plugin is upgraded.
+Invoke-Step "eslint"    {
+    if ($env:CI) { pnpm lint }
+    else {
+        $cache = "node_modules/.cache/eslint"
+        $name = (Get-FileHash pnpm-lock.yaml -Algorithm SHA256).Hash.Substring(0, 16) + ".json"
+        if (Test-Path $cache) { Get-ChildItem $cache -Exclude $name | Remove-Item -Force }
+        pnpm lint --cache --cache-strategy content --cache-location "$cache/$name"
+    }
+}
 
 # The Python harnesses the app ships as source run only inside Blender and the
 # CAD environment, which the gate does not have, so Ruff reads all of them

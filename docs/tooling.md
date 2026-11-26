@@ -322,7 +322,14 @@ test needing a program is listed where it may skip, the test suite, the
 harnesses' Python tests, the build and the installed-app suite, which is not run when the build failed: there
 would be no app to start. The checks that read the source come first, and when
 one fails the tests, build and installed app are not run, since they take most
-of the time and could not make the run green. `-Quick` runs only those first
+of the time and could not make the run green. Outside CI, ESLint keeps each
+file's result in `node_modules/.cache/eslint`, under a name taken from the
+lockfile, and lints again only the files whose content or configuration
+changed: about 15 seconds instead of 95 on a warm cache (measured
+2026-11-26). ESLint does not follow one file's result to the files it
+depends on, so a cycle or an unresolved import a change to one file causes
+in another unchanged one can go unreported locally until that file changes.
+CI lints every file without the cache. `-Quick` runs only those first
 checks, in about two minutes, to run before a commit whose hook runs the rest. `-Full` adds packaging; a check that the
 packaged executable's Electron fuses refuse `ELECTRON_RUN_AS_NODE`,
 `NODE_OPTIONS` and `--inspect` (ADRs 0001 and 0004), give a page loaded from `file:`

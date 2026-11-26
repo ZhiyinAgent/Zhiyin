@@ -6,7 +6,7 @@
 
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProviderModelClient } from "../src/client.js";
 import { openRouter } from "../src/providers/openrouter/provider.js";
 
@@ -52,6 +52,40 @@ async function until(condition: () => boolean, withinMs: number) {
     await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+/**
+ * Reads every event `send` yields, the client's clock moved on by
+ * `stallTimeoutMs` only once an attempt has passed its first words on. The
+ * client's timers run on that clock alone, so a loaded machine, slow to
+ * reach the server or to read its words, cannot end an attempt before it
+ * started answering, which would make it a retry of another kind.
+ */
+async function silencedOnceAnswering(
+  send: () => AsyncIterable<{ readonly kind: string }>,
+  stallTimeoutMs: number,
+): Promise<void> {
+  const kinds: string[] = [];
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    let settled = false;
+    const sent = (async () => {
+      for await (const event of send()) kinds.push(event.kind);
+    })().finally(() => {
+      settled = true;
+    });
+    sent.catch(() => undefined);
+    while (!settled) {
+      // A new attempt starts only after its restart is passed on, so until
+      // then the clock can end nothing but the silent attempt.
+      if (kinds.lastIndexOf("textDelta") > kinds.lastIndexOf("restarting"))
+        await vi.advanceTimersByTimeAsync(stallTimeoutMs);
+      else await new Promise((resolve) => setImmediate(resolve));
+    }
+    await sent;
+  } finally {
+    vi.useRealTimers();
+  }
+}
+
 describe("an answer that falls silent partway through", () => {
   it("has its connection closed once it is given up, each attempt's included", async () => {
     const { connections, endpoint } = await fallingSilent();
@@ -64,17 +98,22 @@ describe("an answer that falls silent partway through", () => {
       retry: { wait: async () => {}, random: () => 0 },
     });
 
-    await expect(async () => {
-      for await (const event of client.send({
-        messages: [{ role: "user", content: "Hello" }],
-        restartable: true,
-      }))
-        void event;
-    }).rejects.toMatchObject({ code: "networkFailure" });
+    await expect(
+      silencedOnceAnswering(
+        () =>
+          client.send({
+            messages: [{ role: "user", content: "Hello" }],
+            restartable: true,
+          }),
+        80,
+      ),
+    ).rejects.toMatchObject({ code: "networkFailure" });
 
     // The first attempt and the three restarts the policy allows.
     expect(connections.opened).toBe(4);
-    await until(() => connections.closed === connections.opened, 1_000);
+    // A connection still open is never closed, so only a broken run waits
+    // this long.
+    await until(() => connections.closed === connections.opened, 15_000);
     expect(connections.closed).toBe(connections.opened);
   });
 });
