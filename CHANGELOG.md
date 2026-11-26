@@ -27,6 +27,8 @@ What changed for people using Zhiyin, newest release first.
   reads its old names; one frame needs no spacing, and frames spread evenly to
   an end. Setting an object down takes [x, y]. A render takes an exposure of
   its own, and describing with no scene open answers instead of refusing.
+- A DeepSeek tool call that ran on into DeepSeek's own call markup is read as
+  the call it is, instead of being refused.
 
 ## 0.1.0-alpha.2
 
