@@ -352,6 +352,14 @@ ignores all four.
   came with it is passed on. A Chat Completions answer stopped as
   `content_filter`, and one Anthropic or MiniMax stops as a refusal, ends as
   `refused`.
+- **A DeepSeek call that runs on into DeepSeek's own call markup is read as
+  the call it is.** Where a field of a call's input, such as the name of the
+  tool to run, runs on into the markup's parameter blocks, the field keeps
+  the name before the markup and each parameter becomes a field of the
+  input, in place of one the call left empty. The call streams as any other
+  until its markup begins; the rest is passed on once the answer ends.
+  Markup that does not read whole leaves the call as it came. The
+  events do not say that a call was read this way.
 - **A stream that goes silent is abandoned.** After five minutes with nothing
   arriving the request fails as `networkFailure`, and the request is
   cancelled, so the provider is told to stop answering it. A slow stream that keeps

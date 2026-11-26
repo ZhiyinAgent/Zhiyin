@@ -22,6 +22,7 @@ import {
   type ChatCompletionsDialect,
 } from "../../wires/chat-completions/send.js";
 import { classifyFailure, failedFinish } from "./failures.js";
+import { withLeakedCallsRead } from "./leaked-calls.js";
 
 const host = "https://api.deepseek.com";
 const endpoint = `${host}/chat/completions`;
@@ -156,7 +157,7 @@ export const deepSeek: ListedProvider = {
       pages,
     },
   ],
-  send: (input) => sendChatCompletions(dialect, input),
+  send: (input) => withLeakedCallsRead(sendChatCompletions(dialect, input)),
   listed: { byApi: listedByApi },
   checkKey,
 };
