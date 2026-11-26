@@ -32,6 +32,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { ScenePreview } from "@zhiyin/contract";
 import { openProcessContainer } from "@zhiyin/sandbox";
 import { TemporaryFolders } from "@zhiyin/test-support";
+import { withKeptGlCache } from "../test/kept-gl-cache.js";
 import {
   ConversationScenes,
   containedSessionLaunch,
@@ -173,7 +174,7 @@ describe.runIf(blender)("a real Blender", () => {
     scenes = new ConversationScenes({
       blender: async () => blender,
       directory: join(root, "data"),
-      launch: containedSessionLaunch(
+      launch: withKeptGlCache(containedSessionLaunch)(
         { open: openProcessContainer },
         { scripts: join(root, "session-scripts") },
       ),
@@ -1229,7 +1230,7 @@ describe.runIf(blender)("a real Blender", () => {
     const far = new ConversationScenes({
       blender: async () => join(installed, basename(blender ?? "")),
       directory: join(root, "far-data"),
-      launch: containedSessionLaunch(
+      launch: withKeptGlCache(containedSessionLaunch)(
         { open: openProcessContainer },
         { scripts: join(root, "session-scripts") },
       ),
@@ -7554,7 +7555,7 @@ describe.runIf(blender && TemporaryFolders.canTellCaseApart())(
       const scenes = new ConversationScenes({
         blender: async () => blender,
         directory: join(data, "data"),
-        launch: containedSessionLaunch(
+        launch: withKeptGlCache(containedSessionLaunch)(
           { open: openProcessContainer },
           { scripts: join(data, "session-scripts") },
         ),
@@ -7613,7 +7614,7 @@ describe.runIf(blender)(
       const scenes = new ConversationScenes({
         blender: async () => blender,
         directory: join(data, "data"),
-        launch: containedSessionLaunch(
+        launch: withKeptGlCache(containedSessionLaunch)(
           { open: openProcessContainer },
           { scripts: join(data, "session-scripts") },
         ),
