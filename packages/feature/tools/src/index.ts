@@ -29,6 +29,7 @@ export type {
   ShellGit,
   ShellGitAnswer,
   ShellGitCall,
+  ShellGitFailure,
 } from "./commands/git-handoff.js";
 
 export {

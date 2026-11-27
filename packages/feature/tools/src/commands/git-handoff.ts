@@ -51,6 +51,17 @@ export type ShellGitAnswer = {
 /** Runs git for a sealed-off shell, outside its container; handed in by the application. */
 export type ShellGit = (call: ShellGitCall) => Promise<ShellGitAnswer>;
 
+/**
+ * A git command for the shell that Zhiyin could not run, for Zhiyin's own
+ * record. The shell is told only that Zhiyin could not run git.
+ */
+export type ShellGitFailure = {
+  readonly conversationId: string;
+  /** `hold`: holding the conversation's container still; `git`: the `ShellGit`. */
+  readonly step: "hold" | "git";
+  readonly error: unknown;
+};
+
 /** What the git commands of one run reached, for its answer. */
 export type GitTally = {
   readonly refusedHosts: Set<string>;
@@ -90,6 +101,7 @@ function handedCommand(
  * Each connection is one git command, refused or run as `git` decides.
  */
 export function gitOpening(context: {
+  readonly conversationId: string;
   readonly git: ShellGit;
   readonly folders: readonly string[];
   readonly hosts: readonly string[];
@@ -102,6 +114,8 @@ export function gitOpening(context: {
    * command at a time.
    */
   readonly hold: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Keeps what stopped a command Zhiyin could not run; absent, it is not kept. */
+  readonly recordFailure?: (failure: ShellGitFailure) => void;
 }): PipeOpening {
   return {
     variable: "ZHIYIN_GIT",
@@ -140,19 +154,27 @@ function serve(
     started = true;
     socket.off("data", receive);
     if (input) await new Promise<void>((resolve) => input!.stream.end(resolve));
+    // What git itself threw, told apart from what holding the container
+    // threw, which may be thrown in its place as the container resumes.
+    let gitThrew: { readonly error: unknown } | undefined;
     try {
       // The container, this `git` among it, is resumed before git's answer
       // is written to it.
       const answer = await context.hold(() =>
-        context.git({
-          args: command!.args,
-          cwd: command!.cwd,
-          folders: context.folders,
-          hosts: context.hosts,
-          home: context.home,
-          signal: stop.signal,
-          ...(input ? { input: input.path } : {}),
-        }),
+        context
+          .git({
+            args: command!.args,
+            cwd: command!.cwd,
+            folders: context.folders,
+            hosts: context.hosts,
+            home: context.home,
+            signal: stop.signal,
+            ...(input ? { input: input.path } : {}),
+          })
+          .catch((error: unknown) => {
+            gitThrew = { error };
+            throw error;
+          }),
       );
       for (const host of answer.refusedHosts)
         context.tally.refusedHosts.add(host);
@@ -165,8 +187,14 @@ function serve(
             exitFrame(answer.exitCode),
           ]),
         );
-    } catch {
+    } catch (error) {
+      // The shell is told no more, so no path of this computer reaches it.
       if (!socket.destroyed) fail("Zhiyin could not run git.");
+      context.recordFailure?.({
+        conversationId: context.conversationId,
+        step: gitThrew?.error === error ? "git" : "hold",
+        error,
+      });
     } finally {
       if (input) await rm(input.path, { force: true }).catch(() => undefined);
     }

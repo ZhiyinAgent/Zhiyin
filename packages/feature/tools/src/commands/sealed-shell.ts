@@ -23,7 +23,12 @@ import {
   type PipeOpening,
   type ProcessContainment,
 } from "@zhiyin/sandbox";
-import { gitOpening, type GitTally, type ShellGit } from "./git-handoff.js";
+import {
+  gitOpening,
+  type GitTally,
+  type ShellGit,
+  type ShellGitFailure,
+} from "./git-handoff.js";
 import { packageRegistries, type ShellReach } from "./reach.js";
 
 /** Zhiyin's shell, as the application hands it in. */
@@ -38,6 +43,11 @@ export type SealedShellSetup = {
   readonly reads?: readonly string[];
   /** Runs git for the shell outside its container; absent, `git` says so. */
   readonly git?: ShellGit;
+  /**
+   * Keeps why a git command Zhiyin could not run failed, where Zhiyin's own
+   * errors are read; absent, it is not kept.
+   */
+  readonly recordGitFailure?: (failure: ShellGitFailure) => void;
   /**
    * Zhiyin's own Node, a toolchain (ADR 0027), installed when a sealed-off
    * command first runs: its folder, holding `node.exe`, `npm` and `npx`, goes
@@ -267,6 +277,7 @@ export class SealedShell {
       openings: this.#setup.git
         ? [
             gitOpening({
+              conversationId,
               git: this.#setup.git,
               folders: [root, ...reach.change],
               hosts,
@@ -274,6 +285,9 @@ export class SealedShell {
               signal,
               tally,
               hold: (work) => holdingContainer(purpose, home, work),
+              ...(this.#setup.recordGitFailure
+                ? { recordFailure: this.#setup.recordGitFailure }
+                : {}),
             }),
           ]
         : [],

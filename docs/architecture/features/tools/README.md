@@ -80,7 +80,8 @@ with the reason, and checking for a shell again does not change it.
   compared, the Recycle Bin, and the ripgrep path; and, for sealed-off
   commands, `sealedShell` (`SealedShellSetup`: busybox, the folder of the
   `git` that hands git to Zhiyin, where each conversation's home is kept,
-  toolchains to read, a `ShellGit` that runs git outside the container, and
+  toolchains to read, a `ShellGit` that runs git outside the container, where
+  a git command Zhiyin could not run is recorded (`ShellGitFailure`), and
   Zhiyin's Node as a `SealedToolchain`, which says where it is installed and
   installs it)
   and `reach`, a `ConversationReach` saying what each conversation granted
@@ -169,6 +170,7 @@ with the reason, and checking for a shell again does not change it.
   until it is confirmed or declined.
 - The types these take and return: `ConversationReach`, `ShellReach`,
   `SealedShellSetup`, `ShellGit`, `ShellGitCall`, `ShellGitAnswer`,
+  `ShellGitFailure`,
   `CommandContainer`,
   `CommandContainment`, `RecycleBin`, `OpenedPdf`, `PdfPagesSource`,
   `PixelSource`, `OpenedPixels`, `PixelFormat`, `ToolResult`, `ShellAvailability`, `ToolCallInspection`, `ToolSpec`,
@@ -452,6 +454,12 @@ with the reason, and checking for a shell again does not change it.
   container is suspended, those of its other commands and jobs included, and
   resumed before the answer is written, also when git fails or is stopped;
   the conversation's git commands run one at a time.
+- When holding the container still or the `ShellGit` throws, the shell's
+  `git` is told only "Zhiyin could not run git." and exits with 128, so no
+  path of this computer reaches the container. What was thrown is handed to
+  the application's record with the conversation and the step that failed:
+  the hold, which is also named when the container fails to resume after git
+  threw, or git.
 - `request_access` names one website or one folder, with the model's reason.
   A website is granted by its registrable domain under the Public Suffix List,
   covering every name below it, or one exact host, on port 443 unless another

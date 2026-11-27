@@ -17,6 +17,9 @@ What changed for people using Zhiyin, newest release first.
   replacement, by its number, in one answer. A replacement that puts back the
   same text is skipped, and one with replaceAll that finds nothing replaces
   nothing and says 0.
+- When a git command from the sealed-off shell cannot run, Zhiyin's
+  diagnostic log now says whether holding the container still or git itself
+  failed, and why; the shell is still told only that Zhiyin could not run git.
 - Calls whose meaning is clear run with a note instead of being refused: a
   field sent under the name a sibling tool gives it, a purpose put inside an
   item or doubled, a direct call wrapped as {name, arguments}, update_plan
