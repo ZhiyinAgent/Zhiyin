@@ -68,6 +68,9 @@ const systemBoundaryAlone = [
   // measures within 45 s and 6 s, and CAD parts brought in within 20 s and
   // keyed within 30 s.
   "packages/feature/blender-studio/system-boundary/real-blender-time.test.ts",
+  // A new conversation's first session on the kept shader cache timed
+  // against one without it, which another Blender's compiling slows.
+  "packages/feature/blender-studio/system-boundary/real-blender-shader-caches.test.ts",
   // The Blender containers in the person's profile counted, which another
   // Blender's adds to.
   "packages/feature/blender-studio/system-boundary/real-blender-confinement.test.ts",

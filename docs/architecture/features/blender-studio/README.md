@@ -72,7 +72,13 @@ on surfaces, never boxes.
   the size shipped, is copied again before Blender starts. With
   `withoutGraphicsCard`, which only the `ZHIYIN_TEST_NO_GRAPHICS_CARD` test
   switch sets, every Blender behaves as on a PC whose graphics card cannot
-  draw.
+  draw. With `shaderCaches`, a `KeptShaderCaches`, a new container's
+  Blender starts on the shader cache kept for it (ADR 0032).
+  - `new KeptShaderCaches({ directory, driver })` keeps the caches in
+    `directory`, which the composition root places in the app's data
+    outside every conversation's folder; `driver` answers the NVIDIA
+    driver's version, and `nvidiaDriverVersion(containment)` is the one the
+    app uses. `settled()` settles once the caches being made are.
   - `scene(conversationId)` returns that conversation's `SceneSession`,
     created on first use and started when a tool first needs it;
     `existing(conversationId)` returns it only if it exists.
@@ -193,7 +199,8 @@ on surfaces, never boxes.
   answers which scene is open.
 - The types these take and return: `ConversationScenesOptions`, `SceneCommand`,
   `SceneOutcome`, `SceneSessionOptions`, `SceneAutomationOptions`, `LaunchSession`,
-  `SessionLaunchOptions`, `SessionProcess`, `StudioTool`.
+  `SessionLaunchOptions`, `SessionProcess`, `StudioTool`,
+  `KeptShaderCachesOptions`.
 
 ## Invariants
 
@@ -225,6 +232,24 @@ way:
 - **A Blender too deep to run is refused before it starts.** Where some of
   its own files lie past the 260 characters Blender can open, the session
   says so instead of starting a Blender that cannot load them.
+- **A new conversation's Blender starts on shaders Zhiyin compiled itself**
+  (ADR 0032). One NVIDIA shader cache is kept for each Blender, by its
+  executable's contents, and NVIDIA driver version, as Windows states it for
+  the cards connected. Only a Blender started for that alone, in a folder
+  and container new for it, no deeper than a conversation's, and removed
+  after, makes it: it starts as a session does, drawing the warm-up
+  picture, and runs nothing else. Once its container's cache holds files
+  and has stayed the same for a second, it is ended, and the cache is kept
+  as copied, in place of any cache kept for another Blender or driver; one
+  that changed while it was copied is not kept. That happens in the
+  background once a Blender has started on the graphics card in a new
+  container without a cache to match, once in the app's run for each
+  cache. A new container's first Blender is given a copy of the kept cache
+  before it starts; what a conversation's Blender writes in its copy is
+  never kept, nor seen by another conversation. A container with a driver
+  folder of its own, a PC without an NVIDIA card or whose driver version
+  cannot be read, a Blender on the processor, a copy that fails and a make
+  that does not draw each leave the start as it is without a cache.
 - **Blender yields the processor.** It runs below normal priority, so a
   long render on the processor leaves the person's own programs responsive.
 - **Blender starts on compiled Python.** Its archive carries its scripts as
@@ -654,9 +679,22 @@ Blender's first start in a new folder compiles the shaders its warm-up picture
 draws with into the graphics driver's cache in its container's folder. Those
 tests start on a copy of a cache kept for them beside their temporary
 folders, one per Blender executable, and keep the cache a session leaves when
-it differs; without one, or when the copy fails, a start compiles them as a
-new conversation's does. The test of the commands Blender describes as its
-session starts always starts on none, so that path stays tested too.
+it differs, which holds the shaders of their scenes as well as the warm-up's;
+without one, or when the copy fails, a start compiles them as a new
+conversation's does. The test of the commands Blender describes as its
+session starts always starts on none, so that path stays tested too. The
+app's kept cache is tested on its own against a real Blender: its first
+conversation starts without one, and the next starts on the cache made after
+it in under half the time; a kept cache overwritten with noise leaves a
+start that compiles again and opens. The driver's version is read against
+WMI's for the same cards. Making, copying, a driver that writes the cache a
+moment after Blender is ready, and the failures are tested against a
+stand-in Blender. Measured on 2026-11-27 on an RTX 4070 Ti SUPER with
+Blender 5.2.2, a new conversation's first call opened its session in 16.7
+to 18.3 s without a kept cache and 3.2 to 3.4 s on it, three times each; a
+call made beside the make answered within 0.12 s and previewed within
+0.31 s, as one without it does. Other graphics cards and drivers are not
+measured.
 
 Reading Blender's API, and each API change both ways, are tested against
 Blender 5.2 when `ZHIYIN_BLENDER` names it; without it, keeping, listing

@@ -17,6 +17,7 @@ import {
   type Confinement,
   type ProcessContainment,
 } from "@zhiyin/sandbox";
+import type { KeptShaderCaches, Seeding } from "./shader-caches.js";
 
 /** A running Blender session, as the scene sees it: lines in, lines out. */
 export type SessionProcess = {
@@ -193,6 +194,52 @@ export const sessionHome = (directory: string) => join(directory, "home");
  */
 export const stagingFolder = (directory: string) => join(directory, "staging");
 
+/** Whether a line a starting Blender sent says `field`, as `{"ready": true}`. */
+function says(line: string, field: "ready" | "eevee"): boolean {
+  try {
+    return (JSON.parse(line) as Record<string, unknown>)[field] === true;
+  } catch {
+    return false;
+  }
+}
+
+/** How long the Blender that makes a kept shader cache may run. */
+const warmUpMs = 180_000;
+
+/**
+ * Starts a Blender with `start` in `directory`, a folder new for it, which
+ * draws the warm-up picture as a session's start does. Settles once it is
+ * ready or has ended, on whether it drew with EEVEE on the graphics card,
+ * with a way to end it, which also ends it past its time.
+ */
+async function drawWarmUp(
+  start: LaunchSession,
+  executable: string,
+  script: string,
+  directory: string,
+): Promise<{ readonly drew: boolean; end(): Promise<void> }> {
+  const workspace = join(directory, "workspace");
+  await mkdir(workspace, { recursive: true });
+  const drawing = await start({
+    executable,
+    script,
+    directory,
+    workspace,
+    warm: join(directory, "previews", "warm.jpg"),
+  });
+  const timer = setTimeout(() => drawing.end(), warmUpMs);
+  const end = async () => {
+    clearTimeout(timer);
+    drawing.end();
+    await drawing.ended;
+  };
+  for (;;) {
+    const line = await drawing.next();
+    if (line === undefined) return { drew: false, end };
+    if (says(line, "ready")) return { drew: says(line, "eevee"), end };
+  }
+}
+
 /**
  * Starts Blender headless inside a process container, on its own settings,
  * reached over two pipes. Blender ignores the person's startup file,
@@ -204,6 +251,10 @@ export const stagingFolder = (directory: string) => join(directory, "staging");
  * changes only its home, caches, previews, pictures, the spec's verdicts, the lines of drawings
  * and the files it writes for outside the workspace there, and the
  * workspace, and has no internet.
+ *
+ * With `shaderCaches`, a Blender that draws on the graphics card starts in a
+ * new container on a copy of the shader cache kept for it; when none is kept,
+ * one is made in the background once it has started (ADR 0032).
  */
 export function containedSessionLaunch(
   containment: ProcessContainment,
@@ -215,19 +266,24 @@ export function containedSessionLaunch(
      * draw, where drawing on it ends Blender.
      */
     readonly withoutGraphicsCard?: boolean;
+    readonly shaderCaches?: KeptShaderCaches;
   },
 ): LaunchSession {
   const confine = options.confine ?? confineProgram;
-  return async ({
-    executable,
-    script,
-    directory,
-    workspace,
-    warm,
-    sealed,
-    probe,
-    processor,
-  }) => {
+  /** A start, given the kept shader cache when `kept` is said. */
+  const start = async (
+    {
+      executable,
+      script,
+      directory,
+      workspace,
+      warm,
+      sealed,
+      probe,
+      processor,
+    }: SessionLaunchOptions,
+    kept: boolean,
+  ): Promise<SessionProcess> => {
     await requireReachable(executable);
     const logs = join(directory, "logs");
     await mkdir(logs, { recursive: true });
@@ -278,6 +334,19 @@ export function containedSessionLaunch(
       write: [join(directory, "cache"), ...working, workspace],
       hosts: [],
     });
+    // The container's folder is made as its folders are granted; the copy
+    // goes in after, so it takes the container's access, and before Blender
+    // starts. A Blender on the processor draws nothing the cache holds, and
+    // one that only finds out how this PC draws starts as it would anywhere.
+    // The Blender that makes the kept cache starts on none.
+    const caches = kept ? options.shaderCaches : undefined;
+    const seeding: Seeding | undefined =
+      caches && !probe && !processor
+        ? await caches
+            .seed(sessionHome(directory), executable)
+            .catch(() => ({ copied: false }))
+        : undefined;
+    let toMake = seeding && !seeding.copied ? seeding.missing : undefined;
     const container = containment.open();
     let child;
     try {
@@ -346,7 +415,20 @@ export function containedSessionLaunch(
           done: true as const,
           value: undefined,
         }));
-        return read.done ? undefined : read.value;
+        const line = read.done ? undefined : read.value;
+        // Made once this Blender has started, so it never holds up its start.
+        if (caches && toMake !== undefined && line && says(line, "ready")) {
+          caches.make(toMake, (folder) =>
+            drawWarmUp(
+              (options) => start(options, false),
+              executable,
+              script,
+              folder,
+            ),
+          );
+          toMake = undefined;
+        }
+        return line;
       },
       ended,
       end: () => container.close(),
@@ -357,4 +439,5 @@ export function containedSessionLaunch(
           .join("\n"),
     };
   };
+  return (options) => start(options, true);
 }
