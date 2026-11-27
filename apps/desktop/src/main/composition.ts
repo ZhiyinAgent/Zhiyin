@@ -540,6 +540,15 @@ export function buildCore({
               // a git call need not walk it whole each time.
               linksIn: folderLinks(),
             }),
+            // The shell is told only that Zhiyin could not run git; which
+            // step failed, and why, is kept here.
+            recordGitFailure: ({ conversationId, step, error }) =>
+              log?.record({
+                level: "error",
+                source: "sealed shell",
+                message: `Zhiyin could not run a git command for the shell in conversation ${conversationId}: ${step === "hold" ? "holding its container still" : "git"} failed.`,
+                error,
+              }),
             // Zhiyin's own Node, a toolchain like uv (ADR 0027); a command
             // with full access runs the person's.
             node: {
