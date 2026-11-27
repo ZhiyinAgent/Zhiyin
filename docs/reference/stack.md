@@ -1957,6 +1957,22 @@ a less-privileged container (LPAC), OpenGL falls back to Windows' software
 driver. cmd and PowerShell started inside are confined the same way; Git's
 bash does not start (`0xC0000142`). ADR 0006.
 
+**A container's temporary folder has a length limit.** _Verified 2026-11-27
+on Windows 11 (22631), long paths enabled, by probes in app containers and
+outside them, against Microsoft's GetTempPath2W and GetTempFileNameW
+documentation._ Windows sets `TEMP` and `TMP` below the given `LOCALAPPDATA`
+even when the program is given its own. `GetTempPathW` and `GetTempPath2W`
+never return, spinning, when `TMP` is longer than 260 characters, whatever
+the buffer; the documented largest answer is 261 with the backslash. uv's
+trampoline, the `python.exe` of every environment uv makes (uv 0.12.15),
+calls `GetTempPath2W` as it starts Python, to move its working folder there;
+past 260 characters the run neither prints nor ends. Blender 5.2.2's USD ends Blender (`0xC0000409`, `Call to
+GetTempPath failed`) from 259 characters; Blender's Python cannot use
+`tempfile` from 255; Blender makes no session folder from 234 and uses the
+folder itself. `GetTempFileNameW` documents its folder at most MAX_PATH − 14
+characters and failed from 248 here (`ERROR_BUFFER_OVERFLOW`). Python 3.13
+started directly, and Node, run with any length.
+
 **Copy on first write by oplock, through `koffi`.** _Verified 2026-11-20 and
 2026-11-21 on Windows 11 Home (22631), NTFS, unelevated, by running the
 file-watch and recovery system-boundary tests with programs in real app

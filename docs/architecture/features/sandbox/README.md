@@ -95,7 +95,8 @@ a process that reaches only the folders it is given (ADR 0006).
   and a run given another home runs in another. The home stands in for the
   person's user folder: the program's settings, application data and
   temporary files go there. It rejects, saying why, when a folder may not or
-  cannot be given.
+  cannot be given, or when the home's path is too long for the temporary
+  folder Windows gives its container.
 - `forgetConfinement(purpose, home)` removes the container of a home removed
   for good, with the folder Windows keeps for it in the person's profile.
 - `holdingContainer(purpose, home, work)` runs `work` with every process of
@@ -213,6 +214,17 @@ a process that reaches only the folders it is given (ADR 0006).
 - **Its home is its own.** Its user folder, application data and temporary
   files are in the home it is given. A later run given that home finds what
   was left there; a run given another home cannot reach it.
+- **A home too long for Windows' temporary folder is refused at once.**
+  Windows sets a container's temporary folder itself, whatever the program
+  is given: `AppData\Local\Packages\<container>\AC\Temp` below its home.
+  Windows programs make files there only while it is at most 245
+  characters, MAX_PATH less the 14 that `GetTempFileNameW` keeps for a name
+  and the backslash Windows ends the folder with; past MAX_PATH, Windows
+  never answers a program that asks for it, as the launcher of a Python
+  environment does as it starts Python. A run whose temporary folder would
+  pass 245 characters is refused before anything is made for it, naming the
+  folder and the limit, rather than left to fail or to wait out its time; one
+  at 245 runs, Python and Blender included.
 - **Each home has a container of its own.** What a run leaves in the folder
   Windows keeps for its container, a run given another home cannot read. A
   home forgotten keeps no container in the person's profile. A container's

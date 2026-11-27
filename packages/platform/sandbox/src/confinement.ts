@@ -64,6 +64,24 @@ const identities = new WeakMap<object, Identity>();
 const purposes = /^[a-z][a-z0-9-]{0,30}$/;
 
 /**
+ * The longest temporary folder a container is given. Windows programs make
+ * their temporary files by asking Windows for the folder, which it answers
+ * with a backslash after it, and then for a name in it, which Windows makes
+ * only in a folder of at most MAX_PATH less 14 characters (GetTempFileNameW).
+ * Past it they fail, and further on they stop: asked for a folder past
+ * MAX_PATH, Windows never answers.
+ */
+const longestTemporaryFolder = 260 - 14 - 1;
+
+/**
+ * Where Windows puts a container's temporary folder, from the local
+ * application data it is given: in the container's own folder below it.
+ */
+function temporaryFolder(local: string, name: string): string {
+  return join(local, "Packages", name, "AC", "Temp");
+}
+
+/**
  * The container a home's runs share. Windows gives each container a folder
  * of its own in the person's profile, which it may change, and storage in the
  * registry; a container per home keeps those apart as the homes are.
@@ -88,7 +106,9 @@ export function forgetConfinement(purpose: string, home: string): void {
 /**
  * Grants the folders a confinement names, makes its home, and registers its
  * purpose's profile on first use. Rejects, saying why, when a folder may not
- * or cannot be given.
+ * or cannot be given, or when the home's path leaves the temporary folder
+ * Windows gives its container too long to make files in; nothing is made
+ * for it then.
  */
 export async function confine(confinement: Confinement): Promise<Confined> {
   if (!purposes.test(confinement.purpose))
@@ -105,9 +125,14 @@ export async function confine(confinement: Confinement): Promise<Confined> {
   // given, and finds the person's folders from the user folder it is given;
   // each must be there. The home is made before its container is registered,
   // so no registered container is ever without its home.
+  const temporary = temporaryFolder(local, name);
+  if (temporary.length > longestTemporaryFolder)
+    throw new Error(
+      `Windows would give this program ${temporary} for its temporary files, ${temporary.length} characters long, and Windows programs cannot make files in a folder longer than ${longestTemporaryFolder} characters. Its home, ${home}, needs a shorter path.`,
+    );
   await mkdir(join(home, "AppData", "Roaming"), { recursive: true });
   const container = containerFor(name, home);
-  await mkdir(join(local, "Packages", name, "AC", "Temp"), { recursive: true });
+  await mkdir(temporary, { recursive: true });
   const writes = [...new Set([home, ...confinement.write])];
   const reads = [...new Set(confinement.read)].filter(
     (folder) => !writes.includes(folder),
