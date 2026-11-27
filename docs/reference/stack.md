@@ -2080,10 +2080,12 @@ source package; the environment it builds in has a `sitecustomize` of its own
 on `PYTHONPATH`, and adds the target environment's packages through
 `site.addsitedir`, so path files there run. ADR 0020.
 
-**What a confined `import build123d` costs.** _Verified 2026-11-26 on
-Windows 11 (22631), Python 3.13.15 as uv 0.12.15 installs it, build123d
-0.13.0, by timing runs with `-X importtime`, `-v` and step by step, confined
-as the kept environments are and unconfined with the same variables._ uv's
+**What a confined `import build123d` costs.** _Verified 2026-11-26 and
+2026-11-27 on Windows 11 (22631), Python 3.13.15 as uv 0.12.15 installs it,
+build123d 0.13.0, by timing runs with `-X importtime`, `-v` and step by step,
+confined as the kept environments are and unconfined with the same variables;
+the 2026-11-27 figures are three sessions of each version of the startup file
+and the studio, on a copy of the CAD environment._ uv's
 environment names its Python, in `pyvenv.cfg`, through a junction for its
 minor version (`cpython-3.13-windows-x86_64-none`) to the folder of the exact
 one. In a container, `GetFinalPathNameByHandleW` with `VOLUME_NAME_DOS` is
@@ -2096,12 +2098,80 @@ returns the junction's path, the first call taking 0.85 s, and
 build123d imports them, about 0.9 s; the import takes 4.25–4.47 s against
 2.55–2.67 s unconfined, and a one-plate `cad_build` 10.4–10.7 s. Given the
 folder of Zhiyin's Pythons, as the kept environments are, the real path is
-right, the import takes 3.04–3.22 s and the build 7.63–7.81 s. What is left
-is mostly WMI, which a container is refused, so `platform.machine()` takes
-0.1–0.16 s before falling back to `PROCESSOR_ARCHITECTURE`, and the mending's
-first call, which loads `ctypes`. Every module comes from the bytecode
-compiled as the environment is made, confined as unconfined, and the venv's
-launcher costs nothing measurable against the base `python.exe`. ADR 0020.
+right, the import takes 3.04–3.22 s and the build 7.63–7.81 s. Every module
+comes from the bytecode compiled as the environment is made, confined as
+unconfined, and the venv's launcher costs nothing measurable against the base
+`python.exe`.
+
+Two causes of what was left are the startup file's to remove. A container is
+refused WMI, so `platform.machine()` takes 0.19–0.20 s, and `win32_ver()`
+0.08 s more, before answering from `PROCESSOR_ARCHITECTURE` and `cmd /c ver`,
+with the same answers as unconfined. From Python 3.13 (3.14 too, not 3.11 or
+3.12) `ctypes` imports `sysconfig`, which asks for `realpath(sys.executable)`
+as it loads; a mending made with `ctypes` cannot answer while `ctypes` is half
+imported, so `realpath` asks Windows for every folder up to the drive, about
+7 ms a folder with the mending's failed try, 23 refusals in all: a confined `import ctypes` took
+284–301 ms against 7 ms unconfined. The startup file now tells `platform`
+that WMI is missing, makes the mending's calls through `_ctypes`, ctypes'
+engine, which imports nothing, and mends a drive's paths without asking
+again once Windows has refused one of them and the mending answered it. A
+confined process that imports `ctypes` then runs in 0.16–0.18 s whole.
+
+Measured on 2026-11-27, `import build123d` timed inside Python: unconfined
+2.37–2.52 s, confined 3.18–3.25 s before those changes and 2.69–2.91 s
+after, 0.3–0.45 s more than unconfined. About 0.25 s of that was `ezdxf`
+listing the system's fonts on every start, as each run's new home held no
+font list for it to read, where an unconfined Python reads the one in the
+person's cache, which the kept font list below removes; `numpy`'s test
+helpers take 0.06 s more. A one-plate
+`cad_build` (`show(Box(80, 50, 8))`, with a preview) took 7.97–8.26 s before
+the changes, 7.09–7.25 s after them, and 4.20–4.43 s once the measuring run
+starts beside the script's run, its loading overlapping the script. The
+first build of a session took 9.63–10.09 s, its measuring run waiting
+1.17–1.67 s for its new home's grant behind the environment's grant again;
+once a run's new home may be granted beside it, the wait is 33–98 ms and
+the build 4.60–4.65 s. The two runs side by side hold 698 MB of working set
+together at their peak, against 435–459 MB for one run alone, and 2.4 GB of
+private bytes against 1.33–1.35 GB. ADR 0020.
+
+**ezdxf's font list in a confined run.** _Verified 2026-11-27 on Windows 11
+(22631) against ezdxf 1.4.5 as the CAD lock pins it, by reading
+`ezdxf/fonts/fonts.py`, `font_manager.py` and `_options.py` and by running
+it confined, on a copy of the CAD environment with this release's startup
+file._ Importing `ezdxf.fonts` loads the list
+`$XDG_CACHE_HOME/ezdxf/font_manager_cache.json`, or
+`~/.cache/ezdxf/font_manager_cache.json` without the variable. A list that
+is there and parses, of cache version 2, is read as it is and never
+checked against the fonts on the PC: one missing a font leaves that font
+unfound until the list is made again. Only with no list, one that does not
+parse, or one of another version, does ezdxf list the fonts of
+`~/AppData/Local/Microsoft/Windows/Fonts` and `%SystemRoot%\Fonts`, and of
+the `SUPPORT_DIRS` an `ezdxf.ini` names (in `~/.config/ezdxf` or the
+current folder), then try to write the list. In a folder the run may only
+read, that write fails with `Errno 13` and the folder's making with nothing
+raised; ezdxf logs a warning, keeps the list in memory and the run goes on.
+On Windows no other package of the CAD environment reads `XDG_CACHE_HOME`
+(parso, jedi, IPython and platformdirs read it on other systems only). A
+confined run's `~` is its own home, so the account's own fonts folder,
+where Windows puts a font installed for one account, is never listed: the
+list a confined run makes holds 351 fonts, all of `C:\Windows\Fonts`,
+against 352 in an unconfined Python's, which has one font installed for the
+account. On NTFS a folder's time of change moves on as a file is added or
+removed in it, or a folder made, and not as a file in it is rewritten or a
+file is added to a folder below; `C:\Windows\Fonts` holds no folder. The
+CAD studio therefore keeps one list, made by a confined run of its own and
+named by the fonts folder's time of change and the CAD lock, which both
+runs of a build read and may not write.
+
+Measured the same day, three sessions each, alternated, on the copy: a
+confined `import build123d` inside Python took 2.14–2.36 s against
+1.84–1.94 s unconfined, 0.35 s more on average, when each run listed the
+fonts itself, and 1.87–2.00 s against 1.85–1.98 s, 0.06 s more on average,
+reading the kept list. The one-plate `cad_build` with a preview took
+3.65–3.87 s before and 3.35–3.93 s with the list, 3.35–3.44 s in two of the
+three sessions, and a session's first build 4.14–4.48 s before and
+3.76–3.94 s once the list was kept. Making the list, a confined run that
+imports `ezdxf.fonts` alone, takes 0.88–0.93 s, and the list is 42 KB.
 
 **Low integrity through `koffi`.** Not used: it limits writes only (ADR 0006).
 _Verified 2026-10-12 on Windows 11

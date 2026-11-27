@@ -20,7 +20,12 @@ import {
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation } from "../src/index.js";
 import { scriptHelpers } from "../src/script-helpers.js";
-import { confinedPython, harness, python } from "./confined-cad-python.js";
+import {
+  confinedPython,
+  harness,
+  keptFonts,
+  python,
+} from "./confined-cad-python.js";
 
 type Result = {
   isError?: boolean;
@@ -136,6 +141,7 @@ describe.skipIf(!python)("shaping real parts with the helpers", () => {
       workspaceRoot: () => root,
       harness,
       directory: join(data, "cad-studio"),
+      fonts: await keptFonts(),
     });
     const call = (name: string) => async (args: Record<string, unknown>) => {
       const asked = await tools.inspect(name, args);

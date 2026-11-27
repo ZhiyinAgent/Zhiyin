@@ -18,6 +18,7 @@ import {
   cadTools,
   type CadPython,
 } from "../src/index.js";
+import { requestOf, stoppedUnasked } from "./harness-request.js";
 
 const folders = new TemporaryFolders();
 afterEach(() => folders.removeAll());
@@ -38,9 +39,13 @@ async function studio() {
   const python: CadPython = {
     state: async () => "ready",
     run: async (request) => {
-      const given = JSON.parse(
-        await readFile(request.arguments.at(-1)!, "utf8"),
-      ) as { phase?: string; api?: string[]; output: string };
+      const path = await requestOf(request);
+      if (!path) return stoppedUnasked;
+      const given = JSON.parse(await readFile(path, "utf8")) as {
+        phase?: string;
+        api?: string[];
+        output: string;
+      };
       requests.push(given);
       const answer = given.api
         ? { api: given.api.map((name) => `${name}(): looked up`).join("\n\n") }

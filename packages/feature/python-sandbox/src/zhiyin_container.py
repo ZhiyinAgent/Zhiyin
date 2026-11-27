@@ -37,6 +37,80 @@ def _pipes_in_the_container():
     connection.arbitrary_address = local
 
 
+def _no_wmi_in_the_container():
+    # Windows refuses a container WMI. platform asks it first for the
+    # processor and the version of Windows, and is refused only after a tenth
+    # of a second or more; it then answers from the environment's variables
+    # and Windows' version, as it does where WMI is missing. Every script of
+    # this environment runs in a container, so platform finds WMI missing and
+    # answers that way at once.
+    import sys
+
+    sys.modules.setdefault("_wmi", None)
+
+
+def _device_paths():
+    # A file's final path named by its device, through ctypes' engine alone.
+    # The ctypes package is not imported for it: from Python 3.13 it imports
+    # sysconfig, which asks for a real path as it loads, and that request
+    # would come back to the mending before ctypes could answer it.
+    import _ctypes
+
+    class handle(_ctypes._SimpleCData):
+        _type_ = "P"
+
+    class number(_ctypes._SimpleCData):
+        _type_ = "L"
+
+    class text(_ctypes._SimpleCData):
+        _type_ = "Z"
+
+    class letter(_ctypes._SimpleCData):
+        _type_ = "u"
+
+    class call(_ctypes.CFuncPtr):
+        _flags_ = _ctypes.FUNCFLAG_STDCALL | _ctypes.FUNCFLAG_USE_LASTERROR
+
+    class kernel32:
+        _handle = _ctypes.LoadLibrary("kernel32")
+
+    def function(name, restype, *argtypes):
+        made = call((name, kernel32))
+        made.restype = restype
+        made.argtypes = argtypes
+        return made
+
+    create_file = function(
+        "CreateFileW", handle, text, number, number, handle, number, number,
+        handle,
+    )
+    final_path = function(
+        "GetFinalPathNameByHandleW", number, handle, text, number, number
+    )
+    close = function("CloseHandle", number, handle)
+    invalid = handle(-1).value
+
+    def refused():
+        code = _ctypes.get_last_error()
+        return OSError(None, _ctypes.FormatError(code), None, code)
+
+    def device_path(path):
+        # Opened for no access, shared, following links, folders included.
+        opened = create_file(path, 0, 7, None, 3, 0x02000000, None)
+        if opened in (None, invalid):
+            raise refused()
+        try:
+            buffer = (letter * 32768)()
+            # Named by its device.
+            if not final_path(opened, buffer, 32768, 2):
+                raise refused()
+            return buffer.value
+        finally:
+            close(opened)
+
+    return device_path
+
+
 def _real_paths_in_the_container():
     # Windows refuses a container a file's final path named by its drive, and
     # gives it named by its device, so os.path.realpath fails, and tarfile
@@ -46,34 +120,12 @@ def _real_paths_in_the_container():
     import ntpath
 
     named = ntpath._getfinalpathname
+    made = []
 
     def device_path(path):
-        import ctypes
-        from ctypes import wintypes
-
-        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel32.CreateFileW.argtypes = [
-            wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
-            wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE,
-        ]
-        kernel32.CreateFileW.restype = wintypes.HANDLE
-        kernel32.GetFinalPathNameByHandleW.argtypes = [
-            wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD,
-        ]
-        kernel32.GetFinalPathNameByHandleW.restype = wintypes.DWORD
-        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-        # Opened for no access, shared, following links, folders included.
-        handle = kernel32.CreateFileW(path, 0, 7, None, 3, 0x02000000, None)
-        if handle in (None, wintypes.HANDLE(-1).value):
-            raise ctypes.WinError(ctypes.get_last_error())
-        try:
-            buffer = ctypes.create_unicode_buffer(32768)
-            # Named by its device.
-            if not kernel32.GetFinalPathNameByHandleW(handle, buffer, 32768, 2):
-                raise ctypes.WinError(ctypes.get_last_error())
-            return buffer.value
-        finally:
-            kernel32.CloseHandle(handle)
+        if not made:
+            made.append(_device_paths())
+        return made[0](path)
 
     def drive_path(path):
         drive, tail = ntpath.splitdrive(ntpath.abspath(os.fsdecode(path)))
@@ -96,21 +148,40 @@ def _real_paths_in_the_container():
                 return None
             folder = parent
 
+    def mend(path):
+        # Anything that keeps the path from being mended gives no answer.
+        try:
+            return drive_path(path)
+        except Exception:
+            return None
+
+    def drive_of(path):
+        try:
+            return ntpath.splitdrive(ntpath.abspath(os.fsdecode(path)))[0].lower()
+        except Exception:
+            return None
+
+    # The drives whose paths Windows refused by name and gave by device. It
+    # refuses every path on such a drive, about 5 ms a refusal, so their
+    # paths are mended without asking it again. A path that cannot be mended
+    # is still asked for, so what it answers, or why it refuses, is Windows'
+    # own.
+    refusing = set()
+
     def final(path):
+        drive = drive_of(path)
+        if drive in refusing:
+            mended = mend(path)
+            return named(path) if mended is None else mended
         try:
             return named(path)
         except PermissionError as refused:
             if getattr(refused, "winerror", None) != 5:
                 raise
-            # Anything that keeps the path from being mended, ctypes still
-            # loading among it, as when loading it is what asked, leaves the
-            # refusal as Windows gave it.
-            try:
-                mended = drive_path(path)
-            except Exception:
-                mended = None
+            mended = mend(path)
             if mended is None:
                 raise
+            refusing.add(drive)
             return mended
 
     ntpath._getfinalpathname = final
@@ -193,6 +264,7 @@ def _a_null_device_in_the_container():
 
 
 _reachable_folders()
+_no_wmi_in_the_container()
 _pipes_in_the_container()
 _real_paths_in_the_container()
 _a_null_device_in_the_container()

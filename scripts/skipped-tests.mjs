@@ -375,6 +375,13 @@ export const expected = new Map([
     },
   ],
   [
+    "packages/feature/cad-studio/system-boundary/real-cad-font-list.test.ts",
+    {
+      needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON,
+    },
+  ],
+  [
     "packages/feature/cad-studio/system-boundary/real-cad-confinement.test.ts",
     {
       needs: "the CAD environment's Python (ZHIYIN_CAD_PYTHON)",

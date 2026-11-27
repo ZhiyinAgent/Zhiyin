@@ -36,6 +36,7 @@ import {
   cadEnvironment,
   cadPrograms,
   describeCadTools,
+  KeptFontLists,
   PartPreviews,
   PartReviews,
   type CadPython,
@@ -667,6 +668,14 @@ export function buildCore({
     run: (request) =>
       pythons.kept.run({ environment: cadEnvironment.name, ...request }),
   };
+  /** The system's fonts as ezdxf lists them, kept for every conversation's builds. */
+  const cadFonts = cadHarness
+    ? new KeptFontLists({
+        directory: join(dataDirectory, "cad-fonts"),
+        python: cadPython,
+        harness: cadHarness,
+      })
+    : undefined;
   /** One installed program, named the way the compiler asks for it. */
   const executable = async (id: "typst" | "tectonic") => {
     const path = await toolchains.executable(id);
@@ -759,6 +768,7 @@ export function buildCore({
                   harness: cadHarness,
                   directory: cadConversations.folder(conversationId),
                   protect: ownFolders,
+                  ...(cadFonts ? { fonts: cadFonts } : {}),
                   ...(partPreviews
                     ? {
                         preview: (model, parts, script) =>

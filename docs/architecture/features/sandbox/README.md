@@ -234,9 +234,13 @@ a process that reaches only the folders it is given (ADR 0006).
   moved in since is reached too. A folder
   that lost its entry, as one removed and made again at the same path has, is
   granted again whenever it is given.
-- **A grant a run waits for goes first.** Grants are written one at a time; a
-  folder that already carries its entry is granted again behind the run, and
-  a new folder a later run waits for is granted before it.
+- **A grant a run waits for goes first.** A folder that already carries its
+  entry is granted again behind the run, and a new folder a later run waits
+  for is granted before it, or beside it when neither folder holds the other:
+  a run's new home does not wait for its environment to be granted again.
+  Grants start in the order asked, two at once at most, and one waits for a
+  grant walking a folder that holds it or that it holds. A grant behind a
+  run, and a path held or let go, waits until nothing else walks.
 - **A confined program is given no credential from Zhiyin's environment.**
   `windowsEnvironment` passes only what Windows programs expect and the
   certificates this computer trusts, so no key kept in a variable, no proxy

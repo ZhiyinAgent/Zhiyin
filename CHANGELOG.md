@@ -30,6 +30,12 @@ What changed for people using Zhiyin, newest release first.
   reads its old names; one frame needs no spacing, and frames spread evenly to
   an end. Setting an object down takes [x, y]. A render takes an exposure of
   its own, and describing with no scene open answers instead of refusing.
+- A simple CAD build takes about half as long as before. The run that
+  measures the parts now loads build123d while the script runs; a sealed-off
+  Python no longer asks Windows again for paths it was refused; a build's new
+  home is no longer granted behind an unrelated folder's grant; and builds
+  read a list of the system's fonts kept once, instead of listing them on
+  every start.
 - A DeepSeek tool call that ran on into DeepSeek's own call markup is read as
   the call it is, instead of being refused.
 
