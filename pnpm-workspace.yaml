@@ -41,12 +41,9 @@ auditConfig:
     # - 3.1.5 and 5.1.9, under electron-builder (@electron/asar, glob 7,
     #   jake's filelist): older than optimizationLevel, which came in 7.1, so
     #   without the step, and unable to call 11's API.
-    # - 10.x under eslint-plugin-import-x 4.17.1, which builds its
-    #   no-internal-modules patterns from this repository's lint config with
-    #   `makeRe()`, and under app-builder-lib 26.15.3, which reads the
-    #   compiled `set` of the packaging config's file patterns; 11 removed
-    #   the one and changed the other. Waits on releases of them that accept
-    #   11.
+    # - 10.x under app-builder-lib 26.15.3, which reads the compiled `set`
+    #   of the packaging config's file patterns, which 11 changed. Waits on
+    #   a release of it that accepts 11.
     - GHSA-g3hv-75wg-m249
     # picomatch <=4.0.7, with no fixed version: a glob someone else supplies,
     # such as +(*), can make its regular expression backtrack without end.
@@ -76,8 +73,8 @@ overrides:
   # pairwise. ESLint 10 asks for ^10.2.6, @eslint/config-array for ^10.2.4,
   # typescript-estree for ^10.2.2 and electron-builder's @electron/universal
   # for ^9. ESLint calls only `new Minimatch()` and `match()`, and the other
-  # two only `minimatch()`, all of which 11 keeps. eslint-plugin-import-x and
-  # app-builder-lib are not moved (see `auditConfig`).
+  # two only `minimatch()`, all of which 11 keeps. app-builder-lib is not
+  # moved (see `auditConfig`).
   "eslint>minimatch": ^11.0.3
   "@eslint/config-array>minimatch": ^11.0.3
   "@typescript-eslint/typescript-estree>minimatch": ^11.0.3
