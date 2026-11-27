@@ -19,6 +19,9 @@ export { sceneReviews, sceneReviewer } from "./scene-reviews.js";
 export { sceneLines } from "./scene-lines.js";
 export type { SceneAutomationOptions } from "./scene-automation.js";
 export { containedSessionLaunch } from "./session-process.js";
+export { KeptShaderCaches } from "./shader-caches.js";
+export type { KeptShaderCachesOptions } from "./shader-caches.js";
+export { nvidiaDriverVersion } from "./graphics-driver.js";
 export type {
   LaunchSession,
   SessionLaunchOptions,

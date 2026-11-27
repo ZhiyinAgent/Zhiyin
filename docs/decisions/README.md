@@ -52,6 +52,7 @@ gets `Status: superseded by NNNN`; a new record follows the
 - [0022](0022-3d-work-runs-in-zhiyins-own-blender-through-a-library-whose-calls-say-what-they-did.md): 3D work runs in Zhiyin's own Blender, through a library whose calls say what they did.
 - [0023](0023-cad-parts-are-built-with-build123d-in-a-pinned-environment-and-drawn-from-the-exact-solids.md): CAD parts are built with build123d in a pinned environment and drawn from the exact solids.
 - [0024](0024-studio-work-is-checked-against-version-exact-knowledge-and-reviewed-before-a-turn-ends.md): studio work is checked against version-exact knowledge and reviewed before a turn ends.
+- [0032](0032-a-new-conversations-blender-starts-on-a-copy-of-shaders-compiled-by-zhiyins-own-warm-up.md): a new conversation's Blender starts on a copy of shaders compiled by Zhiyin's own warm-up.
 
 ## Data and what Zhiyin fetches
 

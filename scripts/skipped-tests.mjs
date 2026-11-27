@@ -337,6 +337,14 @@ export const expected = new Map([
     },
   ],
   [
+    // The kept shader cache is NVIDIA's; the tests run where its driver is.
+    "packages/feature/blender-studio/system-boundary/real-blender-shader-caches.test.ts",
+    {
+      needs: "Blender on a PC with an NVIDIA graphics card (ZHIYIN_BLENDER)",
+      without: (env) => !env.ZHIYIN_BLENDER,
+    },
+  ],
+  [
     "packages/feature/blender-studio/system-boundary/real-blender-confinement.test.ts",
     {
       needs: "Blender on a PC with a graphics card (ZHIYIN_BLENDER)",

@@ -46,6 +46,8 @@ import {
   compiledBlenderPython,
   containedSessionLaunch,
   describeSceneTools,
+  KeptShaderCaches,
+  nvidiaDriverVersion,
   sceneAutomation,
   scenePrograms,
   sceneLines,
@@ -625,6 +627,11 @@ export function buildCore({
         launch: containedSessionLaunch(containment, {
           scripts: join(dataDirectory, "blender-studio", "session-scripts"),
           ...(testing.noGraphicsCard ? { withoutGraphicsCard: true } : {}),
+          // The shaders a new conversation's Blender starts on (ADR 0032).
+          shaderCaches: new KeptShaderCaches({
+            directory: join(dataDirectory, "blender-studio", "shader-caches"),
+            driver: nvidiaDriverVersion(containment),
+          }),
         }),
         script: blenderSessionScript,
       })

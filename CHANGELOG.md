@@ -38,6 +38,9 @@ What changed for people using Zhiyin, newest release first.
   every start.
 - A DeepSeek tool call that ran on into DeepSeek's own call markup is read as
   the call it is, instead of being refused.
+- On an NVIDIA graphics card, a new conversation's first 3D call opens its
+  scene in about 3 s instead of 17: its Blender starts on a copy of the
+  shaders Zhiyin's own warm-up compiled, kept for each Blender and driver.
 
 ## 0.1.0-alpha.2
 
