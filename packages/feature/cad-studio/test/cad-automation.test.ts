@@ -24,6 +24,7 @@ import type {
   ToolCallInspection,
 } from "@zhiyin/contract";
 import { cadAutomation, type CadPython, type CadRun } from "../src/index.js";
+import { requestOf, stoppedUnasked } from "./harness-request.js";
 
 const folders = new TemporaryFolders();
 afterEach(() => folders.removeAll());
@@ -57,7 +58,11 @@ type ScriptRequest = {
   readonly seconds: number;
 };
 
-type Script = (request: ScriptRequest) => Promise<{
+type Script = (
+  request: ScriptRequest,
+  /** Set when the run is stopped, as the person's Stop or a cancelled build does. */
+  signal?: AbortSignal,
+) => Promise<{
   exitCode: number | null;
   stdout?: string;
   ending?: "timeout" | "stopped" | "outputLimit";
@@ -137,6 +142,18 @@ async function studio(
     data = join(data, "moved");
   }
   const runs: CadRun[] = [];
+  /**
+   * Each run as it went, in the order started: whether it was given its
+   * request, whether a script's run was still going when it was, and whether
+   * it has ended.
+   */
+  const lives: {
+    readonly run: CadRun;
+    requested: boolean;
+    duringScript: boolean;
+    ended: boolean;
+  }[] = [];
+  let scriptsRunning = 0;
   let asked: ScriptRequest | undefined;
   /** Each preview of the parts shown beside the conversation, read as it was handed over. */
   const previews: { model: string; parts: unknown; script?: string }[] = [];
@@ -144,27 +161,52 @@ async function studio(
     state: async () => options.state ?? "ready",
     run: async (request) => {
       runs.push(request);
-      const given = JSON.parse(
-        await readFile(request.arguments.at(-1)!, "utf8"),
-      ) as Record<string, unknown>;
-      // What the script's run was asked, which a harness below may look at too.
-      if (given["phase"] === "script") asked = given as ScriptRequest;
-      const ran: Awaited<ReturnType<Script>> =
-        given["phase"] === "script"
-          ? await (options.script ?? scripts)(given as ScriptRequest)
-          : await (options.harness ?? builds)({
-              ...asked,
-              ...given,
-            } as Parameters<Harness>[0]);
-      return {
-        ok: true,
-        run: {
-          exitCode: ran.exitCode,
-          stdout: ran.stdout ?? "",
-          stderr: "",
-          ...(ran.ending ? { ending: ran.ending } : {}),
-        },
+      const life = {
+        run: request,
+        requested: false,
+        duringScript: false,
+        ended: false,
       };
+      lives.push(life);
+      try {
+        const path = await requestOf(request);
+        if (!path) return stoppedUnasked;
+        life.requested = true;
+        life.duringScript = scriptsRunning > 0;
+        const given = JSON.parse(await readFile(path, "utf8")) as Record<
+          string,
+          unknown
+        >;
+        // What the script's run was asked, which a harness below may look at too.
+        if (given["phase"] === "script") asked = given as ScriptRequest;
+        let ran: Awaited<ReturnType<Script>>;
+        if (given["phase"] === "script") {
+          scriptsRunning += 1;
+          try {
+            ran = await (options.script ?? scripts)(
+              given as ScriptRequest,
+              request.signal,
+            );
+          } finally {
+            scriptsRunning -= 1;
+          }
+        } else
+          ran = await (options.harness ?? builds)({
+            ...asked,
+            ...given,
+          } as Parameters<Harness>[0]);
+        return {
+          ok: true,
+          run: {
+            exitCode: ran.exitCode,
+            stdout: ran.stdout ?? "",
+            stderr: "",
+            ...(ran.ending ? { ending: ran.ending } : {}),
+          },
+        };
+      } finally {
+        life.ended = true;
+      }
     },
   };
   const harness = join(data, "harness", "run.py");
@@ -182,7 +224,7 @@ async function studio(
     ...(options.sceneLines ? { sceneLines: options.sceneLines } : {}),
     ...(options.protect ? { protect: options.protect } : {}),
   });
-  return { root, data, runs, tools, harness, previews };
+  return { root, data, runs, lives, tools, harness, previews };
 }
 
 const code = 'from build123d import *\nshow(Box(80, 50, 8), name="Plate")\n';
@@ -1159,6 +1201,82 @@ describe("running a build", () => {
     );
   });
 
+  it("starts the measuring run beside the script's run, and gives it its request only once the script's run has ended", async () => {
+    let overlapped = false;
+    const { tools, lives } = await studio({
+      script: async (request) => {
+        await writeFile(join(request.output, "manifest.json"), "{}");
+        // Still running: the measuring run has started, and waits.
+        for (let waited = 0; waited < 1000 && lives.length < 2; waited += 5)
+          await new Promise((wait) => setTimeout(wait, 5));
+        overlapped = lives.length === 2 && !lives[1]!.requested;
+        await new Promise((wait) => setTimeout(wait, 20));
+        return { exitCode: 0 };
+      },
+    });
+
+    const result = (await tools.callTool("cad_build", { code })) as {
+      isError?: boolean;
+      content: { text?: string }[];
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toContain("Built 1 part in 3.4 s.");
+    expect(overlapped).toBe(true);
+    const [script, measuring] = lives;
+    expect(script?.run.arguments.slice(0, 2)).toEqual(["-P", "-B"]);
+    expect(measuring?.requested).toBe(true);
+    expect(measuring?.duringScript).toBe(false);
+  });
+
+  it("stops the measuring run, never giving it a request, when the script fails, shows nothing, is stopped or the build is cancelled, and answers once it has ended", async () => {
+    const cases: Record<string, Script> = {
+      failed: async (request) => {
+        await writeFile(
+          join(request.output, "answer.json"),
+          JSON.stringify({ failed: "The script failed:\nNameError" }),
+        );
+        return { exitCode: 2 };
+      },
+      "handed nothing": async () => ({ exitCode: 0 }),
+      stopped: async () => ({ exitCode: null, ending: "stopped" }),
+      cancelled: async (_request, signal) => {
+        // Runs until the build is cancelled, as a long build does.
+        await new Promise((ended) =>
+          signal?.addEventListener("abort", ended, { once: true }),
+        );
+        return { exitCode: null, ending: "stopped" };
+      },
+    };
+    for (const [name, script] of Object.entries(cases)) {
+      const { tools, lives, data } = await studio({ script });
+      const cancel = new AbortController();
+      if (name === "cancelled")
+        void (async () => {
+          while (!lives[0]?.requested)
+            await new Promise((wait) => setTimeout(wait, 5));
+          await new Promise((wait) => setTimeout(wait, 20));
+          cancel.abort();
+        })();
+
+      const result = (await tools.callTool(
+        "cad_build",
+        { code },
+        cancel.signal,
+      )) as { isError?: boolean };
+
+      expect(result.isError, name).toBe(true);
+      expect(
+        lives.map(({ requested, ended }) => ({ requested, ended })),
+        name,
+      ).toEqual([
+        { requested: true, ended: true },
+        { requested: false, ended: true },
+      ]);
+      expect(await readdir(join(data, "cad-studio", "runs")), name).toEqual([]);
+    }
+  });
+
   it("writes the exports at the paths approved, and says what it built, with the picture", async () => {
     const { tools, root } = await studio();
 
@@ -1248,7 +1366,7 @@ describe("running a build", () => {
   });
 
   it("answers a failed script with its reason and what it printed, and writes nothing", async () => {
-    const { tools, root, runs } = await studio({
+    const { tools, root, lives } = await studio({
       script: async (request) => {
         await writeFile(
           join(request.output, "answer.json"),
@@ -1272,8 +1390,9 @@ describe("running a build", () => {
       "What the script printed:\\nbefore",
     );
     expect(await readdir(root)).toEqual([]);
-    // Nothing is measured of a script that failed.
-    expect(runs).toHaveLength(1);
+    // Nothing is measured of a script that failed: the measuring run, started
+    // beside it, was never given its request.
+    expect(lives.map((life) => life.requested)).toEqual([true, false]);
   });
 
   it("says where a module the code could not import is, and how to build beside it", async () => {
@@ -1353,8 +1472,11 @@ describe("running a build", () => {
     expect(result.content[0]?.text).toBe(
       "The build did not finish: it printed more than 64 MB, the most a build may print.\nPrint less from the script, such as a summary.\nWhat the script printed:\nlobe 3 of 6",
     );
+    // The script's run, and the measuring run started beside it, which
+    // prints only what the harness writes.
     expect(runs.map((run) => run.maximumOutputBytes)).toEqual([
       64 * 1024 * 1024,
+      undefined,
     ]);
   });
 
@@ -1466,8 +1588,11 @@ describe("running a build", () => {
     });
     await tools.callTool("cad_build", { code });
     expect(given).toEqual([720, 1800, 300]);
+    // Each build's script run ends by the time the build has; the measuring
+    // run started beside it has a second more, to answer after a script
+    // that took all of it.
     expect(runs.map((run) => run.timeoutMs)).toEqual([
-      720_000, 1_800_000, 300_000,
+      720_000, 721_000, 1_800_000, 1_801_000, 300_000, 301_000,
     ]);
     for (const minutes of [0, 31, 2.5, "ten"])
       expect(

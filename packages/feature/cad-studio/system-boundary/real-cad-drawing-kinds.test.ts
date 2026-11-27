@@ -12,7 +12,12 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation } from "../src/index.js";
-import { confinedPython, harness, python } from "./confined-cad-python.js";
+import {
+  confinedPython,
+  harness,
+  keptFonts,
+  python,
+} from "./confined-cad-python.js";
 
 type Result = {
   isError?: boolean;
@@ -60,6 +65,7 @@ describe.skipIf(!python)(
         workspaceRoot: () => root,
         harness,
         directory: join(data, "cad-studio"),
+        fonts: await keptFonts(),
       });
       draw = async (args) => {
         const asked = await tools.inspect("cad_draw", args);

@@ -64,6 +64,7 @@ import { notInstalled } from "./environment-words.js";
 import { removeHeldRuns, removeRun } from "./run-folders.js";
 import { delivered } from "./delivery.js";
 import { runBuild } from "./build-run.js";
+import type { KeptFontLists } from "./font-lists.js";
 
 export type CadAutomationOptions = {
   readonly workspaceRoot: () => string | undefined;
@@ -92,6 +93,12 @@ export type CadAutomationOptions = {
    * writes may be in, whatever the person would approve (ADR 0012).
    */
   readonly protect?: readonly string[];
+  /**
+   * The list of the system's fonts kept for every conversation's builds,
+   * which their runs read and may not change; without it, each run lists
+   * the fonts itself.
+   */
+  readonly fonts?: KeptFontLists;
 };
 
 const noFolder = "Choose a folder before building a CAD part.";
@@ -334,6 +341,7 @@ export function cadAutomation(
           lines = join(run, "lines.json");
           await writeFile(lines, found.lines, "utf8");
         }
+        const fonts = await options.fonts?.folder();
         const ran = await runBuild({
           python,
           harness: options.harness,
@@ -341,6 +349,7 @@ export function cadAutomation(
           run,
           prepared,
           ...(lines ? { lines } : {}),
+          ...(fonts ? { fonts } : {}),
           timeMs: buildTime,
           preview: options.preview !== undefined,
           ...(signal ? { signal } : {}),

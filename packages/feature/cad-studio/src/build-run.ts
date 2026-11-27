@@ -1,10 +1,11 @@
 /**
- * A build or a drawing as the harness runs it: two confined runs, one after
- * the other. The first runs the model's script, from a copy of the files its
- * approval saw, and writes only the parts it built, as exact geometry with
- * what was said of them. The second is the harness alone, in isolated
- * Python, given those files as its only input: it measures, checks, draws
- * and exports the parts and writes the answer, which is the only one read.
+ * A build or a drawing as the harness runs it: two confined runs. The first
+ * runs the model's script, from a copy of the files its approval saw, and
+ * writes only the parts it built, as exact geometry with what was said of
+ * them. The second is the harness alone, in isolated Python, given those
+ * files as its only input once the first has ended: it measures, checks,
+ * draws and exports the parts and writes the answer, which is the only one
+ * read. It starts beside the first, so its loading overlaps the script's.
  * The model's code never runs where its parts are measured. A drawing of the
  * 3D scene runs no script, so it is the second run alone.
  */
@@ -23,6 +24,11 @@ import { breakLines, hintLines } from "./break-answer.js";
 import type { BuildAnswer } from "./wording.js";
 import type { DrawingAnswer } from "./run-answer.js";
 import { measuredHere } from "./requirements-request.js";
+import {
+  fontsGiven,
+  measuringRun,
+  type MeasuringRun,
+} from "./measuring-run.js";
 
 /** What a build's runs came to: the answer to read, or the call's answer already, as a failure. */
 export type Ran =
@@ -193,12 +199,7 @@ function measuring(
   };
 }
 
-/**
- * Runs a call's script, then measures what it built, in `run`, the call's
- * own folder: `lines`, for a drawing of the scene, are the lines Blender
- * found, and no script runs.
- */
-export async function runBuild(options: {
+type BuildOptions = {
   readonly python: CadPython;
   readonly harness: string;
   readonly root: string;
@@ -207,8 +208,35 @@ export async function runBuild(options: {
   readonly lines?: string;
   readonly timeMs: number;
   readonly preview: boolean;
+  /** The folder of the kept font list, which both runs read and may not change. */
+  readonly fonts?: string;
   readonly signal?: AbortSignal;
-}): Promise<Ran> {
+};
+
+/**
+ * Runs a call's script, then measures what it built, in `run`, the call's
+ * own folder: `lines`, for a drawing of the scene, are the lines Blender
+ * found, and no script runs. Answers once both runs have ended.
+ */
+export async function runBuild(options: BuildOptions): Promise<Ran> {
+  const measurer = measuringRun({
+    python: options.python,
+    harness: options.harness,
+    run: options.run,
+    ...(options.fonts ? { fonts: options.fonts } : {}),
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  try {
+    return await buildWith(options, measurer);
+  } finally {
+    await measurer.end();
+  }
+}
+
+async function buildWith(
+  options: BuildOptions,
+  measurer: MeasuringRun,
+): Promise<Ran> {
   const { python, harness, root, run, prepared, timeMs } = options;
   const began = Date.now();
   const tool = prepared.tool;
@@ -252,12 +280,14 @@ export async function runBuild(options: {
       }),
       "utf8",
     );
-    const first = await python.run({
+    await mkdir(measurer.out, { recursive: true });
+    const fonts = fontsGiven(options.fonts);
+    const running = python.run({
       // Neither the script's folder nor the current one is on Python's
       // path, and nothing compiled is written: what imports is the copy.
-      arguments: ["-P", "-B", harness, request],
+      arguments: ["-P", "-B", harness, ...fonts.arguments, request],
       cwd: root,
-      read: [root, dirname(harness), run],
+      read: [root, dirname(harness), run, ...fonts.read],
       write: [scripted],
       // A home of the run's own, gone with it, so nothing is kept between builds.
       home: join(run, "home"),
@@ -266,6 +296,12 @@ export async function runBuild(options: {
       maximumOutputBytes: largestOutput,
       ...signal,
     });
+    // The second run loads while the script runs, and waits for its request.
+    // It has the build's time and a second more, so a script that takes
+    // all of it still leaves the harness a second to answer with what it
+    // measured, and a deadline it can stop at, before it is stopped.
+    measurer.beside(scripted, timeMs + 1000);
+    const first = await running;
     if (!first.ok)
       return { done: false, result: textResult(first.reason, true) };
     printed = first.run.stdout;
@@ -308,29 +344,16 @@ export async function runBuild(options: {
     handed = manifest.path;
   }
   // The second run: the harness alone, given only what the first wrote.
-  const out = join(run, "out");
+  const { out } = measurer;
   await mkdir(out, { recursive: true });
   const left = Math.max(1000, timeMs - (Date.now() - began));
-  const request = join(run, "request.json");
-  await writeFile(
-    request,
+  const second = await measurer.measure(
     JSON.stringify({
       ...(options.lines ? { lines: options.lines } : { parts: handed }),
       ...measuring(prepared, out, left / 1000, options.preview),
     }),
-    "utf8",
+    left,
   );
-  const second = await python.run({
-    // Isolated: nothing of the workspace on its path, nor of its environment.
-    arguments: ["-I", "-X", "utf8", harness, request],
-    cwd: out,
-    read: [dirname(harness), ...(handed ? [scripted] : []), run],
-    write: [out],
-    home: join(run, "measuring-home"),
-    homeLastsOneRun: true,
-    timeoutMs: left,
-    ...signal,
-  });
   if (!second.ok)
     return { done: false, result: textResult(second.reason, true) };
   if (second.run.exitCode === null)

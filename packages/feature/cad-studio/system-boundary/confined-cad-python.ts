@@ -4,6 +4,7 @@
  * ZHIYIN_CAD_PYTHON; the tests are skipped without it.
  */
 
+import { rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,12 +13,40 @@ import {
   openProcessContainer,
   runProcess,
 } from "@zhiyin/sandbox";
-import type { CadPython } from "../src/index.js";
+import { TemporaryFolders } from "@zhiyin/test-support";
+import { KeptFontLists, type CadPython } from "../src/index.js";
 
 export const python = process.env["ZHIYIN_CAD_PYTHON"];
 export const harness = fileURLToPath(
   new URL("../src/harness/run.py", import.meta.url),
 );
+
+let fonts: Promise<KeptFontLists> | undefined;
+
+/**
+ * The font list kept for this test file's builds, as the app keeps one for
+ * every conversation's: made once, before the first build that uses it, in a
+ * folder that goes when the tests end.
+ */
+export function keptFonts(): Promise<KeptFontLists> {
+  fonts ??= (async () => {
+    const directory = await new TemporaryFolders().make(
+      "zhiyin-real-cad-fonts-",
+    );
+    process.once("exit", () =>
+      rmSync(directory, { recursive: true, force: true }),
+    );
+    const kept = new KeptFontLists({
+      directory,
+      python: await confinedPython(),
+      harness,
+    });
+    await kept.folder();
+    await kept.settled();
+    return kept;
+  })();
+  return fonts;
+}
 
 export async function confinedPython(): Promise<CadPython> {
   const environment = dirname(dirname(python!));

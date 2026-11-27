@@ -3,6 +3,8 @@
  * permission calls: which grant a run waits for, and which it does not.
  */
 
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { folderGrants, type Advapi32 } from "../src/folder-grants.js";
@@ -69,6 +71,52 @@ describe("folder grants", () => {
     expect(await settled(run)).toBe(true);
     expect(windows.started).toEqual([fresh, workspace]);
     windows.release(workspace);
+  });
+
+  it("grants a later run's new home while an earlier run's granted folder is granted again behind it, when neither holds the other", async () => {
+    const windows = standInWindows();
+    const environment = await folders.make("zhiyin-grants-environment-");
+    const home = await folders.make("zhiyin-grants-home-");
+    await folderGrants(windows.api).grantAll([
+      { folder: environment, access: "read" },
+    ]);
+
+    // A later session: the first run's environment is granted again behind
+    // it, and that grant is still walking when the next run asks for its home.
+    windows.started.length = 0;
+    windows.hold(environment);
+    const grants = folderGrants(windows.api);
+    await grants.grantAll([{ folder: environment, access: "read" }]);
+    const next = grants.grantAll([
+      { folder: home, access: "write" },
+      { folder: environment, access: "read" },
+    ]);
+
+    expect(await settled(next)).toBe(true);
+    expect(windows.started).toEqual([environment, home]);
+    windows.release(environment);
+  });
+
+  it("waits for a grant walking a folder that holds the new one", async () => {
+    const windows = standInWindows();
+    const environment = await folders.make("zhiyin-grants-environment-");
+    const inner = join(environment, "inner");
+    await mkdir(inner);
+    await folderGrants(windows.api).grantAll([
+      { folder: environment, access: "read" },
+    ]);
+
+    windows.started.length = 0;
+    windows.hold(environment);
+    const grants = folderGrants(windows.api);
+    await grants.grantAll([{ folder: environment, access: "read" }]);
+    const next = grants.grantAll([{ folder: inner, access: "write" }]);
+
+    expect(await settled(next)).toBe(false);
+    expect(windows.started).toEqual([environment]);
+    windows.release(environment);
+    expect(await settled(next)).toBe(true);
+    expect(windows.started).toEqual([environment, inner]);
   });
 
   it("grants again a folder that lost its grant, as one removed and made again does", async () => {

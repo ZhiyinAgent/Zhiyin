@@ -1,42 +1,71 @@
 /**
- * What writes permissions in this session of the app, one write at a time:
- * folder grants, and paths held against sealed-off programs. Windows hands a
- * folder's grant on to everything in it on a thread of its own, so a path
- * held while a grant walks could be written over by the walk; each waits for
- * the other instead.
+ * What writes permissions in this session of the app: folder grants, and
+ * paths held against sealed-off programs. Windows hands a folder's grant on
+ * to everything in it on a thread of its own, so a path held while a grant
+ * walks could be written over by the walk; each waits for the other instead.
  */
+
+import { inside } from "@zhiyin/path-comparison";
+
+/** Work in the queue: what it does, and the folder it walks, for a grant. */
+type Work = { readonly start: () => Promise<void>; readonly folder?: string };
+
+/** Whether either folder holds the other. */
+const overlap = (one: string, other: string) =>
+  inside(one, other) || inside(other, one);
 
 /**
  * Work written one at a time, since each holds a thread file work shares
- * while it walks. Work a run waits on goes before work written behind a run,
- * though not before work already walking.
+ * while it walks, with one exception: a grant a run waits for walks beside a
+ * grant of a folder it does not overlap, two at most, since neither writes
+ * what the other does. Work a run waits on goes before work written behind a
+ * run, though not before work already walking, and otherwise in the order it
+ * was asked for.
  */
 export class Walks {
-  readonly #awaited: (() => Promise<void>)[] = [];
-  readonly #behind: (() => Promise<void>)[] = [];
-  #walking = false;
+  readonly #awaited: Work[] = [];
+  readonly #behind: Work[] = [];
+  readonly #walking = new Set<Work>();
 
-  run<T>(work: () => Promise<T>, awaited: boolean): Promise<T> {
+  /** `folder` is the folder a grant walks; other work names none. */
+  run<T>(
+    work: () => Promise<T>,
+    awaited: boolean,
+    folder?: string,
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
-      (awaited ? this.#awaited : this.#behind).push(() =>
-        work().then(resolve, reject),
-      );
-      void this.#next();
+      (awaited ? this.#awaited : this.#behind).push({
+        start: () => work().then(resolve, reject),
+        ...(folder === undefined ? {} : { folder }),
+      });
+      this.#next();
     });
   }
 
-  async #next(): Promise<void> {
-    if (this.#walking) return;
-    this.#walking = true;
-    try {
-      for (
-        let work = this.#awaited.shift() ?? this.#behind.shift();
-        work;
-        work = this.#awaited.shift() ?? this.#behind.shift()
-      )
-        await work();
-    } finally {
-      this.#walking = false;
+  /** Whether the first work waiting may start beside what walks now. */
+  #mayStart(work: Work, awaited: boolean): boolean {
+    if (this.#walking.size === 0) return true;
+    const { folder } = work;
+    if (!awaited || folder === undefined || this.#walking.size >= 2)
+      return false;
+    return [...this.#walking].every(
+      (walking) =>
+        walking.folder !== undefined && !overlap(walking.folder, folder),
+    );
+  }
+
+  #next(): void {
+    for (;;) {
+      const awaited = this.#awaited.length > 0;
+      const queue = awaited ? this.#awaited : this.#behind;
+      const work = queue[0];
+      if (!work || !this.#mayStart(work, awaited)) return;
+      queue.shift();
+      this.#walking.add(work);
+      void work.start().finally(() => {
+        this.#walking.delete(work);
+        this.#next();
+      });
     }
   }
 }

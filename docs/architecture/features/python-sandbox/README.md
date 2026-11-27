@@ -263,8 +263,12 @@ Running scripts:
   real place, the Python's own included, which an environment names through
   the link uv keeps for its minor version: a run reads the folder all of
   Zhiyin's Pythons are in, not only the one it runs on, since through a link
-  whose folder it cannot read a real path is wrong and slow to look up. What
-  makes this work is a Python file that every environment runs as it starts;
+  whose folder it cannot read a real path is wrong and slow to look up. A
+  real path stays right however often it is asked, including through a link,
+  for a path not there, and for one the run may not open. `platform` names
+  the machine, the system and Windows' version as it does unconfined, where
+  it asks WMI, which a container is refused. What makes this work is a
+  Python file that every environment runs as it starts;
   it changes private parts of Python's library, so it holds on each Python an
   environment may use.
 - Only a `.py` file is run, and a call that gives neither code nor a file is

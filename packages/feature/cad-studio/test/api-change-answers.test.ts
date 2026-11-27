@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation, cadEnvironment, type CadPython } from "../src/index.js";
+import { requestOf, stoppedUnasked } from "./harness-request.js";
 
 const folders = new TemporaryFolders();
 afterEach(() => folders.removeAll());
@@ -31,9 +32,12 @@ async function studio() {
   const python: CadPython = {
     state: async () => "ready",
     run: async (request) => {
-      const given = JSON.parse(
-        await readFile(request.arguments.at(-1)!, "utf8"),
-      ) as { phase?: string; output: string };
+      const path = await requestOf(request);
+      if (!path) return stoppedUnasked;
+      const given = JSON.parse(await readFile(path, "utf8")) as {
+        phase?: string;
+        output: string;
+      };
       if (given.phase === "script") {
         await writeFile(
           join(given.output, script.failed ? "answer.json" : "manifest.json"),

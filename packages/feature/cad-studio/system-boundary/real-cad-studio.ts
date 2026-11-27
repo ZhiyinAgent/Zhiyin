@@ -9,7 +9,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { TemporaryFolders } from "@zhiyin/test-support";
 import { cadAutomation } from "../src/index.js";
-import { confinedPython, harness } from "./confined-cad-python.js";
+import { confinedPython, harness, keptFonts } from "./confined-cad-python.js";
 
 export type Result = {
   isError?: boolean;
@@ -51,6 +51,7 @@ export async function openStudio(
     workspaceRoot: () => root,
     harness,
     directory: join(data, "cad-studio"),
+    fonts: await keptFonts(),
     preview: async (model, parts) => {
       previews.push({ model: await readFile(model), parts });
     },
@@ -75,12 +76,14 @@ export async function busyDrafting(
   const root = await folders.make("zhiyin-real-cad-busy-");
   const data = await folders.make("zhiyin-real-cad-busy-data-");
   const confined = await confinedPython();
+  const fonts = await keptFonts();
   const drawIn = (ms: number) =>
     caller(
       cadAutomation(confined, {
         workspaceRoot: () => root,
         harness,
         directory: join(data, "cad-studio"),
+        fonts,
         buildTimeMs: ms,
         sceneLines: {
           installed: async () => true,

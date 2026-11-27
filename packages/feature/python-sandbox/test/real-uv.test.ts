@@ -21,6 +21,7 @@ import {
   readdir,
   readFile,
   realpath,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -390,6 +391,69 @@ describe.runIf(uv)("the real uv", () => {
     expect(place.toLowerCase()).not.toBe(named.toLowerCase());
     expect(real.toLowerCase()).toBe(place.toLowerCase());
   }, 120_000);
+
+  it("finds each real path as Windows names it, however often it is asked: through a link, for a path not there, and for one the run may not open", async () => {
+    const place = join(workspace, "real-place");
+    await mkdir(place, { recursive: true });
+    await writeFile(join(place, "note.txt"), "here");
+    const linked = join(workspace, "linked");
+    await symlink(place, linked, "junction");
+    const asked = {
+      link: linked,
+      file: join(linked, "note.txt"),
+      missing: join(linked, "missing", "note.txt"),
+      outside,
+    };
+    const result = await run({
+      code: [
+        "import os",
+        `asked = ${JSON.stringify(asked)}`,
+        "for name, path in asked.items():",
+        "    for _ in range(3):",
+        "        print(name, os.path.realpath(path))",
+        "try:",
+        "    os.path.realpath(asked['missing'], strict=True)",
+        "except OSError as error:",
+        "    print('strict', type(error).__name__)",
+      ].join("\n"),
+    });
+
+    expect(result.isError, result.said).toBeUndefined();
+    const real = await realpath(place);
+    const expected = {
+      link: real,
+      file: join(real, "note.txt"),
+      missing: join(real, "missing", "note.txt"),
+      outside: await realpath(outside),
+    };
+    const lines = result.said.split("\n").filter((line) => line.trim());
+    expect(lines.map((line) => line.trim().toLowerCase())).toEqual(
+      [
+        ...Object.entries(expected).flatMap(([name, path]) =>
+          Array.from({ length: 3 }, () => `${name} ${path}`),
+        ),
+        "strict FileNotFoundError",
+      ].map((line) => line.toLowerCase()),
+    );
+  }, 900_000);
+
+  it("names the machine, the system and Windows' version as an unconfined Python does", async () => {
+    const code =
+      "import platform; print(repr((platform.machine(), platform.system(), platform.release(), platform.version(), platform.win32_ver()[:2])))";
+    const confined = await run({ code });
+    // The environment's own Python, started without its packages' startup
+    // files, asking WMI as Python does.
+    const unconfined = spawnSync(
+      join(directory, "environments", "default", "Scripts", "python.exe"),
+      ["-I", "-S", "-c", code],
+      { encoding: "utf8" },
+    );
+
+    expect(confined.isError, confined.said).toBeUndefined();
+    expect(unconfined.status, unconfined.stderr).toBe(0);
+    expect(confined.said.trim()).toBe(unconfined.stdout.trim());
+    expect(confined.said).toMatch(/^\('(AMD64|ARM64)', 'Windows', /);
+  }, 900_000);
 
   it.each(pythonVersions)(
     "makes Python %s's own library work confined: private folders, a pool, real paths, an archive unpacked, and the null device",

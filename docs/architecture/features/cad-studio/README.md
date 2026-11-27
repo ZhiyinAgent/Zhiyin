@@ -14,7 +14,8 @@ were meant to be, and to say so.
 
 The idea: the script builds and the studio speaks. A build is two confined,
 offline runs. The first runs the script and writes only the shapes it showed,
-as data. The second is the studio's harness alone, holding none of the
+as data. The second, started beside it and given those shapes once it has
+ended, is the studio's harness alone, holding none of the
 model's code: it measures the shapes, checks them against how they are made
 and the design's requirements, draws them, writes the exports and writes the
 one answer Zhiyin reads. Zhiyin then copies the files the approval named into
@@ -33,7 +34,8 @@ environment, which the person sets up on the Plugins page.
   harness that runs the script and measures, draws and exports what it shows,
   copying the exports into the workspace, the answer's words, and the mesh of
   the parts each conversation built last, kept for the person's view of them
-  (ADR 0021), what the CAD environment holds: its lock, and the words
+  (ADR 0021), the list of the system's fonts kept for the builds' runs,
+  what the CAD environment holds: its lock, and the words
   that refuse a package asked for in it, and what the studio knows beyond
   its tools for the catalog: its own pages, the library's reference read
   from the CAD environment, and the known changes in build123d (ADR 0024).
@@ -57,13 +59,19 @@ environment, which the person sets up on the Plugins page.
 
 ## Public interface
 
-- `cadAutomation(python, { workspaceRoot, harness, directory, preview?, sceneLines? })`
+- `cadAutomation(python, { workspaceRoot, harness, directory, preview?, sceneLines?, fonts? })`
   returns a `WritingConnection` for one conversation's folder. `harness` is
   the shipped `run.py`; `directory` is where each run keeps its files while
   it runs. `preview(model, parts, script?)`, when given, is handed the mesh
   each successful build wrote, the parts shown and the script's workspace
   path, and must read the mesh before it returns. `sceneLines`, when given,
-  is the conversation's scene, which a drawing can be of.
+  is the conversation's scene, which a drawing can be of. `fonts`, when
+  given, is the font list kept for every conversation's builds.
+- `KeptFontLists({ directory, python, harness })` keeps the list of the
+  system's fonts a build's runs read, in a folder of the app's data of its
+  own. `folder()` is the folder of the list for the fonts as they are now,
+  or nothing, and then one is made in the background; `settled()` settles
+  once the making asked for has ended.
 - `PartPreviews(directory)` keeps, for each conversation, the parts it built
   last and their mesh, in a folder of the app's data of its own. `shown(taskId, model,
   parts, script?)` keeps a new build, `state(taskId)` says what the view
@@ -220,9 +228,14 @@ way:
 
 ### Running a build
 
-- A build or a drawing of parts is two confined runs, one after the other.
-  The first runs the script, at each position and again to check its cuts,
-  and writes only what it built: each shown part as a file of the geometry
+- A build or a drawing of parts is two confined runs. The second starts
+  beside the first, so loading build123d overlaps the script's run, and is
+  given its request, what it measures, only once the first has ended and
+  handed on its parts. When the script fails, hands
+  nothing on or is stopped, or the build is cancelled, the second is stopped
+  without a request; either way it has ended before the call answers. The
+  first runs the script, at each position and again to check its cuts, and
+  writes only what it built: each shown part as a file of the geometry
   kernel's own exact format, which holds data and no code, with a list of
   their names, the faces of each named surface, the faces a helper marked
   to mesh finer or coarser, what the helpers did and the cuts skipped, the
@@ -245,6 +258,19 @@ way:
   homes in the person's profile, so nothing is kept from one build to the
   next but the files written. A run folder Windows still held then is
   removed at the conversation's next run, unless a call is using it.
+- Both runs read the list of the system's fonts that ezdxf, which build123d
+  loads, would otherwise make again on each start, kept for every
+  conversation in Zhiyin's data, and neither may change it. It is made by a
+  run of its own, isolated, which reads only the harness, writes only a
+  folder new for it, lists the fonts and runs nothing else; Zhiyin writes
+  what it listed into the kept folder, so nothing a conversation ran is in
+  it. One list is kept for this release's CAD packages and the system's
+  fonts folder as it is, named by that folder's time of change, which moves
+  on as a font is added or removed there. A build that finds no list for the
+  fonts as they are now, the first one, or the first after a font was added,
+  lists the fonts in each run itself, so the font is found, and the list is
+  made beside it, once while the app runs, for the builds after; one that
+  could not be made leaves each build listing them itself.
 - What either run leaves is read as untrusted: the answer is checked as
   data, and the only files taken from it are those Zhiyin named, each a
   plain file of the run's own folder. A run cannot point Zhiyin at any

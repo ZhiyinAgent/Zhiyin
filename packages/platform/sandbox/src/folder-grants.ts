@@ -408,14 +408,18 @@ export function folderGrants(
     if (!grant) {
       const mask = access === "read" ? READ : CHANGE;
       const write = (awaited: boolean) =>
-        walks.run(async () => {
-          const error = await windows.grant(named, capability, mask);
-          if (error !== 0)
-            throw new Error(
-              `${folder} could not be given to the program: ${windows.message(error)}`,
-            );
-          await reachApart(windows, named, capability, mask);
-        }, awaited);
+        walks.run(
+          async () => {
+            const error = await windows.grant(named, capability, mask);
+            if (error !== 0)
+              throw new Error(
+                `${folder} could not be given to the program: ${windows.message(error)}`,
+              );
+            await reachApart(windows, named, capability, mask);
+          },
+          awaited,
+          named,
+        );
       let done: Promise<void>;
       if (carries(windows.permissions(named) ?? "", capability)) {
         behind.push(() => void write(false).catch(() => undefined));
