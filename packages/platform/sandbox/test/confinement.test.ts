@@ -379,6 +379,81 @@ describe.runIf(process.platform === "win32")("a confined process", () => {
     expect(await ours()).toEqual(before);
   });
 
+  describe("under a long path", () => {
+    /**
+     * Windows gives a container its temporary folder below the local
+     * application data of its home, in a folder named for the container:
+     * `Zhiyin.<purpose>.` and sixteen characters of the home's key.
+     */
+    const ownFolders = (home: string) =>
+      join(home, "AppData", "Local", "Packages", `Zhiyin.${purpose}.`);
+    const temporaryFolderLength = (home: string) =>
+      `${ownFolders(home)}${"x".repeat(16)}\\AC\\Temp`.length;
+
+    /** A home, not made yet, whose temporary folder is `characters` long. */
+    async function homeWhoseTemporaryFolderIs(characters: number) {
+      const base = await folders.make("zhiyin-confined-long-");
+      const extra = characters - temporaryFolderLength(base);
+      // Folders of at most 60 characters, each after a backslash.
+      const count = Math.ceil(extra / 61);
+      const letters = extra - count;
+      const names = Array.from({ length: count }, (_, at) =>
+        "d".repeat(
+          Math.floor(letters / count) + (at < letters % count ? 1 : 0),
+        ),
+      );
+      const own = join(base, ...names);
+      homes.push(own);
+      expect(temporaryFolderLength(own)).toBe(characters);
+      return own;
+    }
+
+    const containers = async () =>
+      (
+        await readdir(
+          join(
+            process.env["LOCALAPPDATA"] ?? join(homedir(), "AppData", "Local"),
+            "Packages",
+          ),
+        )
+      ).filter((name) => name.toLowerCase().startsWith(`zhiyin.${purpose}.`));
+
+    it("refuses at once, naming the folder and the limit, a home whose temporary folder would pass 245 characters", async () => {
+      const own = await homeWhoseTemporaryFolderIs(246);
+      const before = await containers();
+
+      const started = performance.now();
+      const ran = await runProcess({
+        executable: join(programs, "node.exe"),
+        arguments: [...node, join(programs, "reach.mjs"), "[]"],
+        cwd: programs,
+        timeoutMs: 60_000,
+        containment: { open: openProcessContainer },
+        confinement: given({ home: own, read: [programs] }),
+      });
+
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(ran).toMatchObject({ exitCode: null, failure: "confinement" });
+      expect(ran.reason).toContain(ownFolders(own));
+      expect(ran.reason).toMatch(/\\AC\\Temp\b/);
+      expect(ran.reason).toContain("246 characters");
+      expect(ran.reason).toContain("245");
+      // Nothing is made for it: no home, and no container in the profile.
+      await expect(readdir(own)).rejects.toThrow();
+      expect(await containers()).toEqual(before);
+    });
+
+    it("runs a home whose temporary folder is 245 characters, and makes files there", async () => {
+      const own = await homeWhoseTemporaryFolderIs(245);
+
+      const [temporary] = await reach({ home: own }, [["temporary"]]);
+
+      expect(
+        String(temporary).toLowerCase().startsWith(`${own.toLowerCase()}\\`),
+      ).toBe(true);
+    });
+  });
+
   it("reaches the folders its own run is given, not those given to another run of its purpose", async () => {
     const first = await folders.make("zhiyin-confined-first-");
     const second = await folders.make("zhiyin-confined-second-");

@@ -26,6 +26,9 @@ What changed for people using Zhiyin, newest release first.
   given its list as plan, and a toolkit's tool called through call by its
   short name. The browser preview says how to open another page of the
   workspace.
+- A sealed-off program whose folder lies too deep for Windows to give it a
+  temporary folder, as under a very long profile path, is refused at once,
+  saying which folder and why, instead of waiting out its time without a word.
 - The 3D frame sheet takes time and tile_width, as the other 3D tools do, and
   reads its old names; one frame needs no spacing, and frames spread evenly to
   an end. Setting an object down takes [x, y]. A render takes an exposure of

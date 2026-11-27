@@ -577,6 +577,16 @@ export const expected = new Map([
     },
   ],
   [
+    // A uv environment's Python and a Blender, each started under a home too
+    // long for its container's temporary folder.
+    "packages/platform/sandbox/system-boundary/long-home.test.ts",
+    {
+      needs:
+        "the CAD environment's Python and Blender (ZHIYIN_CAD_PYTHON, ZHIYIN_BLENDER)",
+      without: (env) => !env.ZHIYIN_CAD_PYTHON || !env.ZHIYIN_BLENDER,
+    },
+  ],
+  [
     "apps/desktop/system-boundary/blender-install.test.ts",
     {
       needs: "Blender's archive (ZHIYIN_BLENDER_ARCHIVE)",
